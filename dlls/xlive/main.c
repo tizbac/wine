@@ -44,3 +44,66 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 
     return TRUE;
 }
+
+/* This DLL is completely undocumented. DLL ordinal functions were found using winedump
+   and number of parameters determined using Python ctypes. See http://docs.python.org/library/ctypes.html */
+
+INT WINAPI XLIVE_651(DWORD unknown, DWORD unknown2, DWORD unknown3, DWORD unknown4)
+{
+    FIXME("stub: %d %d %d %d\n", unknown, unknown2, unknown3, unknown4);
+    return 0;
+}
+
+INT WINAPI XLIVE_652(DWORD unknown)
+{
+    FIXME("stub: %d\n", unknown);
+    return 0;
+}
+
+INT WINAPI XLIVE_5000(DWORD unknown)
+{
+    FIXME("stub: %d\n", unknown);
+    return 0;
+}
+
+INT WINAPI XLIVE_5001(DWORD unknown)
+{
+    FIXME("stub: %d\n", unknown);
+    return 0;
+}
+
+INT WINAPI XLIVE_5002(void)
+{
+    FIXME("stub\n");
+    return 0;
+}
+
+INT WINAPI XLIVE_5030(DWORD unknown)
+{
+    FIXME("stub: %d\n", unknown);
+    return 0;
+}
+
+INT WINAPI XLIVE_5263(DWORD unknown, DWORD unknown2, DWORD unknown3)
+{
+    FIXME("stub: %d %d %d\n", unknown, unknown2, unknown3);
+    return 0;
+}
+
+INT WINAPI XLIVE_5267(DWORD unknown, DWORD unknown2, DWORD unknown3)
+{
+    FIXME("stub: %d %d %d\n", unknown, unknown2, unknown3);
+    return 0;
+}
+
+INT WINAPI XLIVE_5270(DWORD unknown, DWORD unknown2)
+{
+    FIXME("stub: %d %d\n", unknown, unknown2);
+    return 0;
+}
+
+INT WINAPI XLIVE_5310(void)
+{
+    FIXME("stub\n");
+    return 0;
+}
