@@ -37,7 +37,7 @@ static BOOL InitFunctionPtrs(void)
 
     pXLIVE5002 = (void *)GetProcAddress(hmod, (LPSTR)5002);
     pXLIVE5310 = (void *)GetProcAddress(hmod, (LPSTR)5310);
-    
+
     return TRUE;
 }
 
@@ -50,7 +50,7 @@ static void test_XLIVE_5002(void)
         win_skip("function not available, skipping test\n");
         return;
     }
-    
+
     hr = pXLIVE5002();
     ok(hr == S_OK, "got %x, expected S_OK\n", hr);
 }
@@ -76,6 +76,6 @@ START_TEST(xlive)
 
     test_XLIVE_5002();
     test_XLIVE_5310();
-    
+
     FreeLibrary(hmod);
 }
