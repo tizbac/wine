@@ -105,5 +105,5 @@ INT WINAPI XLIVE_5270(DWORD unknown, DWORD unknown2)
 INT WINAPI XLIVE_5310(void)
 {
     FIXME("stub\n");
-    return 0;
+    return 10093;
 }
