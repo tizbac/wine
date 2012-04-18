@@ -891,14 +891,14 @@ BOOL  WINAPI EnumerateLoadedModulesW64(HANDLE hProcess,
                                        PVOID UserContext)
 {
     HMODULE*    hMods;
-    WCHAR       baseW[256], modW[256];
+    WCHAR       baseW[512], modW[512];
     DWORD       i, sz;
     MODULEINFO  mi;
 
-    hMods = HeapAlloc(GetProcessHeap(), 0, 256 * sizeof(hMods[0]));
+    hMods = HeapAlloc(GetProcessHeap(), 0, 512 * sizeof(hMods[0]));
     if (!hMods) return FALSE;
 
-    if (!EnumProcessModules(hProcess, hMods, 256 * sizeof(hMods[0]), &sz))
+    if (!EnumProcessModules(hProcess, hMods, 512 * sizeof(hMods[0]), &sz))
     {
         /* hProcess should also be a valid process handle !! */
         FIXME("If this happens, bump the number in mod\n");
