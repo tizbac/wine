@@ -40,29 +40,11 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dsound);
 
-static DWORD DSOUND_fraglen(DirectSoundDevice *device)
-{
-    REFERENCE_TIME period;
-    HRESULT hr;
-    DWORD ret;
-
-    hr = IAudioClient_GetDevicePeriod(device->client, &period, NULL);
-    if(FAILED(hr)){
-        /* just guess at 10ms */
-        WARN("GetDevicePeriod failed: %08x\n", hr);
-        ret = MulDiv(device->pwfx->nBlockAlign, device->pwfx->nSamplesPerSec, 100);
-    }else
-        ret = MulDiv(device->pwfx->nSamplesPerSec * device->pwfx->nBlockAlign, period, 10000000);
-
-    ret -= ret % device->pwfx->nBlockAlign;
-    return ret;
-}
-
 HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
 {
-    UINT prebuf_frames;
-    REFERENCE_TIME prebuf_rt;
     HRESULT hres;
+    REFERENCE_TIME period;
+    UINT32 frames;
 
     TRACE("(%p, %d)\n", device, forcewave);
 
@@ -90,12 +72,9 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
         return hres;
     }
 
-    prebuf_frames = device->prebuf * DSOUND_fraglen(device) / device->pwfx->nBlockAlign;
-    prebuf_rt = (10000000 * (UINT64)prebuf_frames) / device->pwfx->nSamplesPerSec;
-
     hres = IAudioClient_Initialize(device->client,
             AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST,
-            prebuf_rt, 0, device->pwfx, NULL);
+            200000, 0, device->pwfx, NULL);
     if(FAILED(hres)){
         IAudioClient_Release(device->client);
         device->client = NULL;
@@ -136,6 +115,12 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
         return hres;
     }
 
+    IAudioClient_GetStreamLatency(device->client, &period);
+    IAudioClient_GetBufferSize(device->client, &frames);
+    device->fraglen = MulDiv(device->pwfx->nSamplesPerSec, period, 10000000) * device->pwfx->nBlockAlign;
+    device->prebuf = frames * device->pwfx->nBlockAlign / device->fraglen;
+    TRACE("period %Lu fraglen %u prebuf %u\n", period, device->fraglen, device->prebuf);
+
     return S_OK;
 }
 
@@ -144,8 +129,6 @@ static HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device)
 	LPBYTE newbuf;
 
 	TRACE("(%p)\n", device);
-
-	device->fraglen = DSOUND_fraglen(device);
 
 	/* on original windows, the buffer it set to a fixed size, no matter what the settings are.
 	   on windows this size is always fixed (tested on win-xp) */

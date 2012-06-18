@@ -20,8 +20,8 @@
  */
 
 /* Linux does not support better timing than 10ms */
-#define DS_TIME_RES 2  /* Resolution of multimedia timer */
-#define DS_TIME_DEL 10  /* Delay of multimedia timer callback, and duration of HEL fragment */
+#define DS_TIME_RES 1  /* Resolution of multimedia timer */
+#define DS_TIME_DEL 1  /* Delay of multimedia timer callback, and duration of HEL fragment */
 
 #include "wingdi.h"
 #include "mmdeviceapi.h"
