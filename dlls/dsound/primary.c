@@ -73,14 +73,15 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
     }
 
     hres = IAudioClient_Initialize(device->client,
-            AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST,
-            200000, 0, device->pwfx, NULL);
+            AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST |
+            AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 800000, 0, device->pwfx, NULL);
     if(FAILED(hres)){
         IAudioClient_Release(device->client);
         device->client = NULL;
         WARN("Initialize failed: %08x\n", hres);
         return hres;
     }
+    IAudioClient_SetEventHandle(device->client, device->sleepev);
 
     hres = IAudioClient_GetService(device->client, &IID_IAudioRenderClient,
             (void**)&device->render);
@@ -114,6 +115,8 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
         WARN("GetService failed: %08x\n", hres);
         return hres;
     }
+    /* Now kick off the timer so the event fires periodically */
+    IAudioClient_Start(device->client);
 
     IAudioClient_GetStreamLatency(device->client, &period);
     IAudioClient_GetBufferSize(device->client, &frames);
