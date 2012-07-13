@@ -1192,24 +1192,27 @@ static HRESULT DirectSoundDevice_Create(DirectSoundDevice ** ppDevice)
     device->ds3dl.flRolloffFactor = DS3D_DEFAULTROLLOFFFACTOR;
     device->ds3dl.flDopplerFactor = DS3D_DEFAULTDOPPLERFACTOR;
 
-    device->prebuf = ds_snd_queue_max;
     device->guid = GUID_NULL;
 
     /* Set default wave format (may need it for waveOutOpen) */
-    device->pwfx = HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(WAVEFORMATEX));
-    if (device->pwfx == NULL) {
+    device->pwfx = HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(WAVEFORMATEXTENSIBLE));
+    device->primary_pwfx = HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(WAVEFORMATEX));
+    if (!device->pwfx || !device->primary_pwfx) {
         WARN("out of memory\n");
+        HeapFree(GetProcessHeap(),0,device->primary_pwfx);
+        HeapFree(GetProcessHeap(),0,device->pwfx);
         HeapFree(GetProcessHeap(),0,device);
         return DSERR_OUTOFMEMORY;
     }
 
     device->pwfx->wFormatTag = WAVE_FORMAT_PCM;
-    device->pwfx->nSamplesPerSec = ds_default_sample_rate;
-    device->pwfx->wBitsPerSample = ds_default_bits_per_sample;
+    device->pwfx->nSamplesPerSec = 22050;
+    device->pwfx->wBitsPerSample = 8;
     device->pwfx->nChannels = 2;
     device->pwfx->nBlockAlign = device->pwfx->wBitsPerSample * device->pwfx->nChannels / 8;
     device->pwfx->nAvgBytesPerSec = device->pwfx->nSamplesPerSec * device->pwfx->nBlockAlign;
     device->pwfx->cbSize = 0;
+    memcpy(device->primary_pwfx, device->pwfx, sizeof(*device->pwfx));
 
     InitializeCriticalSection(&(device->mixlock));
     device->mixlock.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": DirectSoundDevice.mixlock");
@@ -1688,6 +1691,8 @@ HRESULT DirectSoundDevice_SetCooperativeLevel(
     HWND hwnd,
     DWORD level)
 {
+    HRESULT hr = S_OK;
+    DWORD oldlevel;
     TRACE("(%p,%p,%s)\n",device,hwnd,dumpCooperativeLevel(level));
 
     if (device == NULL) {
@@ -1700,8 +1705,20 @@ HRESULT DirectSoundDevice_SetCooperativeLevel(
              level==DSSCL_PRIORITY ? "DSSCL_PRIORITY" : "DSSCL_EXCLUSIVE");
     }
 
+    RtlAcquireResourceExclusive(&device->buffer_list_lock, TRUE);
+    EnterCriticalSection(&device->mixlock);
+    oldlevel = device->priolevel;
     device->priolevel = level;
-    return DS_OK;
+    if ((level == DSSCL_WRITEPRIMARY) != (oldlevel == DSSCL_WRITEPRIMARY)) {
+        hr = DSOUND_ReopenDevice(device, 0);
+        if (FAILED(hr))
+            device->priolevel = oldlevel;
+        else
+            DSOUND_PrimaryOpen(device);
+    }
+    LeaveCriticalSection(&device->mixlock);
+    RtlReleaseResource(&device->buffer_list_lock);
+    return hr;
 }
 
 HRESULT DirectSoundDevice_Compact(
