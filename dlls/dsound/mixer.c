@@ -752,10 +752,14 @@ DWORD CALLBACK DSOUND_mixthread(void *p)
 	TRACE("(%p)\n", dev);
 
 	while (dev->ref) {
+		DWORD ret;
 
 		/* ALSA is retarded, add a timeout.. */
-		if (WaitForSingleObject(dev->sleepev, 25) == WAIT_TIMEOUT)
-			WARN("wait timed out!\n");
+		ret = WaitForSingleObject(dev->sleepev, 25);
+		if (ret == WAIT_FAILED)
+			WARN("wait returned error %u %08x!\n", GetLastError(), GetLastError());
+		else if (ret)
+			WARN("wait returned %08x!\n", ret);
 		if (!dev->ref)
 			break;
 

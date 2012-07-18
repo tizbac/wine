@@ -1432,7 +1432,7 @@ HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGUID lpcG
 
     device->mmdevice = mmdevice;
     device->guid = devGUID;
-    device->sleepev = CreateEventExW(0, 0, 0, 0);
+    device->sleepev = CreateEventW(0, 0, 0, 0);
 
     hr = DSOUND_ReopenDevice(device, FALSE);
     if (FAILED(hr))
