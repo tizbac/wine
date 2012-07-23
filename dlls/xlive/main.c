@@ -169,6 +169,33 @@ INT WINAPI XHVCreateEngine(DWORD p0, DWORD p1, void ** ppEngine)
   return -1;
 
 }
+INT WINAPI XUserSetContext(DWORD p0, DWORD p1, DWORD p2)
+{
+  FIXME("stub: %d %d %d\n",p0,p1,p2);
+  return 0;
+}
+INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait)
+{
+  FIXME("stub: %p %p %d\n",p0,pResult,bWait);
+  if (pResult)
+		*pResult = 0;
+  return 0;
+
+}
+INT WINAPI XLiveOnResetDevice(DWORD p0)
+{
+  FIXME("stub: %d\n",p0);
+  return 0;
+}
+INT WINAPI XLiveOnCreateDevice(DWORD p0,DWORD p1)
+{
+  FIXME("stub: %d %d\n",p0,p1);
+  return 0;
+}
+INT WINAPI XLiveUninitialize()
+{
+  return 0;
+}
 INT WINAPI XLIVE_5310(void)
 {
     FIXME("stub\n");

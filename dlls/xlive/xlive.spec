@@ -78,14 +78,14 @@
 652 stdcall -noname XLIVE_652(long)
 653 stub -noname @
 1082 stub -noname @
-1083 stub -noname @
+1083 stdcall -noname XGetOverlappedResult(long long long)
 5000 stdcall -noname XLIVE_5000(long)
 5001 stdcall -noname XLIVE_5001(long)
 5002 stdcall -noname XLIVE_5002()
-5003 stub -noname @
-5005 stub -noname @
+5003 stdcall -noname XLiveUninitialize()
+5005 stdcall -noname XLiveOnCreateDevice(long long)
 5006 stub -noname @
-5007 stub -noname @
+5007 stdcall -noname XLiveOnResetDevice(long)
 5008 stdcall -noname XHVCreateEngine(long long long)
 5010 stub -noname @
 5011 stub -noname @
@@ -152,7 +152,7 @@
 5274 stub -noname @
 5275 stub -noname @
 5276 stub -noname @
-5277 stub -noname @
+5277 stdcall -noname XUserSetContext(long long long)
 5278 stub -noname @
 5279 stub -noname @
 5280 stub -noname @
