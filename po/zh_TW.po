@@ -11439,7 +11439,7 @@ msgstr "暫停(&P)"
 
 #: taskmgr.rc:68 taskmgr.rc:256
 msgid "&Select Columns..."
-msgstr "選擇欄位(&S)..."
+msgstr "選擇欄(&S)…"
 
 #: taskmgr.rc:69 taskmgr.rc:258
 msgid "&CPU History"
@@ -11986,47 +11986,47 @@ msgstr "取消工作管理員隱藏狀態"
 
 #: taskmgr.rc:230
 msgid "Removes the process from the system"
-msgstr "將行程從系統中移除"
+msgstr "將進程從系統中移除"
 
 #: taskmgr.rc:232
 msgid "Removes this process and all descendants from the system"
-msgstr "將行程及其附屬行程從系統中移除"
+msgstr "將進程及其附屬進程從系統中移除"
 
 #: taskmgr.rc:233
 msgid "Attaches the debugger to this process"
-msgstr "將除錯器接到本行程"
+msgstr "將除錯器接到本進程"
 
 #: taskmgr.rc:235
 msgid "Controls which processors the process will be allowed to run on"
-msgstr "控制各行程使用那個處理器"
+msgstr "控制各進程使用那個處理器"
 
 #: taskmgr.rc:237
 msgid "Sets process to the REALTIME priority class"
-msgstr "將行程設為即時優先等級"
+msgstr "將進程設為即時優先等級"
 
 #: taskmgr.rc:238
 msgid "Sets process to the HIGH priority class"
-msgstr "將行程設為高優先級"
+msgstr "將進程設為高優先級"
 
 #: taskmgr.rc:240
 msgid "Sets process to the ABOVE NORMAL priority class"
-msgstr "將行程設為中等以上優先級"
+msgstr "將進程設為中等以上優先級"
 
 #: taskmgr.rc:242
 msgid "Sets process to the NORMAL priority class"
-msgstr "將行程設為中等優先級"
+msgstr "將進程設為中等優先級"
 
 #: taskmgr.rc:244
 msgid "Sets process to the BELOW NORMAL priority class"
-msgstr "將行程設為中等以下優先級"
+msgstr "將進程設為中等以下優先級"
 
 #: taskmgr.rc:245
 msgid "Sets process to the LOW priority class"
-msgstr "將行程設為低優先級"
+msgstr "將進程設為低優先級"
 
 #: taskmgr.rc:247
 msgid "Controls Debug Channels"
-msgstr ""
+msgstr "控制項除錯頻道"
 
 #: taskmgr.rc:264
 msgid "Performance"
@@ -12038,7 +12038,7 @@ msgstr "CPU 使用率: %3d%%"
 
 #: taskmgr.rc:266
 msgid "Processes: %d"
-msgstr "處理程序：%d"
+msgstr "進程：%d"
 
 #: taskmgr.rc:267
 msgid "Mem Usage: %1!u!kB / %2!u!kB"
@@ -12050,11 +12050,11 @@ msgstr "影像名稱"
 
 #: taskmgr.rc:273
 msgid "PID"
-msgstr ""
+msgstr "PID"
 
 #: taskmgr.rc:274
 msgid "CPU"
-msgstr ""
+msgstr "CPU"
 
 #: taskmgr.rc:275
 msgid "CPU Time"
@@ -12094,19 +12094,19 @@ msgstr "PF 差異"
 
 #: taskmgr.rc:286
 msgid "VM Size"
-msgstr "VM 大小"
+msgstr "虛擬機器大小"
 
 #: taskmgr.rc:287
 msgid "Paged Pool"
-msgstr "分頁池"
+msgstr "置換頁池"
 
 #: taskmgr.rc:288
 msgid "NP Pool"
-msgstr ""
+msgstr "非置換頁池"
 
 #: taskmgr.rc:289
 msgid "Base Pri"
-msgstr ""
+msgstr "基底優先權"
 
 #: taskmgr.rc:301
 msgid "Task Manager Warning"
@@ -12118,10 +12118,13 @@ msgid ""
 "cause undesired results including system instability. Are you\n"
 "sure you want to change the priority class?"
 msgstr ""
+"警告：變更這個進程的優先權類別也許會\n"
+"造成預料之外的結果像是系統的不穩定。\n"
+"您確定要變更優先權類別嗎？"
 
 #: taskmgr.rc:305
 msgid "Unable to Change Priority"
-msgstr ""
+msgstr "無法變更優先權"
 
 #: taskmgr.rc:310
 msgid ""
@@ -12131,32 +12134,39 @@ msgid ""
 "data before it is terminated. Are you sure you want to\n"
 "terminate the process?"
 msgstr ""
+"警告：終止進程可以造成 undesired\n"
+"結果包含失真的資料和系統 instability。\n"
+"進程將無法被給定的 chance 到儲存它的狀態或\n"
+"資料之前它被終止。確定要\n"
+"終止進程？"
 
 #: taskmgr.rc:311
 msgid "Unable to Terminate Process"
-msgstr ""
+msgstr "無法終止進程"
 
 #: taskmgr.rc:313
 msgid ""
 "WARNING: Debugging this process may result in loss of data.\n"
 "Are you sure you wish to attach the debugger?"
 msgstr ""
+"警告：對這個進程偵錯也許會導致資料失真。\n"
+"您確定希望要附加除錯程式？"
 
 #: taskmgr.rc:314
 msgid "Unable to Debug Process"
-msgstr ""
+msgstr "無法對進程進行除錯"
 
 #: taskmgr.rc:315
 msgid "The process must have affinity with at least one processor"
-msgstr ""
+msgstr "進程必須有具備至少一個處理器的近似者"
 
 #: taskmgr.rc:316
 msgid "Invalid Option"
-msgstr ""
+msgstr "無效的選項"
 
 #: taskmgr.rc:317
 msgid "Unable to Access or Set Process Affinity"
-msgstr ""
+msgstr "無法存取或設定進程近似者"
 
 #: taskmgr.rc:322
 msgid "System Idle Process"
@@ -12185,7 +12195,7 @@ msgid ""
 "Do you want to remove the uninstall entry from the registry?"
 msgstr ""
 "移除指令執行失敗「%s」, 可能是找不到可執行程式。\n"
-"您要將這項移除指令從登錄檔中刪除嗎？"
+"您要將這項移除指令從註冊表中刪除嗎？"
 
 #: view.rc:33
 msgid "&Pan"
@@ -12222,9 +12232,9 @@ msgid ""
 "\n"
 "If you terminate the process you may lose all unsaved data."
 msgstr ""
-"正在模擬關機，但此程序沒有反應。\n"
+"正在模擬關機，但此程式沒有反應。\n"
 "\n"
-"如果您中斷程式，可能會遺失尚未儲存的資料。"
+"如果您中斷進程，可能會遺失尚未儲存的資料。"
 
 #: wineboot.rc:39
 msgid "Wine"
@@ -12232,7 +12242,7 @@ msgstr "Wine"
 
 #: wineboot.rc:43
 msgid "The Wine configuration in %s is being updated, please wait..."
-msgstr "正在更新 %s 的 Wine 設定，請稍候..."
+msgstr "正在更新 %s 的 Wine 設定，請稍候…"
 
 #: winecfg.rc:132
 msgid ""
@@ -12242,7 +12252,7 @@ msgid ""
 "option) any later version."
 msgstr ""
 "這個程式是自由軟體；您可以遵照自由軟體基金會所制定的 GNU LGPL 2.1 版或者更新"
-"版本的許可條款來修改和重新散佈這個程式。"
+"版本的許可條款來修改和重新散布這個程式。"
 
 #: winecfg.rc:134
 msgid "Windows registration information"
@@ -12271,7 +12281,7 @@ msgstr ""
 
 #: winecfg.rc:150
 msgid "&Add application..."
-msgstr "新增程式設定(&A)..."
+msgstr "新增程式設定(&A)…"
 
 #: winecfg.rc:151
 msgid "&Remove application"
@@ -12311,7 +12321,7 @@ msgstr "螢幕解析度"
 
 #: winecfg.rc:175
 msgid "This is a sample text using 10 point Tahoma"
-msgstr ""
+msgstr "這是使用 10 點 Tahoma 字型的範例文字"
 
 #: winecfg.rc:182
 msgid "DLL overrides"
@@ -12340,7 +12350,7 @@ msgstr "已有的函式庫覆載(&O)："
 
 #: winecfg.rc:190
 msgid "&Edit..."
-msgstr "編輯(&E)..."
+msgstr "編輯(&E)…"
 
 #: winecfg.rc:196
 msgid "Edit Override"
@@ -12378,11 +12388,11 @@ msgstr "儲存裝置對應"
 msgid ""
 "Failed to connect to the mount manager, the drive configuration cannot be "
 "edited."
-msgstr ""
+msgstr "連線到掛載管理員時失敗，無法編輯磁碟組態。"
 
 #: winecfg.rc:227
 msgid "&Add..."
-msgstr "加入(&A)..."
+msgstr "加入(&A)…"
 
 #: winecfg.rc:229
 msgid "Auto&detect"
@@ -12402,7 +12412,7 @@ msgstr "裝置(&V)："
 
 #: winecfg.rc:242
 msgid "Bro&wse..."
-msgstr "瀏覽(&W)..."
+msgstr "瀏覽(&W)…"
 
 #: winecfg.rc:244
 msgid "&Label:"
@@ -12450,11 +12460,11 @@ msgstr "外觀"
 
 #: winecfg.rc:275
 msgid "&Theme:"
-msgstr "佈景主題(&T)："
+msgstr "布景主題(&T)："
 
 #: winecfg.rc:277
 msgid "&Install theme..."
-msgstr "安裝佈景主題(&I)..."
+msgstr "安裝布景主題(&I)…"
 
 #: winecfg.rc:282
 msgid "It&em:"
@@ -12490,7 +12500,7 @@ msgstr "隱藏進階選項(&A)"
 
 #: winecfg.rc:36
 msgid "(No Theme)"
-msgstr "(無佈景主題)"
+msgstr "(無布景主題)"
 
 #: winecfg.rc:37
 msgid "Graphics"
@@ -12514,11 +12524,11 @@ msgstr "Wine 設定"
 
 #: winecfg.rc:43
 msgid "Theme files (*.msstyles; *.theme)"
-msgstr "佈景主題檔案 (*.msstyles；*.theme)"
+msgstr "布景主題檔案 (*.msstyles; *.theme)"
 
 #: winecfg.rc:44
 msgid "Select a theme file"
-msgstr "選擇一個佈景主題檔案"
+msgstr "選擇一個布景主題檔案"
 
 #: winecfg.rc:45
 msgid "Folder"
@@ -12586,7 +12596,7 @@ msgstr "預設組態"
 
 #: winecfg.rc:59
 msgid "Wine Programs (*.exe; *.exe.so)"
-msgstr "Wine 程式 (*.exe；*.exe.so)"
+msgstr "Wine 程式 (*.exe; *.exe.so)"
 
 #: winecfg.rc:60
 msgid "Use global settings"
@@ -12597,9 +12607,8 @@ msgid "Select an executable file"
 msgstr "選擇一個可執行檔"
 
 #: winecfg.rc:66
-#, fuzzy
 msgid "Autodetect"
-msgstr "自動偵測(&D)"
+msgstr "自動偵測"
 
 #: winecfg.rc:67
 msgid "Local hard disk"
@@ -12769,7 +12778,7 @@ msgstr "按鈕替換背景"
 
 #: winecfg.rc:117
 msgid "Hot Tracked Item"
-msgstr ""
+msgstr "熱門軌段的項目"
 
 #: winecfg.rc:118
 msgid "Active Title Bar Gradient"
@@ -12937,7 +12946,7 @@ msgstr "螢幕緩衝區大小必須大於或等於視窗緩衝區"
 
 #: wineconsole.rc:34
 msgid "Each character is %1!u! pixels wide and %2!u! pixels high"
-msgstr "每個字都是 %1!u! 個像素寬，%2!u! 個像素高"
+msgstr "每個字元都是 %1!u! 個像素寬，%2!u! 個像素高"
 
 #: wineconsole.rc:35
 msgid "This is a test"
@@ -12945,25 +12954,27 @@ msgstr "這是一段測試訊息"
 
 #: wineconsole.rc:41
 msgid "wineconsole: Couldn't parse event id\n"
-msgstr ""
+msgstr "wineconsole：無法剖析事件識別號\n"
 
 #: wineconsole.rc:42
 msgid "wineconsole: Invalid backend\n"
-msgstr ""
+msgstr "wineconsole：無效的後端程式\n"
 
 #: wineconsole.rc:43
 msgid "wineconsole: Unrecognized command line option\n"
-msgstr ""
+msgstr "wineconsole：無法辨識的命令列選項\n"
 
 #: wineconsole.rc:44
 msgid "Starts a program in a Wine console\n"
-msgstr ""
+msgstr "在 Wine 主控臺中啟始一個程式\n"
 
 #: wineconsole.rc:45
 msgid ""
 "wineconsole: Starting program %s failed.\n"
 "The command is invalid.\n"
 msgstr ""
+"wineconsole：啟始程式 %s 時失敗。\n"
+"命令無效。\n"
 
 #: wineconsole.rc:47
 msgid ""
@@ -12973,6 +12984,11 @@ msgid ""
 "\n"
 "Options:\n"
 msgstr ""
+"\n"
+"用法：\n"
+"  wineconsole [選項] <命令>\n"
+"\n"
+"選項：\n"
 
 #: wineconsole.rc:49
 msgid ""
@@ -12981,10 +12997,12 @@ msgid ""
 "                           try to setup the current terminal as a Wine "
 "console.\n"
 msgstr ""
+"  --backend={user|curses}  選擇 user 將衍生新的視窗，curses 將\n"
+"                           試著設定目前的終端機做為 Wine 主控臺。\n"
 
 #: wineconsole.rc:50
 msgid "  <command>                The Wine program to launch in the console.\n"
-msgstr ""
+msgstr "  <命令>                   要在主控臺中啟動的 Wine 程式。\n"
 
 #: wineconsole.rc:51
 msgid ""
@@ -12994,6 +13012,11 @@ msgid ""
 "Starts the Wine command prompt in a Wine console.\n"
 "\n"
 msgstr ""
+"\n"
+"範例：\n"
+"  wineconsole cmd\n"
+"在 Wine 主控臺中啟始 Wine 指令提示符號。\n"
+"\n"
 
 #: winedbg.rc:46
 msgid "Program Error"
@@ -13003,7 +13026,7 @@ msgstr "程式錯誤"
 msgid ""
 "The program %s has encountered a serious problem and needs to close. We are "
 "sorry for the inconvenience."
-msgstr ""
+msgstr "程式 %s 遇到了嚴重的問題而需要關閉。我們對於造成的不便感到抱歉。"
 
 #: winedbg.rc:55
 msgid ""
@@ -13011,6 +13034,8 @@ msgid ""
 "may want to check the <a href=\"http://appdb.winehq.org\">Application "
 "Database</a> for tips about running this application."
 msgstr ""
+"這個可能是由 Wine 中的程式問題或缺失所造成。您可能要檢查<a href=\"http://"
+"appdb.winehq.org\">應用程式資料庫</a>以獲得關於執行這個應用程式的祕訣。"
 
 #: winedbg.rc:58
 msgid "Show &Details"
@@ -13027,26 +13052,29 @@ msgid ""
 "button, then <a href=\"http://wiki.winehq.org/Bugs\">file a bug report</a> "
 "and attach that file to the report."
 msgstr ""
+"如果這個問題在 Windows 之下不會出現且未曾被報告，您可以使用「另存新檔」 按鈕"
+"將詳細的資訊儲存到檔案，然後<a href=\"http://wiki.winehq.org/Bugs\">發送錯誤"
+"報告</a>並附加該檔案到報告中。"
 
 #: winedbg.rc:35
 msgid "Wine program crash"
-msgstr ""
+msgstr "Wine 程式當機"
 
 #: winedbg.rc:36
 msgid "Internal errors - invalid parameters received"
-msgstr ""
+msgstr "內部錯誤 - 收到無效的參數"
 
 #: winedbg.rc:37
 msgid "(unidentified)"
-msgstr ""
+msgstr "(未經識別的)"
 
 #: winedbg.rc:40
 msgid "Saving failed"
-msgstr ""
+msgstr "儲存失敗"
 
 #: winedbg.rc:41
 msgid "Loading detailed information, please wait..."
-msgstr ""
+msgstr "正在載入詳細資訊，請稍待…"
 
 #: winefile.rc:26
 msgid "&Open\tEnter"
@@ -13054,7 +13082,7 @@ msgstr "開啟(&O)\tEnter"
 
 #: winefile.rc:30
 msgid "Re&name..."
-msgstr "重新命名(&N)..."
+msgstr "重新命名(&N)…"
 
 #: winefile.rc:31
 msgid "Propert&ies\tAlt+Enter"
@@ -13062,11 +13090,11 @@ msgstr "屬性(&I)\tAlt+Enter"
 
 #: winefile.rc:33
 msgid "&Run..."
-msgstr "執行(&R)..."
+msgstr "執行(&R)…"
 
 #: winefile.rc:35
 msgid "Cr&eate Directory..."
-msgstr "建立目錄(&E)..."
+msgstr "建立目錄(&E)…"
 
 #: winefile.rc:40
 msgid "&Disk"
@@ -13074,7 +13102,7 @@ msgstr "磁碟(&D)"
 
 #: winefile.rc:41
 msgid "Connect &Network Drive..."
-msgstr "連線至網路儲存裝置(&N)..."
+msgstr "連線至網路儲存裝置(&N)…"
 
 #: winefile.rc:42
 msgid "&Disconnect Network Drive"
@@ -13106,7 +13134,7 @@ msgstr "按日期排列(&D)"
 
 #: winefile.rc:56
 msgid "Filter by&..."
-msgstr ""
+msgstr "篩選依照…(&.)"
 
 #: winefile.rc:63
 msgid "&Drivebar"
@@ -13178,7 +13206,7 @@ msgstr "最後修改："
 
 #: winefile.rc:168
 msgid "Cop&yright:"
-msgstr ""
+msgstr "著作權(&Y)："
 
 #: winefile.rc:170
 msgid "Size:"
@@ -13207,7 +13235,7 @@ msgstr "版本資訊"
 #: winefile.rc:194
 msgctxt "accelerator Fullscreen"
 msgid "S"
-msgstr ""
+msgstr "S"
 
 #: winefile.rc:87
 msgid "Applying font settings"
@@ -13215,7 +13243,7 @@ msgstr "字型設定套用中"
 
 #: winefile.rc:88
 msgid "Error while selecting new font."
-msgstr ""
+msgstr "選取新字型時發生錯誤。"
 
 #: winefile.rc:93
 msgid "Wine File Manager"
@@ -13223,15 +13251,15 @@ msgstr "Wine 檔案管理員"
 
 #: winefile.rc:95
 msgid "root fs"
-msgstr ""
+msgstr "根檔案系統"
 
 #: winefile.rc:96
 msgid "unixfs"
-msgstr ""
+msgstr "unixfs"
 
 #: winefile.rc:98
 msgid "Shell"
-msgstr ""
+msgstr "命令殼"
 
 #: winefile.rc:99 winhlp32.rc:107 winhlp32.rc:82
 msgid "Not yet implemented"
@@ -13239,38 +13267,38 @@ msgstr "尚未實作"
 
 #: winefile.rc:106
 msgid "CDate"
-msgstr ""
+msgstr "CDate"
 
 #: winefile.rc:107
 msgid "ADate"
-msgstr ""
+msgstr "ADate"
 
 #: winefile.rc:108
 msgid "MDate"
-msgstr ""
+msgstr "MDate"
 
 #: winefile.rc:109
 msgid "Index/Inode"
-msgstr ""
+msgstr "索引/Inode"
 
 #: winefile.rc:114
 msgid "%1 of %2 free"
-msgstr ""
+msgstr "%2 中剩下 %1"
 
 #: winefile.rc:115
 msgctxt "unit kilobyte"
 msgid "kB"
-msgstr ""
+msgstr "kB"
 
 #: winefile.rc:116
 msgctxt "unit megabyte"
 msgid "MB"
-msgstr ""
+msgstr "MB"
 
 #: winefile.rc:117
 msgctxt "unit gigabyte"
 msgid "GB"
-msgstr ""
+msgstr "GB"
 
 #: winemine.rc:34
 msgid "&Game"
@@ -13282,7 +13310,7 @@ msgstr "新遊戲(&N)\tF2"
 
 #: winemine.rc:37
 msgid "Question &Marks"
-msgstr ""
+msgstr "問號(&M)"
 
 #: winemine.rc:39
 msgid "&Beginner"
@@ -13298,7 +13326,7 @@ msgstr "專家(&E)"
 
 #: winemine.rc:42
 msgid "&Custom..."
-msgstr "自訂(&C)..."
+msgstr "自訂(&C)…"
 
 #: winemine.rc:44
 msgid "&Fastest Times"
@@ -13450,33 +13478,27 @@ msgstr "無法開啟檔案「%s」。 您想要自己搜尋這個檔案嗎？"
 
 #: winhlp32.rc:90
 msgid "Cannot find a richedit implementation... Aborting"
-msgstr "找不到 richedit... 終止"
+msgstr "找不到 richedit… 終止"
 
 #: winhlp32.rc:91
 msgid "Help topics: "
 msgstr "說明主題："
 
 #: wmic.rc:25
-#, fuzzy
-#| msgid "Extended attributes not supported.\n"
 msgid "Error: Command line not supported\n"
-msgstr "不支援延伸屬性。\n"
+msgstr "錯誤：不支援命令列\n"
 
 #: wmic.rc:26
-#, fuzzy
-#| msgid "Sector not found.\n"
 msgid "Error: Alias not found\n"
-msgstr "找不到磁區。\n"
+msgstr "錯誤：找不到別名\n"
 
 #: wmic.rc:27
-#, fuzzy
-#| msgid "Invalid key.\n"
 msgid "Error: Invalid query\n"
-msgstr "無效的機碼。\n"
+msgstr "錯誤：無效的查詢\n"
 
 #: wordpad.rc:28
 msgid "&New...\tCtrl+N"
-msgstr "新增(&N)...\tCtrl+N"
+msgstr "新增(&N)…\tCtrl+N"
 
 #: wordpad.rc:42
 msgid "R&edo\tCtrl+Y"
@@ -13540,7 +13562,7 @@ msgstr "插入(&I)"
 
 #: wordpad.rc:77
 msgid "&Date and time..."
-msgstr "日期時間(&D)..."
+msgstr "日期時間(&D)…"
 
 #: wordpad.rc:79
 msgid "F&ormat"
@@ -13552,11 +13574,11 @@ msgstr "子彈點(&B)"
 
 #: wordpad.rc:83 wordpad.rc:106
 msgid "&Paragraph..."
-msgstr "段落(&P)..."
+msgstr "段落(&P)…"
 
 #: wordpad.rc:84
 msgid "&Tabs..."
-msgstr "標籤(&T)..."
+msgstr "標籤(&T)…"
 
 #: wordpad.rc:85
 msgid "Backgroun&d"
@@ -13608,7 +13630,7 @@ msgstr "右"
 
 #: wordpad.rc:229
 msgid "First line"
-msgstr "第一行"
+msgstr "第一列"
 
 #: wordpad.rc:231
 msgid "Alignment"
@@ -13628,11 +13650,11 @@ msgstr "全部刪除(&L)"
 
 #: wordpad.rc:256
 msgid "Line wrapping"
-msgstr "自動換行"
+msgstr "自動換列"
 
 #: wordpad.rc:257
 msgid "&No line wrapping"
-msgstr "關閉自動換行(&N)"
+msgstr "關閉自動換列(&N)"
 
 #: wordpad.rc:258
 msgid "Wrap text by the &window border"
@@ -13649,37 +13671,37 @@ msgstr "工具列"
 #: wordpad.rc:273
 msgctxt "accelerator Align Left"
 msgid "L"
-msgstr ""
+msgstr "L"
 
 #: wordpad.rc:274
 msgctxt "accelerator Align Center"
 msgid "E"
-msgstr ""
+msgstr "E"
 
 #: wordpad.rc:275
 msgctxt "accelerator Align Right"
 msgid "R"
-msgstr ""
+msgstr "R"
 
 #: wordpad.rc:282
 msgctxt "accelerator Redo"
 msgid "Y"
-msgstr ""
+msgstr "Y"
 
 #: wordpad.rc:283
 msgctxt "accelerator Bold"
 msgid "B"
-msgstr ""
+msgstr "B"
 
 #: wordpad.rc:284
 msgctxt "accelerator Italic"
 msgid "I"
-msgstr ""
+msgstr "I"
 
 #: wordpad.rc:285
 msgctxt "accelerator Underline"
 msgid "U"
-msgstr ""
+msgstr "U"
 
 #: wordpad.rc:136
 msgid "All documents (*.*)"
@@ -13691,15 +13713,15 @@ msgstr "純文字文件 (*.txt)"
 
 #: wordpad.rc:138
 msgid "Unicode text document (*.txt)"
-msgstr "統一碼文字文件 (*.txt)"
+msgstr "萬國碼文字文件 (*.txt)"
 
 #: wordpad.rc:139
 msgid "Rich text format (*.rtf)"
-msgstr "RTF豐富格式 (*.rtf)"
+msgstr "豐富文字格式 (*.rtf)"
 
 #: wordpad.rc:140
 msgid "Rich text document"
-msgstr "RTF豐富格式檔案"
+msgstr "豐富文字格式檔案"
 
 #: wordpad.rc:141
 msgid "Text document"
@@ -13707,7 +13729,7 @@ msgstr "純文字文件"
 
 #: wordpad.rc:142
 msgid "Unicode text document"
-msgstr "統一碼文字文件"
+msgstr "萬國碼文字文件"
 
 #: wordpad.rc:143
 msgid "Printer files (*.prn)"
@@ -13800,11 +13822,11 @@ msgstr "您已經選擇儲存為純文字格式, 這可能導致格式遺失。 
 
 #: wordpad.rc:187
 msgid "Invalid number format."
-msgstr ""
+msgstr "無效的數字格式。"
 
 #: wordpad.rc:188
 msgid "OLE storage documents are not supported."
-msgstr ""
+msgstr "OLE 儲存體文件未被支援。"
 
 #: wordpad.rc:189
 msgid "Could not save the file."
@@ -13828,19 +13850,19 @@ msgstr "列印功能尚未實作。"
 
 #: wordpad.rc:194
 msgid "Cannot add more than 32 tab stops."
-msgstr ""
+msgstr "無法加入超過 32 個定位停駐點。"
 
 #: write.rc:27
 msgid "Starting Wordpad failed"
-msgstr ""
+msgstr "啟動 Wordpad 時失敗"
 
 #: xcopy.rc:27
 msgid "Invalid number of parameters - Use xcopy /? for help\n"
-msgstr ""
+msgstr "無效的參數數量 - 使用 xcopy /? 以獲得說明\n"
 
 #: xcopy.rc:28
 msgid "Invalid parameter '%1' - Use xcopy /? for help\n"
-msgstr ""
+msgstr "無效的參數『%1』- 使用 xcopy /? 以獲得說明\n"
 
 #: xcopy.rc:29
 msgid "Press <Enter> to begin copying\n"
@@ -13848,7 +13870,7 @@ msgstr "請按 <Enter> 鍵開始複製\n"
 
 #: xcopy.rc:30
 msgid "%1!d! file(s) would be copied\n"
-msgstr ""
+msgstr "%1!d! 個檔案將被複製\n"
 
 #: xcopy.rc:31
 msgid "%1!d! file(s) copied\n"
@@ -13860,32 +13882,35 @@ msgid ""
 "on the target?\n"
 "(F - File, D - Directory)\n"
 msgstr ""
+"『%1』是一個在目標上的\n"
+"檔名或目錄？\n"
+"(F - 檔案，D - 目錄)\n"
 
 #: xcopy.rc:35
 msgid "%1? (Yes|No)\n"
-msgstr "%1？ (是｜否)\n"
+msgstr "%1？ (Yes|No)\n"
 
 #: xcopy.rc:36
 msgid "Overwrite %1? (Yes|No|All)\n"
-msgstr "是否覆蓋 %1？ (是｜否｜全部皆是)\n"
+msgstr "是否覆蓋 %1？ (Yes|No|All)\n"
 
 #: xcopy.rc:37
 msgid "Copying of '%1' to '%2' failed with r/c %3!d!\n"
-msgstr ""
+msgstr "將『%1』複製到『%2』時失敗並獲得 r/c %3!d!\n"
 
 #: xcopy.rc:39
 msgid "Failed during reading of '%1'\n"
-msgstr ""
+msgstr "在讀取『%1』的期間發生了失敗\n"
 
 #: xcopy.rc:43
 msgctxt "File key"
 msgid "F"
-msgstr ""
+msgstr "F"
 
 #: xcopy.rc:44
 msgctxt "Directory key"
 msgid "D"
-msgstr ""
+msgstr "D"
 
 #: xcopy.rc:77
 msgid ""
@@ -13922,3 +13947,34 @@ msgid ""
 "\t\tthan source.\n"
 "\n"
 msgstr ""
+"XCOPY - 將來源檔案或樹狀目錄複製到目的。\n"
+"\n"
+"語法：\n"
+"XCOPY 來源 [目的] [/I] [/S] [/Q] [/F] [/L] [/W] [/T] [/N] [/U]\n"
+"\t     [/R] [/H] [/C] [/P] [/A] [/M] [/E] [/D] [/Y] [/-Y]\n"
+"\n"
+"位置：\n"
+"\n"
+"[/I]  如果目的不存在且複製兩個或更多檔案時，\n"
+"\t將目的假設為目錄。\n"
+"[/S]  複製目錄和子目錄。\n"
+"[/E]  複製目錄和子目錄，包含任何空目錄。\n"
+"[/Q]  在複製期間不列出名稱，亦即安靜模式。\n"
+"[/F]  在複製期間顯示完整的來源和目的名稱。\n"
+"[/L]  模擬操作，顯示會被複製的名稱。\n"
+"[/W]  在開始複製操作之前進行提示。\n"
+"[/T]  建立空的目錄結構但是不複製檔案。\n"
+"[/Y]  覆寫檔案時抑制提示。\n"
+"[/-Y] 覆寫檔案時啟用提示。\n"
+"[/P]  於複製每個來源檔案之前提示。\n"
+"[/N]  使用簡稱複製。\n"
+"[/U]  只複製已經存在目的中的檔案。\n"
+"[/R]  覆寫任何唯讀檔案。\n"
+"[/H]  複製時包括隱藏和系統檔案。\n"
+"[/C]  即使在複製期間發生錯誤仍然繼續。\n"
+"[/A]  只複製具有封存屬性的檔案。\n"
+"[/M]  只複製具有封存屬性的檔案，\n"
+"\t但會移除封存屬性。\n"
+"[/D | /D:m-d-y] 複製新檔案或是於給定日期之後修改的檔案。\n"
+"\t\t如果沒有給定日期，只有當目的比來源舊時才複製。\n"
+"\n"

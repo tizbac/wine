@@ -110,7 +110,6 @@ static HRESULT Object_hasOwnProperty(script_ctx_t *ctx, vdisp_t *jsthis, WORD fl
         VARIANT *retv, jsexcept_t *ei)
 {
     BSTR name;
-    BOOL result;
     DISPID id;
     HRESULT hres;
 
@@ -130,14 +129,21 @@ static HRESULT Object_hasOwnProperty(script_ctx_t *ctx, vdisp_t *jsthis, WORD fl
         return hres;
 
     if(is_jsdisp(jsthis)) {
-        result = jsdisp_is_own_prop(jsthis->u.jsdisp, name);
+        VARIANT_BOOL result;
+
+        hres = jsdisp_is_own_prop(jsthis->u.jsdisp, name, &result);
+        if(FAILED(hres))
+            return hres;
+
         if(retv) {
             V_VT(retv) = VT_BOOL;
             V_BOOL(retv) = result;
         }
 
         return S_OK;
-    } else if(is_dispex(jsthis)) {
+    }
+
+    if(is_dispex(jsthis)) {
         hres = IDispatchEx_GetDispID(jsthis->u.dispex, name,
                 make_grfdex(ctx, fdexNameCaseSensitive), &id);
     } else {
@@ -207,6 +213,14 @@ static const builtin_info_t Object_info = {
     {NULL, Object_value, 0},
     sizeof(Object_props)/sizeof(*Object_props),
     Object_props,
+    Object_destructor,
+    NULL
+};
+
+static const builtin_info_t ObjectInst_info = {
+    JSCLASS_OBJECT,
+    {NULL, Object_value, 0},
+    0, NULL,
     Object_destructor,
     NULL
 };
@@ -282,7 +296,7 @@ HRESULT create_object(script_ctx_t *ctx, jsdisp_t *constr, jsdisp_t **ret)
     if(!object)
         return E_OUTOFMEMORY;
 
-    hres = init_dispex_from_constr(object, ctx, &Object_info, constr ? constr : ctx->object_constr);
+    hres = init_dispex_from_constr(object, ctx, &ObjectInst_info, constr ? constr : ctx->object_constr);
     if(FAILED(hres)) {
         heap_free(object);
         return hres;

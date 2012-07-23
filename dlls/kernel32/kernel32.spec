@@ -634,6 +634,7 @@
 @ stdcall GetStringTypeW(long wstr long ptr)
 @ stdcall GetSystemDefaultLCID()
 @ stdcall GetSystemDefaultLangID()
+@ stdcall GetSystemDefaultLocaleName(ptr long)
 @ stdcall GetSystemDefaultUILanguage()
 @ stdcall GetSystemDEPPolicy()
 @ stdcall GetSystemDirectoryA(ptr long)
@@ -746,6 +747,7 @@
 @ stdcall InitializeCriticalSectionAndSpinCount(ptr long)
 @ stdcall InitializeCriticalSectionEx(ptr long long)
 @ stdcall InitializeSListHead(ptr) ntdll.RtlInitializeSListHead
+@ stdcall InitOnceInitialize(ptr) ntdll.RtlRunOnceInitialize
 @ stdcall -arch=i386 InterlockedCompareExchange (ptr long long)
 @ stdcall -arch=i386 -ret64 InterlockedCompareExchange64(ptr int64 int64) ntdll.RtlInterlockedCompareExchange64
 @ stdcall -arch=i386 InterlockedDecrement(ptr)
