@@ -1,5 +1,6 @@
 /*
  * Copyright 2010 Austin English
+ * Copyright 2012 Tiziano Bacocco
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -28,6 +29,10 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(xlive);
 
+struct XUSER_READ_PROFILE_SETTINGS {
+	DWORD	dwLength;
+	BYTE *	pSettings;
+};
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
     TRACE("(0x%p, %d, %p)\n", hinstDLL, fdwReason, lpvReserved);
@@ -179,7 +184,7 @@ INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait)
   FIXME("stub: %p %p %d\n",p0,pResult,bWait);
   if (pResult)
 		*pResult = 0;
-  return 0;
+  return ERROR_SUCCESS;
 
 }
 INT WINAPI XLiveOnResetDevice(DWORD p0)
@@ -194,10 +199,79 @@ INT WINAPI XLiveOnCreateDevice(DWORD p0,DWORD p1)
 }
 INT WINAPI XLiveUninitialize()
 {
+FIXME("stub\n");
   return 0;
+}
+INT WINAPI XNetXnAddrToMachineId( void * addr1, void * pMachId)
+{
+  FIXME("stub: %p %p\n",addr1,pMachId);
+  return 0;
+}
+DWORD WINAPI XLiveUserCheckPrivilege(DWORD uIndex,DWORD PrivType, PBOOL pfResult )
+{
+  FIXME("stub: %d %d %p\n",uIndex,PrivType,pfResult);
+  *pfResult = FALSE;
+  return ERROR_SUCCESS;
+}
+INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, void ** ppxnqos)
+{
+	FIXME("stub\n");
+	return 0;
+}
+INT WINAPI XLIVE_5036(void)
+{
+  FIXME("stub\n");
+  return 0;
+}
+INT WINAPI XLIVE_5038(void)
+{
+  FIXME("stub\n");
+  return 0;
+}
+INT WINAPI XLIVE_5034(void)
+{
+  FIXME("stub\n");
+  return 0;
+}
+INT WINAPI XLiveCancelOverlapped(void * pOver)
+{
+  FIXME("stub\n");
+  return ERROR_SUCCESS;
 }
 INT WINAPI XLIVE_5310(void)
 {
     FIXME("stub\n");
     return 0;
+}
+INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dwNumSettingIds, 
+					DWORD * pdwSettingIds, DWORD * pcbResults, struct XUSER_READ_PROFILE_SETTINGS * pResults, DWORD pOverlapped)
+{
+    FIXME("stub: %d %d %d %p %p %p %d\n",dwTitleId,dwUserIndex,dwNumSettingIds,pdwSettingIds,pcbResults,pResults,pOverlapped);
+	/*if (*pcbResults < 1036) {
+		*pcbResults = 1036;	// TODO: make correct calculation by IDs.
+		return ERROR_INSUFFICIENT_BUFFER;
+	}*/
+if (!pResults)
+	return 0;
+	memset (pResults, 0, *pcbResults);
+	pResults->dwLength = *pcbResults-sizeof (struct XUSER_READ_PROFILE_SETTINGS);
+	pResults->pSettings = (BYTE *)pResults+sizeof (struct XUSER_READ_PROFILE_SETTINGS);
+    return 0;
+}
+
+INT WINAPI XFriendsCreateEnumerator(DWORD p0, DWORD p1, DWORD p2, DWORD p3, HANDLE * phEnum)
+{
+	*phEnum = INVALID_HANDLE_VALUE;
+	return 0; 
+
+}
+INT WINAPI XEnumerate (HANDLE hEnum, void * pvBuffer, DWORD cbBuffer, DWORD * pcItemsReturned, void * pOverlapped)
+{
+	if (pcItemsReturned)
+		*pcItemsReturned = 0;
+	return 0;
+}
+INT WINAPI XGetOverlappedExtendedError (void * p0)
+{
+	return 0;
 }

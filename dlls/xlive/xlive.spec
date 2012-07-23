@@ -48,14 +48,14 @@
 60 stub -noname @
 62 stub -noname @
 63 stub -noname @
-64 stub -noname @
+64 stdcall -noname XNetXnAddrToMachineId(long long)
 65 stub -noname @
 66 stub -noname @
 67 stub -noname @
 68 stub -noname @
 69 stub -noname @
 70 stub -noname @
-71 stub -noname @
+71 stdcall -noname NetDll_XNetQosServiceLookup(long long long)
 72 stub -noname @
 73 stdcall -noname XNetGetTitleXnAddr(long)
 75 stdcall -noname XNetGetEthernetLinkStatus()
@@ -77,7 +77,7 @@
 651 stdcall -noname XLIVE_651(long long long long)
 652 stdcall -noname XLIVE_652(long)
 653 stub -noname @
-1082 stub -noname @
+1082 stdcall -noname XGetOverlappedExtendedError(long)
 1083 stdcall -noname XGetOverlappedResult(long long long)
 5000 stdcall -noname XLIVE_5000(long)
 5001 stdcall -noname XLIVE_5001(long)
@@ -107,11 +107,11 @@
 5030 stdcall -noname XLIVE_5030(long)
 5031 stub -noname @
 5032 stub -noname @
-5034 stub -noname @
+5034 stdcall -noname XLIVE_5034()
 5035 stub -noname @
-5036 stub -noname @
+5036 stdcall -noname XLIVE_5036()
 5037 stub -noname @
-5038 stub -noname @
+5038 stdcall -noname XLIVE_5038()
 5039 stub -noname @
 5206 stub -noname @
 5208 stub -noname @
@@ -132,9 +132,9 @@
 5250 stub -noname @
 5251 stub -noname @
 5252 stub -noname @
-5254 stub -noname @
+5254 stdcall -noname XLiveCancelOverlapped(long)
 5255 stub -noname @
-5256 stub -noname @
+5256 stdcall -noname XEnumerate(long long long long long)
 5257 stub -noname @
 5258 stub -noname @
 5259 stub -noname @
@@ -143,7 +143,7 @@
 5262 stdcall -noname XUserGetSigninState(long)
 5263 stdcall -noname XLIVE_5263(long long long)
 5264 stub -noname @
-5265 stub -noname @
+5265 stdcall -noname XLiveUserCheckPrivilege(long long long)
 5266 stub -noname @
 5267 stdcall -noname XLIVE_5267(long long long)
 5270 stdcall -noname XLIVE_5270(long long)
@@ -184,7 +184,7 @@
 5309 stub -noname @
 5310 stdcall -noname XLIVE_5310()
 5311 stub -noname @
-5312 stub -noname @
+5312 stdcall -noname XFriendsCreateEnumerator(long long long long long)
 5313 stub -noname @
 5314 stub -noname @
 5315 stub -noname @
@@ -203,7 +203,7 @@
 5328 stub -noname @
 5329 stub -noname @
 5330 stub -noname @
-5331 stub -noname @
+5331 stdcall -noname XUserReadProfileSettings(long long long long long long long)
 5332 stub -noname @
 5333 stub -noname @
 5334 stub -noname @
