@@ -23,6 +23,7 @@
 
 #include "windef.h"
 #include "winbase.h"
+#include "winsock2.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(xlive);
@@ -123,6 +124,50 @@ INT WINAPI XNetGetTitleXnAddr(DWORD * pAddr)
     *pAddr = 0x0100007F; //localhost
     FIXME("returning localhost\n");
     return 4;
+}
+INT WINAPI XUserGetSigninState(DWORD dwUserIndex)
+{
+    FIXME("stub: %d\n",dwUserIndex);
+    return 1;
+}
+INT WINAPI XUserGetXUID(DWORD p0, DWORD * pXuid)
+{
+    pXuid[0] = pXuid[1] = 0x10001000; 
+    FIXME("stub: %d %p\n",p0,pXuid);
+	  return 0; // ???
+}
+INT WINAPI XWSAStartup(WORD wVersionRequested, LPWSADATA lpWsaData)
+{
+    FIXME("stub: %d %p\n",wVersionRequested,lpWsaData);
+    lpWsaData->wVersion = wVersionRequested;
+    return 0;
+}
+INT WINAPI XNetGetSystemLinkPort(DWORD * LinkPort)
+{
+    FIXME("stub: %p\n",LinkPort);
+    *LinkPort = 0;
+    return WSAEACCES;
+}
+short WINAPI NetDll_htons(short in)
+{
+    return htons(in);
+}
+short WINAPI NetDll_ntohs(short in)
+{
+    return ntohs(in);
+}
+INT WINAPI XNetSetSystemLinkPort(WORD newPort)
+{
+    FIXME("stub: %d\n",(int)newPort);
+    return 0;
+}
+INT WINAPI XHVCreateEngine(DWORD p0, DWORD p1, void ** ppEngine)
+{
+  if ( ppEngine)
+    *ppEngine = NULL;
+  FIXME("stub: %d %d %p\n",p0,p1,ppEngine);
+  return -1;
+
 }
 INT WINAPI XLIVE_5310(void)
 {
