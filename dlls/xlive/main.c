@@ -102,8 +102,30 @@ INT WINAPI XLIVE_5270(DWORD unknown, DWORD unknown2)
     return 0;
 }
 
+INT WINAPI XLIVE_5297(void * pXii, DWORD dwVersion)
+{
+    FIXME("stub: %p %d\n", pXii, dwVersion);
+    return 0;
+}
+
+INT WINAPI XNetStartup(void* p)
+{
+    FIXME("stub: %p\n",p);
+    return 0;
+}
+INT WINAPI XNetGetEthernetLinkStatus()
+{
+    FIXME("stub\n");
+    return 1;
+}
+INT WINAPI XNetGetTitleXnAddr(DWORD * pAddr)
+{
+    *pAddr = 0x0100007F; //localhost
+    FIXME("returning localhost\n");
+    return 4;
+}
 INT WINAPI XLIVE_5310(void)
 {
     FIXME("stub\n");
-    return 10093;
+    return 0;
 }
