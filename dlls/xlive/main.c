@@ -27,6 +27,7 @@
 #include "winsock2.h"
 #include "wine/debug.h"
 
+
 WINE_DEFAULT_DEBUG_CHANNEL(xlive);
 
 struct XUSER_READ_PROFILE_SETTINGS {
@@ -54,9 +55,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 /* This DLL is completely undocumented. DLL ordinal functions were found using winedump
    and number of parameters determined using Python ctypes. See http://docs.python.org/library/ctypes.html */
 
-INT WINAPI XLIVE_651(DWORD unknown, DWORD unknown2, DWORD unknown3, DWORD unknown4)
+INT WINAPI XNotifyGetNext(HANDLE hNotification, DWORD dwMsgFilter, DWORD * pdwId, void * pParam)
 {
-    FIXME("stub: %d %d %d %d\n", unknown, unknown2, unknown3, unknown4);
+   // FIXME("stub: %d %d %p %p\n", hNotification, dwMsgFilter,  pdwId, pParam);
     return 0;
 }
 
@@ -80,32 +81,54 @@ INT WINAPI XLIVE_5001(DWORD unknown)
 
 INT WINAPI XLIVE_5002(void)
 {
-    FIXME("stub\n");
+    //FIXME("stub\n"); Commented out because this is called every frame
     return 0;
 }
 
-INT WINAPI XLIVE_5030(DWORD unknown)
+INT WINAPI XLivePreTranslateMessage(DWORD unknown)
 {
     FIXME("stub: %d\n", unknown);
     return 0;
 }
 
-INT WINAPI XLIVE_5263(DWORD unknown, DWORD unknown2, DWORD unknown3)
+INT WINAPI XUserGetName(DWORD dwUserId, char * pBuffer, DWORD dwBufLen)
 {
-    FIXME("stub: %d %d %d\n", unknown, unknown2, unknown3);
-    return 0;
+    FIXME("stub: %d %p %d\n", dwUserId, pBuffer, dwBufLen);
+    char playername[] = "Player";
+    if (!pBuffer)
+        return 1;
+    lstrcpynA(pBuffer,playername,dwBufLen);
+    return ERROR_SUCCESS;
 }
 
-INT WINAPI XLIVE_5267(DWORD unknown, DWORD unknown2, DWORD unknown3)
+typedef struct {
+   DWORD        xuidL;
+   DWORD        xuidH;
+   DWORD    dwInfoFlags;
+   DWORD        UserSigninState;
+   DWORD    dwGuestNumber;
+   DWORD    dwSponsorUserIndex;
+   CHAR     szUserName[16];
+} XUSER_SIGNIN_INFO;
+
+INT WINAPI XUserGetSigninInfo(DWORD dwUser, DWORD dwFlags, XUSER_SIGNIN_INFO * pInfo)
 {
-    FIXME("stub: %d %d %d\n", unknown, unknown2, unknown3);
-    return 0;
+    FIXME("stub: %d %d %p\n", dwUser, dwFlags, pInfo);
+    memset(pInfo,0,sizeof(XUSER_SIGNIN_INFO));
+    pInfo->xuidL = pInfo->xuidH = dwFlags != 1 ? (dwUser+1)*0x10001000 : 0;
+   // if (dwFlags != 1) {
+                pInfo->dwInfoFlags = 0;
+                pInfo->UserSigninState = 1;
+                lstrcpynA(pInfo->szUserName,"WinePlayer",15);
+                return 0;
+   // }
+    return 1;
 }
 
-INT WINAPI XLIVE_5270(DWORD unknown, DWORD unknown2)
+INT WINAPI XNotifyCreateListener(DWORD unknown, DWORD unknown2)
 {
     FIXME("stub: %d %d\n", unknown, unknown2);
-    return 0;
+    return 1;
 }
 
 INT WINAPI XLIVE_5297(void * pXii, DWORD dwVersion)
@@ -121,7 +144,7 @@ INT WINAPI XNetStartup(void* p)
 }
 INT WINAPI XNetGetEthernetLinkStatus()
 {
-    FIXME("stub\n");
+    //FIXME("stub\n"); Commented out because this is called every frame
     return 1;
 }
 INT WINAPI XNetGetTitleXnAddr(DWORD * pAddr)
@@ -181,7 +204,7 @@ INT WINAPI XUserSetContext(DWORD p0, DWORD p1, DWORD p2)
 }
 INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait)
 {
-  FIXME("stub: %p %p %d\n",p0,pResult,bWait);
+  //FIXME("stub: %p %p %d\n",p0,pResult,bWait); Commented out because this is called every frame
   if (pResult)
 		*pResult = 0;
   return ERROR_SUCCESS;
@@ -215,23 +238,30 @@ DWORD WINAPI XLiveUserCheckPrivilege(DWORD uIndex,DWORD PrivType, PBOOL pfResult
 }
 INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, void ** ppxnqos)
 {
-	FIXME("stub\n");
+	//FIXME("stub\n"); Commented out because this is called every frame
 	return 0;
 }
-INT WINAPI XLIVE_5036(void)
+INT WINAPI XLiveCreateProtectedDataContext(DWORD * dwType, PHANDLE pHandle)
+{
+  FIXME("stub\n");
+  if (pHandle)
+        *pHandle = (HANDLE)1;
+  return 0;
+}
+INT WINAPI XLiveCloseProtectedDataContext(HANDLE h)
 {
   FIXME("stub\n");
   return 0;
 }
-INT WINAPI XLIVE_5038(void)
+DWORD WINAPI XLiveProtectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE h)
 {
-  FIXME("stub\n");
-  return 0;
-}
-INT WINAPI XLIVE_5034(void)
-{
-  FIXME("stub\n");
-  return 0;
+  FIXME("stub: %p %d %p %p(%d) %d\n",pInBuffer,dwInDataSize,pOutBuffer,pDataSize,*pDataSize,h);
+  *pDataSize = dwInDataSize;
+  if ( !pOutBuffer )
+      return 0x8007007A; //Insufficent buffer
+  if (*pDataSize >= dwInDataSize && pOutBuffer)
+            memcpy (pOutBuffer, pInBuffer, dwInDataSize);
+    return 0;
 }
 INT WINAPI XLiveCancelOverlapped(void * pOver)
 {
@@ -274,4 +304,37 @@ INT WINAPI XEnumerate (HANDLE hEnum, void * pvBuffer, DWORD cbBuffer, DWORD * pc
 INT WINAPI XGetOverlappedExtendedError (void * p0)
 {
 	return 0;
+}
+INT WINAPI XLiveUnprotectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE * ph)
+{
+    FIXME("stub\n");
+    if (!pDataSize || !ph)      // invalid parameter
+                return E_FAIL;
+    if (!pOutBuffer)
+    {
+        *pDataSize = dwInDataSize;
+        return 0x8007007A;
+    }
+    *ph = (HANDLE)1;
+    if (!pOutBuffer || *pDataSize < dwInDataSize) {
+            *pDataSize = dwInDataSize;
+            return 0x8007007A;
+    }
+    *pDataSize = dwInDataSize;
+    memcpy (pOutBuffer, pInBuffer, dwInDataSize);
+    return 0;
+}
+void WINAPI XWSACleanup(void)
+{
+    FIXME("stub\n");
+}
+INT WINAPI XOnlineCleanup(void)
+{
+    FIXME("stub\n");
+    return 0;
+}
+INT WINAPI XLiveQueryProtectedDataInformation(HANDLE h, DWORD * p0)
+{
+    FIXME("stub: %u %p\n",h,p0);
+    return 0;
 }

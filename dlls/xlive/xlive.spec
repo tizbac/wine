@@ -1,5 +1,5 @@
 1 stdcall -noname XWSAStartup(long long)
-2 stub -noname @
+2 stdcall -noname XWSACleanup()
 3 stub -noname @
 4 stub -noname @
 5 stub -noname @
@@ -74,7 +74,7 @@
 477 stub -noname @
 478 stub -noname @
 479 stub -noname @
-651 stdcall -noname XLIVE_651(long long long long)
+651 stdcall -noname XNotifyGetNext(long long long long)
 652 stdcall -noname XLIVE_652(long)
 653 stub -noname @
 1082 stdcall -noname XGetOverlappedExtendedError(long)
@@ -104,14 +104,14 @@
 5027 stub -noname @
 5028 stub -noname @
 5029 stub -noname @
-5030 stdcall -noname XLIVE_5030(long)
+5030 stdcall -noname XLivePreTranslateMessage(long)
 5031 stub -noname @
 5032 stub -noname @
-5034 stdcall -noname XLIVE_5034()
-5035 stub -noname @
-5036 stdcall -noname XLIVE_5036()
-5037 stub -noname @
-5038 stdcall -noname XLIVE_5038()
+5034 stdcall -noname XLiveProtectData(long long long long long)
+5035 stdcall -noname XLiveUnprotectData(long long long long long)
+5036 stdcall -noname XLiveCreateProtectedDataContext(long long)
+5037 stdcall -noname XLiveQueryProtectedDataInformation(long long)
+5038 stdcall -noname XLiveCloseProtectedDataContext(long)
 5039 stub -noname @
 5206 stub -noname @
 5208 stub -noname @
@@ -141,12 +141,12 @@
 5260 stub -noname @
 5261 stdcall -noname XUserGetXUID(long long)
 5262 stdcall -noname XUserGetSigninState(long)
-5263 stdcall -noname XLIVE_5263(long long long)
+5263 stdcall -noname XUserGetName(long long long)
 5264 stub -noname @
 5265 stdcall -noname XLiveUserCheckPrivilege(long long long)
 5266 stub -noname @
-5267 stdcall -noname XLIVE_5267(long long long)
-5270 stdcall -noname XLIVE_5270(long long)
+5267 stdcall -noname XUserGetSigninInfo(long long long)
+5270 stdcall -noname XNotifyCreateListener(long long)
 5271 stub -noname @
 5273 stub -noname @
 5274 stub -noname @
@@ -183,7 +183,7 @@
 5308 stub -noname @
 5309 stub -noname @
 5310 stdcall -noname XLIVE_5310()
-5311 stub -noname @
+5311 stdcall -noname XOnlineCleanup()
 5312 stdcall -noname XFriendsCreateEnumerator(long long long long long)
 5313 stub -noname @
 5314 stub -noname @
