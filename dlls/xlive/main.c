@@ -338,3 +338,26 @@ INT WINAPI XLiveQueryProtectedDataInformation(HANDLE h, DWORD * p0)
     FIXME("stub: %u %p\n",h,p0);
     return 0;
 }
+INT WINAPI XUserWriteAchievements (DWORD p0, DWORD p1, DWORD p2)
+{
+    FIXME("stub\n");
+    return 0;
+}
+INT WINAPI XUserCreateAchievementEnumerator(DWORD dwTitleId, DWORD dwUserIndex, DWORD xuidL, DWORD xuidHi, DWORD dwDetailFlags, DWORD dwStartingIndex, DWORD cItem, DWORD * pcbBuffer, HANDLE * phEnum)
+{
+    FIXME("stub\n");
+    if (pcbBuffer)
+        *pcbBuffer = 0;
+    if (phEnum)
+            *phEnum = INVALID_HANDLE_VALUE;
+    return 1;   // return error (otherwise, 0-size buffer will be allocated)
+}
+INT WINAPI XUserReadStats (DWORD p0, DWORD p1, DWORD p2, DWORD p3, DWORD p4 , DWORD * pcbResults, DWORD * pResults, void * p7)
+{
+    FIXME("stub\n");
+    if (pcbResults)     
+            *pcbResults = 4;
+    if (pResults)
+            *pResults = 0;
+    return 0;
+}

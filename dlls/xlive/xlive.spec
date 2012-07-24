@@ -153,10 +153,10 @@
 5275 stub -noname @
 5276 stub -noname @
 5277 stdcall -noname XUserSetContext(long long long)
-5278 stub -noname @
+5278 stdcall -noname XUserWriteAchievements(long long long)
 5279 stub -noname @
-5280 stub -noname @
-5281 stub -noname @
+5280 stdcall -noname XUserCreateAchievementEnumerator(long long long long long long long long long)
+5281 stdcall -noname XUserReadStats(long long long long long long long long)
 5282 stub -noname @
 5284 stub -noname @
 5285 stub -noname @
