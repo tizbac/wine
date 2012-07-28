@@ -1213,9 +1213,14 @@ static HRESULT WINAPI ddraw_surface7_Flip(IDirectDrawSurface7 *iface, IDirectDra
         hr = ddraw_surface7_GetAttachedSurface(iface, &Caps, &Override7);
         if(hr != DD_OK)
         {
-            ERR("Can't find a flip target\n");
-            wined3d_mutex_unlock();
-            return DDERR_NOTFLIPPABLE; /* Unchecked */
+            Caps.dwCaps = 0x0;//Patch ZeroZone, use the first attached surface in the case that no backbuffer is found
+            hr = ddraw_surface7_GetAttachedSurface(iface, &Caps, &Override7);
+            if ( hr != DD_OK )
+            {
+              ERR("Can't find a flip target\n");
+              wined3d_mutex_unlock();
+              return DDERR_NOTFLIPPABLE; /* Unchecked */
+            }
         }
         Override = impl_from_IDirectDrawSurface7(Override7);
 

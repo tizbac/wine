@@ -4482,10 +4482,12 @@ static HRESULT WINAPI d3d7_EnumZBufferFormats(IDirect3D7 *iface, REFCLSID device
     {
         WINED3DFMT_S1_UINT_D15_UNORM,
         WINED3DFMT_D16_UNORM,
+        WINED3DFMT_DF16,
         WINED3DFMT_X8D24_UNORM,
         WINED3DFMT_S4X4_UINT_D24_UNORM,
         WINED3DFMT_D24_UNORM_S8_UINT,
         WINED3DFMT_D32_UNORM,
+        WINED3DFMT_DF24
     };
 
     TRACE("iface %p, device_iid %s, callback %p, context %p.\n",

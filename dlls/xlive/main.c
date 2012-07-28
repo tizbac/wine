@@ -361,3 +361,62 @@ INT WINAPI XUserReadStats (DWORD p0, DWORD p1, DWORD p2, DWORD p3, DWORD p4 , DW
             *pResults = 0;
     return 0;
 }
+
+typedef struct{
+        DWORD   dwMagick;       
+        DWORD   dwSize;
+        DWORD   __fill[2];
+        BYTE    bData[4];
+} FakeProtectedBuffer;
+DWORD WINAPI XLivePBufferAllocate (int size, FakeProtectedBuffer ** pBuffer) {
+    *pBuffer = (FakeProtectedBuffer *)malloc (size+16);
+    if (!*pBuffer) {
+            return E_OUTOFMEMORY;
+    }
+
+    (*pBuffer)->dwMagick = 0xDEADDEAD;      // some arbitrary number
+    (*pBuffer)->dwSize = size;
+    return 0;
+}
+DWORD WINAPI XLivePBufferFree(FakeProtectedBuffer * pBuffer)
+{
+    if (pBuffer && pBuffer->dwMagick == 0xDEADDEAD)
+        free (pBuffer);
+    return 0;
+}
+DWORD WINAPI XLivePBufferSetByteArray(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE * source, DWORD size) {
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || !source || offset < 0 || offset+size > pBuffer->dwSize)
+                return 0;
+        memcpy (pBuffer->bData+offset, source, size);
+        return 0;
+}
+DWORD WINAPI XLivePBufferGetByteArray(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE * destination, DWORD size) {
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || !destination || offset < 0 || offset+size > pBuffer->dwSize)
+                return 0;
+        memcpy (destination, pBuffer->bData+offset, size);
+        return 0;
+}
+DWORD WINAPI XLivePBufferSetByte(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE value) {
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || offset < 0 || offset > pBuffer->dwSize)
+                return 0;
+        pBuffer->bData[offset] = value;
+        return 0;
+}
+DWORD WINAPI XLivePBufferGetByte (FakeProtectedBuffer * pBuffer, DWORD offset, BYTE * value) {
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || !value || offset < 0 || offset > pBuffer->dwSize)
+                return 0;
+        *value = pBuffer->bData[offset];
+        return 0;
+}
+DWORD WINAPI XLivePBufferGetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset, DWORD * pdwValue) {
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || dwOffset < 0 || dwOffset > pBuffer->dwSize-4 || !pdwValue)
+                return 0;
+        *pdwValue = *(DWORD *)(pBuffer->bData+dwOffset);
+        return 0;
+}
+DWORD WINAPI XLivePBufferSetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset, DWORD dwValue ) {
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || dwOffset < 0 || dwOffset > pBuffer->dwSize-4)
+                return 0;
+        *(DWORD *)(pBuffer->bData+dwOffset) = dwValue;
+        return 0;
+}

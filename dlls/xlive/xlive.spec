@@ -90,12 +90,12 @@
 5010 stub -noname @
 5011 stub -noname @
 5012 stub -noname @
-5016 stub -noname @
-5017 stub -noname @
-5018 stub -noname @
-5019 stub -noname @
-5020 stub -noname @
-5021 stub -noname @
+5016 stdcall -noname XLivePBufferAllocate(long long)
+5017 stdcall -noname XLivePBufferFree(long)
+5018 stdcall -noname XLivePBufferGetByte(long long long)
+5019 stdcall -noname XLivePBufferSetByte(long long long)
+5020 stdcall -noname XLivePBufferGetDWORD(long long long)
+5021 stdcall -noname XLivePBufferSetDWORD(long long long)
 5022 stub -noname @
 5023 stub -noname @
 5024 stub -noname @
@@ -168,8 +168,8 @@
 5291 stub -noname @
 5292 stub -noname @
 5293 stub -noname @
-5294 stub -noname @
-5295 stub -noname @
+5294 stdcall -noname XLivePBufferGetByteArray(long long long long)
+5295 stdcall -noname XLivePBufferSetByteArray(long long long long)
 5296 stub -noname @
 5297 stdcall -noname XLIVE_5297()
 5298 stub -noname @

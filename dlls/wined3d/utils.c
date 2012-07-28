@@ -124,6 +124,8 @@ static const struct StaticPixelFormatDesc formats[] =
     {WINED3DFMT_S4X4_UINT_D24_UNORM,        0x0,        0x0,        0x0,        0x0,        4,      24,     4},
     {WINED3DFMT_D16_UNORM,                  0x0,        0x0,        0x0,        0x0,        2,      16,     0},
     {WINED3DFMT_D32_FLOAT,                  0x0,        0x0,        0x0,        0x0,        4,      32,     0},
+    {WINED3DFMT_DF16,                       0x0,        0x0,        0x0,         0x0,       2,      16,     0},
+    {WINED3DFMT_DF24,                       0x0,        0x0,        0x0,         0x0,       3,      24,     0},
     {WINED3DFMT_S8_UINT_D24_FLOAT,          0x0,        0x0,        0x0,        0x0,        4,      24,     8},
     {WINED3DFMT_VERTEXDATA,                 0x0,        0x0,        0x0,        0x0,        0,      0,      0},
     {WINED3DFMT_R16_UINT,                   0x0,        0x0,        0x0,        0x0,        2,      0,      0},
@@ -188,6 +190,8 @@ static const struct wined3d_format_base_flags format_base_flags[] =
     {WINED3DFMT_R16G16_FLOAT,       WINED3DFMT_FLAG_FLOAT},
     {WINED3DFMT_R16G16B16A16_FLOAT, WINED3DFMT_FLAG_FLOAT},
     {WINED3DFMT_D32_FLOAT,          WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_DF16,               WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_DF24,               WINED3DFMT_FLAG_FLOAT},
     {WINED3DFMT_S8_UINT_D24_FLOAT,  WINED3DFMT_FLAG_FLOAT},
 };
 
@@ -860,6 +864,14 @@ static const struct wined3d_format_texture_info format_texture_info[] =
             WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING | WINED3DFMT_FLAG_FILTERING,
             WINED3D_GL_EXT_NONE,        NULL},
     {WINED3DFMT_D32_FLOAT,              GL_DEPTH_COMPONENT32F,            GL_DEPTH_COMPONENT32F,                  0,
+            GL_DEPTH_COMPONENT,         GL_FLOAT,                         0,
+            WINED3DFMT_FLAG_DEPTH | WINED3DFMT_FLAG_SHADOW,
+            ARB_DEPTH_BUFFER_FLOAT,     NULL},
+    {WINED3DFMT_DF16,                   GL_DEPTH_COMPONENT32F,            GL_DEPTH_COMPONENT32F,                  0,
+            GL_DEPTH_COMPONENT,         GL_FLOAT,                         0,
+            WINED3DFMT_FLAG_DEPTH | WINED3DFMT_FLAG_SHADOW,
+            ARB_DEPTH_BUFFER_FLOAT,     NULL},
+    {WINED3DFMT_DF24,                   GL_DEPTH_COMPONENT32F,            GL_DEPTH_COMPONENT32F,                  0,
             GL_DEPTH_COMPONENT,         GL_FLOAT,                         0,
             WINED3DFMT_FLAG_DEPTH | WINED3DFMT_FLAG_SHADOW,
             ARB_DEPTH_BUFFER_FLOAT,     NULL},
@@ -1815,6 +1827,8 @@ const char *debug_d3dformat(enum wined3d_format_id format_id)
         FMT_TO_STR(WINED3DFMT_R16G16_SINT);
         FMT_TO_STR(WINED3DFMT_R32_TYPELESS);
         FMT_TO_STR(WINED3DFMT_D32_FLOAT);
+        FMT_TO_STR(WINED3DFMT_DF16);
+        FMT_TO_STR(WINED3DFMT_DF24);
         FMT_TO_STR(WINED3DFMT_R32_FLOAT);
         FMT_TO_STR(WINED3DFMT_R32_UINT);
         FMT_TO_STR(WINED3DFMT_R32_SINT);
@@ -2699,6 +2713,8 @@ BOOL getDepthStencilBits(const struct wined3d_format *format, BYTE *depthSize, B
         case WINED3DFMT_S8_UINT_D24_FLOAT:
         case WINED3DFMT_D32_UNORM:
         case WINED3DFMT_D32_FLOAT:
+        case WINED3DFMT_DF16:
+        case WINED3DFMT_DF24:
         case WINED3DFMT_INTZ:
             break;
         default:
