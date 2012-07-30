@@ -215,7 +215,7 @@ static HRESULT WINAPI HTMLDocument_get_images(IHTMLDocument2 *iface, IHTMLElemen
 
     if(nscoll) {
         *p = create_collection_from_htmlcol(This->doc_node, nscoll);
-        nsIDOMElement_Release(nscoll);
+        nsIDOMHTMLCollection_Release(nscoll);
     }
 
     return S_OK;
@@ -247,7 +247,7 @@ static HRESULT WINAPI HTMLDocument_get_applets(IHTMLDocument2 *iface, IHTMLEleme
 
     if(nscoll) {
         *p = create_collection_from_htmlcol(This->doc_node, nscoll);
-        nsIDOMElement_Release(nscoll);
+        nsIDOMHTMLCollection_Release(nscoll);
     }
 
     return S_OK;
@@ -279,7 +279,7 @@ static HRESULT WINAPI HTMLDocument_get_links(IHTMLDocument2 *iface, IHTMLElement
 
     if(nscoll) {
         *p = create_collection_from_htmlcol(This->doc_node, nscoll);
-        nsIDOMElement_Release(nscoll);
+        nsIDOMHTMLCollection_Release(nscoll);
     }
 
     return S_OK;
@@ -311,7 +311,7 @@ static HRESULT WINAPI HTMLDocument_get_forms(IHTMLDocument2 *iface, IHTMLElement
 
     if(nscoll) {
         *p = create_collection_from_htmlcol(This->doc_node, nscoll);
-        nsIDOMElement_Release(nscoll);
+        nsIDOMHTMLCollection_Release(nscoll);
     }
 
     return S_OK;
@@ -343,7 +343,7 @@ static HRESULT WINAPI HTMLDocument_get_anchors(IHTMLDocument2 *iface, IHTMLEleme
 
     if(nscoll) {
         *p = create_collection_from_htmlcol(This->doc_node, nscoll);
-        nsIDOMElement_Release(nscoll);
+        nsIDOMHTMLCollection_Release(nscoll);
     }
 
     return S_OK;
@@ -1022,17 +1022,23 @@ static HRESULT WINAPI HTMLDocument_createElement(IHTMLDocument2 *iface, BSTR eTa
                                                  IHTMLElement **newElem)
 {
     HTMLDocument *This = impl_from_IHTMLDocument2(iface);
+    HTMLDocumentNode *doc_node;
     nsIDOMHTMLElement *nselem;
     HTMLElement *elem;
     HRESULT hres;
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_w(eTag), newElem);
 
-    hres = create_nselem(This->doc_node, eTag, &nselem);
+    /* Use owner doc if called on document fragment */
+    doc_node = This->doc_node;
+    if(!doc_node->nsdoc)
+        doc_node = doc_node->node.doc;
+
+    hres = create_nselem(doc_node, eTag, &nselem);
     if(FAILED(hres))
         return hres;
 
-    hres = HTMLElement_Create(This->doc_node, (nsIDOMNode*)nselem, TRUE, &elem);
+    hres = HTMLElement_Create(doc_node, (nsIDOMNode*)nselem, TRUE, &elem);
     nsIDOMHTMLElement_Release(nselem);
     if(FAILED(hres))
         return hres;

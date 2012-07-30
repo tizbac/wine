@@ -27,9 +27,7 @@
 #include <stdio.h>
 
 #include "wined3d_private.h"
-#ifndef USE_WIN32_OPENGL
-#include "wine/wgl_driver.h"
-#endif
+#include "winternl.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d);
 
@@ -81,134 +79,133 @@ struct wined3d_extension_map
 {
     const char *extension_string;
     enum wined3d_gl_extension extension;
-    DWORD version;
 };
 
 static const struct wined3d_extension_map gl_extension_map[] =
 {
     /* APPLE */
-    {"GL_APPLE_client_storage",             APPLE_CLIENT_STORAGE,           0                           },
-    {"GL_APPLE_fence",                      APPLE_FENCE,                    0                           },
-    {"GL_APPLE_float_pixels",               APPLE_FLOAT_PIXELS,             0                           },
-    {"GL_APPLE_flush_buffer_range",         APPLE_FLUSH_BUFFER_RANGE,       0                           },
-    {"GL_APPLE_ycbcr_422",                  APPLE_YCBCR_422,                0                           },
+    {"GL_APPLE_client_storage",             APPLE_CLIENT_STORAGE          },
+    {"GL_APPLE_fence",                      APPLE_FENCE                   },
+    {"GL_APPLE_float_pixels",               APPLE_FLOAT_PIXELS            },
+    {"GL_APPLE_flush_buffer_range",         APPLE_FLUSH_BUFFER_RANGE      },
+    {"GL_APPLE_ycbcr_422",                  APPLE_YCBCR_422               },
 
     /* ARB */
-    {"GL_ARB_color_buffer_float",           ARB_COLOR_BUFFER_FLOAT,         0                           },
-    {"GL_ARB_depth_buffer_float",           ARB_DEPTH_BUFFER_FLOAT,         0                           },
-    {"GL_ARB_depth_clamp",                  ARB_DEPTH_CLAMP,                0                           },
-    {"GL_ARB_depth_texture",                ARB_DEPTH_TEXTURE,              0                           },
-    {"GL_ARB_draw_buffers",                 ARB_DRAW_BUFFERS,               0                           },
-    {"GL_ARB_draw_elements_base_vertex",    ARB_DRAW_ELEMENTS_BASE_VERTEX,  0                           },
-    {"GL_ARB_fragment_program",             ARB_FRAGMENT_PROGRAM,           0                           },
-    {"GL_ARB_fragment_shader",              ARB_FRAGMENT_SHADER,            0                           },
-    {"GL_ARB_framebuffer_object",           ARB_FRAMEBUFFER_OBJECT,         0                           },
-    {"GL_ARB_geometry_shader4",             ARB_GEOMETRY_SHADER4,           0                           },
-    {"GL_ARB_half_float_pixel",             ARB_HALF_FLOAT_PIXEL,           0                           },
-    {"GL_ARB_half_float_vertex",            ARB_HALF_FLOAT_VERTEX,          0                           },
-    {"GL_ARB_map_buffer_alignment",         ARB_MAP_BUFFER_ALIGNMENT,       0                           },
-    {"GL_ARB_map_buffer_range",             ARB_MAP_BUFFER_RANGE,           0                           },
-    {"GL_ARB_multisample",                  ARB_MULTISAMPLE,                0                           }, /* needs GLX_ARB_MULTISAMPLE as well */
-    {"GL_ARB_multitexture",                 ARB_MULTITEXTURE,               0                           },
-    {"GL_ARB_occlusion_query",              ARB_OCCLUSION_QUERY,            0                           },
-    {"GL_ARB_pixel_buffer_object",          ARB_PIXEL_BUFFER_OBJECT,        0                           },
-    {"GL_ARB_point_parameters",             ARB_POINT_PARAMETERS,           0                           },
-    {"GL_ARB_point_sprite",                 ARB_POINT_SPRITE,               0                           },
-    {"GL_ARB_provoking_vertex",             ARB_PROVOKING_VERTEX,           0                           },
-    {"GL_ARB_shader_objects",               ARB_SHADER_OBJECTS,             0                           },
-    {"GL_ARB_shader_texture_lod",           ARB_SHADER_TEXTURE_LOD,         0                           },
-    {"GL_ARB_shading_language_100",         ARB_SHADING_LANGUAGE_100,       0                           },
-    {"GL_ARB_shadow",                       ARB_SHADOW,                     0                           },
-    {"GL_ARB_sync",                         ARB_SYNC,                       0                           },
-    {"GL_ARB_texture_border_clamp",         ARB_TEXTURE_BORDER_CLAMP,       0                           },
-    {"GL_ARB_texture_compression",          ARB_TEXTURE_COMPRESSION,        0                           },
-    {"GL_ARB_texture_compression_rgtc",     ARB_TEXTURE_COMPRESSION_RGTC,   0                           },
-    {"GL_ARB_texture_cube_map",             ARB_TEXTURE_CUBE_MAP,           0                           },
-    {"GL_ARB_texture_env_add",              ARB_TEXTURE_ENV_ADD,            0                           },
-    {"GL_ARB_texture_env_combine",          ARB_TEXTURE_ENV_COMBINE,        0                           },
-    {"GL_ARB_texture_env_dot3",             ARB_TEXTURE_ENV_DOT3,           0                           },
-    {"GL_ARB_texture_float",                ARB_TEXTURE_FLOAT,              0                           },
-    {"GL_ARB_texture_mirrored_repeat",      ARB_TEXTURE_MIRRORED_REPEAT,    0                           },
-    {"GL_ARB_texture_non_power_of_two",     ARB_TEXTURE_NON_POWER_OF_TWO,   MAKEDWORD_VERSION(2, 0)     },
-    {"GL_ARB_texture_rectangle",            ARB_TEXTURE_RECTANGLE,          0                           },
-    {"GL_ARB_texture_rg",                   ARB_TEXTURE_RG,                 0                           },
-    {"GL_ARB_vertex_array_bgra",            ARB_VERTEX_ARRAY_BGRA,          0                           },
-    {"GL_ARB_vertex_blend",                 ARB_VERTEX_BLEND,               0                           },
-    {"GL_ARB_vertex_buffer_object",         ARB_VERTEX_BUFFER_OBJECT,       0                           },
-    {"GL_ARB_vertex_program",               ARB_VERTEX_PROGRAM,             0                           },
-    {"GL_ARB_vertex_shader",                ARB_VERTEX_SHADER,              0                           },
+    {"GL_ARB_color_buffer_float",           ARB_COLOR_BUFFER_FLOAT        },
+    {"GL_ARB_depth_buffer_float",           ARB_DEPTH_BUFFER_FLOAT        },
+    {"GL_ARB_depth_clamp",                  ARB_DEPTH_CLAMP               },
+    {"GL_ARB_depth_texture",                ARB_DEPTH_TEXTURE             },
+    {"GL_ARB_draw_buffers",                 ARB_DRAW_BUFFERS              },
+    {"GL_ARB_draw_elements_base_vertex",    ARB_DRAW_ELEMENTS_BASE_VERTEX },
+    {"GL_ARB_fragment_program",             ARB_FRAGMENT_PROGRAM          },
+    {"GL_ARB_fragment_shader",              ARB_FRAGMENT_SHADER           },
+    {"GL_ARB_framebuffer_object",           ARB_FRAMEBUFFER_OBJECT        },
+    {"GL_ARB_geometry_shader4",             ARB_GEOMETRY_SHADER4          },
+    {"GL_ARB_half_float_pixel",             ARB_HALF_FLOAT_PIXEL          },
+    {"GL_ARB_half_float_vertex",            ARB_HALF_FLOAT_VERTEX         },
+    {"GL_ARB_map_buffer_alignment",         ARB_MAP_BUFFER_ALIGNMENT      },
+    {"GL_ARB_map_buffer_range",             ARB_MAP_BUFFER_RANGE          },
+    {"GL_ARB_multisample",                  ARB_MULTISAMPLE               }, /* needs GLX_ARB_MULTISAMPLE as well */
+    {"GL_ARB_multitexture",                 ARB_MULTITEXTURE              },
+    {"GL_ARB_occlusion_query",              ARB_OCCLUSION_QUERY           },
+    {"GL_ARB_pixel_buffer_object",          ARB_PIXEL_BUFFER_OBJECT       },
+    {"GL_ARB_point_parameters",             ARB_POINT_PARAMETERS          },
+    {"GL_ARB_point_sprite",                 ARB_POINT_SPRITE              },
+    {"GL_ARB_provoking_vertex",             ARB_PROVOKING_VERTEX          },
+    {"GL_ARB_shader_objects",               ARB_SHADER_OBJECTS            },
+    {"GL_ARB_shader_texture_lod",           ARB_SHADER_TEXTURE_LOD        },
+    {"GL_ARB_shading_language_100",         ARB_SHADING_LANGUAGE_100      },
+    {"GL_ARB_shadow",                       ARB_SHADOW                    },
+    {"GL_ARB_sync",                         ARB_SYNC                      },
+    {"GL_ARB_texture_border_clamp",         ARB_TEXTURE_BORDER_CLAMP      },
+    {"GL_ARB_texture_compression",          ARB_TEXTURE_COMPRESSION       },
+    {"GL_ARB_texture_compression_rgtc",     ARB_TEXTURE_COMPRESSION_RGTC  },
+    {"GL_ARB_texture_cube_map",             ARB_TEXTURE_CUBE_MAP          },
+    {"GL_ARB_texture_env_add",              ARB_TEXTURE_ENV_ADD           },
+    {"GL_ARB_texture_env_combine",          ARB_TEXTURE_ENV_COMBINE       },
+    {"GL_ARB_texture_env_dot3",             ARB_TEXTURE_ENV_DOT3          },
+    {"GL_ARB_texture_float",                ARB_TEXTURE_FLOAT             },
+    {"GL_ARB_texture_mirrored_repeat",      ARB_TEXTURE_MIRRORED_REPEAT   },
+    {"GL_ARB_texture_non_power_of_two",     ARB_TEXTURE_NON_POWER_OF_TWO  },
+    {"GL_ARB_texture_rectangle",            ARB_TEXTURE_RECTANGLE         },
+    {"GL_ARB_texture_rg",                   ARB_TEXTURE_RG                },
+    {"GL_ARB_vertex_array_bgra",            ARB_VERTEX_ARRAY_BGRA         },
+    {"GL_ARB_vertex_blend",                 ARB_VERTEX_BLEND              },
+    {"GL_ARB_vertex_buffer_object",         ARB_VERTEX_BUFFER_OBJECT      },
+    {"GL_ARB_vertex_program",               ARB_VERTEX_PROGRAM            },
+    {"GL_ARB_vertex_shader",                ARB_VERTEX_SHADER             },
 
     /* ATI */
-    {"GL_ATI_fragment_shader",              ATI_FRAGMENT_SHADER,            0                           },
-    {"GL_ATI_separate_stencil",             ATI_SEPARATE_STENCIL,           0                           },
-    {"GL_ATI_texture_compression_3dc",      ATI_TEXTURE_COMPRESSION_3DC,    0                           },
-    {"GL_ATI_texture_env_combine3",         ATI_TEXTURE_ENV_COMBINE3,       0                           },
-    {"GL_ATI_texture_mirror_once",          ATI_TEXTURE_MIRROR_ONCE,        0                           },
+    {"GL_ATI_fragment_shader",              ATI_FRAGMENT_SHADER           },
+    {"GL_ATI_separate_stencil",             ATI_SEPARATE_STENCIL          },
+    {"GL_ATI_texture_compression_3dc",      ATI_TEXTURE_COMPRESSION_3DC   },
+    {"GL_ATI_texture_env_combine3",         ATI_TEXTURE_ENV_COMBINE3      },
+    {"GL_ATI_texture_mirror_once",          ATI_TEXTURE_MIRROR_ONCE       },
 
     /* EXT */
-    {"GL_EXT_blend_color",                  EXT_BLEND_COLOR,                0                           },
-    {"GL_EXT_blend_equation_separate",      EXT_BLEND_EQUATION_SEPARATE,    0                           },
-    {"GL_EXT_blend_func_separate",          EXT_BLEND_FUNC_SEPARATE,        0                           },
-    {"GL_EXT_blend_minmax",                 EXT_BLEND_MINMAX,               0                           },
-    {"GL_EXT_blend_subtract",               EXT_BLEND_SUBTRACT,             0                           },
-    {"GL_EXT_depth_bounds_test",            EXT_DEPTH_BOUNDS_TEST,          0                           },
-    {"GL_EXT_draw_buffers2",                EXT_DRAW_BUFFERS2,              0                           },
-    {"GL_EXT_fog_coord",                    EXT_FOG_COORD,                  0                           },
-    {"GL_EXT_framebuffer_blit",             EXT_FRAMEBUFFER_BLIT,           0                           },
-    {"GL_EXT_framebuffer_multisample",      EXT_FRAMEBUFFER_MULTISAMPLE,    0                           },
-    {"GL_EXT_framebuffer_object",           EXT_FRAMEBUFFER_OBJECT,         0                           },
-    {"GL_EXT_gpu_program_parameters",       EXT_GPU_PROGRAM_PARAMETERS,     0                           },
-    {"GL_EXT_gpu_shader4",                  EXT_GPU_SHADER4,                0                           },
-    {"GL_EXT_packed_depth_stencil",         EXT_PACKED_DEPTH_STENCIL,       0                           },
-    {"GL_EXT_paletted_texture",             EXT_PALETTED_TEXTURE,           0                           },
-    {"GL_EXT_point_parameters",             EXT_POINT_PARAMETERS,           0                           },
-    {"GL_EXT_provoking_vertex",             EXT_PROVOKING_VERTEX,           0                           },
-    {"GL_EXT_secondary_color",              EXT_SECONDARY_COLOR,            0                           },
-    {"GL_EXT_stencil_two_side",             EXT_STENCIL_TWO_SIDE,           0                           },
-    {"GL_EXT_stencil_wrap",                 EXT_STENCIL_WRAP,               0                           },
-    {"GL_EXT_texture3D",                    EXT_TEXTURE3D,                  MAKEDWORD_VERSION(1, 2)     },
-    {"GL_EXT_texture_compression_rgtc",     EXT_TEXTURE_COMPRESSION_RGTC,   0                           },
-    {"GL_EXT_texture_compression_s3tc",     EXT_TEXTURE_COMPRESSION_S3TC,   0                           },
-    {"GL_EXT_texture_env_add",              EXT_TEXTURE_ENV_ADD,            0                           },
-    {"GL_EXT_texture_env_combine",          EXT_TEXTURE_ENV_COMBINE,        0                           },
-    {"GL_EXT_texture_env_dot3",             EXT_TEXTURE_ENV_DOT3,           0                           },
-    {"GL_EXT_texture_filter_anisotropic",   EXT_TEXTURE_FILTER_ANISOTROPIC, 0                           },
-    {"GL_EXT_texture_lod_bias",             EXT_TEXTURE_LOD_BIAS,           0                           },
-    {"GL_EXT_texture_sRGB",                 EXT_TEXTURE_SRGB,               0                           },
-    {"GL_EXT_texture_sRGB_decode",          EXT_TEXTURE_SRGB_DECODE,        0                           },
-    {"GL_EXT_vertex_array_bgra",            EXT_VERTEX_ARRAY_BGRA,          0                           },
+    {"GL_EXT_blend_color",                  EXT_BLEND_COLOR               },
+    {"GL_EXT_blend_equation_separate",      EXT_BLEND_EQUATION_SEPARATE   },
+    {"GL_EXT_blend_func_separate",          EXT_BLEND_FUNC_SEPARATE       },
+    {"GL_EXT_blend_minmax",                 EXT_BLEND_MINMAX              },
+    {"GL_EXT_blend_subtract",               EXT_BLEND_SUBTRACT            },
+    {"GL_EXT_depth_bounds_test",            EXT_DEPTH_BOUNDS_TEST         },
+    {"GL_EXT_draw_buffers2",                EXT_DRAW_BUFFERS2             },
+    {"GL_EXT_fog_coord",                    EXT_FOG_COORD                 },
+    {"GL_EXT_framebuffer_blit",             EXT_FRAMEBUFFER_BLIT          },
+    {"GL_EXT_framebuffer_multisample",      EXT_FRAMEBUFFER_MULTISAMPLE   },
+    {"GL_EXT_framebuffer_object",           EXT_FRAMEBUFFER_OBJECT        },
+    {"GL_EXT_gpu_program_parameters",       EXT_GPU_PROGRAM_PARAMETERS    },
+    {"GL_EXT_gpu_shader4",                  EXT_GPU_SHADER4               },
+    {"GL_EXT_packed_depth_stencil",         EXT_PACKED_DEPTH_STENCIL      },
+    {"GL_EXT_paletted_texture",             EXT_PALETTED_TEXTURE          },
+    {"GL_EXT_point_parameters",             EXT_POINT_PARAMETERS          },
+    {"GL_EXT_provoking_vertex",             EXT_PROVOKING_VERTEX          },
+    {"GL_EXT_secondary_color",              EXT_SECONDARY_COLOR           },
+    {"GL_EXT_stencil_two_side",             EXT_STENCIL_TWO_SIDE          },
+    {"GL_EXT_stencil_wrap",                 EXT_STENCIL_WRAP              },
+    {"GL_EXT_texture3D",                    EXT_TEXTURE3D                 },
+    {"GL_EXT_texture_compression_rgtc",     EXT_TEXTURE_COMPRESSION_RGTC  },
+    {"GL_EXT_texture_compression_s3tc",     EXT_TEXTURE_COMPRESSION_S3TC  },
+    {"GL_EXT_texture_env_add",              EXT_TEXTURE_ENV_ADD           },
+    {"GL_EXT_texture_env_combine",          EXT_TEXTURE_ENV_COMBINE       },
+    {"GL_EXT_texture_env_dot3",             EXT_TEXTURE_ENV_DOT3          },
+    {"GL_EXT_texture_filter_anisotropic",   EXT_TEXTURE_FILTER_ANISOTROPIC},
+    {"GL_EXT_texture_lod_bias",             EXT_TEXTURE_LOD_BIAS          },
+    {"GL_EXT_texture_sRGB",                 EXT_TEXTURE_SRGB              },
+    {"GL_EXT_texture_sRGB_decode",          EXT_TEXTURE_SRGB_DECODE       },
+    {"GL_EXT_vertex_array_bgra",            EXT_VERTEX_ARRAY_BGRA         },
 
     /* NV */
-    {"GL_NV_depth_clamp",                   NV_DEPTH_CLAMP,                 0                           },
-    {"GL_NV_fence",                         NV_FENCE,                       0                           },
-    {"GL_NV_fog_distance",                  NV_FOG_DISTANCE,                0                           },
-    {"GL_NV_fragment_program",              NV_FRAGMENT_PROGRAM,            0                           },
-    {"GL_NV_fragment_program2",             NV_FRAGMENT_PROGRAM2,           0                           },
-    {"GL_NV_fragment_program_option",       NV_FRAGMENT_PROGRAM_OPTION,     0                           },
-    {"GL_NV_half_float",                    NV_HALF_FLOAT,                  0                           },
-    {"GL_NV_light_max_exponent",            NV_LIGHT_MAX_EXPONENT,          0                           },
-    {"GL_NV_point_sprite",                  NV_POINT_SPRITE,                MAKEDWORD_VERSION(1, 4)     },
-    {"GL_NV_register_combiners",            NV_REGISTER_COMBINERS,          0                           },
-    {"GL_NV_register_combiners2",           NV_REGISTER_COMBINERS2,         0                           },
-    {"GL_NV_texgen_reflection",             NV_TEXGEN_REFLECTION,           0                           },
-    {"GL_NV_texture_env_combine4",          NV_TEXTURE_ENV_COMBINE4,        0                           },
-    {"GL_NV_texture_shader",                NV_TEXTURE_SHADER,              0                           },
-    {"GL_NV_texture_shader2",               NV_TEXTURE_SHADER2,             0                           },
-    {"GL_NV_vertex_program",                NV_VERTEX_PROGRAM,              0                           },
-    {"GL_NV_vertex_program1_1",             NV_VERTEX_PROGRAM1_1,           0                           },
-    {"GL_NV_vertex_program2",               NV_VERTEX_PROGRAM2,             0                           },
-    {"GL_NV_vertex_program2_option",        NV_VERTEX_PROGRAM2_OPTION,      0                           },
-    {"GL_NV_vertex_program3",               NV_VERTEX_PROGRAM3,             0                           },
+    {"GL_NV_depth_clamp",                   NV_DEPTH_CLAMP                },
+    {"GL_NV_fence",                         NV_FENCE                      },
+    {"GL_NV_fog_distance",                  NV_FOG_DISTANCE               },
+    {"GL_NV_fragment_program",              NV_FRAGMENT_PROGRAM           },
+    {"GL_NV_fragment_program2",             NV_FRAGMENT_PROGRAM2          },
+    {"GL_NV_fragment_program_option",       NV_FRAGMENT_PROGRAM_OPTION    },
+    {"GL_NV_half_float",                    NV_HALF_FLOAT                 },
+    {"GL_NV_light_max_exponent",            NV_LIGHT_MAX_EXPONENT         },
+    {"GL_NV_point_sprite",                  NV_POINT_SPRITE               },
+    {"GL_NV_register_combiners",            NV_REGISTER_COMBINERS         },
+    {"GL_NV_register_combiners2",           NV_REGISTER_COMBINERS2        },
+    {"GL_NV_texgen_reflection",             NV_TEXGEN_REFLECTION          },
+    {"GL_NV_texture_env_combine4",          NV_TEXTURE_ENV_COMBINE4       },
+    {"GL_NV_texture_shader",                NV_TEXTURE_SHADER             },
+    {"GL_NV_texture_shader2",               NV_TEXTURE_SHADER2            },
+    {"GL_NV_vertex_program",                NV_VERTEX_PROGRAM             },
+    {"GL_NV_vertex_program1_1",             NV_VERTEX_PROGRAM1_1          },
+    {"GL_NV_vertex_program2",               NV_VERTEX_PROGRAM2            },
+    {"GL_NV_vertex_program2_option",        NV_VERTEX_PROGRAM2_OPTION     },
+    {"GL_NV_vertex_program3",               NV_VERTEX_PROGRAM3            },
 
     /* SGI */
-    {"GL_SGIS_generate_mipmap",             SGIS_GENERATE_MIPMAP,           0                           },
+    {"GL_SGIS_generate_mipmap",             SGIS_GENERATE_MIPMAP          },
 };
 
 static const struct wined3d_extension_map wgl_extension_map[] =
 {
-    {"WGL_ARB_pixel_format",                WGL_ARB_PIXEL_FORMAT,               0                        },
-    {"WGL_EXT_swap_control",                WGL_EXT_SWAP_CONTROL,               0                        },
-    {"WGL_WINE_pixel_format_passthrough",   WGL_WINE_PIXEL_FORMAT_PASSTHROUGH,  0                        },
+    {"WGL_ARB_pixel_format",                WGL_ARB_PIXEL_FORMAT             },
+    {"WGL_EXT_swap_control",                WGL_EXT_SWAP_CONTROL             },
+    {"WGL_WINE_pixel_format_passthrough",   WGL_WINE_PIXEL_FORMAT_PASSTHROUGH},
 };
 
 /**********************************************************
@@ -425,7 +422,7 @@ static inline BOOL test_arb_vs_offset_limit(const struct wined3d_gl_info *gl_inf
         "MOV result.position, C[A0.x + 65];\n"
         "END\n";
 
-    while(glGetError());
+    while (gl_info->gl_ops.gl.p_glGetError());
     GL_EXTCALL(glGenProgramsARB(1, &prog));
     if(!prog) {
         ERR("Failed to create an ARB offset limit test program\n");
@@ -433,10 +430,10 @@ static inline BOOL test_arb_vs_offset_limit(const struct wined3d_gl_info *gl_inf
     GL_EXTCALL(glBindProgramARB(GL_VERTEX_PROGRAM_ARB, prog));
     GL_EXTCALL(glProgramStringARB(GL_VERTEX_PROGRAM_ARB, GL_PROGRAM_FORMAT_ASCII_ARB,
                                   strlen(testcode), testcode));
-    if (glGetError())
+    if (gl_info->gl_ops.gl.p_glGetError())
     {
         TRACE("OpenGL implementation does not allow indirect addressing offsets > 63\n");
-        TRACE("error: %s\n", debugstr_a((const char *)glGetString(GL_PROGRAM_ERROR_STRING_ARB)));
+        TRACE("error: %s\n", debugstr_a((const char *)gl_info->gl_ops.gl.p_glGetString(GL_PROGRAM_ERROR_STRING_ARB)));
         ret = TRUE;
     } else TRACE("OpenGL implementation allows offsets > 63\n");
 
@@ -445,18 +442,6 @@ static inline BOOL test_arb_vs_offset_limit(const struct wined3d_gl_info *gl_inf
     checkGLcall("ARB vp offset limit test cleanup");
 
     return ret;
-}
-
-static DWORD ver_for_ext(enum wined3d_gl_extension ext)
-{
-    unsigned int i;
-
-    for (i = 0; i < (sizeof(gl_extension_map) / sizeof(*gl_extension_map)); ++i)
-    {
-        if (gl_extension_map[i].extension == ext)
-            return gl_extension_map[i].version;
-    }
-    return 0;
 }
 
 static BOOL match_amd_r300_to_500(const struct wined3d_gl_info *gl_info, const char *gl_renderer,
@@ -536,12 +521,12 @@ static void test_pbo_functionality(struct wined3d_gl_info *gl_info)
 
     ENTER_GL();
 
-    while (glGetError());
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    while (gl_info->gl_ops.gl.p_glGetError());
+    gl_info->gl_ops.gl.p_glGenTextures(1, &texture);
+    gl_info->gl_ops.gl.p_glBindTexture(GL_TEXTURE_2D, texture);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 4, 4, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
+    gl_info->gl_ops.gl.p_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    gl_info->gl_ops.gl.p_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 4, 4, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
     checkGLcall("Specifying the PBO test texture");
 
     GL_EXTCALL(glGenBuffersARB(1, &pbo));
@@ -549,20 +534,20 @@ static void test_pbo_functionality(struct wined3d_gl_info *gl_info)
     GL_EXTCALL(glBufferDataARB(GL_PIXEL_UNPACK_BUFFER_ARB, sizeof(pattern), pattern, GL_STREAM_DRAW_ARB));
     checkGLcall("Specifying the PBO test pbo");
 
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, 4, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+    gl_info->gl_ops.gl.p_glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, 4, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
     checkGLcall("Loading the PBO test texture");
 
     GL_EXTCALL(glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, 0));
     LEAVE_GL();
 
-    glFinish(); /* just to be sure */
+    gl_info->gl_ops.gl.p_glFinish(); /* just to be sure */
 
     memset(check, 0, sizeof(check));
     ENTER_GL();
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, check);
+    gl_info->gl_ops.gl.p_glGetTexImage(GL_TEXTURE_2D, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, check);
     checkGLcall("Reading back the PBO test texture");
 
-    glDeleteTextures(1, &texture);
+    gl_info->gl_ops.gl.p_glDeleteTextures(1, &texture);
     GL_EXTCALL(glDeleteBuffersARB(1, &pbo));
     checkGLcall("PBO test cleanup");
 
@@ -621,15 +606,16 @@ static BOOL match_allows_spec_alpha(const struct wined3d_gl_info *gl_info, const
     GLenum error;
     DWORD data[16];
 
-    if (!gl_info->supported[EXT_SECONDARY_COLOR]) return FALSE;
+    if (!gl_info->supported[EXT_SECONDARY_COLOR])
+        return FALSE;
 
     ENTER_GL();
-    while(glGetError());
+    while (gl_info->gl_ops.gl.p_glGetError());
     GL_EXTCALL(glSecondaryColorPointerEXT)(4, GL_UNSIGNED_BYTE, 4, data);
-    error = glGetError();
+    error = gl_info->gl_ops.gl.p_glGetError();
     LEAVE_GL();
 
-    if(error == GL_NO_ERROR)
+    if (error == GL_NO_ERROR)
     {
         TRACE("GL Implementation accepts 4 component specular color pointers\n");
         return TRUE;
@@ -659,7 +645,7 @@ static BOOL match_broken_nv_clip(const struct wined3d_gl_info *gl_info, const ch
     if (!gl_info->supported[NV_VERTEX_PROGRAM2_OPTION]) return FALSE;
 
     ENTER_GL();
-    while(glGetError());
+    while (gl_info->gl_ops.gl.p_glGetError());
 
     GL_EXTCALL(glGenProgramsARB(1, &prog));
     if(!prog)
@@ -671,13 +657,13 @@ static BOOL match_broken_nv_clip(const struct wined3d_gl_info *gl_info, const ch
     GL_EXTCALL(glBindProgramARB(GL_VERTEX_PROGRAM_ARB, prog));
     GL_EXTCALL(glProgramStringARB(GL_VERTEX_PROGRAM_ARB, GL_PROGRAM_FORMAT_ASCII_ARB,
                                   strlen(testcode), testcode));
-    glGetIntegerv(GL_PROGRAM_ERROR_POSITION_ARB, &pos);
+    gl_info->gl_ops.gl.p_glGetIntegerv(GL_PROGRAM_ERROR_POSITION_ARB, &pos);
     if(pos != -1)
     {
         WARN("GL_NV_vertex_program2_option result.clip[] test failed\n");
-        TRACE("error: %s\n", debugstr_a((const char *)glGetString(GL_PROGRAM_ERROR_STRING_ARB)));
+        TRACE("error: %s\n", debugstr_a((const char *)gl_info->gl_ops.gl.p_glGetString(GL_PROGRAM_ERROR_STRING_ARB)));
         ret = TRUE;
-        while(glGetError());
+        while (gl_info->gl_ops.gl.p_glGetError());
     }
     else TRACE("GL_NV_vertex_program2_option result.clip[] test passed\n");
 
@@ -703,11 +689,11 @@ static BOOL match_fbo_tex_update(const struct wined3d_gl_info *gl_info, const ch
 
     ENTER_GL();
 
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 4, 4, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+    gl_info->gl_ops.gl.p_glGenTextures(1, &tex);
+    gl_info->gl_ops.gl.p_glBindTexture(GL_TEXTURE_2D, tex);
+    gl_info->gl_ops.gl.p_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    gl_info->gl_ops.gl.p_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    gl_info->gl_ops.gl.p_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 4, 4, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
     checkGLcall("glTexImage2D");
 
     gl_info->fbo_ops.glGenFramebuffers(1, &fbo);
@@ -720,23 +706,23 @@ static BOOL match_fbo_tex_update(const struct wined3d_gl_info *gl_info, const ch
     checkGLcall("glCheckFramebufferStatus");
 
     memset(data, 0x11, sizeof(data));
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, 4, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, data);
+    gl_info->gl_ops.gl.p_glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, 4, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, data);
     checkGLcall("glTexSubImage2D");
 
-    glClearColor(0.996f, 0.729f, 0.745f, 0.792f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    gl_info->gl_ops.gl.p_glClearColor(0.996f, 0.729f, 0.745f, 0.792f);
+    gl_info->gl_ops.gl.p_glClear(GL_COLOR_BUFFER_BIT);
     checkGLcall("glClear");
 
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, data);
+    gl_info->gl_ops.gl.p_glGetTexImage(GL_TEXTURE_2D, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, data);
     checkGLcall("glGetTexImage");
 
     gl_info->fbo_ops.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
     gl_info->fbo_ops.glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    gl_info->gl_ops.gl.p_glBindTexture(GL_TEXTURE_2D, 0);
     checkGLcall("glBindTexture");
 
     gl_info->fbo_ops.glDeleteFramebuffers(1, &fbo);
-    glDeleteTextures(1, &tex);
+    gl_info->gl_ops.gl.p_glDeleteTextures(1, &tex);
     checkGLcall("glDeleteTextures");
 
     LEAVE_GL();
@@ -755,18 +741,18 @@ static BOOL match_broken_rgba16(const struct wined3d_gl_info *gl_info, const cha
 
     ENTER_GL();
 
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, 4, 4, 0, GL_RGBA, GL_UNSIGNED_SHORT, NULL);
+    gl_info->gl_ops.gl.p_glGenTextures(1, &tex);
+    gl_info->gl_ops.gl.p_glBindTexture(GL_TEXTURE_2D, tex);
+    gl_info->gl_ops.gl.p_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, 4, 4, 0, GL_RGBA, GL_UNSIGNED_SHORT, NULL);
     checkGLcall("glTexImage2D");
 
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_RED_SIZE, &size);
+    gl_info->gl_ops.gl.p_glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_RED_SIZE, &size);
     checkGLcall("glGetTexLevelParameteriv");
     TRACE("Real color depth is %d\n", size);
 
-    glBindTexture(GL_TEXTURE_2D, 0);
+    gl_info->gl_ops.gl.p_glBindTexture(GL_TEXTURE_2D, 0);
     checkGLcall("glBindTexture");
-    glDeleteTextures(1, &tex);
+    gl_info->gl_ops.gl.p_glDeleteTextures(1, &tex);
     checkGLcall("glDeleteTextures");
 
     LEAVE_GL();
@@ -2328,21 +2314,17 @@ static void parse_extension_string(struct wined3d_gl_info *gl_info, const char *
     }
 }
 
-static void load_gl_funcs(struct wined3d_gl_info *gl_info, DWORD gl_version)
+static void load_gl_funcs(struct wined3d_gl_info *gl_info)
 {
-    DWORD ver;
-
-#define USE_GL_FUNC(type, pfn, ext, replace) \
-    if (gl_info->supported[ext]) gl_info->pfn = (type)pwglGetProcAddress(#pfn); \
-    else if ((ver = ver_for_ext(ext)) && ver <= gl_version) gl_info->pfn = (type)pwglGetProcAddress(#replace); \
-    else gl_info->pfn = NULL;
-
+#define USE_GL_FUNC(pfn) gl_info->gl_ops.ext.p_##pfn = (void *)pwglGetProcAddress(#pfn);
     GL_EXT_FUNCS_GEN;
 #undef USE_GL_FUNC
 
-#define USE_GL_FUNC(type, pfn, ext, replace) gl_info->pfn = (type)pwglGetProcAddress(#pfn);
-    WGL_EXT_FUNCS_GEN;
-#undef USE_GL_FUNC
+#ifndef USE_WIN32_OPENGL
+    /* hack: use the functions directly from the TEB table to bypass the thunks */
+    /* note that we still need the above wglGetProcAddress calls to initialize the table */
+    gl_info->gl_ops.ext = ((struct opengl_funcs *)NtCurrentTeb()->glTable)->ext;
+#endif
 }
 
 static void wined3d_adapter_init_limits(struct wined3d_gl_info *gl_info)
@@ -2369,26 +2351,26 @@ static void wined3d_adapter_init_limits(struct wined3d_gl_info *gl_info)
     gl_info->limits.arb_ps_instructions = 0;
     gl_info->limits.arb_ps_temps = 0;
 
-    glGetIntegerv(GL_MAX_CLIP_PLANES, &gl_max);
+    gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_CLIP_PLANES, &gl_max);
     gl_info->limits.clipplanes = min(WINED3DMAXUSERCLIPPLANES, gl_max);
     TRACE("Clip plane support - max planes %d.\n", gl_max);
 
-    glGetIntegerv(GL_MAX_LIGHTS, &gl_max);
+    gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_LIGHTS, &gl_max);
     gl_info->limits.lights = gl_max;
     TRACE("Light support - max lights %d.\n", gl_max);
 
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &gl_max);
+    gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_TEXTURE_SIZE, &gl_max);
     gl_info->limits.texture_size = gl_max;
     TRACE("Maximum texture size support - max texture size %d.\n", gl_max);
 
-    glGetFloatv(GL_ALIASED_POINT_SIZE_RANGE, gl_floatv);
+    gl_info->gl_ops.gl.p_glGetFloatv(GL_ALIASED_POINT_SIZE_RANGE, gl_floatv);
     gl_info->limits.pointsize_min = gl_floatv[0];
     gl_info->limits.pointsize_max = gl_floatv[1];
     TRACE("Maximum point size support - max point size %f.\n", gl_floatv[1]);
 
     if (gl_info->supported[ARB_MAP_BUFFER_ALIGNMENT])
     {
-        glGetIntegerv(GL_MIN_MAP_BUFFER_ALIGNMENT, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MIN_MAP_BUFFER_ALIGNMENT, &gl_max);
         TRACE("Minimum buffer map alignment: %d.\n", gl_max);
     }
     else
@@ -2397,28 +2379,28 @@ static void wined3d_adapter_init_limits(struct wined3d_gl_info *gl_info)
     }
     if (gl_info->supported[NV_REGISTER_COMBINERS])
     {
-        glGetIntegerv(GL_MAX_GENERAL_COMBINERS_NV, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_GENERAL_COMBINERS_NV, &gl_max);
         gl_info->limits.general_combiners = gl_max;
         TRACE("Max general combiners: %d.\n", gl_max);
     }
     if (gl_info->supported[ARB_DRAW_BUFFERS] && wined3d_settings.offscreen_rendering_mode == ORM_FBO)
     {
-        glGetIntegerv(GL_MAX_DRAW_BUFFERS_ARB, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_DRAW_BUFFERS_ARB, &gl_max);
         gl_info->limits.buffers = gl_max;
         TRACE("Max draw buffers: %u.\n", gl_max);
     }
     if (gl_info->supported[ARB_MULTITEXTURE])
     {
-        glGetIntegerv(GL_MAX_TEXTURE_UNITS_ARB, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_TEXTURE_UNITS_ARB, &gl_max);
         gl_info->limits.textures = min(MAX_TEXTURES, gl_max);
         TRACE("Max textures: %d.\n", gl_info->limits.textures);
 
         if (gl_info->supported[ARB_FRAGMENT_PROGRAM])
         {
             GLint tmp;
-            glGetIntegerv(GL_MAX_TEXTURE_COORDS_ARB, &gl_max);
+            gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_TEXTURE_COORDS_ARB, &gl_max);
             gl_info->limits.texture_coords = min(MAX_TEXTURES, gl_max);
-            glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS_ARB, &tmp);
+            gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS_ARB, &tmp);
             gl_info->limits.fragment_samplers = min(MAX_FRAGMENT_SAMPLERS, tmp);
         }
         else
@@ -2432,11 +2414,11 @@ static void wined3d_adapter_init_limits(struct wined3d_gl_info *gl_info)
         if (gl_info->supported[ARB_VERTEX_SHADER])
         {
             GLint tmp;
-            glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS_ARB, &tmp);
+            gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS_ARB, &tmp);
             gl_info->limits.vertex_samplers = tmp;
-            glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS_ARB, &tmp);
+            gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS_ARB, &tmp);
             gl_info->limits.combined_samplers = tmp;
-            glGetIntegerv(GL_MAX_VERTEX_ATTRIBS_ARB, &tmp);
+            gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_VERTEX_ATTRIBS_ARB, &tmp);
             gl_info->limits.vertex_attribs = tmp;
 
             /* Loading GLSL sampler uniforms is much simpler if we can assume that the sampler setup
@@ -2474,19 +2456,19 @@ static void wined3d_adapter_init_limits(struct wined3d_gl_info *gl_info)
     }
     if (gl_info->supported[ARB_VERTEX_BLEND])
     {
-        glGetIntegerv(GL_MAX_VERTEX_UNITS_ARB, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_VERTEX_UNITS_ARB, &gl_max);
         gl_info->limits.blends = gl_max;
         TRACE("Max blends: %u.\n", gl_info->limits.blends);
     }
     if (gl_info->supported[EXT_TEXTURE3D])
     {
-        glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE_EXT, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE_EXT, &gl_max);
         gl_info->limits.texture3d_size = gl_max;
         TRACE("Max texture3D size: %d.\n", gl_info->limits.texture3d_size);
     }
     if (gl_info->supported[EXT_TEXTURE_FILTER_ANISOTROPIC])
     {
-        glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl_max);
         gl_info->limits.anisotropy = gl_max;
         TRACE("Max anisotropy: %d.\n", gl_info->limits.anisotropy);
     }
@@ -2527,29 +2509,29 @@ static void wined3d_adapter_init_limits(struct wined3d_gl_info *gl_info)
     }
     if (gl_info->supported[ARB_VERTEX_SHADER])
     {
-        glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS_ARB, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS_ARB, &gl_max);
         gl_info->limits.glsl_vs_float_constants = gl_max / 4;
         TRACE("Max ARB_VERTEX_SHADER float constants: %u.\n", gl_info->limits.glsl_vs_float_constants);
     }
     if (gl_info->supported[ARB_FRAGMENT_SHADER])
     {
-        glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_COMPONENTS_ARB, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_COMPONENTS_ARB, &gl_max);
         gl_info->limits.glsl_ps_float_constants = gl_max / 4;
         TRACE("Max ARB_FRAGMENT_SHADER float constants: %u.\n", gl_info->limits.glsl_ps_float_constants);
-        glGetIntegerv(GL_MAX_VARYING_FLOATS_ARB, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_VARYING_FLOATS_ARB, &gl_max);
         gl_info->limits.glsl_varyings = gl_max;
         TRACE("Max GLSL varyings: %u (%u 4 component varyings).\n", gl_max, gl_max / 4);
     }
 
     if (gl_info->supported[NV_LIGHT_MAX_EXPONENT])
-        glGetFloatv(GL_MAX_SHININESS_NV, &gl_info->limits.shininess);
+        gl_info->gl_ops.gl.p_glGetFloatv(GL_MAX_SHININESS_NV, &gl_info->limits.shininess);
     else
         gl_info->limits.shininess = 128.0f;
 
     if ((gl_info->supported[ARB_FRAMEBUFFER_OBJECT] || gl_info->supported[EXT_FRAMEBUFFER_MULTISAMPLE])
             && wined3d_settings.allow_multisampling)
     {
-        glGetIntegerv(GL_MAX_SAMPLES, &gl_max);
+        gl_info->gl_ops.gl.p_glGetIntegerv(GL_MAX_SAMPLES, &gl_max);
         gl_info->limits.samples = gl_max;
     }
 }
@@ -2567,14 +2549,13 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
     enum wined3d_gl_vendor gl_vendor;
     enum wined3d_pci_device device;
     DWORD gl_version;
-    unsigned int i;
     HDC hdc;
 
     TRACE("adapter %p.\n", adapter);
 
     ENTER_GL();
 
-    gl_renderer_str = (const char *)glGetString(GL_RENDERER);
+    gl_renderer_str = (const char *)gl_info->gl_ops.gl.p_glGetString(GL_RENDERER);
     TRACE("GL_RENDERER: %s.\n", debugstr_a(gl_renderer_str));
     if (!gl_renderer_str)
     {
@@ -2583,7 +2564,7 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
         return FALSE;
     }
 
-    gl_vendor_str = (const char *)glGetString(GL_VENDOR);
+    gl_vendor_str = (const char *)gl_info->gl_ops.gl.p_glGetString(GL_VENDOR);
     TRACE("GL_VENDOR: %s.\n", debugstr_a(gl_vendor_str));
     if (!gl_vendor_str)
     {
@@ -2593,7 +2574,7 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
     }
 
     /* Parse the GL_VERSION field into major and minor information */
-    gl_version_str = (const char *)glGetString(GL_VERSION);
+    gl_version_str = (const char *)gl_info->gl_ops.gl.p_glGetString(GL_VERSION);
     TRACE("GL_VERSION: %s.\n", debugstr_a(gl_version_str));
     if (!gl_version_str)
     {
@@ -2604,7 +2585,7 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
     gl_version = wined3d_parse_gl_version(gl_version_str);
 
     /* Parse the gl supported features, in theory enabling parts of our code appropriately. */
-    GL_Extensions = (const char *)glGetString(GL_EXTENSIONS);
+    GL_Extensions = (const char *)gl_info->gl_ops.gl.p_glGetString(GL_EXTENSIONS);
     if (!GL_Extensions)
     {
         LEAVE_GL();
@@ -2622,31 +2603,38 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
             sizeof(gl_extension_map) / sizeof(*gl_extension_map));
 
     /* Now work out what GL support this card really has. */
-    load_gl_funcs( gl_info, gl_version );
+    load_gl_funcs( gl_info );
 
     hdc = pwglGetCurrentDC();
     /* Not all GL drivers might offer WGL extensions e.g. VirtualBox. */
     if (GL_EXTCALL(wglGetExtensionsStringARB))
-        WGL_Extensions = GL_EXTCALL(wglGetExtensionsStringARB(hdc));
+        WGL_Extensions = (const char *)GL_EXTCALL(wglGetExtensionsStringARB(hdc));
     if (!WGL_Extensions)
         WARN("WGL extensions not supported.\n");
     else
         parse_extension_string(gl_info, WGL_Extensions, wgl_extension_map,
                 sizeof(wgl_extension_map) / sizeof(*wgl_extension_map));
 
-    ENTER_GL();
-
-    /* Now mark all the extensions supported which are included in the opengl core version. Do this *after*
-     * loading the functions, otherwise the code above will load the extension entry points instead of the
-     * core functions, which may not work. */
-    for (i = 0; i < (sizeof(gl_extension_map) / sizeof(*gl_extension_map)); ++i)
+    if (!gl_info->supported[EXT_TEXTURE3D] && gl_version >= MAKEDWORD_VERSION(1, 2))
     {
-        if (!gl_info->supported[gl_extension_map[i].extension]
-                && gl_extension_map[i].version <= gl_version && gl_extension_map[i].version)
-        {
-            TRACE(" GL CORE: %s support.\n", gl_extension_map[i].extension_string);
-            gl_info->supported[gl_extension_map[i].extension] = TRUE;
-        }
+        TRACE("GL CORE: GL_EXT_texture3D support.\n");
+        gl_info->gl_ops.ext.p_glTexImage3DEXT = (void *)gl_info->gl_ops.ext.p_glTexImage3D;
+        gl_info->gl_ops.ext.p_glTexSubImage3DEXT = gl_info->gl_ops.ext.p_glTexSubImage3D;
+        gl_info->supported[EXT_TEXTURE3D] = TRUE;
+    }
+
+    if (!gl_info->supported[NV_POINT_SPRITE] && gl_version >= MAKEDWORD_VERSION(1, 4))
+    {
+        TRACE("GL CORE: GL_NV_point_sprite support.\n");
+        gl_info->gl_ops.ext.p_glPointParameterivNV = gl_info->gl_ops.ext.p_glPointParameteriv;
+        gl_info->gl_ops.ext.p_glPointParameteriNV = gl_info->gl_ops.ext.p_glPointParameteri;
+        gl_info->supported[NV_POINT_SPRITE] = TRUE;
+    }
+
+    if (!gl_info->supported[ARB_TEXTURE_NON_POWER_OF_TWO] && gl_version >= MAKEDWORD_VERSION(2, 0))
+    {
+        TRACE("GL CORE: GL_ARB_texture_non_power_of_two support.\n");
+        gl_info->supported[ARB_TEXTURE_NON_POWER_OF_TWO] = TRUE;
     }
 
     if (gl_version >= MAKEDWORD_VERSION(2, 0)) gl_info->supported[WINED3D_GL_VERSION_2_0] = TRUE;
@@ -2742,6 +2730,8 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
         gl_info->supported[ARB_HALF_FLOAT_VERTEX] = TRUE;
     }
 
+    ENTER_GL();
+
     wined3d_adapter_init_limits(gl_info);
 
     if (gl_info->supported[ARB_VERTEX_PROGRAM] && test_arb_vs_offset_limit(gl_info))
@@ -2749,7 +2739,7 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
 
     if (gl_info->supported[ARB_SHADING_LANGUAGE_100])
     {
-        const char *str = (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION_ARB);
+        const char *str = (const char *)gl_info->gl_ops.gl.p_glGetString(GL_SHADING_LANGUAGE_VERSION_ARB);
         unsigned int major, minor;
 
         TRACE("GLSL version string: %s.\n", debugstr_a(str));
@@ -2773,47 +2763,49 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
 
     if (gl_info->supported[ARB_FRAMEBUFFER_OBJECT])
     {
-        gl_info->fbo_ops.glIsRenderbuffer = gl_info->glIsRenderbuffer;
-        gl_info->fbo_ops.glBindRenderbuffer = gl_info->glBindRenderbuffer;
-        gl_info->fbo_ops.glDeleteRenderbuffers = gl_info->glDeleteRenderbuffers;
-        gl_info->fbo_ops.glGenRenderbuffers = gl_info->glGenRenderbuffers;
-        gl_info->fbo_ops.glRenderbufferStorage = gl_info->glRenderbufferStorage;
-        gl_info->fbo_ops.glRenderbufferStorageMultisample = gl_info->glRenderbufferStorageMultisample;
-        gl_info->fbo_ops.glGetRenderbufferParameteriv = gl_info->glGetRenderbufferParameteriv;
-        gl_info->fbo_ops.glIsFramebuffer = gl_info->glIsFramebuffer;
-        gl_info->fbo_ops.glBindFramebuffer = gl_info->glBindFramebuffer;
-        gl_info->fbo_ops.glDeleteFramebuffers = gl_info->glDeleteFramebuffers;
-        gl_info->fbo_ops.glGenFramebuffers = gl_info->glGenFramebuffers;
-        gl_info->fbo_ops.glCheckFramebufferStatus = gl_info->glCheckFramebufferStatus;
-        gl_info->fbo_ops.glFramebufferTexture1D = gl_info->glFramebufferTexture1D;
-        gl_info->fbo_ops.glFramebufferTexture2D = gl_info->glFramebufferTexture2D;
-        gl_info->fbo_ops.glFramebufferTexture3D = gl_info->glFramebufferTexture3D;
-        gl_info->fbo_ops.glFramebufferRenderbuffer = gl_info->glFramebufferRenderbuffer;
-        gl_info->fbo_ops.glGetFramebufferAttachmentParameteriv = gl_info->glGetFramebufferAttachmentParameteriv;
-        gl_info->fbo_ops.glBlitFramebuffer = gl_info->glBlitFramebuffer;
-        gl_info->fbo_ops.glGenerateMipmap = gl_info->glGenerateMipmap;
+        gl_info->fbo_ops.glIsRenderbuffer = gl_info->gl_ops.ext.p_glIsRenderbuffer;
+        gl_info->fbo_ops.glBindRenderbuffer = gl_info->gl_ops.ext.p_glBindRenderbuffer;
+        gl_info->fbo_ops.glDeleteRenderbuffers = gl_info->gl_ops.ext.p_glDeleteRenderbuffers;
+        gl_info->fbo_ops.glGenRenderbuffers = gl_info->gl_ops.ext.p_glGenRenderbuffers;
+        gl_info->fbo_ops.glRenderbufferStorage = gl_info->gl_ops.ext.p_glRenderbufferStorage;
+        gl_info->fbo_ops.glRenderbufferStorageMultisample = gl_info->gl_ops.ext.p_glRenderbufferStorageMultisample;
+        gl_info->fbo_ops.glGetRenderbufferParameteriv = gl_info->gl_ops.ext.p_glGetRenderbufferParameteriv;
+        gl_info->fbo_ops.glIsFramebuffer = gl_info->gl_ops.ext.p_glIsFramebuffer;
+        gl_info->fbo_ops.glBindFramebuffer = gl_info->gl_ops.ext.p_glBindFramebuffer;
+        gl_info->fbo_ops.glDeleteFramebuffers = gl_info->gl_ops.ext.p_glDeleteFramebuffers;
+        gl_info->fbo_ops.glGenFramebuffers = gl_info->gl_ops.ext.p_glGenFramebuffers;
+        gl_info->fbo_ops.glCheckFramebufferStatus = gl_info->gl_ops.ext.p_glCheckFramebufferStatus;
+        gl_info->fbo_ops.glFramebufferTexture1D = gl_info->gl_ops.ext.p_glFramebufferTexture1D;
+        gl_info->fbo_ops.glFramebufferTexture2D = gl_info->gl_ops.ext.p_glFramebufferTexture2D;
+        gl_info->fbo_ops.glFramebufferTexture3D = gl_info->gl_ops.ext.p_glFramebufferTexture3D;
+        gl_info->fbo_ops.glFramebufferRenderbuffer = gl_info->gl_ops.ext.p_glFramebufferRenderbuffer;
+        gl_info->fbo_ops.glGetFramebufferAttachmentParameteriv
+                = gl_info->gl_ops.ext.p_glGetFramebufferAttachmentParameteriv;
+        gl_info->fbo_ops.glBlitFramebuffer = gl_info->gl_ops.ext.p_glBlitFramebuffer;
+        gl_info->fbo_ops.glGenerateMipmap = gl_info->gl_ops.ext.p_glGenerateMipmap;
     }
     else
     {
         if (gl_info->supported[EXT_FRAMEBUFFER_OBJECT])
         {
-            gl_info->fbo_ops.glIsRenderbuffer = gl_info->glIsRenderbufferEXT;
-            gl_info->fbo_ops.glBindRenderbuffer = gl_info->glBindRenderbufferEXT;
-            gl_info->fbo_ops.glDeleteRenderbuffers = gl_info->glDeleteRenderbuffersEXT;
-            gl_info->fbo_ops.glGenRenderbuffers = gl_info->glGenRenderbuffersEXT;
-            gl_info->fbo_ops.glRenderbufferStorage = gl_info->glRenderbufferStorageEXT;
-            gl_info->fbo_ops.glGetRenderbufferParameteriv = gl_info->glGetRenderbufferParameterivEXT;
-            gl_info->fbo_ops.glIsFramebuffer = gl_info->glIsFramebufferEXT;
-            gl_info->fbo_ops.glBindFramebuffer = gl_info->glBindFramebufferEXT;
-            gl_info->fbo_ops.glDeleteFramebuffers = gl_info->glDeleteFramebuffersEXT;
-            gl_info->fbo_ops.glGenFramebuffers = gl_info->glGenFramebuffersEXT;
-            gl_info->fbo_ops.glCheckFramebufferStatus = gl_info->glCheckFramebufferStatusEXT;
-            gl_info->fbo_ops.glFramebufferTexture1D = gl_info->glFramebufferTexture1DEXT;
-            gl_info->fbo_ops.glFramebufferTexture2D = gl_info->glFramebufferTexture2DEXT;
-            gl_info->fbo_ops.glFramebufferTexture3D = gl_info->glFramebufferTexture3DEXT;
-            gl_info->fbo_ops.glFramebufferRenderbuffer = gl_info->glFramebufferRenderbufferEXT;
-            gl_info->fbo_ops.glGetFramebufferAttachmentParameteriv = gl_info->glGetFramebufferAttachmentParameterivEXT;
-            gl_info->fbo_ops.glGenerateMipmap = gl_info->glGenerateMipmapEXT;
+            gl_info->fbo_ops.glIsRenderbuffer = gl_info->gl_ops.ext.p_glIsRenderbufferEXT;
+            gl_info->fbo_ops.glBindRenderbuffer = gl_info->gl_ops.ext.p_glBindRenderbufferEXT;
+            gl_info->fbo_ops.glDeleteRenderbuffers = gl_info->gl_ops.ext.p_glDeleteRenderbuffersEXT;
+            gl_info->fbo_ops.glGenRenderbuffers = gl_info->gl_ops.ext.p_glGenRenderbuffersEXT;
+            gl_info->fbo_ops.glRenderbufferStorage = gl_info->gl_ops.ext.p_glRenderbufferStorageEXT;
+            gl_info->fbo_ops.glGetRenderbufferParameteriv = gl_info->gl_ops.ext.p_glGetRenderbufferParameterivEXT;
+            gl_info->fbo_ops.glIsFramebuffer = gl_info->gl_ops.ext.p_glIsFramebufferEXT;
+            gl_info->fbo_ops.glBindFramebuffer = gl_info->gl_ops.ext.p_glBindFramebufferEXT;
+            gl_info->fbo_ops.glDeleteFramebuffers = gl_info->gl_ops.ext.p_glDeleteFramebuffersEXT;
+            gl_info->fbo_ops.glGenFramebuffers = gl_info->gl_ops.ext.p_glGenFramebuffersEXT;
+            gl_info->fbo_ops.glCheckFramebufferStatus = gl_info->gl_ops.ext.p_glCheckFramebufferStatusEXT;
+            gl_info->fbo_ops.glFramebufferTexture1D = gl_info->gl_ops.ext.p_glFramebufferTexture1DEXT;
+            gl_info->fbo_ops.glFramebufferTexture2D = gl_info->gl_ops.ext.p_glFramebufferTexture2DEXT;
+            gl_info->fbo_ops.glFramebufferTexture3D = gl_info->gl_ops.ext.p_glFramebufferTexture3DEXT;
+            gl_info->fbo_ops.glFramebufferRenderbuffer = gl_info->gl_ops.ext.p_glFramebufferRenderbufferEXT;
+            gl_info->fbo_ops.glGetFramebufferAttachmentParameteriv
+                    = gl_info->gl_ops.ext.p_glGetFramebufferAttachmentParameterivEXT;
+            gl_info->fbo_ops.glGenerateMipmap = gl_info->gl_ops.ext.p_glGenerateMipmapEXT;
         }
         else if (wined3d_settings.offscreen_rendering_mode == ORM_FBO)
         {
@@ -2822,11 +2814,12 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
         }
         if (gl_info->supported[EXT_FRAMEBUFFER_BLIT])
         {
-            gl_info->fbo_ops.glBlitFramebuffer = gl_info->glBlitFramebufferEXT;
+            gl_info->fbo_ops.glBlitFramebuffer = gl_info->gl_ops.ext.p_glBlitFramebufferEXT;
         }
         if (gl_info->supported[EXT_FRAMEBUFFER_MULTISAMPLE])
         {
-            gl_info->fbo_ops.glRenderbufferStorageMultisample = gl_info->glRenderbufferStorageMultisampleEXT;
+            gl_info->fbo_ops.glRenderbufferStorageMultisample
+                    = gl_info->gl_ops.ext.p_glRenderbufferStorageMultisampleEXT;
         }
     }
 
@@ -5221,10 +5214,10 @@ static void WINE_GLAPI position_d3dcolor(const void *data)
     DWORD pos = *((const DWORD *)data);
 
     FIXME("Add a test for fixed function position from d3dcolor type\n");
-    glVertex4s(D3DCOLOR_B_R(pos),
-               D3DCOLOR_B_G(pos),
-               D3DCOLOR_B_B(pos),
-               D3DCOLOR_B_A(pos));
+    context_get_current()->gl_info->gl_ops.gl.p_glVertex4s(D3DCOLOR_B_R(pos),
+            D3DCOLOR_B_G(pos),
+            D3DCOLOR_B_B(pos),
+            D3DCOLOR_B_A(pos));
 }
 
 static void WINE_GLAPI position_float4(const void *data)
@@ -5235,11 +5228,11 @@ static void WINE_GLAPI position_float4(const void *data)
     {
         float w = 1.0f / pos[3];
 
-        glVertex4f(pos[0] * w, pos[1] * w, pos[2] * w, w);
+        context_get_current()->gl_info->gl_ops.gl.p_glVertex4f(pos[0] * w, pos[1] * w, pos[2] * w, w);
     }
     else
     {
-        glVertex3fv(pos);
+        context_get_current()->gl_info->gl_ops.gl.p_glVertex3fv(pos);
     }
 }
 
@@ -5247,10 +5240,10 @@ static void WINE_GLAPI diffuse_d3dcolor(const void *data)
 {
     DWORD diffuseColor = *((const DWORD *)data);
 
-    glColor4ub(D3DCOLOR_B_R(diffuseColor),
-               D3DCOLOR_B_G(diffuseColor),
-               D3DCOLOR_B_B(diffuseColor),
-               D3DCOLOR_B_A(diffuseColor));
+    context_get_current()->gl_info->gl_ops.gl.p_glColor4ub(D3DCOLOR_B_R(diffuseColor),
+            D3DCOLOR_B_G(diffuseColor),
+            D3DCOLOR_B_B(diffuseColor),
+            D3DCOLOR_B_A(diffuseColor));
 }
 
 static void WINE_GLAPI specular_d3dcolor(const void *data)
@@ -5272,12 +5265,12 @@ static void fillGLAttribFuncs(const struct wined3d_gl_info *gl_info)
 {
     position_funcs[WINED3D_FFP_EMIT_FLOAT1]      = invalid_func;
     position_funcs[WINED3D_FFP_EMIT_FLOAT2]      = invalid_func;
-    position_funcs[WINED3D_FFP_EMIT_FLOAT3]      = (glAttribFunc)glVertex3fv;
+    position_funcs[WINED3D_FFP_EMIT_FLOAT3]      = (glAttribFunc)gl_info->gl_ops.gl.p_glVertex3fv;
     position_funcs[WINED3D_FFP_EMIT_FLOAT4]      = position_float4;
     position_funcs[WINED3D_FFP_EMIT_D3DCOLOR]    = position_d3dcolor;
     position_funcs[WINED3D_FFP_EMIT_UBYTE4]      = invalid_func;
     position_funcs[WINED3D_FFP_EMIT_SHORT2]      = invalid_func;
-    position_funcs[WINED3D_FFP_EMIT_SHORT4]      = (glAttribFunc)glVertex2sv;
+    position_funcs[WINED3D_FFP_EMIT_SHORT4]      = (glAttribFunc)gl_info->gl_ops.gl.p_glVertex2sv;
     position_funcs[WINED3D_FFP_EMIT_UBYTE4N]     = invalid_func;
     position_funcs[WINED3D_FFP_EMIT_SHORT2N]     = invalid_func;
     position_funcs[WINED3D_FFP_EMIT_SHORT4N]     = invalid_func;
@@ -5290,17 +5283,17 @@ static void fillGLAttribFuncs(const struct wined3d_gl_info *gl_info)
 
     diffuse_funcs[WINED3D_FFP_EMIT_FLOAT1]       = invalid_func;
     diffuse_funcs[WINED3D_FFP_EMIT_FLOAT2]       = invalid_func;
-    diffuse_funcs[WINED3D_FFP_EMIT_FLOAT3]       = (glAttribFunc)glColor3fv;
-    diffuse_funcs[WINED3D_FFP_EMIT_FLOAT4]       = (glAttribFunc)glColor4fv;
+    diffuse_funcs[WINED3D_FFP_EMIT_FLOAT3]       = (glAttribFunc)gl_info->gl_ops.gl.p_glColor3fv;
+    diffuse_funcs[WINED3D_FFP_EMIT_FLOAT4]       = (glAttribFunc)gl_info->gl_ops.gl.p_glColor4fv;
     diffuse_funcs[WINED3D_FFP_EMIT_D3DCOLOR]     = diffuse_d3dcolor;
     diffuse_funcs[WINED3D_FFP_EMIT_UBYTE4]       = invalid_func;
     diffuse_funcs[WINED3D_FFP_EMIT_SHORT2]       = invalid_func;
     diffuse_funcs[WINED3D_FFP_EMIT_SHORT4]       = invalid_func;
-    diffuse_funcs[WINED3D_FFP_EMIT_UBYTE4N]      = (glAttribFunc)glColor4ubv;
+    diffuse_funcs[WINED3D_FFP_EMIT_UBYTE4N]      = (glAttribFunc)gl_info->gl_ops.gl.p_glColor4ubv;
     diffuse_funcs[WINED3D_FFP_EMIT_SHORT2N]      = invalid_func;
-    diffuse_funcs[WINED3D_FFP_EMIT_SHORT4N]      = (glAttribFunc)glColor4sv;
+    diffuse_funcs[WINED3D_FFP_EMIT_SHORT4N]      = (glAttribFunc)gl_info->gl_ops.gl.p_glColor4sv;
     diffuse_funcs[WINED3D_FFP_EMIT_USHORT2N]     = invalid_func;
-    diffuse_funcs[WINED3D_FFP_EMIT_USHORT4N]     = (glAttribFunc)glColor4usv;
+    diffuse_funcs[WINED3D_FFP_EMIT_USHORT4N]     = (glAttribFunc)gl_info->gl_ops.gl.p_glColor4usv;
     diffuse_funcs[WINED3D_FFP_EMIT_UDEC3]        = invalid_func;
     diffuse_funcs[WINED3D_FFP_EMIT_DEC3N]        = invalid_func;
     diffuse_funcs[WINED3D_FFP_EMIT_FLOAT16_2]    = invalid_func;
@@ -5345,8 +5338,8 @@ static void fillGLAttribFuncs(const struct wined3d_gl_info *gl_info)
      */
     normal_funcs[WINED3D_FFP_EMIT_FLOAT1]         = invalid_func;
     normal_funcs[WINED3D_FFP_EMIT_FLOAT2]         = invalid_func;
-    normal_funcs[WINED3D_FFP_EMIT_FLOAT3]         = (glAttribFunc)glNormal3fv;
-    normal_funcs[WINED3D_FFP_EMIT_FLOAT4]         = (glAttribFunc)glNormal3fv; /* Just ignore the 4th value */
+    normal_funcs[WINED3D_FFP_EMIT_FLOAT3]         = (glAttribFunc)gl_info->gl_ops.gl.p_glNormal3fv;
+    normal_funcs[WINED3D_FFP_EMIT_FLOAT4]         = (glAttribFunc)gl_info->gl_ops.gl.p_glNormal3fv; /* Just ignore the 4th value */
     normal_funcs[WINED3D_FFP_EMIT_D3DCOLOR]       = invalid_func;
     normal_funcs[WINED3D_FFP_EMIT_UBYTE4]         = invalid_func;
     normal_funcs[WINED3D_FFP_EMIT_SHORT2]         = invalid_func;
@@ -5390,6 +5383,8 @@ static void fillGLAttribFuncs(const struct wined3d_gl_info *gl_info)
 /* Do not call while under the GL lock. */
 static BOOL InitAdapters(struct wined3d *wined3d)
 {
+    struct wined3d_adapter *adapter = &wined3d->adapters[0];
+    struct wined3d_gl_info *gl_info = &adapter->gl_info;
     static HMODULE mod_gl;
     BOOL ret;
     int ps_selected_mode, vs_selected_mode;
@@ -5408,41 +5403,32 @@ static BOOL InitAdapters(struct wined3d *wined3d)
         }
     }
 
+/* Load WGL core functions from opengl32.dll */
+#define USE_WGL_FUNC(pfn) p##pfn = (void*)GetProcAddress(mod_gl, #pfn);
+    WGL_FUNCS_GEN;
+#undef USE_WGL_FUNC
+
 /* Dynamically load all GL core functions */
 #ifdef USE_WIN32_OPENGL
-    pwglGetProcAddress = (void*)GetProcAddress(mod_gl, "wglGetProcAddress");
-#define USE_GL_FUNC(pfn) pfn = (void*)GetProcAddress(mod_gl, #pfn);
-    GL_FUNCS_GEN;
+#define USE_GL_FUNC(f) gl_info->gl_ops.gl.p_##f = (void *)GetProcAddress(mod_gl, #f);
+    ALL_WGL_FUNCS
 #undef USE_GL_FUNC
 #else
     /* To bypass the opengl32 thunks retrieve functions from the WGL driver instead of opengl32 */
     {
         HDC hdc = GetDC( 0 );
         const struct opengl_funcs *wgl_driver = __wine_get_wgl_driver( hdc, WINE_WGL_DRIVER_VERSION );
-
-        if (wgl_driver && wgl_driver != (void *)-1)
-            pwglGetProcAddress = wgl_driver->wgl.p_wglGetProcAddress;
-
         ReleaseDC( 0, hdc );
-        if (!pwglGetProcAddress) goto nogl_adapter;
-#define USE_GL_FUNC(pfn) pfn = wgl_driver->gl.p_##pfn;
-        GL_FUNCS_GEN;
-#undef USE_GL_FUNC
+        if (!wgl_driver || wgl_driver == (void *)-1) goto nogl_adapter;
+        gl_info->gl_ops.gl = wgl_driver->gl;
     }
 #endif
 
-/* Load WGL core functions from opengl32.dll */
-#define USE_WGL_FUNC(pfn) p##pfn = (void*)GetProcAddress(mod_gl, #pfn);
-    WGL_FUNCS_GEN;
-#undef USE_WGL_FUNC
-
-    glEnableWINE = glEnable;
-    glDisableWINE = glDisable;
+    glEnableWINE = gl_info->gl_ops.gl.p_glEnable;
+    glDisableWINE = gl_info->gl_ops.gl.p_glDisable;
 
     /* For now only one default adapter */
     {
-        struct wined3d_adapter *adapter = &wined3d->adapters[0];
-        const struct wined3d_gl_info *gl_info = &adapter->gl_info;
         struct wined3d_fake_gl_ctx fake_gl_ctx = {0};
         struct wined3d_pixel_format *cfgs;
         int iPixelFormat;

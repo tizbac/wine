@@ -48,6 +48,13 @@ WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 #define UTF16_STR "utf-16"
 
 static const WCHAR emptyW[] = {0};
+static const WCHAR text_htmlW[] = {'t','e','x','t','/','h','t','m','l',0};
+
+enum {
+    BOM_NONE,
+    BOM_UTF8,
+    BOM_UTF16
+};
 
 struct nsProtocolStream {
     nsIInputStream nsIInputStream_iface;
@@ -606,12 +613,41 @@ static void init_bscallback(BSCallback *This, const BSCallbackVtbl *vtbl, IMonik
     This->vtbl = vtbl;
     This->ref = 1;
     This->bindf = bindf;
+    This->bom = BOM_NONE;
 
     list_init(&This->entry);
 
     if(mon)
         IMoniker_AddRef(mon);
     This->mon = mon;
+}
+
+static HRESULT read_stream(BSCallback *This, IStream *stream, void *buf, DWORD size, DWORD *ret_size)
+{
+    DWORD read_size = 0, skip=0;
+    BYTE *data = buf;
+    HRESULT hres;
+
+    hres = IStream_Read(stream, buf, size, &read_size);
+
+    if(!This->readed && This->bom == BOM_NONE) {
+        if(read_size >= 2 && data[0] == 0xff && data[1] == 0xfe) {
+            This->bom = BOM_UTF16;
+            skip = 2;
+        }else if(read_size >= 3 && data[0] == 0xef && data[1] == 0xbb && data[2] == 0xbf) {
+            This->bom = BOM_UTF8;
+            skip = 3;
+        }
+        if(skip) {
+            read_size -= skip;
+            if(read_size)
+                memmove(data, data+skip, read_size);
+        }
+    }
+
+    This->readed += read_size;
+    *ret_size = read_size;
+    return hres;
 }
 
 static void parse_content_type(nsChannelBSC *This, const WCHAR *value)
@@ -761,7 +797,7 @@ typedef struct {
     BSCallback bsc;
 
     DWORD size;
-    BYTE *buf;
+    char *buf;
     HRESULT hres;
 } BufferBSC;
 
@@ -815,14 +851,12 @@ static HRESULT BufferBSC_read_data(BSCallback *bsc, IStream *stream)
     }
 
     do {
-        if(This->bsc.readed == This->size) {
+        if(This->bsc.readed >= This->size) {
             This->size <<= 1;
             This->buf = heap_realloc(This->buf, This->size);
         }
 
-        readed = 0;
-        hres = IStream_Read(stream, This->buf+This->bsc.readed, This->size-This->bsc.readed, &readed);
-        This->bsc.readed += readed;
+        hres = read_stream(&This->bsc, stream, This->buf+This->bsc.readed, This->size-This->bsc.readed, &readed);
     }while(hres == S_OK);
 
     return S_OK;
@@ -866,27 +900,68 @@ static BufferBSC *create_bufferbsc(IMoniker *mon)
     return ret;
 }
 
-HRESULT bind_mon_to_buffer(HTMLInnerWindow *window, IMoniker *mon, void **buf, DWORD *size)
+HRESULT bind_mon_to_wstr(HTMLInnerWindow *window, IMoniker *mon, WCHAR **ret)
 {
     BufferBSC *bsc = create_bufferbsc(mon);
+    int cp = CP_ACP;
+    WCHAR *text;
     HRESULT hres;
 
-    *buf = NULL;
-
     hres = start_binding(window, &bsc->bsc, NULL);
-    if(SUCCEEDED(hres)) {
+    if(SUCCEEDED(hres))
         hres = bsc->hres;
-        if(SUCCEEDED(hres)) {
-            *buf = bsc->buf;
-            bsc->buf = NULL;
-            *size = bsc->bsc.readed;
-            bsc->size = 0;
+    if(FAILED(hres)) {
+        IBindStatusCallback_Release(&bsc->bsc.IBindStatusCallback_iface);
+        return hres;
+    }
+
+    if(!bsc->bsc.readed) {
+        *ret = NULL;
+        return S_OK;
+    }
+
+    switch(bsc->bsc.bom) {
+    case BOM_UTF16:
+        if(bsc->bsc.readed % sizeof(WCHAR)) {
+            FIXME("The buffer is not a valid utf16 string\n");
+            hres = E_FAIL;
+            break;
         }
+
+        text = heap_alloc(bsc->bsc.readed+sizeof(WCHAR));
+        if(!text) {
+            hres = E_OUTOFMEMORY;
+            break;
+        }
+
+        memcpy(text, bsc->buf, bsc->bsc.readed);
+        text[bsc->bsc.readed/sizeof(WCHAR)] = 0;
+        break;
+
+    case BOM_UTF8:
+        cp = CP_UTF8;
+        /* fallthrough */
+    default: {
+        DWORD len;
+
+        len = MultiByteToWideChar(cp, 0, bsc->buf, bsc->bsc.readed, NULL, 0);
+        text = heap_alloc((len+1)*sizeof(WCHAR));
+        if(!text) {
+            hres = E_OUTOFMEMORY;
+            break;
+        }
+
+        MultiByteToWideChar(CP_ACP, 0, bsc->buf, bsc->bsc.readed, text, len);
+        text[len] = 0;
+    }
     }
 
     IBindStatusCallback_Release(&bsc->bsc.IBindStatusCallback_iface);
+    if(FAILED(hres))
+        return hres;
 
-    return hres;
+    *ret = text;
+    return S_OK;
 }
 
 static HRESULT read_post_data_stream(nsChannelBSC *This, nsChannel *nschannel)
@@ -1031,8 +1106,6 @@ static void on_stop_nsrequest(nsChannelBSC *This, HRESULT result)
 
 static HRESULT read_stream_data(nsChannelBSC *This, IStream *stream)
 {
-    static const WCHAR mimeTextHtml[] = {'t','e','x','t','/','h','t','m','l',0};
-
     DWORD read;
     nsresult nsres;
     HRESULT hres;
@@ -1041,8 +1114,7 @@ static HRESULT read_stream_data(nsChannelBSC *This, IStream *stream)
         BYTE buf[1024];
 
         do {
-            read = 0;
-            hres = IStream_Read(stream, buf, sizeof(buf), &read);
+            hres = read_stream(&This->bsc, stream, buf, sizeof(buf), &read);
         }while(hres == S_OK && read);
 
         return S_OK;
@@ -1052,30 +1124,29 @@ static HRESULT read_stream_data(nsChannelBSC *This, IStream *stream)
         This->nsstream = create_nsprotocol_stream();
 
     do {
-        read = 0;
-        hres = IStream_Read(stream, This->nsstream->buf+This->nsstream->buf_size,
+        BOOL first_read = !This->bsc.readed;
+
+        hres = read_stream(&This->bsc, stream, This->nsstream->buf+This->nsstream->buf_size,
                 sizeof(This->nsstream->buf)-This->nsstream->buf_size, &read);
         if(!read)
             break;
 
         This->nsstream->buf_size += read;
 
-        if(!This->bsc.readed) {
-            if(This->nsstream->buf_size >= 2
-               && (BYTE)This->nsstream->buf[0] == 0xff
-               && (BYTE)This->nsstream->buf[1] == 0xfe)
-                This->nschannel->charset = heap_strdupA(UTF16_STR);
-            if(This->nsstream->buf_size >= 3
-               && (BYTE)This->nsstream->buf[0] == 0xef
-               && (BYTE)This->nsstream->buf[1] == 0xbb
-               && (BYTE)This->nsstream->buf[2] == 0xbf)
+        if(first_read) {
+            switch(This->bsc.bom) {
+            case BOM_UTF8:
                 This->nschannel->charset = heap_strdupA(UTF8_STR);
+                break;
+            case BOM_UTF16:
+                This->nschannel->charset = heap_strdupA(UTF16_STR);
+            }
 
             if(!This->nschannel->content_type) {
                 WCHAR *mime;
 
                 hres = FindMimeFromData(NULL, NULL, This->nsstream->buf, This->nsstream->buf_size,
-                        This->is_doc_channel ? mimeTextHtml : NULL, 0, &mime, 0);
+                        This->is_doc_channel ? text_htmlW : NULL, 0, &mime, 0);
                 if(FAILED(hres))
                     return hres;
 
@@ -1089,8 +1160,6 @@ static HRESULT read_stream_data(nsChannelBSC *This, IStream *stream)
 
             on_start_nsrequest(This);
         }
-
-        This->bsc.readed += This->nsstream->buf_size;
 
         nsres = nsIStreamListener_OnDataAvailable(This->nslistener,
                 (nsIRequest*)&This->nschannel->nsIHttpChannel_iface, This->nscontext,
@@ -1162,7 +1231,7 @@ static nsrefcnt NSAPI nsAsyncVerifyRedirectCallback_Release(nsIAsyncVerifyRedire
 
     if(!ref) {
         IBindStatusCallback_Release(&This->bsc->bsc.IBindStatusCallback_iface);
-        nsIChannel_Release(&This->nschannel->nsIHttpChannel_iface);
+        nsIHttpChannel_Release(&This->nschannel->nsIHttpChannel_iface);
         heap_free(This);
     }
 
@@ -1178,7 +1247,7 @@ static nsresult NSAPI nsAsyncVerifyRedirectCallback_AsyncOnChannelRedirect(nsIAs
     TRACE("(%p)->(%08x)\n", This, result);
 
     old_nschannel = This->bsc->nschannel;
-    nsIChannel_AddRef(&This->nschannel->nsIHttpChannel_iface);
+    nsIHttpChannel_AddRef(&This->nschannel->nsIHttpChannel_iface);
     This->bsc->nschannel = This->nschannel;
 
     if(This->nschannel->load_group) {
@@ -1228,7 +1297,7 @@ static HRESULT create_redirect_callback(nsChannel *nschannel, nsChannelBSC *bsc,
     callback->nsIAsyncVerifyRedirectCallback_iface.lpVtbl = &nsAsyncVerifyRedirectCallbackVtbl;
     callback->ref = 1;
 
-    nsIChannel_AddRef(&nschannel->nsIHttpChannel_iface);
+    nsIHttpChannel_AddRef(&nschannel->nsIHttpChannel_iface);
     callback->nschannel = nschannel;
 
     IBindStatusCallback_AddRef(&bsc->bsc.IBindStatusCallback_iface);
@@ -1248,7 +1317,7 @@ static void nsChannelBSC_destroy(BSCallback *bsc)
     nsChannelBSC *This = nsChannelBSC_from_BSCallback(bsc);
 
     if(This->nschannel)
-        nsIChannel_Release(&This->nschannel->nsIHttpChannel_iface);
+        nsIHttpChannel_Release(&This->nschannel->nsIHttpChannel_iface);
     if(This->nslistener)
         nsIStreamListener_Release(This->nslistener);
     if(This->nscontext)
@@ -1466,7 +1535,7 @@ static HRESULT handle_redirect(nsChannelBSC *This, const WCHAR *new_url)
         TRACE("%p %p->%p\n", This, This->nschannel, new_channel);
 
         hres = create_redirect_callback(new_channel, This, &callback);
-        nsIChannel_Release(&new_channel->nsIHttpChannel_iface);
+        nsIHttpChannel_Release(&new_channel->nsIHttpChannel_iface);
     }
 
     if(SUCCEEDED(hres)) {
@@ -1745,7 +1814,7 @@ HRESULT channelbsc_load_stream(HTMLInnerWindow *pending_window, IStream *stream)
 
 void channelbsc_set_channel(nsChannelBSC *This, nsChannel *channel, nsIStreamListener *listener, nsISupports *context)
 {
-    nsIChannel_AddRef(&channel->nsIHttpChannel_iface);
+    nsIHttpChannel_AddRef(&channel->nsIHttpChannel_iface);
     This->nschannel = channel;
 
     nsIStreamListener_AddRef(listener);
@@ -2002,7 +2071,7 @@ HRESULT navigate_new_window(HTMLOuterWindow *window, IUri *uri, const WCHAR *nam
     if(SUCCEEDED(hres)) {
         ITargetFramePriv2 *target_frame_priv;
 
-        hres = IWebBrowser_QueryInterface(web_browser, &IID_ITargetFramePriv2, (void**)&target_frame_priv);
+        hres = IWebBrowser2_QueryInterface(web_browser, &IID_ITargetFramePriv2, (void**)&target_frame_priv);
         if(SUCCEEDED(hres)) {
             hres = ITargetFramePriv2_AggregatedNavigation2(target_frame_priv,
                     HLNF_DISABLEWINDOWRESTRICTIONS|HLNF_OPENINNEWWINDOW, bind_ctx, &bsc->bsc.IBindStatusCallback_iface,

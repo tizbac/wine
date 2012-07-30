@@ -151,12 +151,8 @@ struct wgl_context
     int numAttribs; /* This is needed for delaying wglCreateContextAttribsARB */
     int attribList[16]; /* This is needed for delaying wglCreateContextAttribsARB */
     GLXContext ctx;
-    HDC read_hdc;
     Drawable drawables[2];
     BOOL refresh_drawables;
-    Pixmap pixmap;            /* pixmap for memory DCs */
-    GLXPixmap glxpixmap;      /* GLX pixmap for memory DCs */
-    SIZE pixmap_size;         /* pixmap size for memory DCs */
     struct list entry;
 };
 
@@ -209,7 +205,6 @@ static const char *opengl_func_names[] = { ALL_WGL_FUNCS };
 static void X11DRV_WineGL_LoadExtensions(void);
 static WineGLPixelFormat* ConvertPixelFormatWGLtoGLX(Display *display, int iPixelFormat, BOOL AllowOffscreen, int *fmt_count);
 static BOOL glxRequireVersion(int requiredVersion);
-static BOOL glxRequireExtension(const char *requiredExtension);
 
 static void dump_PIXELFORMATDESCRIPTOR(const PIXELFORMATDESCRIPTOR *ppfd) {
   TRACE("  - size / version : %d / %d\n", ppfd->nSize, ppfd->nVersion);
@@ -319,6 +314,20 @@ static void (*pglFlush)(void);
 
 static void wglFinish(void);
 static void wglFlush(void);
+
+/* check if the extension is present in the list */
+static BOOL has_extension( const char *list, const char *ext )
+{
+    size_t len = strlen( ext );
+
+    while (list)
+    {
+        while (*list == ' ') list++;
+        if (!strncmp( list, ext, len ) && (!list[len] || list[len] == ' ')) return TRUE;
+        list = strchr( list, ' ' );
+    }
+    return FALSE;
+}
 
 static int GLXErrorHandler(Display *dpy, XErrorEvent *event, void *arg)
 {
@@ -590,7 +599,7 @@ static BOOL has_opengl(void)
         pglXGetFBConfigAttrib = pglXGetProcAddressARB((const GLubyte *) "glXGetFBConfigAttrib");
         pglXGetVisualFromFBConfig = pglXGetProcAddressARB((const GLubyte *) "glXGetVisualFromFBConfig");
         pglXQueryDrawable = pglXGetProcAddressARB((const GLubyte *) "glXQueryDrawable");
-    } else if(glxRequireExtension("GLX_SGIX_fbconfig")) {
+    } else if (has_extension( WineGLInfo.glxExtensions, "GLX_SGIX_fbconfig")) {
         pglXChooseFBConfig = pglXGetProcAddressARB((const GLubyte *) "glXChooseFBConfigSGIX");
         pglXGetFBConfigAttrib = pglXGetProcAddressARB((const GLubyte *) "glXGetFBConfigAttribSGIX");
         pglXGetVisualFromFBConfig = pglXGetProcAddressARB((const GLubyte *) "glXGetVisualFromFBConfigSGIX");
@@ -615,7 +624,7 @@ static BOOL has_opengl(void)
          ERR(" glx_version is %s and GLX_SGIX_fbconfig extension is unsupported. Expect problems.\n", WineGLInfo.glxServerVersion);
     }
 
-    if(glxRequireExtension("GLX_MESA_copy_sub_buffer")) {
+    if (has_extension( WineGLInfo.glxExtensions, "GLX_MESA_copy_sub_buffer")) {
         pglXCopySubBufferMESA = pglXGetProcAddressARB((const GLubyte *) "glXCopySubBufferMESA");
     }
 
@@ -854,7 +863,7 @@ static int ConvertAttribWGLtoGLX(const int* iWGLAttr, int* oGLXAttr, struct wgl_
   TRACE("pAttr[?] = GLX_RENDER_TYPE: %#x\n", pixelattrib);
 
   /* Set GLX_FLOAT_COMPONENTS_NV all the time */
-  if(strstr(WineGLInfo.glxExtensions, "GLX_NV_float_buffer")) {
+  if (has_extension(WineGLInfo.glxExtensions, "GLX_NV_float_buffer")) {
     PUSH2(oGLXAttr, GLX_FLOAT_COMPONENTS_NV, nvfloatattrib);
     TRACE("pAttr[?] = GLX_FLOAT_COMPONENTS_NV: %#x\n", nvfloatattrib);
   }
@@ -1373,18 +1382,7 @@ static BOOL glxdrv_SetPixelFormat(PHYSDEV dev, int iPixelFormat, const PIXELFORM
         }
         /* physDev->current_pf will be set by the DCE update */
     }
-    else if (GetObjectType( physdev->dev.hdc ) == OBJ_MEMDC) {
-        if(!(value&GLX_PIXMAP_BIT)) {
-            WARN("Pixel format %d is not compatible for bitmap rendering\n", iPixelFormat);
-            return FALSE;
-        }
-
-        physdev->pixel_format = iPixelFormat;
-        physdev->type = DC_GL_BITMAP;
-    }
-    else {
-        FIXME("called on a non-window, non-bitmap object?\n");
-    }
+    else FIXME("called on a non-window object?\n");
 
     if (TRACE_ON(wgl)) {
         int gl_test = 0;
@@ -1476,28 +1474,10 @@ static void glxdrv_wglDeleteContext(struct wgl_context *ctx)
     wine_tsx11_lock();
     list_remove( &ctx->entry );
     if (ctx->ctx) pglXDestroyContext( gdi_display, ctx->ctx );
-    if (ctx->glxpixmap) pglXDestroyGLXPixmap( gdi_display, ctx->glxpixmap );
-    if (ctx->pixmap) XFreePixmap( gdi_display, ctx->pixmap );
     if (ctx->vis) XFree( ctx->vis );
     wine_tsx11_unlock();
 
     HeapFree( GetProcessHeap(), 0, ctx );
-}
-
-/**
- * X11DRV_wglGetCurrentReadDCARB
- *
- * For OpenGL32 wglGetCurrentReadDCARB.
- */
-static HDC X11DRV_wglGetCurrentReadDCARB(void)
-{
-    HDC ret = 0;
-    struct wgl_context *ctx = NtCurrentTeb()->glContext;
-
-    if (ctx) ret = ctx->read_hdc;
-
-    TRACE(" returning %p (GL drawable %lu)\n", ret, ctx ? ctx->drawables[1] : 0);
-    return ret;
 }
 
 /***********************************************************************
@@ -1507,25 +1487,6 @@ static PROC glxdrv_wglGetProcAddress(LPCSTR lpszProc)
 {
     if (!strncmp(lpszProc, "wgl", 3)) return NULL;
     return pglXGetProcAddressARB((const GLubyte*)lpszProc);
-}
-
-static GLXPixmap get_context_pixmap( HDC hdc, struct wgl_context *ctx )
-{
-    if (!ctx->pixmap)
-    {
-        BITMAP bmp;
-
-        GetObjectW( GetCurrentObject( hdc, OBJ_BITMAP ), sizeof(bmp), &bmp );
-
-        wine_tsx11_lock();
-        ctx->pixmap = XCreatePixmap( gdi_display, root_window,
-                                     bmp.bmWidth, bmp.bmHeight, ctx->vis->depth );
-        ctx->glxpixmap = pglXCreateGLXPixmap( gdi_display, ctx->vis, ctx->pixmap );
-        wine_tsx11_unlock();
-        ctx->pixmap_size.cx = bmp.bmWidth;
-        ctx->pixmap_size.cy = bmp.bmHeight;
-    }
-    return ctx->glxpixmap;
 }
 
 /***********************************************************************
@@ -1567,8 +1528,6 @@ static BOOL glxdrv_wglMakeCurrent(HDC hdc, struct wgl_context *ctx)
     }
     else
     {
-        if (escape.gl_type == DC_GL_BITMAP) escape.gl_drawable = get_context_pixmap( hdc, ctx );
-
         wine_tsx11_lock();
 
         if (TRACE_ON(wgl)) {
@@ -1587,12 +1546,9 @@ static BOOL glxdrv_wglMakeCurrent(HDC hdc, struct wgl_context *ctx)
 
             ctx->has_been_current = TRUE;
             ctx->hdc = hdc;
-            ctx->read_hdc = hdc;
             ctx->drawables[0] = escape.gl_drawable;
             ctx->drawables[1] = escape.gl_drawable;
             ctx->refresh_drawables = FALSE;
-
-            if (escape.gl_type == DC_GL_BITMAP) opengl_funcs.gl.p_glDrawBuffer(GL_FRONT_LEFT);
         }
         else
             SetLastError(ERROR_INVALID_HANDLE);
@@ -1641,16 +1597,12 @@ static BOOL X11DRV_wglMakeContextCurrentARB( HDC draw_hdc, HDC read_hdc, struct 
     {
         if (!pglXMakeContextCurrent) return FALSE;
 
-        if (escape_draw.gl_type == DC_GL_BITMAP) escape_draw.gl_drawable = get_context_pixmap( draw_hdc, ctx );
-        if (escape_read.gl_type == DC_GL_BITMAP) escape_read.gl_drawable = get_context_pixmap( read_hdc, ctx );
-
         wine_tsx11_lock();
         ret = pglXMakeContextCurrent(gdi_display, escape_draw.gl_drawable, escape_read.gl_drawable, ctx->ctx);
         if (ret)
         {
             ctx->has_been_current = TRUE;
             ctx->hdc = draw_hdc;
-            ctx->read_hdc = read_hdc;
             ctx->drawables[0] = escape_draw.gl_drawable;
             ctx->drawables[1] = escape_read.gl_drawable;
             ctx->refresh_drawables = FALSE;
@@ -1696,11 +1648,6 @@ static BOOL glxdrv_wglShareLists(struct wgl_context *org, struct wgl_context *de
     }
     else
     {
-        if((GetObjectType(org->hdc) == OBJ_MEMDC) ^ (GetObjectType(dest->hdc) == OBJ_MEMDC))
-        {
-            WARN("Attempting to share a context between a direct and indirect rendering context, expect issues!\n");
-        }
-
         wine_tsx11_lock();
         describeContext(org);
         describeContext(dest);
@@ -1716,29 +1663,6 @@ static BOOL glxdrv_wglShareLists(struct wgl_context *org, struct wgl_context *de
         return TRUE;
     }
     return FALSE;
-}
-
-/***********************************************************************
- *		glxdrv_wglGetCurrentDC
- */
-static HDC glxdrv_wglGetCurrentDC( struct wgl_context *ctx )
-{
-    TRACE("hdc %p\n", ctx->hdc);
-    return ctx->hdc;
-}
-
-static void flush_pixmap( struct wgl_context *ctx )
-{
-    char buffer[FIELD_OFFSET( BITMAPINFO, bmiColors[256] )];
-    BITMAPINFO *info = (BITMAPINFO *)buffer;
-    struct gdi_image_bits bits;
-
-    if (!get_pixmap_image( ctx->pixmap, ctx->pixmap_size.cx, ctx->pixmap_size.cy, ctx->vis, info, &bits ))
-    {
-        HBITMAP bitmap = GetCurrentObject( ctx->hdc, OBJ_BITMAP );
-        SetDIBits( 0, bitmap, 0, ctx->pixmap_size.cy, bits.ptr, info, DIB_RGB_COLORS );
-        if (bits.free) bits.free( &bits );
-    }
 }
 
 static void flush_gl_drawable( struct glx_physdev *physdev )
@@ -1781,11 +1705,7 @@ static void wglFinish(void)
     sync_context(ctx);
     pglFinish();
     wine_tsx11_unlock();
-    if (ctx)
-    {
-        if (ctx->pixmap) flush_pixmap( ctx );
-        else ExtEscape( ctx->hdc, X11DRV_ESCAPE, sizeof(code), (LPSTR)&code, 0, NULL );
-    }
+    ExtEscape( ctx->hdc, X11DRV_ESCAPE, sizeof(code), (LPSTR)&code, 0, NULL );
 }
 
 static void wglFlush(void)
@@ -1797,11 +1717,7 @@ static void wglFlush(void)
     sync_context(ctx);
     pglFlush();
     wine_tsx11_unlock();
-    if (ctx)
-    {
-        if (ctx->pixmap) flush_pixmap( ctx );
-        else ExtEscape( ctx->hdc, X11DRV_ESCAPE, sizeof(code), (LPSTR)&code, 0, NULL );
-    }
+    ExtEscape( ctx->hdc, X11DRV_ESCAPE, sizeof(code), (LPSTR)&code, 0, NULL );
 }
 
 /***********************************************************************
@@ -2860,15 +2776,6 @@ static BOOL glxRequireVersion(int requiredVersion)
     return FALSE;
 }
 
-static BOOL glxRequireExtension(const char *requiredExtension)
-{
-    if (strstr(WineGLInfo.glxExtensions, requiredExtension) == NULL) {
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
 static void register_extension(const char *ext)
 {
     if (WineGLInfo.wglExtensions[0])
@@ -2887,16 +2794,16 @@ static void X11DRV_WineGL_LoadExtensions(void)
 
     /* ARB Extensions */
 
-    if(glxRequireExtension("GLX_ARB_create_context"))
+    if (has_extension( WineGLInfo.glxExtensions, "GLX_ARB_create_context"))
     {
         register_extension( "WGL_ARB_create_context" );
         opengl_funcs.ext.p_wglCreateContextAttribsARB = X11DRV_wglCreateContextAttribsARB;
 
-        if(glxRequireExtension("GLX_ARB_create_context_profile"))
+        if (has_extension( WineGLInfo.glxExtensions, "GLX_ARB_create_context_profile"))
             register_extension("WGL_ARB_create_context_profile");
     }
 
-    if(glxRequireExtension("GLX_ARB_fbconfig_float"))
+    if (has_extension( WineGLInfo.glxExtensions, "GLX_ARB_fbconfig_float"))
     {
         register_extension("WGL_ARB_pixel_format_float");
         register_extension("WGL_ATI_pixel_format_float");
@@ -2908,16 +2815,16 @@ static void X11DRV_WineGL_LoadExtensions(void)
     if (glxRequireVersion(3))
     {
         register_extension( "WGL_ARB_make_current_read" );
-        opengl_funcs.ext.p_wglGetCurrentReadDCARB   = X11DRV_wglGetCurrentReadDCARB;
+        opengl_funcs.ext.p_wglGetCurrentReadDCARB   = (void *)1;  /* never called */
         opengl_funcs.ext.p_wglMakeContextCurrentARB = X11DRV_wglMakeContextCurrentARB;
     }
 
-    if (glxRequireExtension("GLX_ARB_multisample")) register_extension( "WGL_ARB_multisample" );
+    if (has_extension( WineGLInfo.glxExtensions, "GLX_ARB_multisample")) register_extension( "WGL_ARB_multisample" );
 
     /* In general pbuffer functionality requires support in the X-server. The functionality is
      * available either when the GLX_SGIX_pbuffer is present or when the GLX server version is 1.3.
      */
-    if ( glxRequireVersion(3) && glxRequireExtension("GLX_SGIX_pbuffer") )
+    if ( glxRequireVersion(3) && has_extension( WineGLInfo.glxExtensions, "GLX_SGIX_pbuffer") )
     {
         register_extension( "WGL_ARB_pbuffer" );
         opengl_funcs.ext.p_wglCreatePbufferARB    = X11DRV_wglCreatePbufferARB;
@@ -2934,19 +2841,19 @@ static void X11DRV_WineGL_LoadExtensions(void)
     opengl_funcs.ext.p_wglGetPixelFormatAttribivARB = X11DRV_wglGetPixelFormatAttribivARB;
 
     /* Support WGL_ARB_render_texture when there's support or pbuffer based emulation */
-    if (glxRequireExtension("GLX_ARB_render_texture") ||
-        (glxRequireVersion(3) && glxRequireExtension("GLX_SGIX_pbuffer") && use_render_texture_emulation))
+    if (has_extension( WineGLInfo.glxExtensions, "GLX_ARB_render_texture") ||
+        (glxRequireVersion(3) && has_extension( WineGLInfo.glxExtensions, "GLX_SGIX_pbuffer") && use_render_texture_emulation))
     {
         register_extension( "WGL_ARB_render_texture" );
         opengl_funcs.ext.p_wglBindTexImageARB    = X11DRV_wglBindTexImageARB;
         opengl_funcs.ext.p_wglReleaseTexImageARB = X11DRV_wglReleaseTexImageARB;
 
         /* The WGL version of GLX_NV_float_buffer requires render_texture */
-        if(glxRequireExtension("GLX_NV_float_buffer"))
+        if (has_extension( WineGLInfo.glxExtensions, "GLX_NV_float_buffer"))
             register_extension("WGL_NV_float_buffer");
 
         /* Again there's no GLX equivalent for this extension, so depend on the required GL extension */
-        if(strstr(WineGLInfo.glExtensions, "GL_NV_texture_rectangle") != NULL)
+        if (has_extension(WineGLInfo.glExtensions, "GL_NV_texture_rectangle"))
             register_extension("WGL_NV_texture_rectangle");
     }
 
@@ -2961,17 +2868,17 @@ static void X11DRV_WineGL_LoadExtensions(void)
     opengl_funcs.ext.p_wglSwapIntervalEXT = X11DRV_wglSwapIntervalEXT;
     opengl_funcs.ext.p_wglGetSwapIntervalEXT = X11DRV_wglGetSwapIntervalEXT;
 
-    if(glxRequireExtension("GLX_EXT_framebuffer_sRGB"))
+    if (has_extension( WineGLInfo.glxExtensions, "GLX_EXT_framebuffer_sRGB"))
         register_extension("WGL_EXT_framebuffer_sRGB");
 
-    if(glxRequireExtension("GLX_EXT_fbconfig_packed_float"))
+    if (has_extension( WineGLInfo.glxExtensions, "GLX_EXT_fbconfig_packed_float"))
         register_extension("WGL_EXT_pixel_format_packed_float");
 
-    if (glxRequireExtension("GLX_EXT_swap_control"))
+    if (has_extension( WineGLInfo.glxExtensions, "GLX_EXT_swap_control"))
         has_swap_control = TRUE;
 
     /* The OpenGL extension GL_NV_vertex_array_range adds wgl/glX functions which aren't exported as 'real' wgl/glX extensions. */
-    if(strstr(WineGLInfo.glExtensions, "GL_NV_vertex_array_range") != NULL)
+    if (has_extension(WineGLInfo.glExtensions, "GL_NV_vertex_array_range"))
     {
         register_extension( "WGL_NV_vertex_array_range" );
         opengl_funcs.ext.p_wglAllocateMemoryNV = pglXAllocateMemoryNV;
@@ -3334,7 +3241,6 @@ static struct opengl_funcs opengl_funcs =
         glxdrv_wglCopyContext,              /* p_wglCopyContext */
         glxdrv_wglCreateContext,            /* p_wglCreateContext */
         glxdrv_wglDeleteContext,            /* p_wglDeleteContext */
-        glxdrv_wglGetCurrentDC,             /* p_wglGetCurrentDC */
         glxdrv_wglGetPixelFormat,           /* p_wglGetPixelFormat */
         glxdrv_wglGetProcAddress,           /* p_wglGetProcAddress */
         glxdrv_wglMakeCurrent,              /* p_wglMakeCurrent */

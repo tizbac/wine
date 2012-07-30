@@ -211,6 +211,41 @@ ok(!Object.hasOwnProperty('isPrototypeOf'), "Object.hasOwnProperty('isPrototypeO
 ok(!parseFloat.hasOwnProperty('call'), "parseFloat.hasOwnProperty('call') is true");
 ok(!Function.hasOwnProperty('call'), "Function.hasOwnProperty('call') is true");
 
+obj = new Array();
+ok(Array.prototype.hasOwnProperty('sort'), "Array.prototype.hasOwnProperty('sort') is false");
+ok(Array.prototype.hasOwnProperty('length'), "Array.prototype.hasOwnProperty('length') is false");
+ok(!obj.hasOwnProperty('sort'), "obj.hasOwnProperty('sort') is true");
+ok(obj.hasOwnProperty('length'), "obj.hasOwnProperty('length') is true");
+
+obj = new Boolean(false);
+ok(!obj.hasOwnProperty('toString'), "obj.hasOwnProperty('toString') is true");
+ok(!Boolean.hasOwnProperty('toString'), "Boolean.hasOwnProperty('toString') is true");
+ok(Boolean.prototype.hasOwnProperty('toString'), "Boolean.prototype.hasOwnProperty('toString') is false");
+
+obj = new Date();
+ok(!obj.hasOwnProperty('getTime'), "obj.hasOwnProperty('getTime') is true");
+ok(!Date.hasOwnProperty('getTime'), "Date.hasOwnProperty('getTime') is true");
+ok(Date.prototype.hasOwnProperty('getTime'), "Date.prototype.hasOwnProperty('getTime') is false");
+
+obj = new Number();
+ok(!obj.hasOwnProperty('toFixed'), "obj.hasOwnProperty('toFixed') is true");
+ok(!Number.hasOwnProperty('toFixed'), "Number.hasOwnProperty('toFixed') is true");
+ok(Number.prototype.hasOwnProperty('toFixed'), "Number.prototype.hasOwnProperty('toFixed') is false");
+
+obj = /x/;
+ok(!obj.hasOwnProperty('exec'), "obj.hasOwnProperty('exec') is true");
+ok(obj.hasOwnProperty('source'), "obj.hasOwnProperty('source') is false");
+ok(!RegExp.hasOwnProperty('exec'), "RegExp.hasOwnProperty('exec') is true");
+ok(!RegExp.hasOwnProperty('source'), "RegExp.hasOwnProperty('source') is true");
+ok(RegExp.prototype.hasOwnProperty('source'), "RegExp.prototype.hasOwnProperty('source') is false");
+
+obj = new String();
+ok(!obj.hasOwnProperty('charAt'), "obj.hasOwnProperty('charAt') is true");
+ok(obj.hasOwnProperty('length'), "obj.hasOwnProperty('length') is false");
+ok(!String.hasOwnProperty('charAt'), "String.hasOwnProperty('charAt') is true");
+ok(String.prototype.hasOwnProperty('charAt'), "String.prototype.hasOwnProperty('charAt') is false");
+ok(String.prototype.hasOwnProperty('length'), "String.prototype.hasOwnProperty('length') is false");
+
 tmp = "" + new Object();
 ok(tmp === "[object Object]", "'' + new Object() = " + tmp);
 (tmp = new Array).f = Object.prototype.toString;

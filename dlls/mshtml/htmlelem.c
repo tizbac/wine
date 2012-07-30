@@ -182,7 +182,7 @@ HRESULT create_nselem(HTMLDocumentNode *doc, const WCHAR *tag, nsIDOMHTMLElement
     }
 
     nsAString_InitDepend(&tag_str, tag);
-    nsres = nsIDOMDocument_CreateElement(doc->nsdoc, &tag_str, &nselem);
+    nsres = nsIDOMHTMLDocument_CreateElement(doc->nsdoc, &tag_str, &nselem);
     nsAString_Finish(&tag_str);
     if(NS_FAILED(nsres)) {
         ERR("CreateElement failed: %08x\n", nsres);
@@ -446,32 +446,9 @@ static HRESULT WINAPI HTMLElement_get_style(IHTMLElement *iface, IHTMLStyle **p)
     TRACE("(%p)->(%p)\n", This, p);
 
     if(!This->style) {
-        nsIDOMElementCSSInlineStyle *nselemstyle;
-        nsIDOMCSSStyleDeclaration *nsstyle;
-        nsresult nsres;
         HRESULT hres;
 
-        if(!This->nselem) {
-            FIXME("NULL nselem\n");
-            return E_NOTIMPL;
-        }
-
-        nsres = nsIDOMHTMLElement_QueryInterface(This->nselem, &IID_nsIDOMElementCSSInlineStyle,
-                (void**)&nselemstyle);
-        if(NS_FAILED(nsres)) {
-            ERR("Could not get nsIDOMCSSStyleDeclaration interface: %08x\n", nsres);
-            return E_FAIL;
-        }
-
-        nsres = nsIDOMElementCSSInlineStyle_GetStyle(nselemstyle, &nsstyle);
-        nsIDOMElementCSSInlineStyle_Release(nselemstyle);
-        if(NS_FAILED(nsres)) {
-            ERR("GetStyle failed: %08x\n", nsres);
-            return E_FAIL;
-        }
-
-        hres = HTMLStyle_Create(This, nsstyle, &This->style);
-        nsIDOMCSSStyleDeclaration_Release(nsstyle);
+        hres = HTMLStyle_Create(This, &This->style);
         if(FAILED(hres))
             return hres;
     }
@@ -1203,7 +1180,7 @@ static HRESULT WINAPI HTMLElement_insertAdjacentText(IHTMLElement *iface, BSTR w
 
 
     nsAString_InitDepend(&ns_text, text);
-    nsres = nsIDOMDocument_CreateTextNode(This->node.doc->nsdoc, &ns_text, (nsIDOMText **)&nsnode);
+    nsres = nsIDOMHTMLDocument_CreateTextNode(This->node.doc->nsdoc, &ns_text, (nsIDOMText **)&nsnode);
     nsAString_Finish(&ns_text);
 
     if(NS_FAILED(nsres) || !nsnode)
@@ -1586,6 +1563,10 @@ void HTMLElement_destructor(HTMLDOMNode *iface)
         This->style->elem = NULL;
         IHTMLStyle_Release(&This->style->IHTMLStyle_iface);
     }
+    if(This->runtime_style) {
+        This->runtime_style->elem = NULL;
+        IHTMLStyle_Release(&This->runtime_style->IHTMLStyle_iface);
+    }
     if(This->attrs) {
         HTMLDOMAttribute *attr;
 
@@ -1821,7 +1802,7 @@ HRESULT HTMLElement_Create(HTMLDocumentNode *doc, nsIDOMNode *nsnode, BOOL use_g
 
     TRACE("%s ret %p\n", debugstr_w(class_name), elem);
 
-    nsIDOMElement_Release(nselem);
+    nsIDOMHTMLElement_Release(nselem);
     nsAString_Finish(&class_name_str);
     if(FAILED(hres))
         return hres;

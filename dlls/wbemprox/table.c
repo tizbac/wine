@@ -44,11 +44,11 @@ HRESULT get_column_index( const struct table *table, const WCHAR *name, UINT *co
     return WBEM_E_INVALID_QUERY;
 }
 
-static UINT get_column_size( const struct table *table, UINT column )
+UINT get_type_size( CIMTYPE type )
 {
-    if (table->columns[column].type & CIM_FLAG_ARRAY) return sizeof(void *);
+    if (type & CIM_FLAG_ARRAY) return sizeof(void *);
 
-    switch (table->columns[column].type & COL_TYPE_MASK)
+    switch (type)
     {
     case CIM_SINT16:
     case CIM_UINT16:
@@ -63,10 +63,15 @@ static UINT get_column_size( const struct table *table, UINT column )
     case CIM_STRING:
         return sizeof(WCHAR *);
     default:
-        ERR("unknown column type %u\n", table->columns[column].type & COL_TYPE_MASK);
+        ERR("unhandled type %u\n", type);
         break;
     }
-    return sizeof(INT32);
+    return sizeof(LONGLONG);
+}
+
+static UINT get_column_size( const struct table *table, UINT column )
+{
+    return get_type_size( table->columns[column].type & COL_TYPE_MASK );
 }
 
 static UINT get_column_offset( const struct table *table, UINT column )
@@ -180,6 +185,49 @@ BSTR get_value_bstr( const struct table *table, UINT row, UINT column )
     return NULL;
 }
 
+HRESULT set_value( const struct table *table, UINT row, UINT column, LONGLONG val,
+                   CIMTYPE type )
+{
+    UINT col_offset, row_size;
+    BYTE *ptr;
+
+    if ((table->columns[column].type & COL_TYPE_MASK) != type) return WBEM_E_TYPE_MISMATCH;
+
+    col_offset = get_column_offset( table, column );
+    row_size = get_row_size( table );
+    ptr = table->data + row * row_size + col_offset;
+
+    switch (table->columns[column].type & COL_TYPE_MASK)
+    {
+    case CIM_DATETIME:
+    case CIM_STRING:
+        *(WCHAR **)ptr = (WCHAR *)(INT_PTR)val;
+        break;
+    case CIM_SINT16:
+        *(INT16 *)ptr = val;
+        break;
+    case CIM_UINT16:
+        *(UINT16 *)ptr = val;
+        break;
+    case CIM_SINT32:
+        *(INT32 *)ptr = val;
+        break;
+    case CIM_UINT32:
+        *(UINT32 *)ptr = val;
+        break;
+    case CIM_SINT64:
+        *(INT64 *)ptr = val;
+        break;
+    case CIM_UINT64:
+        *(UINT64 *)ptr = val;
+        break;
+    default:
+        FIXME("unhandled column type %u\n", type);
+        return WBEM_E_FAILED;
+    }
+    return S_OK;
+}
+
 static void clear_table( struct table *table )
 {
     UINT i, j, type;
@@ -200,9 +248,9 @@ static void clear_table( struct table *table )
             }
         }
     }
-    table->num_rows = 0;
     if (table->fill)
     {
+        table->num_rows = 0;
         heap_free( table->data );
         table->data = NULL;
     }

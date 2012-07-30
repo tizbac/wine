@@ -24,6 +24,12 @@
 #ifndef __WINE_WINED3D_PRIVATE_H
 #define __WINE_WINED3D_PRIVATE_H
 
+#ifdef USE_WIN32_OPENGL
+#define WINE_GLAPI __stdcall
+#else
+#define WINE_GLAPI
+#endif
+
 #include <stdarg.h>
 #include <math.h>
 #include <limits.h>
@@ -43,6 +49,7 @@
 #include "wined3d_gl.h"
 #include "wine/list.h"
 #include "wine/rbtree.h"
+#include "wine/wgl_driver.h"
 
 /* Driver quirks */
 #define WINED3D_QUIRK_ARB_VS_OFFSET_LIMIT       0x00000001
@@ -799,7 +806,7 @@ extern int num_lock DECLSPEC_HIDDEN;
 
 /* GL related defines */
 /* ------------------ */
-#define GL_EXTCALL(f) (gl_info->f)
+#define GL_EXTCALL(f) (gl_info->gl_ops.ext.p_##f)
 
 #define D3DCOLOR_B_R(dw) (((dw) >> 16) & 0xff)
 #define D3DCOLOR_B_G(dw) (((dw) >>  8) & 0xff)
@@ -827,14 +834,14 @@ extern int num_lock DECLSPEC_HIDDEN;
 do {                                                                \
     GLint err;                                                      \
     if (!__WINE_IS_DEBUG_ON(_ERR, __wine_dbch___default)) break;    \
-    err = glGetError();                                             \
+    err = gl_info->gl_ops.gl.p_glGetError();                        \
     if (err == GL_NO_ERROR) {                                       \
        TRACE("%s call ok %s / %d\n", A, __FILE__, __LINE__);        \
                                                                     \
     } else do {                                                     \
         ERR(">>>>>>>>>>>>>>>>> %s (%#x) from %s @ %s / %d\n",       \
             debug_glerror(err), err, A, __FILE__, __LINE__);        \
-       err = glGetError();                                          \
+       err = gl_info->gl_ops.gl.p_glGetError();                     \
     } while (err != GL_NO_ERROR);                                   \
 } while(0)
 #else
@@ -1159,7 +1166,7 @@ struct fragment_caps
 
 struct fragment_pipeline
 {
-    void (*enable_extension)(BOOL enable);
+    void (*enable_extension)(const struct wined3d_gl_info *gl_info, BOOL enable);
     void (*get_caps)(const struct wined3d_gl_info *gl_info, struct fragment_caps *caps);
     HRESULT (*alloc_private)(struct wined3d_device *device);
     void (*free_private)(struct wined3d_device *device);
@@ -1436,25 +1443,33 @@ enum wined3d_pci_device
 
 struct wined3d_fbo_ops
 {
-    PGLFNGLISRENDERBUFFERPROC                       glIsRenderbuffer;
-    PGLFNGLBINDRENDERBUFFERPROC                     glBindRenderbuffer;
-    PGLFNGLDELETERENDERBUFFERSPROC                  glDeleteRenderbuffers;
-    PGLFNGLGENRENDERBUFFERSPROC                     glGenRenderbuffers;
-    PGLFNGLRENDERBUFFERSTORAGEPROC                  glRenderbufferStorage;
-    PGLFNRENDERBUFFERSTORAGEMULTISAMPLEPROC         glRenderbufferStorageMultisample;
-    PGLFNGLGETRENDERBUFFERPARAMETERIVPROC           glGetRenderbufferParameteriv;
-    PGLFNGLISFRAMEBUFFERPROC                        glIsFramebuffer;
-    PGLFNGLBINDFRAMEBUFFERPROC                      glBindFramebuffer;
-    PGLFNGLDELETEFRAMEBUFFERSPROC                   glDeleteFramebuffers;
-    PGLFNGLGENFRAMEBUFFERSPROC                      glGenFramebuffers;
-    PGLFNGLCHECKFRAMEBUFFERSTATUSPROC               glCheckFramebufferStatus;
-    PGLFNGLFRAMEBUFFERTEXTURE1DPROC                 glFramebufferTexture1D;
-    PGLFNGLFRAMEBUFFERTEXTURE2DPROC                 glFramebufferTexture2D;
-    PGLFNGLFRAMEBUFFERTEXTURE3DPROC                 glFramebufferTexture3D;
-    PGLFNGLFRAMEBUFFERRENDERBUFFERPROC              glFramebufferRenderbuffer;
-    PGLFNGLGETFRAMEBUFFERATTACHMENTPARAMETERIVPROC  glGetFramebufferAttachmentParameteriv;
-    PGLFNGLBLITFRAMEBUFFERPROC                      glBlitFramebuffer;
-    PGLFNGLGENERATEMIPMAPPROC                       glGenerateMipmap;
+    GLboolean (WINE_GLAPI *glIsRenderbuffer)(GLuint renderbuffer);
+    void (WINE_GLAPI *glBindRenderbuffer)(GLenum target, GLuint renderbuffer);
+    void (WINE_GLAPI *glDeleteRenderbuffers)(GLsizei n, const GLuint *renderbuffers);
+    void (WINE_GLAPI *glGenRenderbuffers)(GLsizei n, GLuint *renderbuffers);
+    void (WINE_GLAPI *glRenderbufferStorage)(GLenum target, GLenum internalformat,
+            GLsizei width, GLsizei height);
+    void (WINE_GLAPI *glRenderbufferStorageMultisample)(GLenum target, GLsizei samples,
+            GLenum internalformat, GLsizei width, GLsizei height);
+    void (WINE_GLAPI *glGetRenderbufferParameteriv)(GLenum target, GLenum pname, GLint *params);
+    GLboolean (WINE_GLAPI *glIsFramebuffer)(GLuint framebuffer);
+    void (WINE_GLAPI *glBindFramebuffer)(GLenum target, GLuint framebuffer);
+    void (WINE_GLAPI *glDeleteFramebuffers)(GLsizei n, const GLuint *framebuffers);
+    void (WINE_GLAPI *glGenFramebuffers)(GLsizei n, GLuint *framebuffers);
+    GLenum (WINE_GLAPI *glCheckFramebufferStatus)(GLenum target);
+    void (WINE_GLAPI *glFramebufferTexture1D)(GLenum target, GLenum attachment,
+            GLenum textarget, GLuint texture, GLint level);
+    void (WINE_GLAPI *glFramebufferTexture2D)(GLenum target, GLenum attachment,
+            GLenum textarget, GLuint texture, GLint level);
+    void (WINE_GLAPI *glFramebufferTexture3D)(GLenum target, GLenum attachment,
+            GLenum textarget, GLuint texture, GLint level, GLint layer);
+    void (WINE_GLAPI *glFramebufferRenderbuffer)(GLenum target, GLenum attachment,
+            GLenum renderbuffertarget, GLuint renderbuffer);
+    void (WINE_GLAPI *glGetFramebufferAttachmentParameteriv)(GLenum target, GLenum attachment,
+            GLenum pname, GLint *params);
+    void (WINE_GLAPI *glBlitFramebuffer)(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
+            GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
+    void (WINE_GLAPI *glGenerateMipmap)(GLenum target);
 };
 
 struct wined3d_gl_limits
@@ -1503,13 +1518,8 @@ struct wined3d_gl_info
     BOOL supported[WINED3D_GL_EXT_COUNT];
     GLint wrap_lookup[WINED3D_TADDRESS_MIRROR_ONCE - WINED3D_TADDRESS_WRAP + 1];
 
+    struct opengl_funcs gl_ops;
     struct wined3d_fbo_ops fbo_ops;
-#define USE_GL_FUNC(type, pfn, ext, replace) type pfn;
-    /* GL function pointers */
-    GL_EXT_FUNCS_GEN
-    /* WGL function pointers */
-    WGL_EXT_FUNCS_GEN
-#undef USE_GL_FUNC
 
     struct wined3d_format *formats;
 };
@@ -2488,8 +2498,9 @@ BOOL is_invalid_op(const struct wined3d_state *state, int stage,
 void set_tex_op_nvrc(const struct wined3d_gl_info *gl_info, const struct wined3d_state *state,
         BOOL is_alpha, int stage, enum wined3d_texture_op op, DWORD arg1, DWORD arg2, DWORD arg3,
         INT texture_idx, DWORD dst) DECLSPEC_HIDDEN;
-void set_texture_matrix(const float *smat, DWORD flags, BOOL calculatedCoords,
-        BOOL transformed, enum wined3d_format_id coordtype, BOOL ffp_can_disable_proj) DECLSPEC_HIDDEN;
+void set_texture_matrix(const struct wined3d_gl_info *gl_info, const float *smat, DWORD flags,
+        BOOL calculatedCoords, BOOL transformed, enum wined3d_format_id coordtype,
+        BOOL ffp_can_disable_proj) DECLSPEC_HIDDEN;
 void texture_activate_dimensions(const struct wined3d_texture *texture,
         const struct wined3d_gl_info *gl_info) DECLSPEC_HIDDEN;
 void sampler_texdim(struct wined3d_context *context,

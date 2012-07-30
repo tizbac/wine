@@ -263,6 +263,14 @@ void dispex_unlink(DispatchEx*) DECLSPEC_HIDDEN;
 void release_typelib(void) DECLSPEC_HIDDEN;
 HRESULT get_htmldoc_classinfo(ITypeInfo **typeinfo) DECLSPEC_HIDDEN;
 
+typedef enum {
+    DISPEXPROP_CUSTOM,
+    DISPEXPROP_DYNAMIC,
+    DISPEXPROP_BUILTIN
+} dispex_prop_type_t;
+
+dispex_prop_type_t get_dispid_type(DISPID) DECLSPEC_HIDDEN;
+
 typedef struct HTMLWindow HTMLWindow;
 typedef struct HTMLInnerWindow HTMLInnerWindow;
 typedef struct HTMLOuterWindow HTMLOuterWindow;
@@ -626,6 +634,7 @@ typedef struct {
 
     nsIDOMHTMLElement *nselem;
     HTMLStyle *style;
+    HTMLStyle *runtime_style;
     HTMLAttributeCollection *attrs;
     WCHAR *filter;
 } HTMLElement;
@@ -792,13 +801,10 @@ void abort_window_bindings(HTMLInnerWindow*) DECLSPEC_HIDDEN;
 void set_download_state(HTMLDocumentObj*,int) DECLSPEC_HIDDEN;
 void call_docview_84(HTMLDocumentObj*) DECLSPEC_HIDDEN;
 
-HRESULT bind_mon_to_buffer(HTMLInnerWindow*,IMoniker*,void**,DWORD*) DECLSPEC_HIDDEN;
-
 void set_ready_state(HTMLOuterWindow*,READYSTATE) DECLSPEC_HIDDEN;
 
 HRESULT HTMLSelectionObject_Create(HTMLDocumentNode*,nsISelection*,IHTMLSelectionObject**) DECLSPEC_HIDDEN;
 HRESULT HTMLTxtRange_Create(HTMLDocumentNode*,nsIDOMRange*,IHTMLTxtRange**) DECLSPEC_HIDDEN;
-HRESULT HTMLStyle_Create(HTMLElement*,nsIDOMCSSStyleDeclaration*,HTMLStyle**) DECLSPEC_HIDDEN;
 IHTMLStyleSheet *HTMLStyleSheet_Create(nsIDOMStyleSheet*) DECLSPEC_HIDDEN;
 IHTMLStyleSheetsCollection *HTMLStyleSheetsCollection_Create(nsIDOMStyleSheetList*) DECLSPEC_HIDDEN;
 

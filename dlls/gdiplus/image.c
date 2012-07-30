@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007 Google (Evan Stade)
+ * Copyright (C) 2012 Dmitry Timoshkov
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -40,6 +41,73 @@
 WINE_DEFAULT_DEBUG_CHANNEL(gdiplus);
 
 #define PIXELFORMATBPP(x) ((x) ? ((x) >> 8) & 255 : 24)
+
+static const struct
+{
+    const WICPixelFormatGUID *wic_format;
+    PixelFormat gdip_format;
+    /* predefined palette type to use for pixel format conversions */
+    WICBitmapPaletteType palette_type;
+} pixel_formats[] =
+{
+    { &GUID_WICPixelFormatBlackWhite, PixelFormat1bppIndexed, WICBitmapPaletteTypeFixedBW },
+    { &GUID_WICPixelFormat1bppIndexed, PixelFormat1bppIndexed, WICBitmapPaletteTypeFixedBW },
+    { &GUID_WICPixelFormat8bppGray, PixelFormat8bppIndexed, WICBitmapPaletteTypeFixedGray256 },
+    { &GUID_WICPixelFormat8bppIndexed, PixelFormat8bppIndexed, WICBitmapPaletteTypeFixedHalftone256 },
+    { &GUID_WICPixelFormat16bppBGR555, PixelFormat16bppRGB555, WICBitmapPaletteTypeFixedHalftone256 },
+    { &GUID_WICPixelFormat24bppBGR, PixelFormat24bppRGB, WICBitmapPaletteTypeFixedHalftone256 },
+    { &GUID_WICPixelFormat32bppBGR, PixelFormat32bppRGB, WICBitmapPaletteTypeFixedHalftone256 },
+    { &GUID_WICPixelFormat32bppBGRA, PixelFormat32bppARGB, WICBitmapPaletteTypeFixedHalftone256 },
+    { &GUID_WICPixelFormat32bppPBGRA, PixelFormat32bppPARGB, WICBitmapPaletteTypeFixedHalftone256 },
+    { NULL }
+};
+
+static ColorPalette *get_palette(IWICBitmapFrameDecode *frame, WICBitmapPaletteType palette_type)
+{
+    HRESULT hr;
+    IWICImagingFactory *factory;
+    IWICPalette *wic_palette;
+    ColorPalette *palette = NULL;
+
+    hr = CoCreateInstance(&CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_IWICImagingFactory, (void **)&factory);
+    if (hr != S_OK) return NULL;
+
+    hr = IWICImagingFactory_CreatePalette(factory, &wic_palette);
+    if (hr == S_OK)
+    {
+        hr = WINCODEC_ERR_PALETTEUNAVAILABLE;
+        if (frame)
+            hr = IWICBitmapFrameDecode_CopyPalette(frame, wic_palette);
+        if (hr != S_OK)
+        {
+            TRACE("using predefined palette %#x\n", palette_type);
+            hr = IWICPalette_InitializePredefined(wic_palette, palette_type, FALSE);
+        }
+        if (hr == S_OK)
+        {
+            UINT count;
+            BOOL mono, gray;
+
+            IWICPalette_IsBlackWhite(wic_palette, &mono);
+            IWICPalette_IsGrayscale(wic_palette, &gray);
+
+            IWICPalette_GetColorCount(wic_palette, &count);
+            palette = HeapAlloc(GetProcessHeap(), 0, 2 * sizeof(UINT) + count * sizeof(ARGB));
+            IWICPalette_GetColors(wic_palette, count, palette->Entries, &palette->Count);
+
+            if (mono)
+                palette->Flags = 0;
+            else if (gray)
+                palette->Flags = PaletteFlagsGrayScale;
+            else
+                palette->Flags = PaletteFlagsHalftone;
+        }
+        IWICPalette_Release(wic_palette);
+    }
+    IWICImagingFactory_Release(factory);
+    return palette;
+}
 
 static INT ipicture_pixel_height(IPicture *pic)
 {
@@ -2237,7 +2305,11 @@ GpStatus WINGDIPAPI GdipGetImageGraphicsContext(GpImage *image,
         stat = GdipCreateFromHDC(hdc, graphics);
 
         if (stat == Ok)
+        {
             (*graphics)->image = image;
+            (*graphics)->xres = image->xres;
+            (*graphics)->yres = image->yres;
+        }
     }
     else if (image->type == ImageTypeMetafile)
         stat = METAFILE_GetGraphicsContext((GpMetafile*)image, graphics);
@@ -2962,27 +3034,6 @@ GpStatus WINGDIPAPI GdipLoadImageFromFileICM(GDIPCONST WCHAR* filename,GpImage *
     return GdipLoadImageFromFile(filename, image);
 }
 
-static const WICPixelFormatGUID * const wic_pixel_formats[] = {
-    &GUID_WICPixelFormatBlackWhite,
-    &GUID_WICPixelFormat1bppIndexed,
-    &GUID_WICPixelFormat16bppBGR555,
-    &GUID_WICPixelFormat24bppBGR,
-    &GUID_WICPixelFormat32bppBGR,
-    &GUID_WICPixelFormat32bppBGRA,
-    &GUID_WICPixelFormat32bppPBGRA,
-    NULL
-};
-
-static const PixelFormat wic_gdip_formats[] = {
-    PixelFormat1bppIndexed,
-    PixelFormat1bppIndexed,
-    PixelFormat16bppRGB555,
-    PixelFormat24bppRGB,
-    PixelFormat32bppRGB,
-    PixelFormat32bppARGB,
-    PixelFormat32bppPARGB,
-};
-
 static GpStatus decode_image_wic(IStream* stream, REFCLSID clsid, UINT active_frame, GpImage **image)
 {
     GpStatus status=Ok;
@@ -2994,6 +3045,8 @@ static GpStatus decode_image_wic(IStream* stream, REFCLSID clsid, UINT active_fr
     IWICMetadataBlockReader *block_reader;
     WICPixelFormatGUID wic_format;
     PixelFormat gdip_format=0;
+    ColorPalette *palette = NULL;
+    WICBitmapPaletteType palette_type = WICBitmapPaletteTypeFixedHalftone256;
     int i;
     UINT width, height, frame_count;
     BitmapData lockeddata;
@@ -3022,12 +3075,13 @@ static GpStatus decode_image_wic(IStream* stream, REFCLSID clsid, UINT active_fr
             IWICBitmapSource *bmp_source;
             IWICBitmapFrameDecode_QueryInterface(frame, &IID_IWICBitmapSource, (void **)&bmp_source);
 
-            for (i=0; wic_pixel_formats[i]; i++)
+            for (i=0; pixel_formats[i].wic_format; i++)
             {
-                if (IsEqualGUID(&wic_format, wic_pixel_formats[i]))
+                if (IsEqualGUID(&wic_format, pixel_formats[i].wic_format))
                 {
                     source = bmp_source;
-                    gdip_format = wic_gdip_formats[i];
+                    gdip_format = pixel_formats[i].gdip_format;
+                    palette_type = pixel_formats[i].palette_type;
                     break;
                 }
             }
@@ -3102,6 +3156,7 @@ static GpStatus decode_image_wic(IStream* stream, REFCLSID clsid, UINT active_fr
             IWICMetadataBlockReader_Release(block_reader);
         }
 
+        palette = get_palette(frame, palette_type);
         IWICBitmapFrameDecode_Release(frame);
     }
 
@@ -3119,8 +3174,16 @@ end:
         bitmap->image.frame_count = frame_count;
         bitmap->image.current_frame = active_frame;
         bitmap->image.stream = stream;
-        if (IsEqualGUID(&wic_format, &GUID_WICPixelFormatBlackWhite))
-            bitmap->image.palette->Flags = 0;
+        if (palette)
+        {
+            GdipFree(bitmap->image.palette);
+            bitmap->image.palette = palette;
+        }
+        else
+        {
+            if (IsEqualGUID(&wic_format, &GUID_WICPixelFormatBlackWhite))
+                bitmap->image.palette->Flags = 0;
+        }
         /* Pin the source stream */
         IStream_AddRef(stream);
     }
@@ -3513,30 +3576,22 @@ static GpStatus encode_image_WIC(GpImage *image, IStream* stream,
 
         if (SUCCEEDED(hr))
         {
-            for (i=0; wic_pixel_formats[i]; i++)
+            for (i=0; pixel_formats[i].wic_format; i++)
             {
-                if (wic_gdip_formats[i] == bitmap->format)
+                if (pixel_formats[i].gdip_format == bitmap->format)
+                {
+                    memcpy(&wicformat, pixel_formats[i].wic_format, sizeof(GUID));
+                    gdipformat = bitmap->format;
                     break;
+                }
             }
-            if (wic_pixel_formats[i])
-                memcpy(&wicformat, wic_pixel_formats[i], sizeof(GUID));
-            else
+            if (!gdipformat)
+            {
                 memcpy(&wicformat, &GUID_WICPixelFormat32bppBGRA, sizeof(GUID));
+                gdipformat = PixelFormat32bppARGB;
+            }
 
             hr = IWICBitmapFrameEncode_SetPixelFormat(frameencode, &wicformat);
-
-            for (i=0; wic_pixel_formats[i]; i++)
-            {
-                if (IsEqualGUID(&wicformat, wic_pixel_formats[i]))
-                    break;
-            }
-            if (wic_pixel_formats[i])
-                gdipformat = wic_gdip_formats[i];
-            else
-            {
-                ERR("cannot provide pixel format %s\n", debugstr_guid(&wicformat));
-                hr = E_FAIL;
-            }
         }
 
         if (SUCCEEDED(hr))

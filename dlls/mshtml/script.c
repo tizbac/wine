@@ -32,15 +32,32 @@
 #include "wine/debug.h"
 
 #include "mshtml_private.h"
+#include "binding.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 
 #ifdef _WIN64
+
 #define CTXARG_T DWORDLONG
 #define IActiveScriptSiteDebugVtbl IActiveScriptSiteDebug64Vtbl
+
+#define IActiveScriptParse_Release IActiveScriptParse64_Release
+#define IActiveScriptParse_InitNew IActiveScriptParse64_InitNew
+#define IActiveScriptParse_ParseScriptText IActiveScriptParse64_ParseScriptText
+#define IActiveScriptParseProcedure_Release IActiveScriptParseProcedure64_Release
+#define IActiveScriptParseProcedure_ParseProcedureText IActiveScriptParseProcedure64_ParseProcedureText
+
 #else
+
 #define CTXARG_T DWORD
 #define IActiveScriptSiteDebugVtbl IActiveScriptSiteDebug32Vtbl
+
+#define IActiveScriptParse_Release IActiveScriptParse32_Release
+#define IActiveScriptParse_InitNew IActiveScriptParse32_InitNew
+#define IActiveScriptParse_ParseScriptText IActiveScriptParse32_ParseScriptText
+#define IActiveScriptParseProcedure_Release IActiveScriptParseProcedure32_Release
+#define IActiveScriptParseProcedure_ParseProcedureText IActiveScriptParseProcedure32_ParseProcedureText
+
 #endif
 
 static const WCHAR windowW[] = {'w','i','n','d','o','w',0};
@@ -135,7 +152,7 @@ static BOOL init_script_engine(ScriptHost *script_host)
     V_BOOL(&var) = VARIANT_TRUE;
     set_script_prop(script_host, SCRIPTPROP_HACK_TRIDENTEVENTSINK, &var);
 
-    hres = IActiveScriptParse64_InitNew(script_host->parse);
+    hres = IActiveScriptParse_InitNew(script_host->parse);
     if(FAILED(hres)) {
         WARN("InitNew failed: %08x\n", hres);
         return FALSE;
@@ -196,12 +213,12 @@ static void release_script_engine(ScriptHost *This)
 
     default:
         if(This->parse_proc) {
-            IUnknown_Release(This->parse_proc);
+            IActiveScriptParseProcedure_Release(This->parse_proc);
             This->parse_proc = NULL;
         }
 
         if(This->parse) {
-            IUnknown_Release(This->parse);
+            IActiveScriptParse_Release(This->parse);
             This->parse = NULL;
         }
     }
@@ -632,7 +649,7 @@ static void parse_text(ScriptHost *script_host, LPCWSTR text)
     VariantInit(&var);
     memset(&excepinfo, 0, sizeof(excepinfo));
     TRACE(">>>\n");
-    hres = IActiveScriptParse64_ParseScriptText(script_host->parse, text, windowW, NULL, script_endW,
+    hres = IActiveScriptParse_ParseScriptText(script_host->parse, text, windowW, NULL, script_endW,
                                               0, 0, SCRIPTTEXT_ISVISIBLE|SCRIPTTEXT_HOSTMANAGESSOURCE,
                                               &var, &excepinfo);
     if(SUCCEEDED(hres))
@@ -645,9 +662,7 @@ static void parse_text(ScriptHost *script_host, LPCWSTR text)
 static void parse_extern_script(ScriptHost *script_host, LPCWSTR src)
 {
     IMoniker *mon;
-    char *buf;
     WCHAR *text;
-    DWORD len, size=0;
     HRESULT hres;
 
     static const WCHAR wine_schemaW[] = {'w','i','n','e',':'};
@@ -659,16 +674,10 @@ static void parse_extern_script(ScriptHost *script_host, LPCWSTR src)
     if(FAILED(hres))
         return;
 
-    hres = bind_mon_to_buffer(script_host->window, mon, (void**)&buf, &size);
+    hres = bind_mon_to_wstr(script_host->window, mon, &text);
     IMoniker_Release(mon);
     if(FAILED(hres))
         return;
-
-    len = MultiByteToWideChar(CP_ACP, 0, buf, size, NULL, 0);
-    text = heap_alloc((len+1)*sizeof(WCHAR));
-    MultiByteToWideChar(CP_ACP, 0, buf, size, text, len);
-    heap_free(buf);
-    text[len] = 0;
 
     parse_text(script_host, text);
 
@@ -875,7 +884,7 @@ IDispatch *script_parse_event(HTMLInnerWindow *window, LPCWSTR text)
     if(!script_host || !script_host->parse_proc)
         return NULL;
 
-    hres = IActiveScriptParseProcedure64_ParseProcedureText(script_host->parse_proc, ptr, NULL, emptyW,
+    hres = IActiveScriptParseProcedure_ParseProcedureText(script_host->parse_proc, ptr, NULL, emptyW,
             NULL, NULL, delimiterW, 0 /* FIXME */, 0,
             SCRIPTPROC_HOSTMANAGESSOURCE|SCRIPTPROC_IMPLICIT_THIS|SCRIPTPROC_IMPLICIT_PARENTS, &disp);
     if(FAILED(hres)) {
@@ -914,7 +923,7 @@ HRESULT exec_script(HTMLInnerWindow *window, const WCHAR *code, const WCHAR *lan
 
     memset(&ei, 0, sizeof(ei));
     TRACE(">>>\n");
-    hres = IActiveScriptParse64_ParseScriptText(script_host->parse, code, NULL, NULL, delimW, 0, 0, SCRIPTTEXT_ISVISIBLE, ret, &ei);
+    hres = IActiveScriptParse_ParseScriptText(script_host->parse, code, NULL, NULL, delimW, 0, 0, SCRIPTTEXT_ISVISIBLE, ret, &ei);
     if(SUCCEEDED(hres))
         TRACE("<<<\n");
     else
@@ -1027,6 +1036,6 @@ void release_script_hosts(HTMLInnerWindow *window)
         release_script_engine(iter);
         list_remove(&iter->entry);
         iter->window = NULL;
-        IActiveScript_Release(&iter->IActiveScriptSite_iface);
+        IActiveScriptSite_Release(&iter->IActiveScriptSite_iface);
     }
 }

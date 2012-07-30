@@ -65,16 +65,24 @@ enum wgl_handle_type
     HANDLE_TYPE_MASK = 15 << 12
 };
 
+struct opengl_context
+{
+    DWORD               tid;         /* thread that the context is current in */
+    HDC                 draw_dc;     /* current drawing DC */
+    HDC                 read_dc;     /* current reading DC */
+    GLubyte            *extensions;  /* extension string */
+    struct wgl_context *drv_ctx;     /* driver context */
+};
+
 struct wgl_handle
 {
     UINT                 handle;
-    DWORD                tid;
     struct opengl_funcs *funcs;
     union
     {
-        struct wgl_context *context;  /* for HANDLE_CONTEXT */
-        struct wgl_pbuffer *pbuffer;  /* for HANDLE_PBUFFER */
-        struct wgl_handle  *next;     /* for free handles */
+        struct opengl_context *context;  /* for HANDLE_CONTEXT */
+        struct wgl_pbuffer    *pbuffer;  /* for HANDLE_PBUFFER */
+        struct wgl_handle     *next;     /* for free handles */
     } u;
 };
 
@@ -183,7 +191,8 @@ BOOL WINAPI wglCopyContext(HGLRC hglrcSrc, HGLRC hglrcDst, UINT mask)
     if ((dst = get_handle_ptr( hglrcDst, HANDLE_CONTEXT )))
     {
         if (src->funcs != dst->funcs) SetLastError( ERROR_INVALID_HANDLE );
-        else ret = src->funcs->wgl.p_wglCopyContext( src->u.context, dst->u.context, mask );
+        else ret = src->funcs->wgl.p_wglCopyContext( src->u.context->drv_ctx,
+                                                     dst->u.context->drv_ctx, mask );
     }
     release_handle_ptr( dst );
     release_handle_ptr( src );
@@ -199,14 +208,16 @@ BOOL WINAPI wglDeleteContext(HGLRC hglrc)
 
     if (!ptr) return FALSE;
 
-    if (ptr->tid && ptr->tid != GetCurrentThreadId())
+    if (ptr->u.context->tid && ptr->u.context->tid != GetCurrentThreadId())
     {
         SetLastError( ERROR_BUSY );
         release_handle_ptr( ptr );
         return FALSE;
     }
     if (hglrc == NtCurrentTeb()->glCurrentRC) wglMakeCurrent( 0, 0 );
-    ptr->funcs->wgl.p_wglDeleteContext( ptr->u.context );
+    ptr->funcs->wgl.p_wglDeleteContext( ptr->u.context->drv_ctx );
+    HeapFree( GetProcessHeap(), 0, ptr->u.context->extensions );
+    HeapFree( GetProcessHeap(), 0, ptr->u.context );
     free_handle_ptr( ptr );
     return TRUE;
 }
@@ -222,13 +233,15 @@ BOOL WINAPI wglMakeCurrent(HDC hdc, HGLRC hglrc)
     if (hglrc)
     {
         if (!(ptr = get_handle_ptr( hglrc, HANDLE_CONTEXT ))) return FALSE;
-        if (!ptr->tid || ptr->tid == GetCurrentThreadId())
+        if (!ptr->u.context->tid || ptr->u.context->tid == GetCurrentThreadId())
         {
-            ret = ptr->funcs->wgl.p_wglMakeCurrent( hdc, ptr->u.context );
+            ret = ptr->funcs->wgl.p_wglMakeCurrent( hdc, ptr->u.context->drv_ctx );
             if (ret)
             {
-                if (prev) prev->tid = 0;
-                ptr->tid = GetCurrentThreadId();
+                if (prev) prev->u.context->tid = 0;
+                ptr->u.context->tid = GetCurrentThreadId();
+                ptr->u.context->draw_dc = hdc;
+                ptr->u.context->read_dc = hdc;
                 NtCurrentTeb()->glCurrentRC = hglrc;
                 NtCurrentTeb()->glTable = ptr->funcs;
             }
@@ -243,7 +256,7 @@ BOOL WINAPI wglMakeCurrent(HDC hdc, HGLRC hglrc)
     else if (prev)
     {
         if (!prev->funcs->wgl.p_wglMakeCurrent( 0, NULL )) return FALSE;
-        prev->tid = 0;
+        prev->u.context->tid = 0;
         NtCurrentTeb()->glCurrentRC = 0;
         NtCurrentTeb()->glTable = &null_opengl_funcs;
     }
@@ -263,17 +276,23 @@ BOOL WINAPI wglMakeCurrent(HDC hdc, HGLRC hglrc)
 HGLRC WINAPI wglCreateContextAttribsARB( HDC hdc, HGLRC share, const int *attribs )
 {
     HGLRC ret = 0;
-    struct wgl_context *context;
+    struct wgl_context *drv_ctx;
     struct wgl_handle *share_ptr = NULL;
+    struct opengl_context *context;
     struct opengl_funcs *funcs = get_dc_funcs( hdc );
 
     if (!funcs || !funcs->ext.p_wglCreateContextAttribsARB) return 0;
     if (share && !(share_ptr = get_handle_ptr( share, HANDLE_CONTEXT ))) return 0;
-    if ((context = funcs->ext.p_wglCreateContextAttribsARB( hdc, share_ptr ? share_ptr->u.context : NULL,
-                                                            attribs )))
+    if ((drv_ctx = funcs->ext.p_wglCreateContextAttribsARB( hdc,
+                                              share_ptr ? share_ptr->u.context->drv_ctx : NULL, attribs )))
     {
-        ret = alloc_handle( HANDLE_CONTEXT, funcs, context );
-        if (!ret) funcs->wgl.p_wglDeleteContext( context );
+        if ((context = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*context) )))
+        {
+            context->drv_ctx = drv_ctx;
+            if (!(ret = alloc_handle( HANDLE_CONTEXT, funcs, context )))
+                HeapFree( GetProcessHeap(), 0, context );
+        }
+        if (!ret) funcs->wgl.p_wglDeleteContext( drv_ctx );
     }
     release_handle_ptr( share_ptr );
     return ret;
@@ -293,14 +312,17 @@ BOOL WINAPI wglMakeContextCurrentARB( HDC draw_hdc, HDC read_hdc, HGLRC hglrc )
     if (hglrc)
     {
         if (!(ptr = get_handle_ptr( hglrc, HANDLE_CONTEXT ))) return FALSE;
-        if (!ptr->tid || ptr->tid == GetCurrentThreadId())
+        if (!ptr->u.context->tid || ptr->u.context->tid == GetCurrentThreadId())
         {
             ret = (ptr->funcs->ext.p_wglMakeContextCurrentARB &&
-                   ptr->funcs->ext.p_wglMakeContextCurrentARB( draw_hdc, read_hdc, ptr->u.context ));
+                   ptr->funcs->ext.p_wglMakeContextCurrentARB( draw_hdc, read_hdc,
+                                                               ptr->u.context->drv_ctx ));
             if (ret)
             {
-                if (prev) prev->tid = 0;
-                ptr->tid = GetCurrentThreadId();
+                if (prev) prev->u.context->tid = 0;
+                ptr->u.context->tid = GetCurrentThreadId();
+                ptr->u.context->draw_dc = draw_hdc;
+                ptr->u.context->read_dc = read_hdc;
                 NtCurrentTeb()->glCurrentRC = hglrc;
                 NtCurrentTeb()->glTable = ptr->funcs;
             }
@@ -315,7 +337,7 @@ BOOL WINAPI wglMakeContextCurrentARB( HDC draw_hdc, HDC read_hdc, HGLRC hglrc )
     else if (prev)
     {
         if (!prev->funcs->wgl.p_wglMakeCurrent( 0, NULL )) return FALSE;
-        prev->tid = 0;
+        prev->u.context->tid = 0;
         NtCurrentTeb()->glCurrentRC = 0;
         NtCurrentTeb()->glTable = &null_opengl_funcs;
     }
@@ -329,10 +351,10 @@ BOOL WINAPI wglMakeContextCurrentARB( HDC draw_hdc, HDC read_hdc, HGLRC hglrc )
  */
 HDC WINAPI wglGetCurrentReadDCARB(void)
 {
-    const struct opengl_funcs *funcs = NtCurrentTeb()->glTable;
+    struct wgl_handle *ptr = get_current_context_ptr();
 
-    if (!funcs->ext.p_wglGetCurrentReadDCARB) return 0;
-    return funcs->ext.p_wglGetCurrentReadDCARB();
+    if (!ptr) return 0;
+    return ptr->u.context->read_dc;
 }
 
 /***********************************************************************
@@ -347,7 +369,7 @@ BOOL WINAPI wglShareLists(HGLRC hglrcSrc, HGLRC hglrcDst)
     if ((dst = get_handle_ptr( hglrcDst, HANDLE_CONTEXT )))
     {
         if (src->funcs != dst->funcs) SetLastError( ERROR_INVALID_HANDLE );
-        else ret = src->funcs->wgl.p_wglShareLists( src->u.context, dst->u.context );
+        else ret = src->funcs->wgl.p_wglShareLists( src->u.context->drv_ctx, dst->u.context->drv_ctx );
     }
     release_handle_ptr( dst );
     release_handle_ptr( src );
@@ -359,9 +381,10 @@ BOOL WINAPI wglShareLists(HGLRC hglrcSrc, HGLRC hglrcDst)
  */
 HDC WINAPI wglGetCurrentDC(void)
 {
-    struct wgl_handle *context = get_current_context_ptr();
-    if (!context) return 0;
-    return context->funcs->wgl.p_wglGetCurrentDC( context->u.context );
+    struct wgl_handle *ptr = get_current_context_ptr();
+
+    if (!ptr) return 0;
+    return ptr->u.context->draw_dc;
 }
 
 /***********************************************************************
@@ -370,13 +393,19 @@ HDC WINAPI wglGetCurrentDC(void)
 HGLRC WINAPI wglCreateContext(HDC hdc)
 {
     HGLRC ret = 0;
-    struct wgl_context *context;
+    struct wgl_context *drv_ctx;
+    struct opengl_context *context;
     struct opengl_funcs *funcs = get_dc_funcs( hdc );
 
     if (!funcs) return 0;
-    if (!(context = funcs->wgl.p_wglCreateContext( hdc ))) return 0;
-    ret = alloc_handle( HANDLE_CONTEXT, funcs, context );
-    if (!ret) funcs->wgl.p_wglDeleteContext( context );
+    if (!(drv_ctx = funcs->wgl.p_wglCreateContext( hdc ))) return 0;
+    if ((context = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*context) )))
+    {
+        context->drv_ctx = drv_ctx;
+        if (!(ret = alloc_handle( HANDLE_CONTEXT, funcs, context )))
+            HeapFree( GetProcessHeap(), 0, context );
+    }
+    if (!ret) funcs->wgl.p_wglDeleteContext( drv_ctx );
     return ret;
 }
 
@@ -1453,26 +1482,41 @@ GLint WINAPI wine_glDebugEntry( GLint unknown1, GLint unknown2 )
 }
 
 /* build the extension string by filtering out the disabled extensions */
-static char *build_gl_extensions( const char *extensions )
+static GLubyte *filter_extensions( const char *extensions )
 {
-    char *p, *str, *disabled = NULL;
+    static const char *disabled;
+    char *p, *str;
     const char *end;
-    HKEY hkey;
 
     TRACE( "GL_EXTENSIONS:\n" );
 
     if (!extensions) extensions = "";
 
-    /* @@ Wine registry key: HKCU\Software\Wine\OpenGL */
-    if (!RegOpenKeyA( HKEY_CURRENT_USER, "Software\\Wine\\OpenGL", &hkey ))
+    if (!disabled)
     {
-        DWORD size, ret = RegQueryValueExA( hkey, "DisabledExtensions", 0, NULL, NULL, &size );
-        if (!ret && (disabled = HeapAlloc( GetProcessHeap(), 0, size )))
-            ret = RegQueryValueExA( hkey, "DisabledExtensions", 0, NULL, (BYTE *)disabled, &size );
-        RegCloseKey( hkey );
-        if (ret) *disabled = 0;
+        HKEY hkey;
+        DWORD size;
+
+        str = NULL;
+        /* @@ Wine registry key: HKCU\Software\Wine\OpenGL */
+        if (!RegOpenKeyA( HKEY_CURRENT_USER, "Software\\Wine\\OpenGL", &hkey ))
+        {
+            if (!RegQueryValueExA( hkey, "DisabledExtensions", 0, NULL, NULL, &size ))
+            {
+                str = HeapAlloc( GetProcessHeap(), 0, size );
+                if (RegQueryValueExA( hkey, "DisabledExtensions", 0, NULL, (BYTE *)str, &size )) *str = 0;
+            }
+            RegCloseKey( hkey );
+        }
+        if (str)
+        {
+            if (InterlockedCompareExchangePointer( (void **)&disabled, str, NULL ))
+                HeapFree( GetProcessHeap(), 0, str );
+        }
+        else disabled = "";
     }
 
+    if (!disabled[0]) return NULL;
     if ((str = HeapAlloc( GetProcessHeap(), 0, strlen(extensions) + 2 )))
     {
         p = str;
@@ -1494,8 +1538,7 @@ static char *build_gl_extensions( const char *extensions )
         }
         *p = 0;
     }
-    HeapFree( GetProcessHeap(), 0, disabled );
-    return str;
+    return (GLubyte *)str;
 }
 
 /***********************************************************************
@@ -1503,24 +1546,17 @@ static char *build_gl_extensions( const char *extensions )
  */
 const GLubyte * WINAPI wine_glGetString( GLenum name )
 {
-  const struct opengl_funcs *funcs = NtCurrentTeb()->glTable;
-  static const GLubyte *gl_extensions;
+    const struct opengl_funcs *funcs = NtCurrentTeb()->glTable;
+    const GLubyte *ret = funcs->gl.p_glGetString( name );
 
-  /* this is for buggy nvidia driver, crashing if called from a different
-     thread with no context */
-  if(wglGetCurrentContext() == NULL)
-    return NULL;
-
-  if (name != GL_EXTENSIONS) return funcs->gl.p_glGetString(name);
-
-  if (!gl_extensions)
-  {
-      const char *orig_ext = (const char *)funcs->gl.p_glGetString(GL_EXTENSIONS);
-      char *new_ext = build_gl_extensions( orig_ext );
-      if (InterlockedCompareExchangePointer( (void **)&gl_extensions, new_ext, NULL ))
-          HeapFree( GetProcessHeap(), 0, new_ext );
-  }
-  return gl_extensions;
+    if (name == GL_EXTENSIONS && ret)
+    {
+        struct wgl_handle *ptr = get_current_context_ptr();
+        if (ptr->u.context->extensions ||
+            ((ptr->u.context->extensions = filter_extensions( (const char *)ret ))))
+            ret = ptr->u.context->extensions;
+    }
+    return ret;
 }
 
 /***********************************************************************
