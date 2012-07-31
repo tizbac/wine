@@ -816,6 +816,28 @@ const var_t *is_callas(const attr_list_t *a)
   return get_attrp(a, ATTR_CALLAS);
 }
 
+static int is_inherited_method(const type_t *iface, const var_t *func)
+{
+  while ((iface = type_iface_get_inherit(iface)))
+  {
+    const statement_t *stmt;
+    STATEMENTS_FOR_EACH_FUNC(stmt, type_iface_get_stmts(iface))
+    {
+      const var_t *funccmp = stmt->u.var;
+
+      if (!is_callas(func->attrs))
+      {
+         char inherit_name[256];
+         /* compare full name including property prefix */
+         strcpy(inherit_name, get_name(funccmp));
+         if (!strcmp(inherit_name, get_name(func))) return 1;
+      }
+    }
+  }
+
+  return 0;
+}
+
 static void write_method_macro(FILE *header, const type_t *iface, const char *name)
 {
   const statement_t *stmt;
@@ -834,7 +856,7 @@ static void write_method_macro(FILE *header, const type_t *iface, const char *na
       first_iface = 0;
     }
 
-    if (!is_callas(func->attrs)) {
+    if (!is_callas(func->attrs) && !is_inherited_method(iface, func)) {
       const var_t *arg;
 
       fprintf(header, "#define %s_%s(This", name, get_name(func));
@@ -927,7 +949,7 @@ static void write_inline_wrappers(FILE *header, const type_t *iface, const char 
       first_iface = 0;
     }
 
-    if (!is_callas(func->attrs)) {
+    if (!is_callas(func->attrs) && !is_inherited_method(iface, func)) {
       const var_t *arg;
 
       fprintf(header, "static FORCEINLINE ");
@@ -967,7 +989,10 @@ static void do_write_c_method_def(FILE *header, const type_t *iface, const char 
       if (!callconv) callconv = "STDMETHODCALLTYPE";
       indent(header, 0);
       write_type_decl_left(header, type_function_get_rettype(func->type));
-      fprintf(header, " (%s *%s)(\n", callconv, get_name(func));
+      if (is_inherited_method(iface, func))
+        fprintf(header, " (%s *%s_%s)(\n", callconv, iface->name, func->name);
+      else
+        fprintf(header, " (%s *%s)(\n", callconv, get_name(func));
       write_args(header, type_get_function_args(func->type), name, 1, TRUE);
       fprintf(header, ");\n");
       fprintf(header, "\n");

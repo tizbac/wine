@@ -151,10 +151,13 @@ HRESULT get_propval( const struct view *, UINT, const WCHAR *, VARIANT *,
 HRESULT put_propval( const struct view *, UINT, const WCHAR *, VARIANT *, CIMTYPE ) DECLSPEC_HIDDEN;
 HRESULT get_properties( const struct view *, SAFEARRAY ** ) DECLSPEC_HIDDEN;
 HRESULT get_object( const WCHAR *, IWbemClassObject ** ) DECLSPEC_HIDDEN;
+const WCHAR *get_method_name( const WCHAR *, UINT ) DECLSPEC_HIDDEN;
+const WCHAR *get_property_name( const WCHAR *, UINT ) DECLSPEC_HIDDEN;
 
 HRESULT WbemLocator_create(IUnknown *, LPVOID *) DECLSPEC_HIDDEN;
 HRESULT WbemServices_create(IUnknown *, const WCHAR *, LPVOID *) DECLSPEC_HIDDEN;
-HRESULT WbemClassObject_create(IUnknown *, IEnumWbemClassObject *, UINT, LPVOID *) DECLSPEC_HIDDEN;
+HRESULT create_class_object(const WCHAR *, IEnumWbemClassObject *, UINT,
+                            IWbemClassObject **) DECLSPEC_HIDDEN;
 HRESULT EnumWbemClassObject_create(IUnknown *, struct query *, LPVOID *) DECLSPEC_HIDDEN;
 
 static void *heap_alloc( size_t len ) __WINE_ALLOC_SIZE(1);

@@ -125,7 +125,7 @@ static HRESULT WINAPI enum_class_object_Next(
     *puReturned = 0;
     if (ec->index + uCount > view->count) return WBEM_S_FALSE;
 
-    hr = WbemClassObject_create( NULL, iface, ec->index, (void **)apObjects );
+    hr = create_class_object( view->table->name, iface, ec->index, apObjects );
     if (hr != S_OK) return hr;
 
     ec->index++;
@@ -216,8 +216,11 @@ struct class_object
 {
     IWbemClassObject IWbemClassObject_iface;
     LONG refs;
+    WCHAR *name;
     IEnumWbemClassObject *iter;
     UINT index;
+    UINT index_method;
+    UINT index_property;
 };
 
 static inline struct class_object *impl_from_IWbemClassObject(
@@ -242,6 +245,7 @@ static ULONG WINAPI class_object_Release(
     {
         TRACE("destroying %p\n", co);
         if (co->iter) IEnumWbemClassObject_Release( co->iter );
+        heap_free( co->name );
         heap_free( co );
     }
     return refs;
@@ -348,8 +352,14 @@ static HRESULT WINAPI class_object_BeginEnumeration(
     IWbemClassObject *iface,
     LONG lEnumFlags )
 {
-    FIXME("%p, %08x\n", iface, lEnumFlags);
-    return E_NOTIMPL;
+    struct class_object *co = impl_from_IWbemClassObject( iface );
+
+    TRACE("%p, %08x\n", iface, lEnumFlags);
+
+    if (lEnumFlags) FIXME("flags 0x%08x not supported\n", lEnumFlags);
+
+    co->index_property = 0;
+    return S_OK;
 }
 
 static HRESULT WINAPI class_object_Next(
@@ -360,15 +370,34 @@ static HRESULT WINAPI class_object_Next(
     CIMTYPE *pType,
     LONG *plFlavor )
 {
-    FIXME("%p, %08x, %p, %p, %p, %p\n", iface, lFlags, strName, pVal, pType, plFlavor);
-    return E_NOTIMPL;
+    struct class_object *co = impl_from_IWbemClassObject( iface );
+    struct enum_class_object *ec = impl_from_IEnumWbemClassObject( co->iter );
+    struct view *view = ec->query->view;
+    const WCHAR *property;
+    HRESULT hr;
+
+    TRACE("%p, %08x, %p, %p, %p, %p\n", iface, lFlags, strName, pVal, pType, plFlavor);
+
+    if (!(property = get_property_name( co->name, co->index_property ))) return WBEM_S_NO_MORE_DATA;
+    if (!(*strName = SysAllocString( property ))) return E_OUTOFMEMORY;
+    if ((hr = get_propval( view, co->index, property, pVal, pType, plFlavor ) != S_OK))
+    {
+        SysFreeString( *strName );
+        return hr;
+    }
+    co->index_property++;
+    return S_OK;
 }
 
 static HRESULT WINAPI class_object_EndEnumeration(
     IWbemClassObject *iface )
 {
-    FIXME("%p\n", iface);
-    return E_NOTIMPL;
+    struct class_object *co = impl_from_IWbemClassObject( iface );
+
+    TRACE("%p\n", iface);
+
+    co->index_property = 0;
+    return S_OK;
 }
 
 static HRESULT WINAPI class_object_GetPropertyQualifierSet(
@@ -606,16 +635,14 @@ static HRESULT WINAPI class_object_GetMethod(
     IWbemClassObject **ppOutSignature )
 {
     struct class_object *co = impl_from_IWbemClassObject( iface );
-    struct enum_class_object *ec = impl_from_IEnumWbemClassObject( co->iter );
-    struct view *view = ec->query->view;
     HRESULT hr;
 
     TRACE("%p, %s, %08x, %p, %p\n", iface, debugstr_w(wszName), lFlags, ppInSignature, ppOutSignature);
 
-    hr = create_signature( view->table->name, wszName, PARAM_IN, ppInSignature );
+    hr = create_signature( co->name, wszName, PARAM_IN, ppInSignature );
     if (hr != S_OK) return hr;
 
-    hr = create_signature( view->table->name, wszName, PARAM_OUT, ppOutSignature );
+    hr = create_signature( co->name, wszName, PARAM_OUT, ppOutSignature );
     if (hr != S_OK) IWbemClassObject_Release( *ppInSignature );
     return hr;
 }
@@ -643,8 +670,19 @@ static HRESULT WINAPI class_object_BeginMethodEnumeration(
     IWbemClassObject *iface,
     LONG lEnumFlags)
 {
-    FIXME("%p, %08x\n", iface, lEnumFlags);
-    return E_NOTIMPL;
+    struct class_object *co = impl_from_IWbemClassObject( iface );
+
+    TRACE("%p, %08x\n", iface, lEnumFlags);
+
+    if (lEnumFlags) FIXME("flags 0x%08x not supported\n", lEnumFlags);
+
+    if (co->iter)
+    {
+        WARN("not allowed on instance\n");
+        return WBEM_E_ILLEGAL_OPERATION;
+    }
+    co->index_method = 0;
+    return S_OK;
 }
 
 static HRESULT WINAPI class_object_NextMethod(
@@ -654,15 +692,41 @@ static HRESULT WINAPI class_object_NextMethod(
     IWbemClassObject **ppInSignature,
     IWbemClassObject **ppOutSignature)
 {
-    FIXME("%p, %08x, %p, %p, %p\n", iface, lFlags, pstrName, ppInSignature, ppOutSignature);
-    return E_NOTIMPL;
+    struct class_object *co = impl_from_IWbemClassObject( iface );
+    const WCHAR *method;
+    HRESULT hr;
+
+    TRACE("%p, %08x, %p, %p, %p\n", iface, lFlags, pstrName, ppInSignature, ppOutSignature);
+
+    if (!(method = get_method_name( co->name, co->index_method ))) return WBEM_S_NO_MORE_DATA;
+
+    hr = create_signature( co->name, method, PARAM_IN, ppInSignature );
+    if (hr != S_OK) return hr;
+
+    hr = create_signature( co->name, method, PARAM_OUT, ppOutSignature );
+    if (hr != S_OK) IWbemClassObject_Release( *ppInSignature );
+    else
+    {
+        if (!(*pstrName = SysAllocString( method )))
+        {
+            IWbemClassObject_Release( *ppInSignature );
+            IWbemClassObject_Release( *ppOutSignature );
+            return E_OUTOFMEMORY;
+        }
+        co->index_method++;
+    }
+    return hr;
 }
 
 static HRESULT WINAPI class_object_EndMethodEnumeration(
     IWbemClassObject *iface )
 {
-    FIXME("%p\n", iface);
-    return E_NOTIMPL;
+    struct class_object *co = impl_from_IWbemClassObject( iface );
+
+    TRACE("%p\n", iface);
+
+    co->index_method = 0;
+    return S_OK;
 }
 
 static HRESULT WINAPI class_object_GetMethodQualifierSet(
@@ -714,24 +778,32 @@ static const IWbemClassObjectVtbl class_object_vtbl =
     class_object_GetMethodOrigin
 };
 
-HRESULT WbemClassObject_create(
-    IUnknown *pUnkOuter, IEnumWbemClassObject *iter, UINT index, LPVOID *ppObj )
+HRESULT create_class_object(
+    const WCHAR *name, IEnumWbemClassObject *iter, UINT index, IWbemClassObject **obj )
 {
     struct class_object *co;
 
-    TRACE("%p, %p\n", pUnkOuter, ppObj);
+    TRACE("%s, %p\n", debugstr_w(name), obj);
 
     co = heap_alloc( sizeof(*co) );
     if (!co) return E_OUTOFMEMORY;
 
     co->IWbemClassObject_iface.lpVtbl = &class_object_vtbl;
     co->refs  = 1;
-    co->iter  = iter;
-    co->index = index;
+    co->name  = heap_strdupW( name );
+    if (!co->name)
+    {
+        heap_free( co );
+        return E_OUTOFMEMORY;
+    }
+    co->iter           = iter;
+    co->index          = index;
+    co->index_method   = 0;
+    co->index_property = 0;
     if (iter) IEnumWbemClassObject_AddRef( iter );
 
-    *ppObj = &co->IWbemClassObject_iface;
+    *obj = &co->IWbemClassObject_iface;
 
-    TRACE("returning iface %p\n", *ppObj);
+    TRACE("returning iface %p\n", *obj);
     return S_OK;
 }
