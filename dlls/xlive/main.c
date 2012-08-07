@@ -380,6 +380,7 @@ DWORD WINAPI XLivePBufferAllocate (int size, FakeProtectedBuffer ** pBuffer) {
 }
 DWORD WINAPI XLivePBufferFree(FakeProtectedBuffer * pBuffer)
 {
+    FIXME("stub\n");
     if (pBuffer && pBuffer->dwMagick == 0xDEADDEAD)
         free (pBuffer);
     return 0;
@@ -419,4 +420,70 @@ DWORD WINAPI XLivePBufferSetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset
                 return 0;
         *(DWORD *)(pBuffer->bData+dwOffset) = dwValue;
         return 0;
+}
+
+DWORD WINAPI XLiveContentCreateEnumerator (DWORD a1, void * a2, DWORD *pchBuffer, HANDLE * phContent) {
+  FIXME("stub: %d %p %p %p\n",a1,a2,pchBuffer,phContent);
+	if (phContent)
+		*phContent = INVALID_HANDLE_VALUE;
+	return 0;
+}
+DWORD WINAPI XLIVE_5313(DWORD dw1)
+{
+  FIXME("Unknown , dw1=%d\n",dw1);
+  return 0;
+}
+
+DWORD WINAPI XLiveSetDebugLevel (DWORD xdlLevel, DWORD * pxdlOldLevel) { 
+	FIXME ("XLiveSetDebugLevel (%d)\n", xdlLevel);
+	return 0;
+}
+INT FUNC001(DWORD * p1 , DWORD * p2)
+{
+  p2[0] = p1[1];
+  p2[1] = p1[2];
+  memcpy(&p2[2],&p1[3],0x14);
+  return 0;
+}
+DWORD WINAPI XLIVE_5356(DWORD p1,DWORD* p2,DWORD p3,DWORD *p4 /*some buffer size*/)
+{
+  FIXME ("UNK %d %p %d %p \n",p1,p2,p3,p4);
+  FIXME ("%p(%x) %p(%x)\n",p2,*p2,p4,*p4);
+  if ( *p4 == 0 )
+  {
+    *p4 = 0x10;//totally unk
+    return -2147024774;
+  }
+  //if ( p1 || !p2 || !p4 || !p3 && !p4 )
+    return -2147024809;
+  DWORD v6[0x14+2];
+  int result = FUNC001(p2,v6);
+  //8c4 access
+	return 0;
+}
+DWORD WINAPI XCloseHandle(DWORD p1)
+{
+  FIXME ("%d\n",p1);
+  if ( !p1 || p1 == -1 )
+  {
+    SetLastError(87);
+  }
+  return 0;
+}
+DWORD WINAPI XLIVE_5355(DWORD errDesc , DWORD p2 , char* p3 , DWORD *p4) // maybe some func to get extended error str?
+{
+  FIXME("stub\n");
+  if ( *p4 > 0 )
+    p3[0] = 0x0;
+    
+  return 0;
+}
+DWORD WINAPI XLiveContentCreateAccessHandle(DWORD dwTitleId, void * pContentInfo, 
+	DWORD dwLicenseInfoVersion, void * xebBuffer, DWORD dwOffset, HANDLE * phAccess, void * pOverlapped)
+{
+  FIXME("stub\n");
+  if (phAccess)
+		*phAccess = INVALID_HANDLE_VALUE;
+	return 0;	
+
 }

@@ -105,7 +105,7 @@
 5028 stub -noname @
 5029 stub -noname @
 5030 stdcall -noname XLivePreTranslateMessage(long)
-5031 stub -noname @
+5031 stdcall -noname XLiveSetDebugLevel(long long)
 5032 stub -noname @
 5034 stdcall -noname XLiveProtectData(long long long long long)
 5035 stdcall -noname XLiveUnprotectData(long long long long long)
@@ -130,7 +130,7 @@
 5237 stub -noname @
 5238 stub -noname @
 5250 stub -noname @
-5251 stub -noname @
+5251 stdcall -noname XCloseHandle(long)
 5252 stub -noname @
 5254 stdcall -noname XLiveCancelOverlapped(long)
 5255 stub -noname @
@@ -185,7 +185,7 @@
 5310 stdcall -noname XLIVE_5310()
 5311 stdcall -noname XOnlineCleanup()
 5312 stdcall -noname XFriendsCreateEnumerator(long long long long long)
-5313 stub -noname @
+5313 stdcall -noname XLIVE_5313(long)
 5314 stub -noname @
 5315 stub -noname @
 5316 stub -noname @
@@ -222,15 +222,15 @@
 5347 stub -noname @
 5348 stub -noname @
 5349 stub -noname @
-5350 stub -noname @
+5350 stdcall -noname XLiveContentCreateAccessHandle(long long long long long long)
 5351 stub -noname @
 5352 stub -noname @
 5354 stub -noname @
-5355 stub -noname @
-5356 stub -noname @
+5355 stdcall -noname XLIVE_5355(long long long long)
+5356 stdcall -noname XLIVE_5356(long long long long)
 5357 stub -noname @
 5358 stub -noname @
 5359 stub -noname @
-5360 stub -noname @
+5360 stdcall -noname XLiveContentCreateEnumerator(long long long long)
 5361 stub -noname @
 5365 stub -noname @
