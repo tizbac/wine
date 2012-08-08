@@ -73,10 +73,11 @@ INT WINAPI XLIVE_5000(DWORD unknown)
     return 0;
 }
 
-INT WINAPI XLIVE_5001(DWORD unknown)
+INT WINAPI XliveInput(DWORD * p)
 {
-    FIXME("stub: %d\n", unknown);
-    return 0;
+    p[5] = 0;
+    FIXME("stub: %p\n", p);
+    return 1;
 }
 
 INT WINAPI XLIVE_5002(void)
@@ -429,7 +430,7 @@ DWORD WINAPI XLiveContentCreateEnumerator (DWORD a1, void * a2, DWORD *pchBuffer
   FIXME("stub: %d %p %p %p\n",a1,a2,pchBuffer,phContent);
 	if (phContent)
 		*phContent = INVALID_HANDLE_VALUE;
-	return 0;
+	return 1;
 }
 DWORD WINAPI XLIVE_5313(DWORD dw1)
 {
@@ -487,6 +488,12 @@ DWORD WINAPI XLiveContentCreateAccessHandle(DWORD dwTitleId, void * pContentInfo
   FIXME("stub\n");
   if (phAccess)
 		*phAccess = INVALID_HANDLE_VALUE;
-	return 0;	
+  return E_OUTOFMEMORY;	
 
+}
+
+/* #5293: XUserSetPropertyEx*/
+INT WINAPI XUserSetPropertyEx (DWORD dwUserIndex, DWORD dwPropertyId, DWORD cbValue, void * pvValue, void * pOverlapped) { 
+        FIXME ("XUserSetPropertyEx (%d, 0x%x, ...)\n", dwUserIndex, dwPropertyId);
+        return 0;
 }

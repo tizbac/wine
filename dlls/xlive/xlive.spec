@@ -80,7 +80,7 @@
 1082 stdcall -noname XGetOverlappedExtendedError(long)
 1083 stdcall -noname XGetOverlappedResult(long long long)
 5000 stdcall -noname XLIVE_5000(long)
-5001 stdcall -noname XLIVE_5001(long)
+5001 stdcall -noname XliveInput(long)
 5002 stdcall -noname XLIVE_5002()
 5003 stdcall -noname XLiveUninitialize()
 5005 stdcall -noname XLiveOnCreateDevice(long long)
@@ -167,7 +167,7 @@
 5290 stub -noname @
 5291 stub -noname @
 5292 stub -noname @
-5293 stub -noname @
+5293 stdcall -noname XUserSetPropertyEx(long long long long long)
 5294 stdcall -noname XLivePBufferGetByteArray(long long long long)
 5295 stdcall -noname XLivePBufferSetByteArray(long long long long)
 5296 stub -noname @
