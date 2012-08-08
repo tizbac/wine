@@ -281,11 +281,14 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
 		*pcbResults = 1036;	// TODO: make correct calculation by IDs.
 		return ERROR_INSUFFICIENT_BUFFER;
 	}*/
-if (!pResults)
+    if (*pcbResults == 0 || !pResults)
+    {
+        *pcbResults = sizeof (struct XUSER_READ_PROFILE_SETTINGS)+dwNumSettingIds*sizeof(DWORD);
 	return 0;
-	memset (pResults, 0, *pcbResults);
-	pResults->dwLength = *pcbResults-sizeof (struct XUSER_READ_PROFILE_SETTINGS);
-	pResults->pSettings = (BYTE *)pResults+sizeof (struct XUSER_READ_PROFILE_SETTINGS);
+    }
+    memset (pResults, 0, *pcbResults);
+    pResults->dwLength = *pcbResults-sizeof (struct XUSER_READ_PROFILE_SETTINGS);
+    pResults->pSettings = (BYTE *)pResults+sizeof (struct XUSER_READ_PROFILE_SETTINGS);
     return 0;
 }
 
