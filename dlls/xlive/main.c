@@ -76,7 +76,7 @@ INT WINAPI XLIVE_5000(DWORD unknown)
 INT WINAPI XliveInput(DWORD * p)
 {
     p[5] = 0;
-    FIXME("stub: %p\n", p);
+    //FIXME("stub: %p\n", p);
     return 1;
 }
 
@@ -88,14 +88,14 @@ INT WINAPI XLIVE_5002(void)
 
 INT WINAPI XLivePreTranslateMessage(DWORD unknown)
 {
-    FIXME("stub: %d\n", unknown);
+    //FIXME("stub: %d\n", unknown);
     return 0;
 }
 
 INT WINAPI XUserGetName(DWORD dwUserId, char * pBuffer, DWORD dwBufLen)
 {
     FIXME("stub: %d %p %d\n", dwUserId, pBuffer, dwBufLen);
-    char playername[] = "Player";
+    char playername[] = "WinePlayer";
     if (!pBuffer)
         return 1;
     lstrcpynA(pBuffer,playername,dwBufLen);
@@ -161,7 +161,8 @@ INT WINAPI XUserGetSigninState(DWORD dwUserIndex)
 }
 INT WINAPI XUserGetXUID(DWORD p0, DWORD * pXuid)
 {
-    pXuid[0] = pXuid[1] = 0x10001000; 
+
+    pXuid[0] = pXuid[1] = 0x10001000*(p0+1); 
     FIXME("stub: %d %p\n",p0,pXuid);
 	  return 0; // ???
 }
@@ -244,7 +245,7 @@ INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, void ** ppx
 }
 INT WINAPI XLiveCreateProtectedDataContext(DWORD * dwType, PHANDLE pHandle)
 {
-  FIXME("stub\n");
+  FIXME("stub: type=%d\n",*dwType);
   if (pHandle)
         *pHandle = (HANDLE)1;
   return 0;
@@ -262,6 +263,8 @@ DWORD WINAPI XLiveProtectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutB
       return 0x8007007A; //Insufficent buffer
   if (*pDataSize >= dwInDataSize && pOutBuffer)
             memcpy (pOutBuffer, pInBuffer, dwInDataSize);
+  else
+      return 0x8007007A; //Insufficent buffer
     return 0;
 }
 INT WINAPI XLiveCancelOverlapped(void * pOver)
@@ -311,9 +314,10 @@ INT WINAPI XGetOverlappedExtendedError (void * p0)
 }
 INT WINAPI XLiveUnprotectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE * ph)
 {
-    FIXME("stub\n");
+    
     if (!pDataSize || !ph)      // invalid parameter
                 return E_FAIL;
+    FIXME("stub: %d %d %p %p(%d) %p\n",pInBuffer,dwInDataSize, pOutBuffer,pDataSize,*pDataSize,ph);
     if (!pOutBuffer)
     {
         *pDataSize = dwInDataSize;
