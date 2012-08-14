@@ -79,7 +79,7 @@
 653 stub -noname @
 1082 stdcall -noname XGetOverlappedExtendedError(long)
 1083 stdcall -noname XGetOverlappedResult(long long long)
-5000 stdcall -noname XLIVE_5000(long)
+5000 stdcall -noname XLiveInitialize(long)
 5001 stdcall -noname XliveInput(long)
 5002 stdcall -noname XLIVE_5002()
 5003 stdcall -noname XLiveUninitialize()
@@ -171,7 +171,7 @@
 5294 stdcall -noname XLivePBufferGetByteArray(long long long long)
 5295 stdcall -noname XLivePBufferSetByteArray(long long long long)
 5296 stub -noname @
-5297 stdcall -noname XLIVE_5297()
+5297 stdcall -noname XLiveInitializeEx(long long)
 5298 stub -noname @
 5299 stub -noname @
 5300 stub -noname @
