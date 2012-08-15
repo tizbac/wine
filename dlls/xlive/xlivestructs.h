@@ -27,7 +27,7 @@ struct XUSER_READ_PROFILE_SETTINGS {
 	DWORD	dwLength;
 	BYTE *	pSettings;
 };
-typedef ULONGLONG                       XUID;
+typedef ULONGLONG                       XUID;
 typedef XUID                            *PXUID;
 typedef struct {
     DWORD dwId;
@@ -67,8 +67,8 @@ typedef struct {
     DWORD dw3;
 } XLIVE_INITIALIZE_INFO;
 
-typedef enum _XUSER_SIGNIN_STATE
-{
+typedef enum _XUSER_SIGNIN_STATE
+{
     eXUserSigninState_NotSignedIn = 0x0 ,
     eXUserSigninState_SignedInLocally = 0x1,
     eXUserSigninState_SignedInToLive =0x2 
@@ -133,13 +133,41 @@ typedef struct _XUSER_PROFILE_SETTING {
     DWORD dwSettingId;
     XUSER_DATA data;
 } XUSER_PROFILE_SETTING, *PXUSER_PROFILE_SETTING;
-
+#define XUSER_STATS_ATTRS_IN_SPEC       64
 typedef struct _XUSER_READ_PROFILE_SETTING_RESULT {
     DWORD dwSettingsLen;
     XUSER_PROFILE_SETTING *pSettings;
 } XUSER_READ_PROFILE_SETTING_RESULT, *PXUSER_READ_PROFILE_SETTING_RESULT;
+typedef struct _XUSER_STATS_COLUMN {
+    WORD wColumnId;
+    XUSER_DATA Value;
+} XUSER_STATS_COLUMN, *PXUSER_STATS_COLUMN;
+typedef struct _XUSER_STATS_ROW {
+    XUID xuid;
+    DWORD dwRank;
+    LONGLONG i64Rating;
+    CHAR szGamertag[XUSER_NAME_SIZE];
+    DWORD dwNumColumns;
+    PXUSER_STATS_COLUMN pColumns;
+} XUSER_STATS_ROW, *PXUSER_STATS_ROW;
 
+typedef struct _XUSER_STATS_VIEW {
+    DWORD dwViewId;
+    DWORD dwTotalViewRows;
+    DWORD dwNumRows;
+    PXUSER_STATS_ROW pRows;
+} XUSER_STATS_VIEW, *PXUSER_STATS_VIEW;
 
+typedef struct _XUSER_STATS_READ_RESULTS {
+    DWORD dwNumViews;
+    PXUSER_STATS_VIEW pViews;
+} XUSER_STATS_READ_RESULTS, *PXUSER_STATS_READ_RESULTS;
+
+typedef struct _XUSER_STATS_SPEC {
+    DWORD dwViewId;
+    DWORD dwNumColumnIds;
+    WORD rgwColumnIds[XUSER_STATS_ATTRS_IN_SPEC];
+} XUSER_STATS_SPEC, *PXUSER_STATS_SPEC;
 typedef struct {
     XUSER_SIGNIN_STATE signedin;
     CHAR username[XUSER_NAME_SIZE];

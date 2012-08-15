@@ -211,7 +211,7 @@
 5336 stub -noname @
 5337 stub -noname @
 5338 stub -noname @
-5339 stub -noname @
+5339 stdcall -noname XUserReadProfileSettingsByXuid(long long long long long long long long long)
 5340 stub -noname @
 5341 stub -noname @
 5342 stub -noname @
@@ -234,3 +234,4 @@
 5360 stdcall -noname XLiveContentCreateEnumerator(long long long long)
 5361 stub -noname @
 5365 stub -noname @
+5372 stdcall -noname xlive_5372(long long long long long long)
