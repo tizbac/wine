@@ -1402,6 +1402,7 @@ enum wined3d_pci_device
     CARD_NVIDIA_GEFORCE_GTX560      = 0x1201,
     CARD_NVIDIA_GEFORCE_GTX570      = 0x1081,
     CARD_NVIDIA_GEFORCE_GTX580      = 0x1080,
+    CARD_NVIDIA_GEFORCE_GT630M      = 0x0de9,
     CARD_NVIDIA_GEFORCE_GTX670      = 0x1189,
     CARD_NVIDIA_GEFORCE_GTX680      = 0x1180,
 
@@ -2795,10 +2796,14 @@ struct wined3d_format
 {
     enum wined3d_format_id id;
 
-    DWORD red_mask;
-    DWORD green_mask;
-    DWORD blue_mask;
-    DWORD alpha_mask;
+    DWORD red_size;
+    DWORD green_size;
+    DWORD blue_size;
+    DWORD alpha_size;
+    DWORD red_offset;
+    DWORD green_offset;
+    DWORD blue_offset;
+    DWORD alpha_offset;
     UINT byte_count;
     BYTE depth_size;
     BYTE stencil_size;

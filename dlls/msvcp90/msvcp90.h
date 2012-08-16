@@ -133,6 +133,12 @@ typedef struct {
     _Cvtvec cvt;
 } codecvt_wchar;
 
+int __thiscall codecvt_wchar_unshift(const codecvt_wchar*, int*, char*, char*, char**);
+int __thiscall codecvt_wchar_out(const codecvt_wchar*, int*, const wchar_t*,
+        const wchar_t*, const wchar_t**, char*, char*, char**);
+int __thiscall codecvt_wchar_in(const codecvt_wchar*, int*, const char*,
+        const char*, const char**, wchar_t*, wchar_t*, wchar_t**);
+
 /* class ctype_base */
 typedef struct {
     locale_facet facet;
@@ -171,9 +177,11 @@ locale* __thiscall locale_operator_assign(locale*, const locale*);
 void __thiscall locale_dtor(locale*);
 void free_locale(void);
 codecvt_char* codecvt_char_use_facet(const locale*);
-codecvt_char* codecvt_char_use_facet(const locale*);
+codecvt_wchar* codecvt_wchar_use_facet(const locale*);
+codecvt_wchar* codecvt_short_use_facet(const locale*);
 ctype_char* ctype_char_use_facet(const locale*);
 ctype_wchar* ctype_wchar_use_facet(const locale*);
+ctype_wchar* ctype_short_use_facet(const locale*);
 
 /* class _Lockit */
 typedef struct {
@@ -238,9 +246,9 @@ typedef enum {
 } IOSB_openmode;
 
 typedef enum {
-    SEEKDIR_beg  = 0x1,
-    SEEKDIR_cur  = 0x2,
-    SEEKDIR_end  = 0x3,
+    SEEKDIR_beg  = 0x0,
+    SEEKDIR_cur  = 0x1,
+    SEEKDIR_end  = 0x2,
     SEEKDIR_mask = 0x3
 } IOSB_seekdir;
 
@@ -387,6 +395,7 @@ istreambuf_iterator_char *__thiscall num_get_char_get_bool(const num_get*, istre
         istreambuf_iterator_char, istreambuf_iterator_char, ios_base*, int*, MSVCP_bool*);
 
 num_get* num_get_wchar_use_facet(const locale*);
+num_get* num_get_short_use_facet(const locale*);
 istreambuf_iterator_wchar* __thiscall num_get_wchar_get_long(const num_get*, istreambuf_iterator_wchar*,
         istreambuf_iterator_wchar, istreambuf_iterator_wchar, ios_base*, int*, LONG*);
 istreambuf_iterator_wchar* __thiscall num_get_wchar_get_ushort(const num_get*, istreambuf_iterator_wchar*,
@@ -436,6 +445,7 @@ ostreambuf_iterator_char* __thiscall num_put_char_put_bool(const num_put*, ostre
         ostreambuf_iterator_char, ios_base*, char, MSVCP_bool);
 
 num_put* num_put_wchar_use_facet(const locale*);
+num_put* num_put_short_use_facet(const locale*);
 ostreambuf_iterator_wchar* __thiscall num_put_wchar_put_long(const num_put*, ostreambuf_iterator_wchar*,
         ostreambuf_iterator_wchar, ios_base*, wchar_t, LONG);
 ostreambuf_iterator_wchar* __thiscall num_put_wchar_put_ulong(const num_put*, ostreambuf_iterator_wchar*,

@@ -34,7 +34,7 @@
 #include "winnls.h"
 #include "wine/unicode.h"
 #include "wine/debug.h"
-WINE_DEFAULT_DEBUG_CHANNEL(msvcp90);
+WINE_DEFAULT_DEBUG_CHANNEL(msvcp);
 
 char* __cdecl _Getdays(void);
 char* __cdecl _Getmonths(void);
@@ -2314,7 +2314,7 @@ ctype_wchar* ctype_wchar_use_facet(const locale *loc)
     return obj;
 }
 
-static ctype_wchar* ctype_short_use_facet(const locale *loc)
+ctype_wchar* ctype_short_use_facet(const locale *loc)
 {
     static ctype_wchar *obj = NULL;
 
@@ -3086,7 +3086,7 @@ unsigned int __cdecl codecvt_wchar__Getcat(const locale_facet **facet, const loc
     return LC_CTYPE;
 }
 
-static codecvt_wchar* codecvt_wchar_use_facet(const locale *loc)
+codecvt_wchar* codecvt_wchar_use_facet(const locale *loc)
 {
     static codecvt_wchar *obj = NULL;
 
@@ -3138,7 +3138,7 @@ unsigned int __cdecl codecvt_short__Getcat(const locale_facet **facet, const loc
     return LC_CTYPE;
 }
 
-static codecvt_wchar* codecvt_short_use_facet(const locale *loc)
+codecvt_wchar* codecvt_short_use_facet(const locale *loc)
 {
     static codecvt_wchar *obj = NULL;
 
@@ -4397,7 +4397,7 @@ MSVCP_size_t __cdecl num_get_short__Getcat(const locale_facet **facet, const loc
     return LC_NUMERIC;
 }
 
-static num_get* num_get_short_use_facet(const locale *loc)
+num_get* num_get_short_use_facet(const locale *loc)
 {
     static num_get *obj = NULL;
 
@@ -7072,7 +7072,7 @@ num_put* num_put_wchar_use_facet(const locale *loc)
     return obj;
 }
 
-static num_put* num_put_short_use_facet(const locale *loc)
+num_put* num_put_short_use_facet(const locale *loc)
 {
     static num_put *obj = NULL;
 

@@ -192,15 +192,18 @@ static BOOL CALLBACK update_windows_on_desktop_resize( HWND hwnd, LPARAM lparam 
     {
         XWindowChanges changes;
 
-        wine_tsx11_lock();
         changes.x = data->whole_rect.left - virtual_screen_rect.left;
         changes.y = data->whole_rect.top - virtual_screen_rect.top;
         XReconfigureWMWindow( display, data->whole_window,
                               DefaultScreen(display), mask, &changes );
-        wine_tsx11_unlock();
     }
     if (hwnd == GetForegroundWindow()) clip_fullscreen_window( hwnd, TRUE );
     return TRUE;
+}
+
+BOOL is_desktop_fullscreen(void)
+{
+    return screen_width == max_width && screen_height == max_height;
 }
 
 static void update_desktop_fullscreen( unsigned int width, unsigned int height)
@@ -228,6 +231,11 @@ static void update_desktop_fullscreen( unsigned int width, unsigned int height)
     TRACE("action=%li\n", xev.xclient.data.l[0]);
 
     wine_tsx11_lock();
+    XSendEvent( display, DefaultRootWindow(display), False,
+                SubstructureRedirectMask | SubstructureNotifyMask, &xev );
+
+    xev.xclient.data.l[1] = x11drv_atom(_NET_WM_STATE_MAXIMIZED_VERT);
+    xev.xclient.data.l[2] = x11drv_atom(_NET_WM_STATE_MAXIMIZED_HORZ);
     XSendEvent( display, DefaultRootWindow(display), False,
                 SubstructureRedirectMask | SubstructureNotifyMask, &xev );
     wine_tsx11_unlock();

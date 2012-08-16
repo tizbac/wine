@@ -37,13 +37,20 @@ WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 
 static HRESULT get_url(HTMLLocation *This, const WCHAR **ret)
 {
-    if(!This->window || !This->window->url) {
+    if(!This->window || !This->window->base.outer_window || !This->window->base.outer_window->url) {
         FIXME("No current URL\n");
         return E_NOTIMPL;
     }
 
-    *ret = This->window->url;
+    *ret = This->window->base.outer_window->url;
     return S_OK;
+}
+
+static IUri *get_uri(HTMLLocation *This)
+{
+    if(!This->window || !This->window->base.outer_window)
+        return NULL;
+    return This->window->base.outer_window->uri;
 }
 
 static HRESULT get_url_components(HTMLLocation *This, URL_COMPONENTSW *url)
@@ -158,12 +165,12 @@ static HRESULT WINAPI HTMLLocation_put_href(IHTMLLocation *iface, BSTR v)
 
     TRACE("(%p)->(%s)\n", This, debugstr_w(v));
 
-    if(!This->window) {
+    if(!This->window || !This->window->base.outer_window) {
         FIXME("No window available\n");
         return E_FAIL;
     }
 
-    return navigate_url(This->window, v, This->window->url);
+    return navigate_url(This->window->base.outer_window, v, This->window->base.outer_window->url);
 }
 
 static HRESULT WINAPI HTMLLocation_get_href(IHTMLLocation *iface, BSTR *p)
@@ -278,6 +285,7 @@ static HRESULT WINAPI HTMLLocation_get_protocol(IHTMLLocation *iface, BSTR *p)
     HTMLLocation *This = impl_from_IHTMLLocation(iface);
     BSTR protocol, ret;
     unsigned len;
+    IUri *uri;
     HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
@@ -285,12 +293,12 @@ static HRESULT WINAPI HTMLLocation_get_protocol(IHTMLLocation *iface, BSTR *p)
     if(!p)
         return E_POINTER;
 
-    if(!This->window || !This->window->uri) {
+    if(!(uri = get_uri(This))) {
         FIXME("No current URI\n");
         return E_NOTIMPL;
     }
 
-    hres = IUri_GetSchemeName(This->window->uri, &protocol);
+    hres = IUri_GetSchemeName(uri, &protocol);
     if(FAILED(hres))
         return hres;
     if(hres == S_FALSE) {
@@ -367,6 +375,7 @@ static HRESULT WINAPI HTMLLocation_get_hostname(IHTMLLocation *iface, BSTR *p)
 {
     HTMLLocation *This = impl_from_IHTMLLocation(iface);
     BSTR hostname;
+    IUri *uri;
     HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
@@ -374,12 +383,12 @@ static HRESULT WINAPI HTMLLocation_get_hostname(IHTMLLocation *iface, BSTR *p)
     if(!p)
         return E_POINTER;
 
-    if(!This->window || !This->window->uri) {
+    if(!(uri = get_uri(This))) {
         FIXME("No current URI\n");
         return E_NOTIMPL;
     }
 
-    hres = IUri_GetHost(This->window->uri, &hostname);
+    hres = IUri_GetHost(uri, &hostname);
     if(hres == S_OK) {
         *p = hostname;
     }else if(hres == S_FALSE) {
@@ -403,6 +412,7 @@ static HRESULT WINAPI HTMLLocation_get_port(IHTMLLocation *iface, BSTR *p)
 {
     HTMLLocation *This = impl_from_IHTMLLocation(iface);
     DWORD port;
+    IUri *uri;
     HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
@@ -410,12 +420,12 @@ static HRESULT WINAPI HTMLLocation_get_port(IHTMLLocation *iface, BSTR *p)
     if(!p)
         return E_POINTER;
 
-    if(!This->window || !This->window->uri) {
+    if(!(uri = get_uri(This))) {
         FIXME("No current URI\n");
         return E_NOTIMPL;
     }
 
-    hres = IUri_GetPort(This->window->uri, &port);
+    hres = IUri_GetPort(uri, &port);
     if(FAILED(hres))
         return hres;
 
@@ -479,6 +489,7 @@ static HRESULT WINAPI HTMLLocation_get_search(IHTMLLocation *iface, BSTR *p)
 {
     HTMLLocation *This = impl_from_IHTMLLocation(iface);
     BSTR query;
+    IUri *uri;
     HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
@@ -486,12 +497,12 @@ static HRESULT WINAPI HTMLLocation_get_search(IHTMLLocation *iface, BSTR *p)
     if(!p)
         return E_POINTER;
 
-    if(!This->window || !This->window->uri) {
+    if(!(uri = get_uri(This))) {
         FIXME("No current URI\n");
         return E_NOTIMPL;
     }
 
-    hres = IUri_GetQuery(This->window->uri, &query);
+    hres = IUri_GetQuery(uri, &query);
     if(hres == S_OK) {
         *p = query;
     }else if(hres == S_FALSE) {
@@ -515,6 +526,7 @@ static HRESULT WINAPI HTMLLocation_get_hash(IHTMLLocation *iface, BSTR *p)
 {
     HTMLLocation *This = impl_from_IHTMLLocation(iface);
     BSTR hash;
+    IUri *uri;
     HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
@@ -522,12 +534,12 @@ static HRESULT WINAPI HTMLLocation_get_hash(IHTMLLocation *iface, BSTR *p)
     if(!p)
         return E_POINTER;
 
-    if(!This->window || !This->window->uri) {
+    if(!(uri = get_uri(This))) {
         FIXME("No current URI\n");
         return E_NOTIMPL;
     }
 
-    hres = IUri_GetFragment(This->window->uri, &hash);
+    hres = IUri_GetFragment(uri, &hash);
     if(hres == S_OK) {
         *p = hash;
     }else if(hres == S_FALSE) {
@@ -553,12 +565,12 @@ static HRESULT WINAPI HTMLLocation_replace(IHTMLLocation *iface, BSTR bstr)
 
     TRACE("(%p)->(%s)\n", This, debugstr_w(bstr));
 
-    if(!This->window) {
+    if(!This->window || !This->window->base.outer_window) {
         FIXME("No window available\n");
         return E_FAIL;
     }
 
-    return navigate_url(This->window, bstr, This->window->url);
+    return navigate_url(This->window->base.outer_window, bstr, This->window->base.outer_window->url);
 }
 
 static HRESULT WINAPI HTMLLocation_assign(IHTMLLocation *iface, BSTR bstr)
@@ -617,7 +629,7 @@ static dispex_static_data_t HTMLLocation_dispex = {
 };
 
 
-HRESULT HTMLLocation_Create(HTMLOuterWindow *window, HTMLLocation **ret)
+HRESULT HTMLLocation_Create(HTMLInnerWindow *window, HTMLLocation **ret)
 {
     HTMLLocation *location;
 

@@ -93,11 +93,11 @@ static const DWORD ctab_basic[] = {
     0x0000ffff};                                                            /* END                          */
 
 static const D3DXCONSTANT_DESC ctab_basic_expected[] = {
-    {"mvp", D3DXRS_FLOAT4, 0, 4, D3DXPC_MATRIX_COLUMNS, D3DXPT_FLOAT, 4, 4, 1, 0, 64, 0},
-    {"i",   D3DXRS_FLOAT4, 4, 1, D3DXPC_SCALAR,         D3DXPT_INT,   1, 1, 1, 0,  4, 0},
-    {"i4",  D3DXRS_FLOAT4, 5, 1, D3DXPC_VECTOR,         D3DXPT_INT,   1, 4, 1, 0, 16, 0},
-    {"f",   D3DXRS_FLOAT4, 6, 1, D3DXPC_SCALAR,         D3DXPT_FLOAT, 1, 1, 1, 0,  4, 0},
-    {"f4",  D3DXRS_FLOAT4, 7, 1, D3DXPC_VECTOR,         D3DXPT_FLOAT, 1, 4, 1, 0, 16, 0}};
+    {"mvp", D3DXRS_FLOAT4, 0, 4, D3DXPC_MATRIX_COLUMNS, D3DXPT_FLOAT, 4, 4, 1, 0, 64, NULL},
+    {"i",   D3DXRS_FLOAT4, 4, 1, D3DXPC_SCALAR,         D3DXPT_INT,   1, 1, 1, 0,  4, NULL},
+    {"i4",  D3DXRS_FLOAT4, 5, 1, D3DXPC_VECTOR,         D3DXPT_INT,   1, 4, 1, 0, 16, NULL},
+    {"f",   D3DXRS_FLOAT4, 6, 1, D3DXPC_SCALAR,         D3DXPT_FLOAT, 1, 1, 1, 0,  4, NULL},
+    {"f4",  D3DXRS_FLOAT4, 7, 1, D3DXPC_VECTOR,         D3DXPT_FLOAT, 1, 4, 1, 0, 16, NULL}};
 
 static const DWORD ctab_matrices[] = {
     0xfffe0300,                                                             /* vs_3_0                       */
@@ -118,9 +118,9 @@ static const DWORD ctab_matrices[] = {
     0x0000ffff};                                                            /* END                          */
 
 static const D3DXCONSTANT_DESC ctab_matrices_expected[] = {
-    {"fmatrix4x4", D3DXRS_FLOAT4, 0, 4, D3DXPC_MATRIX_COLUMNS, D3DXPT_FLOAT, 4, 4, 1, 0, 64, 0},
-    {"imatrix2x3", D3DXRS_FLOAT4, 4, 3, D3DXPC_MATRIX_ROWS,    D3DXPT_INT,   2, 3, 1, 0, 24, 0},
-    {"fmatrix3x1", D3DXRS_FLOAT4, 7, 1, D3DXPC_MATRIX_COLUMNS, D3DXPT_FLOAT, 3, 1, 1, 0, 12, 0}};
+    {"fmatrix4x4", D3DXRS_FLOAT4, 0, 4, D3DXPC_MATRIX_COLUMNS, D3DXPT_FLOAT, 4, 4, 1, 0, 64, NULL},
+    {"imatrix2x3", D3DXRS_FLOAT4, 4, 3, D3DXPC_MATRIX_ROWS,    D3DXPT_INT,   2, 3, 1, 0, 24, NULL},
+    {"fmatrix3x1", D3DXRS_FLOAT4, 7, 1, D3DXPC_MATRIX_COLUMNS, D3DXPT_FLOAT, 3, 1, 1, 0, 12, NULL}};
 
 static const DWORD ctab_arrays[] = {
     0xfffe0300,                                                             /* vs_3_0                       */
@@ -150,12 +150,63 @@ static const DWORD ctab_arrays[] = {
     0x0000ffff};                                                            /* END                          */
 
 static const D3DXCONSTANT_DESC ctab_arrays_expected[] = {
-    {"fmtxarray", D3DXRS_FLOAT4,  0, 8, D3DXPC_MATRIX_ROWS, D3DXPT_FLOAT, 4, 4, 2, 0, 128, 0},
-    {"farray",    D3DXRS_FLOAT4,  8, 4, D3DXPC_SCALAR,      D3DXPT_FLOAT, 1, 1, 4, 0,  16, 0},
-    {"fvecarray", D3DXRS_FLOAT4, 12, 2, D3DXPC_VECTOR,      D3DXPT_FLOAT, 1, 4, 2, 0,  32, 0},
-    {"barray",    D3DXRS_FLOAT4, 14, 2, D3DXPC_SCALAR,      D3DXPT_BOOL,  1, 1, 2, 0,   8, 0},
-    {"bvecarray", D3DXRS_FLOAT4, 16, 2, D3DXPC_VECTOR,      D3DXPT_BOOL,  1, 3, 3, 0,  36, 0},
-    {"ivecarray", D3DXRS_FLOAT4, 18, 1, D3DXPC_VECTOR,      D3DXPT_INT,   1, 4, 1, 0,  16, 0}};
+    {"fmtxarray", D3DXRS_FLOAT4,  0, 8, D3DXPC_MATRIX_ROWS, D3DXPT_FLOAT, 4, 4, 2, 0, 128, NULL},
+    {"farray",    D3DXRS_FLOAT4,  8, 4, D3DXPC_SCALAR,      D3DXPT_FLOAT, 1, 1, 4, 0,  16, NULL},
+    {"fvecarray", D3DXRS_FLOAT4, 12, 2, D3DXPC_VECTOR,      D3DXPT_FLOAT, 1, 4, 2, 0,  32, NULL},
+    {"barray",    D3DXRS_FLOAT4, 14, 2, D3DXPC_SCALAR,      D3DXPT_BOOL,  1, 1, 2, 0,   8, NULL},
+    {"bvecarray", D3DXRS_FLOAT4, 16, 2, D3DXPC_VECTOR,      D3DXPT_BOOL,  1, 3, 3, 0,  36, NULL},
+    {"ivecarray", D3DXRS_FLOAT4, 18, 1, D3DXPC_VECTOR,      D3DXPT_INT,   1, 4, 1, 0,  16, NULL}};
+
+static const DWORD ctab_with_default_values[] = {
+    0xfffe0200,                                                 /* vs_2_0 */
+    0x007bfffe, FCC_CTAB,                                       /* CTAB comment */
+    0x0000001c, 0x000001b7, 0xfffe0200, 0x00000005, 0x0000001c, /* header */
+    0x00000100, 0x000001b0,
+    0x00000080, 0x00080002, 0x00000003, 0x00000084, 0x00000094, /* constant 1 desc (arr) */
+    0x000000c4, 0x000c0002, 0x00000001, 0x000000c8, 0x000000d8, /* constant 2 desc (flt) */
+    0x000000e8, 0x00040002, 0x00000004, 0x000000f0, 0x00000100, /* constant 3 desc (mat3) */
+    0x00000140, 0x00000002, 0x00000004, 0x000000f0, 0x00000148, /* constant 4 desc (mat4) */
+    0x00000188, 0x000b0002, 0x00000001, 0x00000190, 0x000001a0, /* constant 5 desc (vec4) */
+    0x00727261,                                                 /* constant 1 name */
+    0x00030000, 0x00010001, 0x00000003, 0x00000000,             /* constant 1 type desc */
+    0x42c80000, 0x00000000, 0x00000000, 0x00000000,             /* constant 1 default value */
+    0x43480000, 0x00000000, 0x00000000, 0x00000000,
+    0x43960000, 0x00000000, 0x00000000, 0x00000000,
+    0x00746c66,                                                 /* constant 2 name */
+    0x00030000, 0x00010001, 0x00000001, 0x00000000,             /* constant 2 type desc */
+    0x411fd70a, 0x00000000, 0x00000000, 0x00000000,             /* constant 2 default value */
+    0x3374616d,                                                 /* constant 3 name */
+    0xababab00,
+    0x00030003, 0x00040004, 0x00000001, 0x00000000,             /* constant 3 & 4 type desc */
+    0x41300000, 0x425c0000, 0x42c60000, 0x44a42000,             /* constat 3 default value */
+    0x41b00000, 0x42840000, 0x447c8000, 0x44b0c000,
+    0x42040000, 0x429a0000, 0x448ae000, 0x44bd6000,
+    0x42300000, 0x42b00000, 0x44978000, 0x44ca0000,
+    0x3474616d,                                                 /* constant 4 name */
+    0xababab00,
+    0x3f800000, 0x40a00000, 0x41100000, 0x41500000,             /* constant 4 default value */
+    0x40000000, 0x40c00000, 0x41200000, 0x41600000,
+    0x40400000, 0x40e00000, 0x41300000, 0x41700000,
+    0x40800000, 0x41000000, 0x41400000, 0x41800000,
+    0x34636576,                                                 /* constant 5 name */
+    0xababab00,
+    0x00030001, 0x00040001, 0x00000001, 0x00000000,             /* constant 5 type desc */
+    0x41200000, 0x41a00000, 0x41f00000, 0x42200000,             /* constant 5 default value */
+    0x325f7376, 0x4d004141, 0x41414141, 0x00000000,             /* target & creator string */
+    0x0000ffff};                                                /* END */
+
+static const float mat4_default_value[] = {1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15, 4, 8, 12, 16};
+static const float mat3_default_value[] = {11, 55, 99, 1313, 22, 66, 1010, 1414, 33, 77, 1111, 1515, 44, 88, 1212, 1616};
+static const float arr_default_value[] = {100, 0, 0, 0, 200, 0, 0, 0, 300, 0, 0, 0};
+static const float vec4_default_value[] = {10, 20, 30, 40};
+static const float flt_default_value[] = {9.99, 0, 0, 0};
+
+static const D3DXCONSTANT_DESC ctab_with_default_values_expected[] = {
+    {"mat4", D3DXRS_FLOAT4,  0, 4, D3DXPC_MATRIX_COLUMNS, D3DXPT_FLOAT, 4, 4, 1, 0, 64, mat4_default_value},
+    {"mat3", D3DXRS_FLOAT4,  4, 4, D3DXPC_MATRIX_COLUMNS, D3DXPT_FLOAT, 4, 4, 1, 0, 64, mat3_default_value},
+    {"arr",  D3DXRS_FLOAT4,  8, 3, D3DXPC_SCALAR,         D3DXPT_FLOAT, 1, 1, 3, 0, 12, arr_default_value},
+    {"vec4", D3DXRS_FLOAT4, 11, 1, D3DXPC_VECTOR,         D3DXPT_FLOAT, 1, 4, 1, 0, 16, vec4_default_value},
+    {"flt",  D3DXRS_FLOAT4, 12, 1, D3DXPC_SCALAR,         D3DXPT_FLOAT, 1, 1, 1, 0,  4, flt_default_value}};
 
 static const DWORD ctab_samplers[] = {
     0xfffe0300,                                                             /* vs_3_0                        */
@@ -176,9 +227,9 @@ static const DWORD ctab_samplers[] = {
     0x0000ffff};                                                            /* END                           */
 
 static const D3DXCONSTANT_DESC ctab_samplers_expected[] = {
-    {"sampler1",   D3DXRS_SAMPLER, 0, 1, D3DXPC_OBJECT, D3DXPT_SAMPLER2D, 1, 1, 1, 0, 4,  0},
-    {"sampler2",   D3DXRS_SAMPLER, 3, 1, D3DXPC_OBJECT, D3DXPT_SAMPLER3D, 1, 1, 1, 0, 4,  0},
-    {"notsampler", D3DXRS_FLOAT4,  2, 1, D3DXPC_VECTOR, D3DXPT_FLOAT,     1, 4, 1, 0, 16, 0}};
+    {"sampler1",   D3DXRS_SAMPLER, 0, 1, D3DXPC_OBJECT, D3DXPT_SAMPLER2D, 1, 1, 1, 0, 4,  NULL},
+    {"sampler2",   D3DXRS_SAMPLER, 3, 1, D3DXPC_OBJECT, D3DXPT_SAMPLER3D, 1, 1, 1, 0, 4,  NULL},
+    {"notsampler", D3DXRS_FLOAT4,  2, 1, D3DXPC_VECTOR, D3DXPT_FLOAT,     1, 4, 1, 0, 16, NULL}};
 
 static void test_get_shader_size(void)
 {
@@ -437,6 +488,21 @@ static void test_constant_table(const char *test_name, const DWORD *ctable_fn,
         ok(actual.Bytes == expected->Bytes,
            "%s in %s: Got different byte count: Got %d, expected %d\n",
            expected->Name, test_name, actual.Bytes, expected->Bytes);
+
+        if (!expected->DefaultValue)
+        {
+            ok(actual.DefaultValue == NULL,
+                "%s in %s: Got different default value: expected NULL\n",
+                expected->Name, test_name);
+        }
+        else
+        {
+            ok(actual.DefaultValue != NULL,
+                "%s in %s: Got different default value: expected non-NULL\n",
+                expected->Name, test_name);
+            ok(memcmp(actual.DefaultValue, expected->DefaultValue, expected->Bytes) == 0,
+                "%s in %s: Got different default value\n", expected->Name, test_name);
+        }
     }
 
     /* Finally, release the constant table */
@@ -451,6 +517,8 @@ static void test_constant_tables(void)
             sizeof(ctab_matrices_expected)/sizeof(*ctab_matrices_expected));
     test_constant_table("test_arrays", ctab_arrays, ctab_arrays_expected,
             sizeof(ctab_arrays_expected)/sizeof(*ctab_arrays_expected));
+    test_constant_table("test_default_values", ctab_with_default_values, ctab_with_default_values_expected,
+            sizeof(ctab_with_default_values_expected)/sizeof(*ctab_with_default_values_expected));
     test_constant_table("test_samplers", ctab_samplers, ctab_samplers_expected,
             sizeof(ctab_samplers_expected)/sizeof(*ctab_samplers_expected));
 }
@@ -631,6 +699,83 @@ static void test_setting_arrays_table(IDirect3DDevice9 *device)
     ok(refcnt == 0, "The constant table reference count was %u, should be 0\n", refcnt);
 }
 
+static void test_SetDefaults(IDirect3DDevice9 *device)
+{
+    static const D3DXMATRIX mvp = {{{
+        0.51f, 0.62f, 0.80f, 0.78f,
+        0.23f, 0.95f, 0.37f, 0.48f,
+        0.10f, 0.58f, 0.90f, 0.25f,
+        0.89f, 0.41f, 0.93f, 0.27f}}};
+    static const D3DXVECTOR4 f4 = {0.2f, 0.4f, 0.8f, 1.2f};
+
+    float out[16];
+
+    HRESULT res;
+    ID3DXConstantTable *ctable;
+
+    res = D3DXGetShaderConstantTable(ctab_basic, &ctable);
+    ok(res == D3D_OK, "D3DXGetShaderConstantTable failed: got %08x\n", res);
+
+    res = ID3DXConstantTable_SetVector(ctable, device, "f4", &f4);
+    ok(res == D3D_OK, "ID3DXConstantTable_SetVector failed: got %08x\n", res);
+
+    res = ID3DXConstantTable_SetMatrix(ctable, device, "mvp", &mvp);
+    ok(res == D3D_OK, "ID3DXConstantTable_SetMatrix failed: got %08x\n", res);
+
+    res = ID3DXConstantTable_SetDefaults(ctable, device);
+    ok(res == D3D_OK, "ID3dXConstantTable_SetDefaults failed: got %08x\n", res);
+
+    /* SetDefaults doesn't change constants without default values */
+    IDirect3DDevice9_GetVertexShaderConstantF(device, 0, out, 4);
+    ok(out[0] == S(U(mvp))._11 && out[4] == S(U(mvp))._12 && out[8] == S(U(mvp))._13 && out[12] == S(U(mvp))._14,
+            "The first row of mvp was not set correctly, got {%f, %f, %f, %f}, should be {%f, %f, %f, %f}\n",
+            out[0], out[4], out[8], out[12], S(U(mvp))._11, S(U(mvp))._12, S(U(mvp))._13, S(U(mvp))._14);
+    ok(out[1] == S(U(mvp))._21 && out[5] == S(U(mvp))._22 && out[9] == S(U(mvp))._23 && out[13] == S(U(mvp))._24,
+            "The second row of mvp was not set correctly, got {%f, %f, %f, %f}, should be {%f, %f, %f, %f}\n",
+            out[1], out[5], out[9], out[13], S(U(mvp))._21, S(U(mvp))._22, S(U(mvp))._23, S(U(mvp))._24);
+    ok(out[2] == S(U(mvp))._31 && out[6] == S(U(mvp))._32 && out[10] == S(U(mvp))._33 && out[14] == S(U(mvp))._34,
+            "The third row of mvp was not set correctly, got {%f, %f, %f, %f}, should be {%f, %f, %f, %f}\n",
+            out[2], out[6], out[10], out[14], S(U(mvp))._31, S(U(mvp))._32, S(U(mvp))._33, S(U(mvp))._34);
+    ok(out[3] == S(U(mvp))._41 && out[7] == S(U(mvp))._42 && out[11] == S(U(mvp))._43 && out[15] == S(U(mvp))._44,
+            "The fourth row of mvp was not set correctly, got {%f, %f, %f, %f}, should be {%f, %f, %f, %f}\n",
+            out[3], out[7], out[11], out[15], S(U(mvp))._41, S(U(mvp))._42, S(U(mvp))._43, S(U(mvp))._44);
+
+    IDirect3DDevice9_GetVertexShaderConstantF(device, 7, out, 1);
+    ok(memcmp(out, &f4, sizeof(f4)) == 0,
+            "The variable f4 was not set correctly, out={%f, %f, %f, %f}, should be {%f, %f, %f, %f}\n",
+            out[0], out[1], out[2], out[3], f4.x, f4.y, f4.z, f4.w);
+
+    ID3DXConstantTable_Release(ctable);
+
+    res = D3DXGetShaderConstantTable(ctab_with_default_values, &ctable);
+    ok(res == D3D_OK, "D3DXGetShaderConstantTable failed: got %08x\n", res);
+
+    res = ID3DXConstantTable_SetDefaults(ctable, device);
+    ok(res == D3D_OK, "ID3DXConstantTable_SetDefaults failed: got %08x\n", res);
+
+    IDirect3DDevice9_GetVertexShaderConstantF(device, 0, out, 4);
+    ok(memcmp(out, mat4_default_value, sizeof(mat4_default_value)) == 0,
+            "The variable mat4 was not set correctly to default value\n");
+
+    IDirect3DDevice9_GetVertexShaderConstantF(device, 4, out, 4);
+    ok(memcmp(out, mat3_default_value, sizeof(mat3_default_value)) == 0,
+            "The variable mat3 was not set correctly to default value\n");
+
+    IDirect3DDevice9_GetVertexShaderConstantF(device, 8, out, 3);
+    ok(memcmp(out, arr_default_value, sizeof(arr_default_value)) == 0,
+        "The variable array was not set correctly to default value\n");
+
+    IDirect3DDevice9_GetVertexShaderConstantF(device, 11, out, 1);
+    ok(memcmp(out, vec4_default_value, sizeof(vec4_default_value)) == 0,
+        "The variable vec4 was not set correctly to default value\n");
+
+    IDirect3DDevice9_GetVertexShaderConstantF(device, 12, out, 1);
+    ok(memcmp(out, flt_default_value, sizeof(flt_default_value)) == 0,
+        "The variable flt was not set correctly to default value\n");
+
+    ID3DXConstantTable_Release(ctable);
+}
+
 static void test_setting_constants(void)
 {
     HWND wnd;
@@ -669,6 +814,7 @@ static void test_setting_constants(void)
 
     test_setting_basic_table(device);
     test_setting_arrays_table(device);
+    test_SetDefaults(device);
 
     /* Release resources */
     refcnt = IDirect3DDevice9_Release(device);

@@ -320,29 +320,6 @@ GpStatus hresult_to_status(HRESULT res)
     }
 }
 
-/* converts a given unit to its value in inches */
-REAL convert_unit(REAL logpixels, GpUnit unit)
-{
-    switch(unit)
-    {
-        case UnitInch:
-            return logpixels;
-        case UnitPoint:
-            return logpixels / 72.0;
-        case UnitDocument:
-            return logpixels / 300.0;
-        case UnitMillimeter:
-            return logpixels / 25.4;
-        case UnitWorld:
-            ERR("cannot convert UnitWorld\n");
-            return 0.0;
-        case UnitPixel:
-        case UnitDisplay:
-        default:
-            return 1.0;
-    }
-}
-
 /* converts a given unit to its value in pixels */
 REAL units_to_pixels(REAL units, GpUnit unit, REAL dpi)
 {
@@ -379,7 +356,6 @@ REAL pixels_to_units(REAL pixels, GpUnit unit, REAL dpi)
         return pixels * point_per_inch / dpi;
     case UnitInch:
         return pixels / dpi;
-        break;
     case UnitDocument:
         return pixels * 300.0 / dpi;
     case UnitMillimeter:
@@ -388,6 +364,12 @@ REAL pixels_to_units(REAL pixels, GpUnit unit, REAL dpi)
         FIXME("Unhandled unit type: %d\n", unit);
         return 0;
     }
+}
+
+REAL units_scale(GpUnit from, GpUnit to, REAL dpi)
+{
+    REAL pixels = units_to_pixels(1.0, from, dpi);
+    return pixels_to_units(pixels, to, dpi);
 }
 
 /* Calculates Bezier points from cardinal spline points. */

@@ -927,6 +927,8 @@ static void test_ID3DXRenderToSurface_device_state(IDirect3DDevice9 *device)
         compare_device_state(&current_state, &pre_state, FALSE);
         release_device_state(&current_state);
 
+        check_release((IUnknown *)render, 0);
+
         /* if EndScene isn't called, the device state isn't restored */
         hr = retrieve_device_state(device, &current_state);
         ok(SUCCEEDED(hr), "Failed to retrieve device state\n");
@@ -936,7 +938,7 @@ static void test_ID3DXRenderToSurface_device_state(IDirect3DDevice9 *device)
         hr = apply_device_state(device, &pre_state);
         ok(SUCCEEDED(hr), "Failed to restore previous device state\n");
 
-        check_release((IUnknown *)render, 0);
+        IDirect3DDevice9_EndScene(device);
     }
 
     release_device_state(&pre_state);
@@ -1082,6 +1084,139 @@ static void test_D3DXCreateRenderToEnvMap(IDirect3DDevice9 *device)
     if (SUCCEEDED(hr)) ID3DXRenderToEnvMap_Release(render);
 }
 
+static void test_ID3DXRenderToEnvMap_cube_map(IDirect3DDevice9 *device)
+{
+    HRESULT hr;
+    IDirect3DCubeTexture9 *cube_texture = NULL;
+    ID3DXRenderToEnvMap *render = NULL;
+    struct device_state pre_state;
+    struct device_state current_state;
+
+    hr = IDirect3DDevice9_CreateCubeTexture(device, 256, 0, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+        &cube_texture, NULL);
+    if (FAILED(hr))
+    {
+        skip("Failed to create cube texture\n");
+        return;
+    }
+
+    hr = retrieve_device_state(device, &pre_state);
+
+    hr = D3DXCreateRenderToEnvMap(device, 256, 0, D3DFMT_A8R8G8B8, TRUE, D3DFMT_D24X8, &render);
+    ok(hr == D3D_OK, "D3DCreateRenderToEnvMap returned %#x, expected %#x\n", hr, D3D_OK);
+    if (SUCCEEDED(hr))
+    {
+        DWORD face;
+
+        hr = ID3DXRenderToEnvMap_End(render, D3DX_FILTER_NONE);
+        ok(hr == D3DERR_INVALIDCALL, "ID3DXRenderToEnvMap::End returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
+        hr = ID3DXRenderToEnvMap_BeginCube(render, cube_texture);
+        ok(hr == D3D_OK, "ID3DXRenderToEnvMap::BeginCube returned %#x, expected %#x\n", hr, D3D_OK);
+
+        hr = retrieve_device_state(device, &current_state);
+        ok(SUCCEEDED(hr), "Failed to retrieve device state\n");
+        compare_device_state(&current_state, &pre_state, TRUE);
+        release_device_state(&current_state);
+
+        for (face = D3DCUBEMAP_FACE_POSITIVE_X; face <= D3DCUBEMAP_FACE_NEGATIVE_Z; face++)
+        {
+            hr = ID3DXRenderToEnvMap_Face(render, face, D3DX_FILTER_POINT);
+            ok(hr == D3D_OK, "ID3DXRenderToEnvMap::Face returned %#x, expected %#x\n", hr, D3D_OK);
+
+            hr = retrieve_device_state(device, &current_state);
+            ok(SUCCEEDED(hr), "Failed to retrieve device state\n");
+            compare_device_state(&current_state, &pre_state, FALSE);
+            release_device_state(&current_state);
+        }
+
+        hr = ID3DXRenderToEnvMap_End(render, D3DX_FILTER_POINT);
+        ok(hr == D3D_OK, "ID3DXRenderToEnvMap::End returned %#x, expected %#x\n", hr, D3D_OK);
+
+        hr = retrieve_device_state(device, &current_state);
+        ok(SUCCEEDED(hr), "Failed to retrieve device state\n");
+        compare_device_state(&current_state, &pre_state, TRUE);
+        release_device_state(&current_state);
+
+        check_release((IUnknown *)render, 0);
+    }
+
+    release_device_state(&pre_state);
+
+    check_release((IUnknown *)cube_texture, 0);
+}
+
+static void test_ID3DXRenderToEnvMap(IDirect3DDevice9 *device)
+{
+    HRESULT hr;
+    ID3DXRenderToEnvMap *render;
+    IDirect3DSurface9 *depth_stencil_surface;
+
+    hr = D3DXCreateRenderToEnvMap(device, 256, 0, D3DFMT_A8R8G8B8, FALSE, D3DFMT_UNKNOWN, &render);
+    if (SUCCEEDED(hr))
+    {
+        ULONG ref_count;
+        IDirect3DDevice9 *out_device;
+
+        hr = ID3DXRenderToEnvMap_GetDesc(render, NULL);
+        ok(hr == D3DERR_INVALIDCALL, "ID3DXRenderToEnvMap::GetDesc returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
+        hr = ID3DXRenderToEnvMap_GetDevice(render, NULL);
+        ok(hr == D3DERR_INVALIDCALL, "ID3DXRenderToEnvMap::GetDevice returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
+        ref_count = get_ref((IUnknown *)device);
+        hr = ID3DXRenderToEnvMap_GetDevice(render, &out_device);
+        ok(hr == D3D_OK, "ID3DXRenderToEnvMap::GetDevice returned %#x, expected %#x\n", hr, D3D_OK);
+        ok(out_device == device, "ID3DXRenderToEnvMap::GetDevice returned different device\n");
+        check_release((IUnknown *)device, ref_count);
+
+        hr = ID3DXRenderToEnvMap_End(render, D3DX_FILTER_NONE);
+        ok(hr == D3DERR_INVALIDCALL, "ID3DXRenderToEnvMap::End returned %#x, expected %#x\n", hr, D3D_OK);
+
+        hr = ID3DXRenderToEnvMap_BeginCube(render, NULL);
+        ok(hr == D3DERR_INVALIDCALL, "ID3DXRenderToEnvMap::BeginCube returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
+        hr = ID3DXRenderToEnvMap_BeginHemisphere(render, NULL, NULL);
+        todo_wine ok(hr == D3DERR_INVALIDCALL, "ID3DXRenderToEnvMap::BeginHemisphere returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
+        hr = ID3DXRenderToEnvMap_BeginParabolic(render, NULL, NULL);
+        todo_wine ok(hr == D3DERR_INVALIDCALL, "ID3DXRenderToEnvMap::BeginParabolic returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
+        hr = ID3DXRenderToEnvMap_BeginSphere(render, NULL);
+        todo_wine ok(hr == D3DERR_INVALIDCALL, "ID3DXRenderToEnvMap::BeginSphere returned %#x, exected %#x\n", hr, D3DERR_INVALIDCALL);
+
+        check_release((IUnknown *)render, 0);
+    } else skip("Failed to create ID3DXRenderToEnvMap\n");
+
+    /* make sure there is a depth stencil surface present */
+    hr = IDirect3DDevice9_GetDepthStencilSurface(device, &depth_stencil_surface);
+    if (SUCCEEDED(hr))
+    {
+        IDirect3DSurface9_Release(depth_stencil_surface);
+        depth_stencil_surface = NULL;
+    }
+    else if (hr == D3DERR_NOTFOUND)
+    {
+        hr = IDirect3DDevice9_CreateDepthStencilSurface(device, 256, 256, D3DFMT_D24X8,
+                D3DMULTISAMPLE_NONE, 0, TRUE, &depth_stencil_surface, NULL);
+        if (SUCCEEDED(hr)) IDirect3DDevice9_SetDepthStencilSurface(device, depth_stencil_surface);
+    }
+
+    if (FAILED(hr))
+    {
+        skip("Failed to create depth stencil surface\n");
+        return;
+    }
+
+    test_ID3DXRenderToEnvMap_cube_map(device);
+
+    if (depth_stencil_surface)
+    {
+        IDirect3DDevice9_SetDepthStencilSurface(device, NULL);
+        IDirect3DSurface9_Release(depth_stencil_surface);
+    }
+}
+
 START_TEST(core)
 {
     HWND wnd;
@@ -1119,6 +1254,7 @@ START_TEST(core)
     test_D3DXCreateRenderToSurface(device);
     test_ID3DXRenderToSurface(device);
     test_D3DXCreateRenderToEnvMap(device);
+    test_ID3DXRenderToEnvMap(device);
 
     check_release((IUnknown*)device, 0);
     check_release((IUnknown*)d3d, 0);

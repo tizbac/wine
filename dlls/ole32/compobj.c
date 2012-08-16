@@ -464,7 +464,8 @@ static void COM_RevokeAllClasses(const struct apartment *apt)
  */
 
 typedef struct ManualResetEvent {
-    ISynchronize   ISynchronize_iface;
+    ISynchronize        ISynchronize_iface;
+    ISynchronizeHandle  ISynchronizeHandle_iface;
     LONG ref;
     HANDLE event;
 } MREImpl;
@@ -477,22 +478,21 @@ static inline MREImpl *impl_from_ISynchronize(ISynchronize *iface)
 static HRESULT WINAPI ISynchronize_fnQueryInterface(ISynchronize *iface, REFIID riid, void **ppv)
 {
     MREImpl *This = impl_from_ISynchronize(iface);
+
     TRACE("%p (%s, %p)\n", This, debugstr_guid(riid), ppv);
 
-    *ppv = NULL;
-    if(IsEqualGUID(riid, &IID_IUnknown) ||
-       IsEqualGUID(riid, &IID_ISynchronize))
-        *ppv = This;
-    else
+    if(IsEqualGUID(riid, &IID_IUnknown) || IsEqualGUID(riid, &IID_ISynchronize)) {
+        *ppv = &This->ISynchronize_iface;
+    }else if(IsEqualGUID(riid, &IID_ISynchronizeHandle)) {
+        *ppv = &This->ISynchronizeHandle_iface;
+    }else {
         ERR("Unknown interface %s requested.\n", debugstr_guid(riid));
-
-    if(*ppv)
-    {
-        IUnknown_AddRef((IUnknown*)*ppv);
-        return S_OK;
+        *ppv = NULL;
+        return E_NOINTERFACE;
     }
 
-    return E_NOINTERFACE;
+    IUnknown_AddRef((IUnknown*)*ppv);
+    return S_OK;
 }
 
 static ULONG WINAPI ISynchronize_fnAddRef(ISynchronize *iface)
@@ -552,6 +552,44 @@ static ISynchronizeVtbl vt_ISynchronize = {
     ISynchronize_fnReset
 };
 
+static inline MREImpl *impl_from_ISynchronizeHandle(ISynchronizeHandle *iface)
+{
+    return CONTAINING_RECORD(iface, MREImpl, ISynchronizeHandle_iface);
+}
+
+static HRESULT WINAPI SynchronizeHandle_QueryInterface(ISynchronizeHandle *iface, REFIID riid, void **ppv)
+{
+    MREImpl *This = impl_from_ISynchronizeHandle(iface);
+    return ISynchronize_QueryInterface(&This->ISynchronize_iface, riid, ppv);
+}
+
+static ULONG WINAPI SynchronizeHandle_AddRef(ISynchronizeHandle *iface)
+{
+    MREImpl *This = impl_from_ISynchronizeHandle(iface);
+    return ISynchronize_AddRef(&This->ISynchronize_iface);
+}
+
+static ULONG WINAPI SynchronizeHandle_Release(ISynchronizeHandle *iface)
+{
+    MREImpl *This = impl_from_ISynchronizeHandle(iface);
+    return ISynchronize_Release(&This->ISynchronize_iface);
+}
+
+static HRESULT WINAPI SynchronizeHandle_GetHandle(ISynchronizeHandle *iface, HANDLE *ph)
+{
+    MREImpl *This = impl_from_ISynchronizeHandle(iface);
+
+    *ph = This->event;
+    return S_OK;
+}
+
+static const ISynchronizeHandleVtbl SynchronizeHandleVtbl = {
+    SynchronizeHandle_QueryInterface,
+    SynchronizeHandle_AddRef,
+    SynchronizeHandle_Release,
+    SynchronizeHandle_GetHandle
+};
+
 static HRESULT ManualResetEvent_Construct(IUnknown *punkouter, REFIID iid, void **ppv)
 {
     MREImpl *This = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(MREImpl));
@@ -562,6 +600,7 @@ static HRESULT ManualResetEvent_Construct(IUnknown *punkouter, REFIID iid, void 
 
     This->ref = 1;
     This->ISynchronize_iface.lpVtbl = &vt_ISynchronize;
+    This->ISynchronizeHandle_iface.lpVtbl = &SynchronizeHandleVtbl;
     This->event = CreateEventW(NULL, TRUE, FALSE, NULL);
 
     hr = ISynchronize_QueryInterface(&This->ISynchronize_iface, iid, ppv);
@@ -732,7 +771,7 @@ DWORD apartment_release(struct apartment *apt)
          * apartment, which it must do. */
         assert(list_empty(&apt->stubmgrs));
 
-        if (apt->filter) IUnknown_Release(apt->filter);
+        if (apt->filter) IMessageFilter_Release(apt->filter);
 
         /* free as many unused libraries as possible... */
         apartment_freeunusedlibraries(apt, 0);
@@ -1254,7 +1293,7 @@ static void COM_TlsDestroy(void)
         if (info->apt) apartment_release(info->apt);
         if (info->errorinfo) IErrorInfo_Release(info->errorinfo);
         if (info->state) IUnknown_Release(info->state);
-        if (info->spy) IUnknown_Release(info->spy);
+        if (info->spy) IInitializeSpy_Release(info->spy);
         if (info->context_token) IObjContext_Release(info->context_token);
         HeapFree(GetProcessHeap(), 0, info);
         NtCurrentTeb()->ReservedForOle = NULL;
@@ -1313,7 +1352,7 @@ HRESULT WINAPI CoRegisterInitializeSpy(IInitializeSpy *spy, ULARGE_INTEGER *cook
         return E_UNEXPECTED;
     }
 
-    hr = IUnknown_QueryInterface(spy, &IID_IInitializeSpy, (void **) &info->spy);
+    hr = IInitializeSpy_QueryInterface(spy, &IID_IInitializeSpy, (void **) &info->spy);
     if (SUCCEEDED(hr))
     {
         cookie->QuadPart = (DWORD_PTR)spy;
@@ -1345,7 +1384,7 @@ HRESULT WINAPI CoRevokeInitializeSpy(ULARGE_INTEGER cookie)
     if (!info || !info->spy || cookie.QuadPart != (DWORD_PTR)info->spy)
         return E_INVALIDARG;
 
-    IUnknown_Release(info->spy);
+    IInitializeSpy_Release(info->spy);
     info->spy = NULL;
     return S_OK;
 }
@@ -3769,10 +3808,9 @@ HRESULT WINAPI CoWaitForMultipleHandles(DWORD dwFlags, DWORD dwTimeout,
         {
             TRACE("waiting for rpc completion\n");
 
-            res = WaitForMultipleObjectsEx(cHandles, pHandles,
-                (dwFlags & COWAIT_WAITALL) ? TRUE : FALSE,
+            res = WaitForMultipleObjectsEx(cHandles, pHandles, (dwFlags & COWAIT_WAITALL) != 0,
                 (dwTimeout == INFINITE) ? INFINITE : start_time + dwTimeout - now,
-                (dwFlags & COWAIT_ALERTABLE) ? TRUE : FALSE);
+                (dwFlags & COWAIT_ALERTABLE) != 0);
         }
 
         switch (res)

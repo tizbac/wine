@@ -657,6 +657,30 @@ static DWORD calc_bytes(D3DXCONSTANT_DESC *desc)
     return 4 * desc->Elements * desc->Rows * desc->Columns;
 }
 
+static inline int is_constant_handle(D3DXHANDLE handle)
+{
+    return !((UINT_PTR)handle >> 16);
+}
+
+static inline ctab_constant *constant_from_handle(struct ID3DXConstantTableImpl *table, D3DXHANDLE handle)
+{
+    return &table->constants[(UINT_PTR)handle - 1];
+}
+
+static inline D3DXHANDLE handle_from_constant_index(UINT index)
+{
+    return (D3DXHANDLE)(DWORD_PTR)(index + 1);
+}
+
+static inline void set_float_shader_constant(struct ID3DXConstantTableImpl *table, IDirect3DDevice9 *device,
+                                             UINT register_index, const FLOAT *data, UINT count)
+{
+    if (is_vertex_shader(table->desc.Version))
+        IDirect3DDevice9_SetVertexShaderConstantF(device, register_index, data, count);
+    else
+        IDirect3DDevice9_SetPixelShaderConstantF(device, register_index, data, count);
+}
+
 /*** IUnknown methods ***/
 static HRESULT WINAPI ID3DXConstantTableImpl_QueryInterface(ID3DXConstantTable *iface, REFIID riid, void **out)
 {
@@ -747,16 +771,14 @@ static HRESULT WINAPI ID3DXConstantTableImpl_GetConstantDesc(ID3DXConstantTable 
         return D3DERR_INVALIDCALL;
 
     /* Applications can pass the name of the constant in place of the handle */
-    if (!((UINT_PTR)constant >> 16))
-        constant_info = &This->constants[(UINT_PTR)constant - 1];
-    else
+    if (!is_constant_handle(constant))
     {
-        D3DXHANDLE c = ID3DXConstantTable_GetConstantByName(iface, NULL, constant);
-        if (!c)
+        constant = ID3DXConstantTable_GetConstantByName(iface, NULL, constant);
+        if (!constant)
             return D3DERR_INVALIDCALL;
-
-        constant_info = &This->constants[(UINT_PTR)c - 1];
     }
+
+    constant_info = constant_from_handle(This, constant);
 
     if (desc)
         *desc = constant_info->desc;
@@ -800,7 +822,7 @@ static D3DXHANDLE WINAPI ID3DXConstantTableImpl_GetConstant(ID3DXConstantTable *
     if (index >= This->desc.Constants)
         return NULL;
 
-    return (D3DXHANDLE)(DWORD_PTR)(index + 1);
+    return handle_from_constant_index(index);
 }
 
 static D3DXHANDLE WINAPI ID3DXConstantTableImpl_GetConstantByName(ID3DXConstantTable *iface, D3DXHANDLE constant, LPCSTR name)
@@ -821,7 +843,7 @@ static D3DXHANDLE WINAPI ID3DXConstantTableImpl_GetConstantByName(ID3DXConstantT
 
     for (i = 0; i < This->desc.Constants; i++)
         if (!strcmp(This->constants[i].desc.Name, name))
-            return (D3DXHANDLE)(DWORD_PTR)(i + 1);
+            return handle_from_constant_index(i);
 
     return NULL;
 }
@@ -869,10 +891,7 @@ static HRESULT set_float_array(ID3DXConstantTable *iface, LPDIRECT3DDEVICE9 devi
                         FIXME("Unhandled type passed to set_float_array\n");
                         return D3DERR_INVALIDCALL;
                 }
-                if (is_vertex_shader(This->desc.Version))
-                    IDirect3DDevice9_SetVertexShaderConstantF(device, desc.RegisterIndex + i, row, 1);
-                else
-                    IDirect3DDevice9_SetPixelShaderConstantF(device, desc.RegisterIndex + i, row, 1);
+                set_float_shader_constant(This, device, desc.RegisterIndex + i, row, 1);
             }
             break;
         default:
@@ -886,10 +905,24 @@ static HRESULT set_float_array(ID3DXConstantTable *iface, LPDIRECT3DDEVICE9 devi
 static HRESULT WINAPI ID3DXConstantTableImpl_SetDefaults(ID3DXConstantTable *iface, LPDIRECT3DDEVICE9 device)
 {
     struct ID3DXConstantTableImpl *This = impl_from_ID3DXConstantTable(iface);
+    UINT i;
 
-    FIXME("(%p)->(%p): stub\n", This, device);
+    TRACE("(%p)->(%p)\n", This, device);
 
-    return E_NOTIMPL;
+    if (!device)
+        return D3DERR_INVALIDCALL;
+
+    for (i = 0; i < This->desc.Constants; i++)
+    {
+        D3DXCONSTANT_DESC *desc = &This->constants[i].desc;
+
+        if (!desc->DefaultValue)
+            continue;
+
+        set_float_shader_constant(This, device, desc->RegisterIndex, desc->DefaultValue, desc->RegisterCount);
+    }
+
+    return D3D_OK;
 }
 
 static HRESULT WINAPI ID3DXConstantTableImpl_SetValue(ID3DXConstantTable *iface, LPDIRECT3DDEVICE9 device,
@@ -991,12 +1024,8 @@ static HRESULT WINAPI ID3DXConstantTableImpl_SetVectorArray(ID3DXConstantTable *
     switch (desc.RegisterSet)
     {
         case D3DXRS_FLOAT4:
-            if (is_vertex_shader(This->desc.Version))
-                IDirect3DDevice9_SetVertexShaderConstantF(device, desc.RegisterIndex, (float *)vector,
-                        min(desc.RegisterCount, count));
-            else
-                IDirect3DDevice9_SetPixelShaderConstantF(device, desc.RegisterIndex, (float *)vector,
-                        min(desc.RegisterCount, count));
+            set_float_shader_constant(This, device, desc.RegisterIndex, (float *)vector,
+                    min(desc.RegisterCount, count));
             break;
         default:
             FIXME("Handle other register sets\n");
@@ -1047,10 +1076,7 @@ static HRESULT WINAPI ID3DXConstantTableImpl_SetMatrixArray(ID3DXConstantTable *
                 else
                     D3DXMatrixTranspose(&temp, &matrix[i]);
 
-                if (is_vertex_shader(This->desc.Version))
-                    IDirect3DDevice9_SetVertexShaderConstantF(device, desc.RegisterIndex + i * 4, &temp.u.s._11, 4);
-                else
-                    IDirect3DDevice9_SetPixelShaderConstantF(device, desc.RegisterIndex + i * 4, &temp.u.s._11, 4);
+                set_float_shader_constant(This, device, desc.RegisterIndex + i * 4, &temp.u.s._11, 4);
             }
             break;
         default:
@@ -1249,7 +1275,8 @@ HRESULT WINAPI D3DXGetShaderConstantTableEx(CONST DWORD *byte_code,
         object->constants[i].desc.RegisterSet = constant_info[i].RegisterSet;
         object->constants[i].desc.RegisterIndex = constant_info[i].RegisterIndex;
         object->constants[i].desc.RegisterCount = constant_info[i].RegisterCount;
-        object->constants[i].desc.DefaultValue = object->ctab + constant_info[i].DefaultValue;
+        object->constants[i].desc.DefaultValue = constant_info[i].DefaultValue
+                ? object->ctab + constant_info[i].DefaultValue : NULL;
 
         hr = parse_ctab_constant_type((LPD3DXSHADER_TYPEINFO)(object->ctab + constant_info[i].TypeInfo),
              &object->constants[i]);

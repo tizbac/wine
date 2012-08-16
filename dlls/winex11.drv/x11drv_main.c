@@ -603,32 +603,11 @@ static void thread_detach(void)
     if (data)
     {
         X11DRV_ResetSelectionOwner();
-        wine_tsx11_lock();
         if (data->xim) XCloseIM( data->xim );
         if (data->font_set) XFreeFontSet( data->display, data->font_set );
         XCloseDisplay( data->display );
-        wine_tsx11_unlock();
         HeapFree( GetProcessHeap(), 0, data );
     }
-}
-
-
-/***********************************************************************
- *           X11DRV process termination routine
- */
-static void process_detach(void)
-{
-    X11DRV_Clipboard_Cleanup();
-    /* cleanup XVidMode */
-    X11DRV_XF86VM_Cleanup();
-    X11DRV_XRender_Finalize();
-
-    /* cleanup GDI */
-    X11DRV_GDI_Finalize();
-
-    IME_UnregisterClasses();
-    DeleteCriticalSection( &X11DRV_CritSection );
-    TlsFree( thread_data_tls_index );
 }
 
 
@@ -715,9 +694,6 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, LPVOID reserved )
     case DLL_THREAD_DETACH:
         thread_detach();
         break;
-    case DLL_PROCESS_DETACH:
-        process_detach();
-        break;
     }
     return ret;
 }
@@ -730,9 +706,7 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, LPVOID reserved )
 BOOL CDECL X11DRV_GetScreenSaveActive(void)
 {
     int timeout, temp;
-    wine_tsx11_lock();
     XGetScreenSaver(gdi_display, &timeout, &temp, &temp, &temp);
-    wine_tsx11_unlock();
     return timeout != 0;
 }
 

@@ -290,7 +290,7 @@ static inline HANDLE get_droptarget_handle(HWND hwnd)
  */
 static inline BOOL is_droptarget(HWND hwnd)
 {
-    return get_droptarget_handle(hwnd) ? TRUE : FALSE;
+    return get_droptarget_handle(hwnd) != 0;
 }
 
 /*************************************************************
@@ -975,7 +975,7 @@ static HRESULT WINAPI EnumOLEVERB_QueryInterface(
     if (IsEqualIID(riid, &IID_IUnknown) ||
         IsEqualIID(riid, &IID_IEnumOLEVERB))
     {
-        IUnknown_AddRef(iface);
+        IEnumOLEVERB_AddRef(iface);
         *ppv = iface;
         return S_OK;
     }
@@ -1333,10 +1333,7 @@ HRESULT WINAPI OleLoad(
   /*
    * Initialize the object with its IPersistStorage interface.
    */
-  hres = IOleObject_QueryInterface(pUnk,
-                                   &IID_IPersistStorage,
-                                   (void**)&persistStorage);
-
+  hres = IUnknown_QueryInterface(pUnk, &IID_IPersistStorage, (void**)&persistStorage);
   if (SUCCEEDED(hres))
   {
     hres = IPersistStorage_Load(persistStorage, pStg);
@@ -1660,7 +1657,7 @@ static BOOL OLEMenu_SetIsServerMenu( HMENU hmenu, OleMenuDescriptor *pOleMenuDes
     if ( nPos < nWidth )
     {
       /* Odd elements are server menu widths */
-      pOleMenuDescriptor->bIsServerItem = (i%2) ? TRUE : FALSE;
+      pOleMenuDescriptor->bIsServerItem = i%2;
       break;
     }
   }
@@ -2939,7 +2936,7 @@ HRESULT WINAPI PropVariantClear(PROPVARIANT * pvar) /* [in/out] */
     case VT_STORAGE:
     case VT_STORED_OBJECT:
         if (pvar->u.pStream)
-            IUnknown_Release(pvar->u.pStream);
+            IStream_Release(pvar->u.pStream);
         break;
     case VT_CLSID:
     case VT_LPSTR:
@@ -2953,8 +2950,7 @@ HRESULT WINAPI PropVariantClear(PROPVARIANT * pvar) /* [in/out] */
         CoTaskMemFree(pvar->u.blob.pBlobData);
         break;
     case VT_BSTR:
-        if (pvar->u.bstrVal)
-            PropSysFreeString(pvar->u.bstrVal);
+        PropSysFreeString(pvar->u.bstrVal);
         break;
     case VT_CF:
         if (pvar->u.pclipdata)

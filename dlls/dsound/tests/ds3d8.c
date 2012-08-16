@@ -1081,11 +1081,14 @@ return DSERR_GENERIC;
     return rc;
 }
 
+static unsigned driver_count = 0;
+
 static BOOL WINAPI dsenum_callback(LPGUID lpGuid, LPCSTR lpcstrDescription,
                                    LPCSTR lpcstrModule, LPVOID lpContext)
 {
     HRESULT rc;
     trace("*** Testing %s - %s ***\n",lpcstrDescription,lpcstrModule);
+    driver_count++;
 
     rc = test_for_driver8(lpGuid);
     if (rc == DSERR_NODRIVER) {
@@ -1132,6 +1135,7 @@ static void ds3d8_tests(void)
     HRESULT rc;
     rc=pDirectSoundEnumerateA(&dsenum_callback,NULL);
     ok(rc==DS_OK,"DirectSoundEnumerateA() failed: %08x\n",rc);
+    trace("tested %u DirectSound drivers\n", driver_count);
 }
 
 START_TEST(ds3d8)
@@ -1151,12 +1155,12 @@ START_TEST(ds3d8)
         if (pDirectSoundCreate8)
             ds3d8_tests();
         else
-            skip("ds3d8 test skipped\n");
+            skip("DirectSoundCreate8 missing - skipping all tests\n");
 
         FreeLibrary(hDsound);
     }
     else
-        skip("dsound.dll not found!\n");
+        skip("dsound.dll not found - skipping all tests\n");
 
     CoUninitialize();
 }

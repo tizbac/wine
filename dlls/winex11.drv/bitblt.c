@@ -600,8 +600,6 @@ static int BITBLT_GetDstArea(X11DRV_PDEVICE *physDev, Pixmap pixmap, GC gc, cons
     INT width  = visRectDst->right - visRectDst->left;
     INT height = visRectDst->bottom - visRectDst->top;
 
-    wine_tsx11_lock();
-
     if (!X11DRV_PALETTE_XPixelToPalette || (physDev->depth == 1) ||
 	(X11DRV_PALETTE_PaletteFlags & X11DRV_PALETTE_VIRTUAL) )
     {
@@ -633,8 +631,6 @@ static int BITBLT_GetDstArea(X11DRV_PDEVICE *physDev, Pixmap pixmap, GC gc, cons
             XDestroyImage( image );
         }
     }
-
-    wine_tsx11_unlock();
     return exposures;
 }
 
@@ -702,14 +698,11 @@ void execute_rop( X11DRV_PDEVICE *physdev, Pixmap src_pixmap, GC gc, const RECT 
 
     pixmaps[SRC] = src_pixmap;
     pixmaps[TMP] = 0;
-    wine_tsx11_lock();
     pixmaps[DST] = XCreatePixmap( gdi_display, root_window, width, height, physdev->depth );
-    wine_tsx11_unlock();
 
     if (use_dst) BITBLT_GetDstArea( physdev, pixmaps[DST], gc, visrect );
     null_brush = use_pat && !X11DRV_SetupGCForPatBlt( physdev, gc, TRUE );
 
-    wine_tsx11_lock();
     for ( ; *opcode; opcode++)
     {
         if (OP_DST(*opcode) == DST) result = pixmaps[DST];
@@ -739,7 +732,6 @@ void execute_rop( X11DRV_PDEVICE *physdev, Pixmap src_pixmap, GC gc, const RECT 
     physdev->exposures += BITBLT_PutDstArea( physdev, result, visrect );
     XFreePixmap( gdi_display, pixmaps[DST] );
     if (pixmaps[TMP]) XFreePixmap( gdi_display, pixmaps[TMP] );
-    wine_tsx11_unlock();
     add_device_bounds( physdev, visrect );
 }
 
@@ -754,7 +746,6 @@ BOOL X11DRV_PatBlt( PHYSDEV dev, struct bitblt_coords *dst, DWORD rop )
 
     if (usePat && !X11DRV_SetupGCForBrush( physDev )) return TRUE;
 
-    wine_tsx11_lock();
     XSetFunction( gdi_display, physDev->gc, OP_ROP(*opcode) );
 
     switch(rop)  /* a few special cases */
@@ -791,7 +782,6 @@ BOOL X11DRV_PatBlt( PHYSDEV dev, struct bitblt_coords *dst, DWORD rop )
                     physDev->dc_rect.top + dst->visrect.top,
                     dst->visrect.right - dst->visrect.left,
                     dst->visrect.bottom - dst->visrect.top );
-    wine_tsx11_unlock();
     add_device_bounds( physDev, &dst->visrect );
     return TRUE;
 }
@@ -830,7 +820,6 @@ BOOL X11DRV_StretchBlt( PHYSDEV dst_dev, struct bitblt_coords *dst,
     {
         if (same_format(physDevSrc, physDevDst))
         {
-            wine_tsx11_lock();
             XSetFunction( gdi_display, physDevDst->gc, OP_ROP(*opcode) );
             XCopyArea( gdi_display, physDevSrc->drawable,
                        physDevDst->drawable, physDevDst->gc,
@@ -840,7 +829,6 @@ BOOL X11DRV_StretchBlt( PHYSDEV dst_dev, struct bitblt_coords *dst,
                        physDevDst->dc_rect.left + dst->visrect.left,
                        physDevDst->dc_rect.top + dst->visrect.top );
             physDevDst->exposures++;
-            wine_tsx11_unlock();
             return TRUE;
         }
         if (physDevSrc->depth == 1)
@@ -848,7 +836,6 @@ BOOL X11DRV_StretchBlt( PHYSDEV dst_dev, struct bitblt_coords *dst,
             int text_pixel = X11DRV_PALETTE_ToPhysical( physDevDst, GetTextColor(physDevDst->dev.hdc) );
             int bkgnd_pixel = X11DRV_PALETTE_ToPhysical( physDevDst, GetBkColor(physDevDst->dev.hdc) );
 
-            wine_tsx11_lock();
             XSetBackground( gdi_display, physDevDst->gc, text_pixel );
             XSetForeground( gdi_display, physDevDst->gc, bkgnd_pixel );
             XSetFunction( gdi_display, physDevDst->gc, OP_ROP(*opcode) );
@@ -860,12 +847,10 @@ BOOL X11DRV_StretchBlt( PHYSDEV dst_dev, struct bitblt_coords *dst,
                         physDevDst->dc_rect.left + dst->visrect.left,
                         physDevDst->dc_rect.top + dst->visrect.top, 1 );
             physDevDst->exposures++;
-            wine_tsx11_unlock();
             return TRUE;
         }
     }
 
-    wine_tsx11_lock();
     gc = XCreateGC( gdi_display, physDevDst->drawable, 0, NULL );
     XSetSubwindowMode( gdi_display, gc, IncludeInferiors );
     XSetGraphicsExposures( gdi_display, gc, False );
@@ -904,14 +889,11 @@ BOOL X11DRV_StretchBlt( PHYSDEV dst_dev, struct bitblt_coords *dst,
                    physDevSrc->dc_rect.top + src->visrect.top,
                    width, height, 0, 0 );
     }
-    wine_tsx11_unlock();
 
     execute_rop( physDevDst, src_pixmap, gc, &dst->visrect, rop );
 
-    wine_tsx11_lock();
     XFreePixmap( gdi_display, src_pixmap );
     XFreeGC( gdi_display, gc );
-    wine_tsx11_unlock();
     return TRUE;
 }
 
@@ -923,9 +905,7 @@ static void free_heap_bits( struct gdi_image_bits *bits )
 
 static void free_ximage_bits( struct gdi_image_bits *bits )
 {
-    wine_tsx11_lock();
     XFree( bits->ptr );
-    wine_tsx11_unlock();
 }
 
 /* only for use on sanitized BITMAPINFO structures */
@@ -1219,10 +1199,8 @@ DWORD X11DRV_PutImage( PHYSDEV dev, HRGN clip, BITMAPINFO *info,
     if (!bits) return ERROR_SUCCESS;  /* just querying the format */
     if ((src->width != dst->width) || (src->height != dst->height)) return ERROR_TRANSFORM_NOT_SUPPORTED;
 
-    wine_tsx11_lock();
     image = XCreateImage( gdi_display, visual, vis.depth, ZPixmap, 0, NULL,
                           info->bmiHeader.biWidth, src->visrect.bottom - src->visrect.top, 32, 0 );
-    wine_tsx11_unlock();
     if (!image) return ERROR_OUTOFMEMORY;
 
     if (image->bits_per_pixel == 4 || image->bits_per_pixel == 8)
@@ -1244,32 +1222,24 @@ DWORD X11DRV_PutImage( PHYSDEV dev, HRGN clip, BITMAPINFO *info,
         /* optimization for single-op ROPs */
         if (!opcode[1] && OP_SRCDST(opcode[0]) == OP_ARGS(SRC,DST))
         {
-            wine_tsx11_lock();
             XSetFunction( gdi_display, physdev->gc, OP_ROP(*opcode) );
             XPutImage( gdi_display, physdev->drawable, physdev->gc, image, src->visrect.left, 0,
                        physdev->dc_rect.left + dst->visrect.left,
                        physdev->dc_rect.top + dst->visrect.top, width, height );
-            wine_tsx11_unlock();
         }
         else
         {
-            Pixmap src_pixmap;
-            GC gc;
+            GC gc = XCreateGC( gdi_display, physdev->drawable, 0, NULL );
+            Pixmap src_pixmap = XCreatePixmap( gdi_display, root_window, width, height, vis.depth );
 
-            wine_tsx11_lock();
-            gc = XCreateGC( gdi_display, physdev->drawable, 0, NULL );
             XSetSubwindowMode( gdi_display, gc, IncludeInferiors );
             XSetGraphicsExposures( gdi_display, gc, False );
-            src_pixmap = XCreatePixmap( gdi_display, root_window, width, height, vis.depth );
             XPutImage( gdi_display, src_pixmap, gc, image, src->visrect.left, 0, 0, 0, width, height );
-            wine_tsx11_unlock();
 
             execute_rop( physdev, src_pixmap, gc, &dst->visrect, rop );
 
-            wine_tsx11_lock();
             XFreePixmap( gdi_display, src_pixmap );
             XFreeGC( gdi_display, gc );
-            wine_tsx11_unlock();
         }
 
         if (restore_region) restore_clipping_region( physdev );
@@ -1277,9 +1247,7 @@ DWORD X11DRV_PutImage( PHYSDEV dev, HRGN clip, BITMAPINFO *info,
         image->data = NULL;
     }
 
-    wine_tsx11_lock();
     XDestroyImage( image );
-    wine_tsx11_unlock();
     if (dst_bits.free) dst_bits.free( &dst_bits );
     return ret;
 
@@ -1356,19 +1324,15 @@ DWORD X11DRV_GetImage( PHYSDEV dev, BITMAPINFO *info,
     if (X11DRV_check_error())
     {
         /* use a temporary pixmap to avoid the BadMatch error */
-        GC gc;
-        Pixmap pixmap;
+        Pixmap pixmap = XCreatePixmap( gdi_display, root_window, width, height, vis.depth );
+        GC gc = XCreateGC( gdi_display, pixmap, 0, NULL );
 
-        wine_tsx11_lock();
-        pixmap = XCreatePixmap( gdi_display, root_window, width, height, vis.depth );
-        gc = XCreateGC( gdi_display, pixmap, 0, NULL );
         XSetGraphicsExposures( gdi_display, gc, False );
         XCopyArea( gdi_display, physdev->drawable, pixmap, gc,
                    physdev->dc_rect.left + x, physdev->dc_rect.top + y, width, height, 0, 0 );
         image = XGetImage( gdi_display, pixmap, 0, 0, width, height, AllPlanes, ZPixmap );
         XFreePixmap( gdi_display, pixmap );
         XFreeGC( gdi_display, gc );
-        wine_tsx11_unlock();
     }
 
     if (!image) return ERROR_OUTOFMEMORY;
@@ -1387,9 +1351,7 @@ DWORD X11DRV_GetImage( PHYSDEV dev, BITMAPINFO *info,
         bits->free = free_ximage_bits;
         image->data = NULL;
     }
-    wine_tsx11_lock();
     XDestroyImage( image );
-    wine_tsx11_unlock();
     return ret;
 }
 
@@ -1423,10 +1385,8 @@ static DWORD put_pixmap_image( Pixmap pixmap, const XVisualInfo *vis,
     coords.height = abs( info->bmiHeader.biHeight );
     SetRect( &coords.visrect, 0, 0, coords.width, coords.height );
 
-    wine_tsx11_lock();
     image = XCreateImage( gdi_display, visual, vis->depth, ZPixmap, 0, NULL,
                           coords.width, coords.height, 32, 0 );
-    wine_tsx11_unlock();
     if (!image) return ERROR_OUTOFMEMORY;
 
     if (image->bits_per_pixel == 4 || image->bits_per_pixel == 8)
@@ -1435,17 +1395,13 @@ static DWORD put_pixmap_image( Pixmap pixmap, const XVisualInfo *vis,
     if (!(ret = copy_image_bits( info, is_r8g8b8(vis), image, bits, &dst_bits, &coords, mapping, ~0u )))
     {
         image->data = dst_bits.ptr;
-        wine_tsx11_lock();
         gc = XCreateGC( gdi_display, pixmap, 0, NULL );
         XPutImage( gdi_display, pixmap, gc, image, 0, 0, 0, 0, coords.width, coords.height );
         XFreeGC( gdi_display, gc );
-        wine_tsx11_unlock();
         image->data = NULL;
     }
 
-    wine_tsx11_lock();
     XDestroyImage( image );
-    wine_tsx11_unlock();
     if (dst_bits.free) dst_bits.free( &dst_bits );
     return ret;
 
@@ -1474,10 +1430,8 @@ Pixmap create_pixmap_from_image( HDC hdc, const XVisualInfo *vis, const BITMAPIN
     DWORD err;
     HBITMAP dib;
 
-    wine_tsx11_lock();
     pixmap = XCreatePixmap( gdi_display, root_window,
                             info->bmiHeader.biWidth, abs(info->bmiHeader.biHeight), vis->depth );
-    wine_tsx11_unlock();
     if (!pixmap) return 0;
 
     memcpy( src_info, info, get_dib_info_size( info, coloruse ));
@@ -1504,9 +1458,7 @@ Pixmap create_pixmap_from_image( HDC hdc, const XVisualInfo *vis, const BITMAPIN
 
     if (!err) return pixmap;
 
-    wine_tsx11_lock();
     XFreePixmap( gdi_display, pixmap );
-    wine_tsx11_unlock();
     return 0;
 
 }
@@ -1547,9 +1499,7 @@ DWORD get_pixmap_image( Pixmap pixmap, int width, int height, const XVisualInfo 
     coords.height = height;
     SetRect( &coords.visrect, 0, 0, width, height );
 
-    wine_tsx11_lock();
     image = XGetImage( gdi_display, pixmap, 0, 0, width, height, AllPlanes, ZPixmap );
-    wine_tsx11_unlock();
     if (!image) return ERROR_OUTOFMEMORY;
 
     info->bmiHeader.biSizeImage = height * image->bytes_per_line;
@@ -1564,8 +1514,6 @@ DWORD get_pixmap_image( Pixmap pixmap, int width, int height, const XVisualInfo 
         bits->free = free_ximage_bits;
         image->data = NULL;
     }
-    wine_tsx11_lock();
     XDestroyImage( image );
-    wine_tsx11_unlock();
     return ret;
 }
