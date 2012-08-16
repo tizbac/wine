@@ -3467,7 +3467,7 @@ msgstr ""
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 
 #: inetcpl.rc:70
@@ -4215,7 +4215,7 @@ msgid "Same drive.\n"
 msgstr "Samme stasjon.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "Ikke toppkatalogen.\n"
 
 #: winerror.mc:591
@@ -5769,11 +5769,11 @@ msgid "Control ID not found.\n"
 msgstr "Fant ikke kontroller-ID'en.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "Ugyldig melding for kombinasjonsboks.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "Ikke et vindu for kombinasjonsboks.\n"
 
 #: winerror.mc:2516
@@ -12008,7 +12008,7 @@ msgstr "Prosessorbruk"
 
 #: taskmgr.rc:373
 #, fuzzy
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Minnebruk"
 
 #: taskmgr.rc:374
@@ -12750,7 +12750,7 @@ msgstr "Programminnstillinger"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine kan etterligne forskjellige Windows-versjoner for hvert program. Denne "
@@ -13184,11 +13184,11 @@ msgid "Selection Text"
 msgstr "Merket tekst"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Bakgrunn for verktøytips"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Tekst i verktøytips"
 
 #: winecfg.rc:100
@@ -13634,7 +13634,7 @@ msgid "Filter by&..."
 msgstr "Filtrer med '&'..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "Stas&jonslinje"
 
 #: winefile.rc:65

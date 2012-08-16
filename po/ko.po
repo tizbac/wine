@@ -3315,7 +3315,7 @@ msgstr "방문 기록 지우기"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "임시 인터넷 파일\n"
 "웹페이지의 캐시된 복사본,그림 그리고 인증서."
@@ -4045,7 +4045,7 @@ msgid "Same drive.\n"
 msgstr "같은 드라이브.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "최상위 디렉토리가 아닙니다.\n"
 
 #: winerror.mc:591
@@ -5573,11 +5573,11 @@ msgid "Control ID not found.\n"
 msgstr "컨트롤 아이디를 찾을 수 없음.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "올바르지 않은  콤보박스 메세지.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "콤보박스 창이 아닙니다.\n"
 
 #: winerror.mc:2516
@@ -11662,7 +11662,7 @@ msgid "CPU usage"
 msgstr "CPU 사용량"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "메모리 사용량"
 
 #: taskmgr.rc:374
@@ -12394,7 +12394,7 @@ msgstr "응용프로그램 설정"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine은 각 응용 프로그램에 대한 서로 다른 Windows 버전을 모방할 수 있습니다."
@@ -12824,11 +12824,11 @@ msgid "Selection Text"
 msgstr "선택된 문자"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "도구팁 배경"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "도구팁 문자"
 
 #: winecfg.rc:100
@@ -13265,7 +13265,7 @@ msgid "Filter by&..."
 msgstr "로 걸려내기&..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "드라이브 바(&D)"
 
 #: winefile.rc:65

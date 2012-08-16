@@ -63,9 +63,6 @@ typedef int Status;
 
 #define WINE_XDND_VERSION 4
 
-extern void CDECL wine_tsx11_lock(void);
-extern void CDECL wine_tsx11_unlock(void);
-
   /* X physical pen */
 typedef struct
 {
@@ -327,6 +324,9 @@ struct x11drv_thread_data
     DWORD    clip_reset;           /* time when clipping was last reset */
     HKL      kbd_layout;           /* active keyboard layout */
     enum { xi_unavailable = -1, xi_unknown, xi_disabled, xi_enabled } xi2_state; /* XInput2 state */
+    void    *xi2_devices;          /* list of XInput2 devices (valid when state is enabled) */
+    int      xi2_device_count;
+    int      xi2_core_pointer;     /* XInput2 core pointer id */
 };
 
 extern struct x11drv_thread_data *x11drv_init_thread_data(void) DECLSPEC_HIDDEN;
@@ -404,6 +404,8 @@ enum x11drv_atoms
     XATOM_RAW_ASCENT,
     XATOM_RAW_DESCENT,
     XATOM_RAW_CAP_HEIGHT,
+    XATOM_Rel_X,
+    XATOM_Rel_Y,
     XATOM_WM_PROTOCOLS,
     XATOM_WM_DELETE_WINDOW,
     XATOM_WM_STATE,
@@ -610,6 +612,10 @@ static inline BOOL is_window_rect_fullscreen( const RECT *rect )
 
 /* X context to associate a hwnd to an X window */
 extern XContext winContext DECLSPEC_HIDDEN;
+/* X context to associate a struct x11drv_win_data to an hwnd */
+extern XContext win_data_context DECLSPEC_HIDDEN;
+/* X context to associate an X cursor to a Win32 cursor handle */
+extern XContext cursor_context DECLSPEC_HIDDEN;
 
 extern void X11DRV_InitClipboard(void) DECLSPEC_HIDDEN;
 extern int CDECL X11DRV_AcquireClipboard(HWND hWndClipWindow) DECLSPEC_HIDDEN;

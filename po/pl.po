@@ -3340,7 +3340,7 @@ msgstr "Usuwanie historii przeglądania"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "Tymczasowe pliki internetowe\n"
 "Kopie stron sieci Web, obrazów i certyfikatów."
@@ -4075,7 +4075,7 @@ msgid "Same drive.\n"
 msgstr "Ten sam napęd.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "Folder nienadrzędny.\n"
 
 #: winerror.mc:591
@@ -5603,12 +5603,12 @@ msgid "Control ID not found.\n"
 msgstr "Nie znaleziono identyfikatora control'a.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
-msgstr "Niepoprawna wiadomość combobox'a.\n"
+msgid "Invalid combo box message.\n"
+msgstr "Niepoprawna wiadomość combo box'a.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
-msgstr "To nie jest okno combobox.\n"
+msgid "Not a combo box window.\n"
+msgstr "To nie jest okno combo box.\n"
 
 #: winerror.mc:2516
 msgid "Invalid edit height.\n"
@@ -11734,7 +11734,7 @@ msgid "CPU usage"
 msgstr "Użycie procesora"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Użycie pamięci"
 
 #: taskmgr.rc:374
@@ -12470,7 +12470,7 @@ msgstr "Ustawienia aplikacji"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine może udawać różne wersje Windows dla różnych aplikacji. Wybór w tej "
@@ -12902,11 +12902,11 @@ msgid "Selection Text"
 msgstr "Zaznaczony tekst"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Tło podpowiedzi"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Tekst podpowiedzi"
 
 #: winecfg.rc:100
@@ -13343,7 +13343,7 @@ msgid "Filter by&..."
 msgstr "Filtruj widok &..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "Pasek &dysków"
 
 #: winefile.rc:65

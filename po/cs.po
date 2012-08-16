@@ -3365,7 +3365,7 @@ msgstr "Vymazat historii prohlížení"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "Dočasné soubory internetu\n"
 "Mezipaměť kopií webových stránek, obrázků a certifikátů."
@@ -4143,7 +4143,7 @@ msgid "Same drive.\n"
 msgstr "Systémový disk.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr ""
 
 #: winerror.mc:591
@@ -5725,11 +5725,11 @@ msgid "Control ID not found.\n"
 msgstr ""
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr ""
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr ""
 
 #: winerror.mc:2516
@@ -11853,7 +11853,7 @@ msgid "CPU usage"
 msgstr ""
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr ""
 
 #: taskmgr.rc:374
@@ -12583,7 +12583,7 @@ msgstr "Nastavení aplikací"
 #, fuzzy
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine umí předstírat různé verze Windows pro každou jednu applikaci. Tato "
@@ -13024,11 +13024,11 @@ msgid "Selection Text"
 msgstr "Písmo výběru"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Pozadí tipu"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Písmo tipu"
 
 #: winecfg.rc:100
@@ -13465,7 +13465,7 @@ msgid "Filter by&..."
 msgstr "Třídit podle &..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "&Panel zařízení"
 
 #: winefile.rc:65

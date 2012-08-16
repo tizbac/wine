@@ -3321,7 +3321,7 @@ msgstr "Delete browsing history"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "Temporary internet files\n"
 "Cached copies of web pages, images and certificates."
@@ -4053,8 +4053,8 @@ msgid "Same drive.\n"
 msgstr "Same drive.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
-msgstr "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
+msgstr "Not top-level directory.\n"
 
 #: winerror.mc:591
 msgid "Directory is not empty.\n"
@@ -5581,12 +5581,12 @@ msgid "Control ID not found.\n"
 msgstr "Control ID not found.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
-msgstr "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
+msgstr "Invalid combo box message.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
-msgstr "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
+msgstr "Not a combo box window.\n"
 
 #: winerror.mc:2516
 msgid "Invalid edit height.\n"
@@ -11700,8 +11700,8 @@ msgid "CPU usage"
 msgstr "CPU usage"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
-msgstr "MEM usage"
+msgid "Mem usage"
+msgstr "Mem usage"
 
 #: taskmgr.rc:374
 msgid "Totals"
@@ -12434,7 +12434,7 @@ msgstr "Application settings"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine can mimic different Windows versions for each application. This tab is "
@@ -12865,12 +12865,12 @@ msgid "Selection Text"
 msgstr "Selection Text"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
-msgstr "ToolTip Background"
+msgid "Tooltip Background"
+msgstr "Tooltip Background"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
-msgstr "ToolTip Text"
+msgid "Tooltip Text"
+msgstr "Tooltip Text"
 
 #: winecfg.rc:100
 msgid "Window Background"
@@ -13308,8 +13308,8 @@ msgid "Filter by&..."
 msgstr "Filter by&..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
-msgstr "&Drivebar"
+msgid "&Drive Bar"
+msgstr "&Drive Bar"
 
 #: winefile.rc:65
 msgid "F&ull Screen\tCtrl+Shift+S"

@@ -3366,7 +3366,7 @@ msgstr "Elimina historial de navegació"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "Fitxers temporals d'Internet\n"
 "Les còpies en memòria cau de pàgines web, imatges i certificats."
@@ -4112,7 +4112,7 @@ msgid "Same drive.\n"
 msgstr "És la mateixa unitat.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "No és un directori superior.\n"
 
 #: winerror.mc:591
@@ -5640,11 +5640,11 @@ msgid "Control ID not found.\n"
 msgstr "ID de control no trobat.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "Missatge de quadre combinat invàlid.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "No és finestra de quadre combinat.\n"
 
 #: winerror.mc:2516
@@ -11828,7 +11828,7 @@ msgid "CPU usage"
 msgstr "Ús de CPU"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Ús MEM"
 
 #: taskmgr.rc:374
@@ -12572,7 +12572,7 @@ msgstr "Ajustaments de les aplicacions"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "El Wine pot imitar versions de Windows diferents per a cada aplicació. "
@@ -13007,11 +13007,11 @@ msgid "Selection Text"
 msgstr "Selecció--Text"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Indicador de Funció--Fons"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Indicador de Funció--Text"
 
 #: winecfg.rc:100
@@ -13452,7 +13452,7 @@ msgid "Filter by&..."
 msgstr "Filtrar per&..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "Barra d'&Unitats"
 
 #: winefile.rc:65

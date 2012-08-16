@@ -121,18 +121,16 @@ static const UINT button_up_data[NB_BUTTONS] =
     XBUTTON2
 };
 
+XContext cursor_context = 0;
+
 static HWND cursor_window;
 static HCURSOR last_cursor;
 static DWORD last_cursor_change;
-static XContext cursor_context;
 static RECT clip_rect;
 static Cursor create_cursor( HANDLE handle );
 
 #ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
 static BOOL xinput2_available;
-static int xinput2_core_pointer;
-static int xinput2_device_count;
-static XIDeviceInfo *xinput2_devices;
 #define MAKE_FUNCPTR(f) static typeof(f) * p##f
 MAKE_FUNCPTR(XIFreeDeviceInfo);
 MAKE_FUNCPTR(XIQueryDevice);
@@ -178,7 +176,6 @@ static Cursor get_empty_cursor(void)
     static Cursor cursor;
     static const char data[] = { 0 };
 
-    wine_tsx11_lock();
     if (!cursor)
     {
         XColor bg;
@@ -188,11 +185,12 @@ static Cursor get_empty_cursor(void)
         pixmap = XCreateBitmapFromData( gdi_display, root_window, data, 1, 1 );
         if (pixmap)
         {
-            cursor = XCreatePixmapCursor( gdi_display, pixmap, pixmap, &bg, &bg, 0, 0 );
+            Cursor new = XCreatePixmapCursor( gdi_display, pixmap, pixmap, &bg, &bg, 0, 0 );
+            if (InterlockedCompareExchangePointer( (void **)&cursor, (void *)new, 0 ))
+                XFreeCursor( gdi_display, new );
             XFreePixmap( gdi_display, pixmap );
         }
     }
-    wine_tsx11_unlock();
     return cursor;
 }
 
@@ -203,16 +201,13 @@ void set_window_cursor( Window window, HCURSOR handle )
 {
     Cursor cursor, prev;
 
-    wine_tsx11_lock();
     if (!handle) cursor = get_empty_cursor();
-    else if (!cursor_context || XFindContext( gdi_display, (XID)handle, cursor_context, (char **)&cursor ))
+    else if (XFindContext( gdi_display, (XID)handle, cursor_context, (char **)&cursor ))
     {
         /* try to create it */
-        wine_tsx11_unlock();
         if (!(cursor = create_cursor( handle ))) return;
 
-        wine_tsx11_lock();
-        if (!cursor_context) cursor_context = XUniqueContext();
+        XLockDisplay( gdi_display );
         if (!XFindContext( gdi_display, (XID)handle, cursor_context, (char **)&prev ))
         {
             /* someone else was here first */
@@ -224,12 +219,12 @@ void set_window_cursor( Window window, HCURSOR handle )
             XSaveContext( gdi_display, (XID)handle, cursor_context, (char *)cursor );
             TRACE( "cursor %p created %lx\n", handle, cursor );
         }
+        XUnlockDisplay( gdi_display );
     }
 
     XDefineCursor( gdi_display, window, cursor );
     /* make the change take effect immediately */
     XFlush( gdi_display );
-    wine_tsx11_unlock();
 }
 
 /***********************************************************************
@@ -258,8 +253,9 @@ static void enable_xinput2(void)
 #ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
     struct x11drv_thread_data *data = x11drv_thread_data();
     XIEventMask mask;
+    XIDeviceInfo *devices;
     unsigned char mask_bits[XIMaskLen(XI_LASTEVENT)];
-    int i, j;
+    int i, j, count;
 
     if (!xinput2_available) return;
 
@@ -275,30 +271,26 @@ static void enable_xinput2(void)
     }
     if (data->xi2_state == xi_unavailable) return;
 
-    wine_tsx11_lock();
-    if (xinput2_devices) pXIFreeDeviceInfo( xinput2_devices );
-    xinput2_devices = pXIQueryDevice( data->display, XIAllDevices, &xinput2_device_count );
-    for (i = 0; i < xinput2_device_count; ++i)
+    if (data->xi2_devices) pXIFreeDeviceInfo( data->xi2_devices );
+    data->xi2_devices = devices = pXIQueryDevice( data->display, XIAllDevices, &data->xi2_device_count );
+    for (i = 0; i < data->xi2_device_count; ++i)
     {
-        if (xinput2_devices[i].use != XIMasterPointer) continue;
-        for (j = 0; j < xinput2_devices[i].num_classes; j++)
+        if (devices[i].use != XIMasterPointer) continue;
+        for (j = count = 0; j < devices[i].num_classes; j++)
         {
-            XIValuatorClassInfo *class = (XIValuatorClassInfo *)xinput2_devices[i].classes[j];
+            XIValuatorClassInfo *class = (XIValuatorClassInfo *)devices[i].classes[j];
 
-            if (xinput2_devices[i].classes[j]->type != XIValuatorClass) continue;
-            if (class->number != 0 && class->number != 1) continue;
-            TRACE( "Device %u (%s) class %u num %u %f,%f res %u mode %u\n",
-                   xinput2_devices[i].deviceid, debugstr_a(xinput2_devices[i].name),
-                   j, class->number, class->min, class->max, class->resolution, class->mode );
-            if (class->mode == XIModeAbsolute)
-            {
-                TRACE( "Device is absolute, not enabling XInput2\n" );
-                goto done;
-            }
+            if (devices[i].classes[j]->type != XIValuatorClass) continue;
+            TRACE( "Device %u (%s) num %u %f,%f res %u mode %u label %s\n",
+                   devices[i].deviceid, debugstr_a(devices[i].name),
+                   class->number, class->min, class->max, class->resolution, class->mode,
+                   XGetAtomName( data->display, class->label ));
+            if (class->label == x11drv_atom( Rel_X ) || class->label == x11drv_atom( Rel_Y )) count++;
         }
+        if (count < 2) continue;
         TRACE( "Using %u (%s) as core pointer\n",
-               xinput2_devices[i].deviceid, debugstr_a(xinput2_devices[i].name) );
-        xinput2_core_pointer = xinput2_devices[i].deviceid;
+               devices[i].deviceid, debugstr_a(devices[i].name) );
+        data->xi2_core_pointer = devices[i].deviceid;
         break;
     }
 
@@ -308,21 +300,17 @@ static void enable_xinput2(void)
     XISetMask( mask_bits, XI_RawMotion );
     XISetMask( mask_bits, XI_ButtonPress );
 
-    for (i = 0; i < xinput2_device_count; ++i)
+    for (i = 0; i < data->xi2_device_count; ++i)
     {
-        if (xinput2_devices[i].use == XISlavePointer &&
-            xinput2_devices[i].attachment == xinput2_core_pointer)
+        if (devices[i].use == XISlavePointer && devices[i].attachment == data->xi2_core_pointer)
         {
             TRACE( "Device %u (%s) is attached to the core pointer\n",
-                   xinput2_devices[i].deviceid, debugstr_a(xinput2_devices[i].name) );
-            mask.deviceid = xinput2_devices[i].deviceid;
+                   devices[i].deviceid, debugstr_a(devices[i].name) );
+            mask.deviceid = devices[i].deviceid;
             pXISelectEvents( data->display, DefaultRootWindow( data->display ), &mask, 1 );
             data->xi2_state = xi_enabled;
         }
     }
-
-done:
-    wine_tsx11_unlock();
 #endif
 }
 
@@ -333,6 +321,7 @@ static void disable_xinput2(void)
 {
 #ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
     struct x11drv_thread_data *data = x11drv_thread_data();
+    XIDeviceInfo *devices = data->xi2_devices;
     XIEventMask mask;
     int i;
 
@@ -344,20 +333,17 @@ static void disable_xinput2(void)
     mask.mask = NULL;
     mask.mask_len = 0;
 
-    wine_tsx11_lock();
-    for (i = 0; i < xinput2_device_count; ++i)
+    for (i = 0; i < data->xi2_device_count; ++i)
     {
-        if (xinput2_devices[i].use == XISlavePointer &&
-            xinput2_devices[i].attachment == xinput2_core_pointer)
+        if (devices[i].use == XISlavePointer && devices[i].attachment == data->xi2_core_pointer)
         {
-            mask.deviceid = xinput2_devices[i].deviceid;
+            mask.deviceid = devices[i].deviceid;
             pXISelectEvents( data->display, DefaultRootWindow( data->display ), &mask, 1 );
         }
     }
-    pXIFreeDeviceInfo( xinput2_devices );
-    xinput2_devices = NULL;
-    xinput2_device_count = 0;
-    wine_tsx11_unlock();
+    pXIFreeDeviceInfo( devices );
+    data->xi2_devices = NULL;
+    data->xi2_device_count = 0;
 #endif
 }
 
@@ -394,7 +380,6 @@ static BOOL grab_clipping_window( const RECT *clip )
 
     TRACE( "clipping to %s win %lx\n", wine_dbgstr_rect(clip), clip_window );
 
-    wine_tsx11_lock();
     if (!data->clip_hwnd) XUnmapWindow( data->display, clip_window );
     XMoveResizeWindow( data->display, clip_window,
                        clip->left - virtual_screen_rect.left, clip->top - virtual_screen_rect.top,
@@ -410,7 +395,6 @@ static BOOL grab_clipping_window( const RECT *clip )
                        PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
                        GrabModeAsync, GrabModeAsync, clip_window, None, CurrentTime ))
         clipping_cursor = 1;
-    wine_tsx11_unlock();
 
     if (!clipping_cursor)
     {
@@ -1211,14 +1195,12 @@ void CDECL X11DRV_DestroyCursorIcon( HCURSOR handle )
 {
     Cursor cursor;
 
-    wine_tsx11_lock();
-    if (cursor_context && !XFindContext( gdi_display, (XID)handle, cursor_context, (char **)&cursor ))
+    if (!XFindContext( gdi_display, (XID)handle, cursor_context, (char **)&cursor ))
     {
         TRACE( "%p xid %lx\n", handle, cursor );
         XFreeCursor( gdi_display, cursor );
         XDeleteContext( gdi_display, (XID)handle, cursor_context );
     }
-    wine_tsx11_unlock();
 }
 
 /***********************************************************************
@@ -1261,7 +1243,6 @@ BOOL CDECL X11DRV_GetCursorPos(LPPOINT pos)
     unsigned int xstate;
     BOOL ret;
 
-    wine_tsx11_lock();
     ret = XQueryPointer( display, root_window, &root, &child, &rootX, &rootY, &winX, &winY, &xstate );
     if (ret)
     {
@@ -1270,7 +1251,6 @@ BOOL CDECL X11DRV_GetCursorPos(LPPOINT pos)
         pos->y = winY + virtual_screen_rect.top;
         TRACE( "pointer at (%d,%d) server pos %d,%d\n", pos->x, pos->y, old.x, old.y );
     }
-    wine_tsx11_unlock();
     return ret;
 }
 
@@ -1517,6 +1497,7 @@ static void X11DRV_RawMotion( XGenericEventCookie *xev )
     int i, j;
     double dx = 0, dy = 0;
     struct x11drv_thread_data *thread_data = x11drv_thread_data();
+    XIDeviceInfo *devices = thread_data->xi2_devices;
 
     if (!event->valuators.mask_len) return;
     if (thread_data->xi2_state != xi_enabled) return;
@@ -1525,33 +1506,38 @@ static void X11DRV_RawMotion( XGenericEventCookie *xev )
     input.u.mi.dwFlags     = MOUSEEVENTF_MOVE;
     input.u.mi.time        = EVENT_x11_time_to_win32_time( event->time );
     input.u.mi.dwExtraInfo = 0;
+    input.u.mi.dx          = 0;
+    input.u.mi.dy          = 0;
 
-    if (XIMaskIsSet( event->valuators.mask, 0 )) dx = *values++;
-    if (XIMaskIsSet( event->valuators.mask, 1 )) dy = *values++;
-    input.u.mi.dx = dx;
-    input.u.mi.dy = dy;
-
-    wine_tsx11_lock();
-    for (i = 0; i < xinput2_device_count; ++i)
+    for (i = 0; i < thread_data->xi2_device_count; ++i)
     {
-        if (xinput2_devices[i].deviceid != event->deviceid) continue;
-        for (j = 0; j < xinput2_devices[i].num_classes; j++)
+        if (devices[i].deviceid != event->deviceid) continue;
+        for (j = 0; j < devices[i].num_classes; j++)
         {
-            XIValuatorClassInfo *class = (XIValuatorClassInfo *)xinput2_devices[i].classes[j];
+            XIValuatorClassInfo *class = (XIValuatorClassInfo *)devices[i].classes[j];
 
-            if (xinput2_devices[i].classes[j]->type != XIValuatorClass) continue;
-            if (class->min >= class->max) continue;
-            if (class->number == 0)
-                input.u.mi.dx = dx * (virtual_screen_rect.right - virtual_screen_rect.left)
-                                   / (class->max - class->min);
-            else if (class->number == 1)
-                input.u.mi.dy = dy * (virtual_screen_rect.bottom - virtual_screen_rect.top)
-                                   / (class->max - class->min);
+            if (devices[i].classes[j]->type != XIValuatorClass) continue;
+            if (XIMaskIsSet( event->valuators.mask, class->number ))
+            {
+                double val = *values++;
+                if (class->label == x11drv_atom( Rel_X ))
+                {
+                    input.u.mi.dx = dx = val;
+                    if (class->min < class->max)
+                        input.u.mi.dx = val * (virtual_screen_rect.right - virtual_screen_rect.left)
+                                            / (class->max - class->min);
+                }
+                else if (class->label == x11drv_atom( Rel_Y ))
+                {
+                    input.u.mi.dy = dy = val;
+                    if (class->min < class->max)
+                        input.u.mi.dy = val * (virtual_screen_rect.bottom - virtual_screen_rect.top)
+                                            / (class->max - class->min);
+                }
+            }
         }
         break;
     }
-
-    wine_tsx11_unlock();
 
     if (thread_data->warp_serial)
     {

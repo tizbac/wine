@@ -3353,7 +3353,7 @@ msgstr "Böngészési előzmények törlése"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "Ideiglenes internet fájlok\n"
 "Weboldalak, képek és tanúsítványok mentett változatai."
@@ -4099,7 +4099,7 @@ msgid "Same drive.\n"
 msgstr "Ugyanaz a meghajtó.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "Nem a legfelsőbbszintű mappa.\n"
 
 #: winerror.mc:591
@@ -5627,11 +5627,11 @@ msgid "Control ID not found.\n"
 msgstr "Vezérlő ID nem található.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "Érvénytelen legördőlő menü üzenet.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "Nem egy legördülő menü ablak.\n"
 
 #: winerror.mc:2516
@@ -11739,7 +11739,7 @@ msgid "CPU usage"
 msgstr "CPU-használat"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Memória"
 
 #: taskmgr.rc:374
@@ -12475,7 +12475,7 @@ msgstr "Alkalmazás beállítások"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "A Wine különböző Windows verzióként tud viselkedni alkalmazásonként. Ez a "
@@ -12909,11 +12909,11 @@ msgid "Selection Text"
 msgstr "Kijelölt szöveg"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Tooltip háttér"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Tooptip szöveg"
 
 #: winecfg.rc:100
@@ -13351,7 +13351,7 @@ msgid "Filter by&..."
 msgstr "Egyedi rendezés &..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "&Lemeztár"
 
 #: winefile.rc:65

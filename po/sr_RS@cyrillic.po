@@ -3358,7 +3358,7 @@ msgstr " Browsing history "
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 
 #: inetcpl.rc:70
@@ -4134,7 +4134,7 @@ msgid "Same drive.\n"
 msgstr ""
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr ""
 
 #: winerror.mc:591
@@ -5758,11 +5758,11 @@ msgid "Control ID not found.\n"
 msgstr "%s путања није пронађена.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr ""
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr ""
 
 #: winerror.mc:2516
@@ -11742,7 +11742,7 @@ msgstr ""
 
 #: taskmgr.rc:373
 #, fuzzy
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Порука"
 
 #: taskmgr.rc:374
@@ -12486,7 +12486,7 @@ msgstr "Програми"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 
@@ -12941,11 +12941,11 @@ msgstr "Изабери &све"
 
 #: winecfg.rc:98
 #, fuzzy
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "&Умножи позадину"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr ""
 
 #: winecfg.rc:100
@@ -13401,7 +13401,7 @@ msgid "Filter by&..."
 msgstr "Поставке &штампе..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr ""
 
 #: winefile.rc:65

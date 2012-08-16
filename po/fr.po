@@ -3346,7 +3346,7 @@ msgstr "Effacer l'historique de navigation"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "Fichiers internet temporaires\n"
 "Copies en cache de pages web, d'images et de certificats."
@@ -4079,7 +4079,7 @@ msgid "Same drive.\n"
 msgstr "Même lecteur.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "Pas un répertoire racine.\n"
 
 #: winerror.mc:591
@@ -5612,11 +5612,11 @@ msgid "Control ID not found.\n"
 msgstr "ID de contrôle non trouvable.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "Message de boîte combinée invalide.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "Cette fenêtre n'est pas une boîte combinée.\n"
 
 #: winerror.mc:2516
@@ -11845,7 +11845,7 @@ msgid "CPU usage"
 msgstr "Util. processeur"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Util. mémoire"
 
 #: taskmgr.rc:374
@@ -12589,7 +12589,7 @@ msgstr "Paramètres des applications"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine peut imiter différentes versions de Windows pour chaque application. "
@@ -13025,11 +13025,11 @@ msgid "Selection Text"
 msgstr "Texte de la sélection"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Arrière-plan de l'infobulle"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Texte de l'infobulle"
 
 #: winecfg.rc:100
@@ -13473,7 +13473,7 @@ msgid "Filter by&..."
 msgstr "Filtrer &par..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "Barre de &lecteur"
 
 #: winefile.rc:65

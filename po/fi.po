@@ -3318,7 +3318,7 @@ msgstr "Poista selaushistoria"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "Väliaikaiset Internet-tiedostot\n"
 "Välimuistissa olevat kopiot sivuista, kuvista ja varmenteista."
@@ -4050,7 +4050,7 @@ msgid "Same drive.\n"
 msgstr "Sama asema.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "Ei ylätason hakemisto.\n"
 
 #: winerror.mc:591
@@ -5578,11 +5578,11 @@ msgid "Control ID not found.\n"
 msgstr "Kontrollin ID:tä ei löydy.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "Virheellinen viesti yhdistelmälaatikolle.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "Ikkuna ei ole yhdistelmälaatikko.\n"
 
 #: winerror.mc:2516
@@ -11688,7 +11688,7 @@ msgid "CPU usage"
 msgstr "Suorittimenkäyttö"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Muistinkäyttö"
 
 #: taskmgr.rc:374
@@ -12420,7 +12420,7 @@ msgstr "Sovellusten asetukset"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine voi jäljitellä Windowsin eri versioita eri sovelluksille. Tämä "
@@ -12849,11 +12849,11 @@ msgid "Selection Text"
 msgstr "Valintojen teksti"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Työkaluvihjeen tausta"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Työkaluvihjeen teksti"
 
 #: winecfg.rc:100
@@ -13289,7 +13289,7 @@ msgid "Filter by&..."
 msgstr "Suodata..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "&Asemapalkki"
 
 #: winefile.rc:65

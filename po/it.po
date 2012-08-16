@@ -3366,7 +3366,7 @@ msgstr "Elimina la cronologia"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "File temporanei di internet\n"
 "Copie in cache di pagine web, immagini e certificati."
@@ -4112,8 +4112,8 @@ msgid "Same drive.\n"
 msgstr "Stessa unità.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
-msgstr "Cartella non toplevel.\n"
+msgid "Not top-level directory.\n"
+msgstr "Cartella non top-level.\n"
 
 #: winerror.mc:591
 msgid "Directory is not empty.\n"
@@ -5641,12 +5641,12 @@ msgid "Control ID not found.\n"
 msgstr "ID del controllo non trovato.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
-msgstr "Messaggio della combobox non valido.\n"
+msgid "Invalid combo box message.\n"
+msgstr "Messaggio della combo box non valido.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
-msgstr "Non una finestra combobox.\n"
+msgid "Not a combo box window.\n"
+msgstr "Non una finestra combo box.\n"
 
 #: winerror.mc:2516
 msgid "Invalid edit height.\n"
@@ -11824,7 +11824,7 @@ msgid "CPU usage"
 msgstr "Uso della CPU"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Uso della memoria"
 
 #: taskmgr.rc:374
@@ -12567,7 +12567,7 @@ msgstr "Impostazioni delle applicazioni"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine può simulare diverse versioni e stili di Windows per ogni applicazione. "
@@ -13001,12 +13001,12 @@ msgid "Selection Text"
 msgstr "Selezione - Testo"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
-msgstr "ToolTip - Sfondo"
+msgid "Tooltip Background"
+msgstr "Tooltip - Sfondo"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
-msgstr "ToolTip - Testo"
+msgid "Tooltip Text"
+msgstr "Tooltip - Testo"
 
 #: winecfg.rc:100
 msgid "Window Background"
@@ -13447,7 +13447,7 @@ msgid "Filter by&..."
 msgstr "Ordina per &..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "Barra delle &unità"
 
 #: winefile.rc:65

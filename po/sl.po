@@ -3355,7 +3355,7 @@ msgstr "Počisti zgodovino brskanja"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "Začasne internetne datoteke\n"
 "Predpomnjene kopije spletnih strani, slik in potrdil."
@@ -4101,7 +4101,7 @@ msgid "Same drive.\n"
 msgstr "Enak pogon.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "Ni mapa vrhnje ravni.\n"
 
 #: winerror.mc:591
@@ -5629,11 +5629,11 @@ msgid "Control ID not found.\n"
 msgstr "Nadzornega ID-ja ni mogoče najti.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "Neveljavno sporočilo izbirnega polja.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "Ni okno izbirnega polja.\n"
 
 #: winerror.mc:2516
@@ -11764,7 +11764,7 @@ msgid "CPU usage"
 msgstr "Uporaba CPE"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Uporaba pomnilnika"
 
 #: taskmgr.rc:374
@@ -12499,7 +12499,7 @@ msgstr "Nastavitve programov"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine je sposoben oponašanja različnih različic Windows za vsak program "
@@ -12933,11 +12933,11 @@ msgid "Selection Text"
 msgstr "Besedilo izbire"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Ozadje orodnega namiga"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Besedilo orodnega namiga"
 
 #: winecfg.rc:100
@@ -13376,7 +13376,7 @@ msgid "Filter by&..."
 msgstr "Filtriraj &po ..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "Vrstica po&gonov"
 
 #: winefile.rc:65

@@ -5,7 +5,7 @@ msgstr ""
 "Project-Id-Version: Wine\n"
 "Report-Msgid-Bugs-To: http://bugs.winehq.org\n"
 "POT-Creation-Date: N/A\n"
-"PO-Revision-Date: 2012-07-03 01:38+0200\n"
+"PO-Revision-Date: 2012-08-15 20:07+0200\n"
 "Last-Translator: Julian Rüger\n"
 "Language-Team: none\n"
 "Language: German\n"
@@ -2913,7 +2913,7 @@ msgstr "Der private Schlüssel sollte Passwortgeschützt sein."
 
 #: cryptui.rc:171
 msgid "The passwords do not match."
-msgstr "Die Passwörter sind unterschiedlich."
+msgstr "Die Passwörter stimmen nicht überein."
 
 #: cryptui.rc:172
 msgid "Note: The private key for this certificate could not be opened."
@@ -2935,11 +2935,11 @@ msgstr "DirectSound: %s"
 
 #: devenum.rc:34
 msgid "Default WaveOut Device"
-msgstr "Standard WaveOut - Gerät"
+msgstr "Standard WaveOut-Gerät"
 
 #: devenum.rc:35
 msgid "Default MidiOut Device"
-msgstr "Standard MidiOut - Gerät"
+msgstr "Standard MidiOut-Gerät"
 
 #: dinput.rc:40
 msgid "Configure Devices"
@@ -2947,7 +2947,7 @@ msgstr "Geräte konfigurieren"
 
 #: dinput.rc:45
 msgid "Reset"
-msgstr "Rücksetzen"
+msgstr "Reset"
 
 #: dinput.rc:48
 msgid "Player"
@@ -2967,7 +2967,7 @@ msgstr "Zuordnung"
 
 #: dinput.rc:53
 msgid "Show Assigned First"
-msgstr "Zeige Zugewiesene zuerst"
+msgstr "Zugewiesene zuerst anzeigen"
 
 #: dinput.rc:34
 msgid "Action"
@@ -3329,7 +3329,7 @@ msgstr "Gespeicherte Browserdaten löschen"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "&Temporäre Internetdateien\n"
 "Zwischengespeicherte Kopien von Webseiten, Bildern und Zertifikaten."
@@ -3462,16 +3462,17 @@ msgid "Test Force Feedback"
 msgstr "Force Feedback testen"
 
 #: joy.rc:63
-#, fuzzy
-#| msgid "Available formats"
 msgid "Available Effects"
-msgstr "Verfügbare Formate"
+msgstr "Verfügbare Effekte"
 
 #: joy.rc:65
 msgid ""
 "Press any button in the controller to activate the chosen effect. The effect "
 "direction can be changed with the controller axis."
 msgstr ""
+"Drücken Sie eine beliebige Taste am Controller, um den gewählten Effekt zu "
+"aktivieren. Die Richtung des Effekts kann mit der Controller-Achse geändert "
+"werden."
 
 #: joy.rc:28
 msgid "Game Controllers"
@@ -4062,7 +4063,7 @@ msgid "Same drive.\n"
 msgstr "Gleiches Laufwerk.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "Kein Wurzelverzeichnis.\n"
 
 #: winerror.mc:591
@@ -5592,11 +5593,11 @@ msgid "Control ID not found.\n"
 msgstr "Steuerelement-ID nicht gefunden.\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "Ungültige Combobox-Nachricht.\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "Kein Combobox-Fenster.\n"
 
 #: winerror.mc:2516
@@ -11784,7 +11785,7 @@ msgid "CPU usage"
 msgstr "CPU Auslastung"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Speicherausl."
 
 #: taskmgr.rc:374
@@ -12526,7 +12527,7 @@ msgstr "Anwendungseinstellungen"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine kann für jede Anwendung eine unterschiedliche Windows-Version "
@@ -12961,11 +12962,11 @@ msgid "Selection Text"
 msgstr "Auswahltext"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Tooltip-Hintergrund"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Tooltip-Text"
 
 #: winecfg.rc:100
@@ -13403,7 +13404,7 @@ msgid "Filter by&..."
 msgstr "Angaben auswählen&..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "Lauf&werkleiste"
 
 #: winefile.rc:65

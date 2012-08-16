@@ -40,7 +40,6 @@ extern int ds_default_bits_per_sample DECLSPEC_HIDDEN;
  * Predeclare the interface implementation structures
  */
 typedef struct IDirectSoundBufferImpl        IDirectSoundBufferImpl;
-typedef struct IDirectSoundCaptureImpl       IDirectSoundCaptureImpl;
 typedef struct IDirectSoundCaptureBufferImpl IDirectSoundCaptureBufferImpl;
 typedef struct DirectSoundDevice             DirectSoundDevice;
 typedef struct DirectSoundCaptureDevice      DirectSoundCaptureDevice;
@@ -264,6 +263,7 @@ HRESULT IKsPrivatePropertySetImpl_Create(REFIID riid, IKsPropertySet **piks) DEC
 
 HRESULT DSOUND_Create(REFIID riid, void **ppv) DECLSPEC_HIDDEN;
 HRESULT DSOUND_Create8(REFIID riid, void **ppv) DECLSPEC_HIDDEN;
+HRESULT IDirectSoundImpl_Create(IUnknown *outer_unk, REFIID riid, void **ppv, BOOL has_ds8) DECLSPEC_HIDDEN;
 
 /* primary.c */
 
@@ -281,8 +281,8 @@ HRESULT primarybuffer_SetFormat(DirectSoundDevice *device, LPCWAVEFORMATEX wfex)
 LONG capped_refcount_dec(LONG *ref) DECLSPEC_HIDDEN;
 
 /* duplex.c */
- 
-HRESULT DSOUND_FullDuplexCreate(REFIID riid, LPDIRECTSOUNDFULLDUPLEX* ppDSFD) DECLSPEC_HIDDEN;
+
+HRESULT DSOUND_FullDuplexCreate(REFIID riid, void **ppv) DECLSPEC_HIDDEN;
 
 /* mixer.c */
 void DSOUND_CheckEvent(const IDirectSoundBufferImpl *dsb, DWORD playpos, int len) DECLSPEC_HIDDEN;
@@ -299,8 +299,9 @@ void DSOUND_Calc3DBuffer(IDirectSoundBufferImpl *dsb) DECLSPEC_HIDDEN;
 
 /* capture.c */
  
-HRESULT DSOUND_CaptureCreate(REFIID riid, LPDIRECTSOUNDCAPTURE *ppDSC) DECLSPEC_HIDDEN;
-HRESULT DSOUND_CaptureCreate8(REFIID riid, LPDIRECTSOUNDCAPTURE8 *ppDSC8) DECLSPEC_HIDDEN;
+HRESULT DSOUND_CaptureCreate(REFIID riid, void **ppv) DECLSPEC_HIDDEN;
+HRESULT DSOUND_CaptureCreate8(REFIID riid, void **ppv) DECLSPEC_HIDDEN;
+HRESULT IDirectSoundCaptureImpl_Create(IUnknown *outer_unk, REFIID riid, void **ppv, BOOL has_dsc8) DECLSPEC_HIDDEN;
 
 #define STATE_STOPPED   0
 #define STATE_STARTING  1

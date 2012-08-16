@@ -3317,7 +3317,7 @@ msgstr "閲覧履歴の削除"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "インターネット一時ファイル\n"
 "キャッシュされたウェブページや画像、証明書です。"
@@ -4047,7 +4047,7 @@ msgid "Same drive.\n"
 msgstr "同じドライブです。\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "最上位のディレクトリではありません。\n"
 
 #: winerror.mc:591
@@ -5576,11 +5576,11 @@ msgid "Control ID not found.\n"
 msgstr "コントロール識別子が見つかりません。\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "コンボボックス メッセージが正しくありません。\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "コンボボックス ウィンドウではありません。\n"
 
 #: winerror.mc:2516
@@ -11673,7 +11673,7 @@ msgid "CPU usage"
 msgstr "CPU 使用率"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "メモリ使用量"
 
 #: taskmgr.rc:374
@@ -12406,7 +12406,7 @@ msgstr "アプリケーション設定"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine はアプリケーションによって異なる Windows のバージョンをエミュレートでき"
@@ -12838,11 +12838,11 @@ msgid "Selection Text"
 msgstr "選択項目のテキスト"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "ヒントの背景"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "ヒントのテキスト"
 
 #: winecfg.rc:100
@@ -13279,7 +13279,7 @@ msgid "Filter by&..."
 msgstr "フィルタ(&.)..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "ドライブ バー(&D)"
 
 #: winefile.rc:65

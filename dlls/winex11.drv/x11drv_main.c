@@ -56,15 +56,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(x11drv);
 WINE_DECLARE_DEBUG_CHANNEL(synchronous);
 WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
-static CRITICAL_SECTION X11DRV_CritSection;
-static CRITICAL_SECTION_DEBUG critsect_debug =
-{
-    0, 0, &X11DRV_CritSection,
-    { &critsect_debug.ProcessLocksList, &critsect_debug.ProcessLocksList },
-      0, 0, { (DWORD_PTR)(__FILE__ ": X11DRV_CritSection") }
-};
-static CRITICAL_SECTION X11DRV_CritSection = { &critsect_debug, -1, 0, 0, 0, 0 };
-
 static Screen *screen;
 Visual *visual;
 XPixmapFormatValues **pixmap_formats;
@@ -127,6 +118,8 @@ static const char * const atom_names[NB_XATOMS - FIRST_XATOM] =
     "RAW_ASCENT",
     "RAW_DESCENT",
     "RAW_CAP_HEIGHT",
+    "Rel X",
+    "Rel Y",
     "WM_PROTOCOLS",
     "WM_DELETE_WINDOW",
     "WM_STATE",
@@ -242,12 +235,9 @@ static inline BOOL ignore_error( Display *display, XErrorEvent *event )
  *
  * Setup a callback function that will be called on an X error.  The
  * callback must return non-zero if the error is the one it expected.
- * This function acquires the x11 lock; X11DRV_check_error must be
- * called in all cases to release it.
  */
 void X11DRV_expect_error( Display *display, x11drv_error_callback callback, void *arg )
 {
-    wine_tsx11_lock();
     err_callback         = callback;
     err_callback_display = display;
     err_callback_arg     = arg;
@@ -260,16 +250,12 @@ void X11DRV_expect_error( Display *display, x11drv_error_callback callback, void
  *		X11DRV_check_error
  *
  * Check if an expected X11 error occurred; return non-zero if yes.
- * Also release the x11 lock obtained in X11DRV_expect_error.
  * The caller is responsible for calling XSync first if necessary.
  */
 int X11DRV_check_error(void)
 {
-    int ret;
     err_callback = NULL;
-    ret = err_callback_result;
-    wine_tsx11_unlock();
-    return ret;
+    return err_callback_result;
 }
 
 
@@ -303,23 +289,6 @@ static int error_handler( Display *display, XErrorEvent *error_evt )
     old_error_handler( display, error_evt );
     return 0;
 }
-
-/***********************************************************************
- *		wine_tsx11_lock   (X11DRV.@)
- */
-void CDECL wine_tsx11_lock(void)
-{
-    EnterCriticalSection( &X11DRV_CritSection );
-}
-
-/***********************************************************************
- *		wine_tsx11_unlock   (X11DRV.@)
- */
-void CDECL wine_tsx11_unlock(void)
-{
-    LeaveCriticalSection( &X11DRV_CritSection );
-}
-
 
 /***********************************************************************
  *		init_pixmap_formats
@@ -568,6 +537,10 @@ static BOOL process_attach(void)
 
     XInternAtoms( display, (char **)atom_names, NB_XATOMS - FIRST_XATOM, False, X11DRV_Atoms );
 
+    winContext = XUniqueContext();
+    win_data_context = XUniqueContext();
+    cursor_context = XUniqueContext();
+
     if (TRACE_ON(synchronous)) XSynchronize( display, True );
 
     xinerama_init( WidthOfScreen(screen), HeightOfScreen(screen) );
@@ -651,10 +624,8 @@ struct x11drv_thread_data *x11drv_init_thread_data(void)
         ERR( "could not create data\n" );
         ExitProcess(1);
     }
-    wine_tsx11_lock();
     if (!(data->display = XOpenDisplay(NULL)))
     {
-        wine_tsx11_unlock();
         ERR_(winediag)( "x11drv: Can't open display: %s. Please ensure that your X server is running and that $DISPLAY is set correctly.\n", XDisplayName(NULL));
         ExitProcess(1);
     }
@@ -667,7 +638,6 @@ struct x11drv_thread_data *x11drv_init_thread_data(void)
 #endif
 
     if (TRACE_ON(synchronous)) XSynchronize( data->display, True );
-    wine_tsx11_unlock();
 
     set_queue_display_fd( data->display );
     TlsSetValue( thread_data_tls_index, data );
@@ -720,7 +690,7 @@ void CDECL X11DRV_SetScreenSaveActive(BOOL bActivate)
     int timeout, interval, prefer_blanking, allow_exposures;
     static int last_timeout = 15 * 60;
 
-    wine_tsx11_lock();
+    XLockDisplay( gdi_display );
     XGetScreenSaver(gdi_display, &timeout, &interval, &prefer_blanking,
                     &allow_exposures);
     if (timeout) last_timeout = timeout;
@@ -728,5 +698,5 @@ void CDECL X11DRV_SetScreenSaveActive(BOOL bActivate)
     timeout = bActivate ? last_timeout : 0;
     XSetScreenSaver(gdi_display, timeout, interval, prefer_blanking,
                     allow_exposures);
-    wine_tsx11_unlock();
+    XUnlockDisplay( gdi_display );
 }

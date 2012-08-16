@@ -3344,7 +3344,7 @@ msgstr "Очистити історію перегляду"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "Тимчасові файли інтернету\n"
 "Кешовані копії сторінок, зображень та сертифікатів."
@@ -4088,7 +4088,7 @@ msgid "Same drive.\n"
 msgstr "Той же привід.\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "Тека не верхнього рівня.\n"
 
 #: winerror.mc:591
@@ -5616,11 +5616,11 @@ msgid "Control ID not found.\n"
 msgstr ""
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr ""
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr ""
 
 #: winerror.mc:2516
@@ -11746,7 +11746,7 @@ msgid "CPU usage"
 msgstr "Викорис. ЦП"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "Викорис. пам'яті"
 
 #: taskmgr.rc:374
@@ -12480,7 +12480,7 @@ msgstr "Налаштування програми"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine може імітувати різні версії Windows для кожної програми. Ця вкладка "
@@ -12912,11 +12912,11 @@ msgid "Selection Text"
 msgstr "Виділення - текст"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "Підказка - фон"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "Підказка - текст"
 
 #: winecfg.rc:100
@@ -13349,7 +13349,7 @@ msgid "Filter by&..."
 msgstr "Фільтрувати за&..."
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "Панель &дисків"
 
 #: winefile.rc:65

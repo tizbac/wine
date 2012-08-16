@@ -3895,7 +3895,7 @@ int __thiscall basic_stringbuf_wchar__Getstate(basic_stringbuf_wchar *this, IOSB
 DEFINE_THISCALL_WRAPPER(basic_stringbuf_wchar__Init, 16)
 void __thiscall basic_stringbuf_wchar__Init(basic_stringbuf_wchar *this, const wchar_t *str, MSVCP_size_t count, int state)
 {
-    TRACE("(%p, %p, %ld, %d)\n", this, str, count, state);
+    TRACE("(%p, %p, %lu, %d)\n", this, str, count, state);
 
     basic_streambuf_wchar__Init_empty(&this->base);
 
@@ -9574,7 +9574,7 @@ basic_istream_wchar* __cdecl basic_istream_short_read_bstr(
                 basic_istream_wchar_get_basic_ios(istream)->strbuf->loc));
 }
 
-basic_istream_wchar* basic_istream_read_str(basic_istream_wchar *istream, wchar_t *str, const ctype_wchar *ctype)
+static basic_istream_wchar* basic_istream_read_str(basic_istream_wchar *istream, wchar_t *str, const ctype_wchar *ctype)
 {
     basic_ios_wchar *base = basic_istream_wchar_get_basic_ios(istream);
     IOSB_iostate state = IOSTATE_failbit;

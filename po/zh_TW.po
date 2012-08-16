@@ -3280,7 +3280,7 @@ msgstr "刪除瀏覽紀錄"
 #: inetcpl.rc:68
 msgid ""
 "Temporary internet files\n"
-"Cached copies of webpages, images and certificates."
+"Cached copies of web pages, images and certificates."
 msgstr ""
 "暫時的網際網路檔案\n"
 "已快取的網頁、影像和憑證。"
@@ -4009,7 +4009,9 @@ msgid "Same drive.\n"
 msgstr "相同儲存裝置。\n"
 
 #: winerror.mc:586
-msgid "Not toplevel directory.\n"
+#, fuzzy
+#| msgid "Not toplevel directory.\n"
+msgid "Not top-level directory.\n"
 msgstr "並非最上層目錄。\n"
 
 #: winerror.mc:591
@@ -5537,11 +5539,11 @@ msgid "Control ID not found.\n"
 msgstr "找不到控制識別號。\n"
 
 #: winerror.mc:2506
-msgid "Invalid combobox message.\n"
+msgid "Invalid combo box message.\n"
 msgstr "無效的複合方塊訊息。\n"
 
 #: winerror.mc:2511
-msgid "Not a combobox window.\n"
+msgid "Not a combo box window.\n"
 msgstr "不是複合方塊視窗。\n"
 
 #: winerror.mc:2516
@@ -11546,7 +11548,7 @@ msgid "CPU usage"
 msgstr "CPU 使用率"
 
 #: taskmgr.rc:373
-msgid "MEM usage"
+msgid "Mem usage"
 msgstr "記憶體用量"
 
 #: taskmgr.rc:374
@@ -12273,7 +12275,7 @@ msgstr "應用程式設定"
 #: winecfg.rc:146
 msgid ""
 "Wine can mimic different Windows versions for each application. This tab is "
-"linked to the Libraries and Graphics tabs to allow you to change systemwide "
+"linked to the Libraries and Graphics tabs to allow you to change system-wide "
 "or per-application settings in those tabs as well."
 msgstr ""
 "Wine 可以對不同程式偽裝成不同版本的 Windows。「函式庫」與「顯示」分頁將連結到"
@@ -12701,11 +12703,11 @@ msgid "Selection Text"
 msgstr "選擇區文字"
 
 #: winecfg.rc:98
-msgid "ToolTip Background"
+msgid "Tooltip Background"
 msgstr "工具提示背景"
 
 #: winecfg.rc:99
-msgid "ToolTip Text"
+msgid "Tooltip Text"
 msgstr "工具提示文字"
 
 #: winecfg.rc:100
@@ -13137,7 +13139,7 @@ msgid "Filter by&..."
 msgstr "篩選依照…(&.)"
 
 #: winefile.rc:63
-msgid "&Drivebar"
+msgid "&Drive Bar"
 msgstr "儲存裝置列表(&D)"
 
 #: winefile.rc:65

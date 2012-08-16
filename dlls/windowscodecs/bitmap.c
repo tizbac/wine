@@ -43,6 +43,9 @@ typedef struct BitmapImpl {
     UINT width, height;
     UINT stride;
     UINT bpp;
+    WICPixelFormatGUID pixelformat;
+    double dpix, dpiy;
+    CRITICAL_SECTION cs;
 } BitmapImpl;
 
 typedef struct BitmapLockImpl {
@@ -195,9 +198,10 @@ static HRESULT WINAPI BitmapLockImpl_GetDataPointer(IWICBitmapLock *iface,
 static HRESULT WINAPI BitmapLockImpl_GetPixelFormat(IWICBitmapLock *iface,
     WICPixelFormatGUID *pPixelFormat)
 {
-    FIXME("(%p,%p)\n", iface, pPixelFormat);
+    BitmapLockImpl *This = impl_from_IWICBitmapLock(iface);
+    TRACE("(%p,%p)\n", iface, pPixelFormat);
 
-    return E_NOTIMPL;
+    return IWICBitmap_GetPixelFormat(&This->parent->IWICBitmap_iface, pPixelFormat);
 }
 
 static const IWICBitmapLockVtbl BitmapLockImpl_Vtbl = {
@@ -254,6 +258,8 @@ static ULONG WINAPI BitmapImpl_Release(IWICBitmap *iface)
     if (ref == 0)
     {
         if (This->palette) IWICPalette_Release(This->palette);
+        This->cs.DebugInfo->Spare[0] = 0;
+        DeleteCriticalSection(&This->cs);
         HeapFree(GetProcessHeap(), 0, This->data);
         HeapFree(GetProcessHeap(), 0, This);
     }
@@ -264,25 +270,47 @@ static ULONG WINAPI BitmapImpl_Release(IWICBitmap *iface)
 static HRESULT WINAPI BitmapImpl_GetSize(IWICBitmap *iface,
     UINT *puiWidth, UINT *puiHeight)
 {
-    FIXME("(%p,%p,%p)\n", iface, puiWidth, puiHeight);
+    BitmapImpl *This = impl_from_IWICBitmap(iface);
+    TRACE("(%p,%p,%p)\n", iface, puiWidth, puiHeight);
 
-    return E_NOTIMPL;
+    if (!puiWidth || !puiHeight)
+        return E_INVALIDARG;
+
+    *puiWidth = This->width;
+    *puiHeight = This->height;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI BitmapImpl_GetPixelFormat(IWICBitmap *iface,
     WICPixelFormatGUID *pPixelFormat)
 {
-    FIXME("(%p,%p)\n", iface, pPixelFormat);
+    BitmapImpl *This = impl_from_IWICBitmap(iface);
+    TRACE("(%p,%p)\n", iface, pPixelFormat);
 
-    return E_NOTIMPL;
+    if (!pPixelFormat)
+        return E_INVALIDARG;
+
+    memcpy(pPixelFormat, &This->pixelformat, sizeof(GUID));
+
+    return S_OK;
 }
 
 static HRESULT WINAPI BitmapImpl_GetResolution(IWICBitmap *iface,
     double *pDpiX, double *pDpiY)
 {
-    FIXME("(%p,%p,%p)\n", iface, pDpiX, pDpiY);
+    BitmapImpl *This = impl_from_IWICBitmap(iface);
+    TRACE("(%p,%p,%p)\n", iface, pDpiX, pDpiY);
 
-    return E_NOTIMPL;
+    if (!pDpiX || !pDpiY)
+        return E_INVALIDARG;
+
+    EnterCriticalSection(&This->cs);
+    *pDpiX = This->dpix;
+    *pDpiY = This->dpiy;
+    LeaveCriticalSection(&This->cs);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI BitmapImpl_CopyPalette(IWICBitmap *iface,
@@ -300,9 +328,11 @@ static HRESULT WINAPI BitmapImpl_CopyPalette(IWICBitmap *iface,
 static HRESULT WINAPI BitmapImpl_CopyPixels(IWICBitmap *iface,
     const WICRect *prc, UINT cbStride, UINT cbBufferSize, BYTE *pbBuffer)
 {
-    FIXME("(%p,%p,%u,%u,%p)\n", iface, prc, cbStride, cbBufferSize, pbBuffer);
+    BitmapImpl *This = impl_from_IWICBitmap(iface);
+    TRACE("(%p,%p,%u,%u,%p)\n", iface, prc, cbStride, cbBufferSize, pbBuffer);
 
-    return E_NOTIMPL;
+    return copy_pixels(This->bpp, This->data, This->width, This->height,
+        This->stride, prc, cbStride, cbBufferSize, pbBuffer);
 }
 
 static HRESULT WINAPI BitmapImpl_Lock(IWICBitmap *iface, const WICRect *prcLock,
@@ -391,9 +421,15 @@ static HRESULT WINAPI BitmapImpl_SetPalette(IWICBitmap *iface, IWICPalette *pIPa
 static HRESULT WINAPI BitmapImpl_SetResolution(IWICBitmap *iface,
     double dpiX, double dpiY)
 {
-    FIXME("(%p,%f,%f)\n", iface, dpiX, dpiY);
+    BitmapImpl *This = impl_from_IWICBitmap(iface);
+    TRACE("(%p,%f,%f)\n", iface, dpiX, dpiY);
 
-    return E_NOTIMPL;
+    EnterCriticalSection(&This->cs);
+    This->dpix = dpiX;
+    This->dpiy = dpiY;
+    LeaveCriticalSection(&This->cs);
+
+    return S_OK;
 }
 
 static const IWICBitmapVtbl BitmapImpl_Vtbl = {
@@ -426,7 +462,7 @@ HRESULT BitmapImpl_Create(UINT uiWidth, UINT uiHeight,
     datasize = stride * uiHeight;
 
     This = HeapAlloc(GetProcessHeap(), 0, sizeof(BitmapImpl));
-    data = HeapAlloc(GetProcessHeap(), 0, datasize);
+    data = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, datasize);
     if (!This || !data)
     {
         HeapFree(GetProcessHeap(), 0, This);
@@ -444,6 +480,10 @@ HRESULT BitmapImpl_Create(UINT uiWidth, UINT uiHeight,
     This->height = uiHeight;
     This->stride = stride;
     This->bpp = bpp;
+    memcpy(&This->pixelformat, pixelFormat, sizeof(GUID));
+    This->dpix = This->dpiy = 0.0;
+    InitializeCriticalSection(&This->cs);
+    This->cs.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": BitmapImpl.lock");
 
     *ppIBitmap = &This->IWICBitmap_iface;
 
