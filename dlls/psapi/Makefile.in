@@ -2,5 +2,6 @@ MODULE    = psapi.dll
 IMPORTLIB = psapi
 
 RC_SRCS = version.rc
-
+C_SRCS = \
+	main.c
 @MAKE_DLL_RULES@
