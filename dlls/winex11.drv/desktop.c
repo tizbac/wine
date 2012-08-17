@@ -138,6 +138,8 @@ Window CDECL X11DRV_create_desktop( UINT width, UINT height )
 
     TRACE( "%u x %u\n", width, height );
 
+    wine_tsx11_lock();
+
     /* Create window */
     win_attr.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask | EnterWindowMask |
                           PointerMotionMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask;
@@ -160,6 +162,7 @@ Window CDECL X11DRV_create_desktop( UINT width, UINT height )
             1);
     }
     XFlush( display );
+    wine_tsx11_unlock();
     if (win != None) X11DRV_init_desktop( win, width, height );
     return win;
 }
@@ -227,6 +230,7 @@ static void update_desktop_fullscreen( unsigned int width, unsigned int height)
 
     TRACE("action=%li\n", xev.xclient.data.l[0]);
 
+    wine_tsx11_lock();
     XSendEvent( display, DefaultRootWindow(display), False,
                 SubstructureRedirectMask | SubstructureNotifyMask, &xev );
 
@@ -234,6 +238,7 @@ static void update_desktop_fullscreen( unsigned int width, unsigned int height)
     xev.xclient.data.l[2] = x11drv_atom(_NET_WM_STATE_MAXIMIZED_HORZ);
     XSendEvent( display, DefaultRootWindow(display), False,
                 SubstructureRedirectMask | SubstructureNotifyMask, &xev );
+    wine_tsx11_unlock();
 }
 
 /***********************************************************************

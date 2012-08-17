@@ -176,6 +176,7 @@ static Cursor get_empty_cursor(void)
     static Cursor cursor;
     static const char data[] = { 0 };
 
+    wine_tsx11_lock();
     if (!cursor)
     {
         XColor bg;
@@ -185,12 +186,11 @@ static Cursor get_empty_cursor(void)
         pixmap = XCreateBitmapFromData( gdi_display, root_window, data, 1, 1 );
         if (pixmap)
         {
-            Cursor new = XCreatePixmapCursor( gdi_display, pixmap, pixmap, &bg, &bg, 0, 0 );
-            if (InterlockedCompareExchangePointer( (void **)&cursor, (void *)new, 0 ))
-                XFreeCursor( gdi_display, new );
+            cursor = XCreatePixmapCursor( gdi_display, pixmap, pixmap, &bg, &bg, 0, 0 );
             XFreePixmap( gdi_display, pixmap );
         }
     }
+    wine_tsx11_unlock();
     return cursor;
 }
 
@@ -207,7 +207,7 @@ void set_window_cursor( Window window, HCURSOR handle )
         /* try to create it */
         if (!(cursor = create_cursor( handle ))) return;
 
-        XLockDisplay( gdi_display );
+        wine_tsx11_lock();
         if (!XFindContext( gdi_display, (XID)handle, cursor_context, (char **)&prev ))
         {
             /* someone else was here first */
@@ -219,7 +219,7 @@ void set_window_cursor( Window window, HCURSOR handle )
             XSaveContext( gdi_display, (XID)handle, cursor_context, (char *)cursor );
             TRACE( "cursor %p created %lx\n", handle, cursor );
         }
-        XUnlockDisplay( gdi_display );
+        wine_tsx11_unlock();
     }
 
     XDefineCursor( gdi_display, window, cursor );
@@ -271,6 +271,7 @@ static void enable_xinput2(void)
     }
     if (data->xi2_state == xi_unavailable) return;
 
+    wine_tsx11_lock();
     if (data->xi2_devices) pXIFreeDeviceInfo( data->xi2_devices );
     data->xi2_devices = devices = pXIQueryDevice( data->display, XIAllDevices, &data->xi2_device_count );
     for (i = 0; i < data->xi2_device_count; ++i)
@@ -311,6 +312,8 @@ static void enable_xinput2(void)
             data->xi2_state = xi_enabled;
         }
     }
+
+    wine_tsx11_unlock();
 #endif
 }
 
@@ -333,6 +336,7 @@ static void disable_xinput2(void)
     mask.mask = NULL;
     mask.mask_len = 0;
 
+    wine_tsx11_lock();
     for (i = 0; i < data->xi2_device_count; ++i)
     {
         if (devices[i].use == XISlavePointer && devices[i].attachment == data->xi2_core_pointer)
@@ -344,6 +348,7 @@ static void disable_xinput2(void)
     pXIFreeDeviceInfo( devices );
     data->xi2_devices = NULL;
     data->xi2_device_count = 0;
+    wine_tsx11_unlock();
 #endif
 }
 
@@ -380,6 +385,7 @@ static BOOL grab_clipping_window( const RECT *clip )
 
     TRACE( "clipping to %s win %lx\n", wine_dbgstr_rect(clip), clip_window );
 
+    wine_tsx11_lock();
     if (!data->clip_hwnd) XUnmapWindow( data->display, clip_window );
     XMoveResizeWindow( data->display, clip_window,
                        clip->left - virtual_screen_rect.left, clip->top - virtual_screen_rect.top,
@@ -395,6 +401,7 @@ static BOOL grab_clipping_window( const RECT *clip )
                        PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
                        GrabModeAsync, GrabModeAsync, clip_window, None, CurrentTime ))
         clipping_cursor = 1;
+    wine_tsx11_unlock();
 
     if (!clipping_cursor)
     {
@@ -1195,12 +1202,14 @@ void CDECL X11DRV_DestroyCursorIcon( HCURSOR handle )
 {
     Cursor cursor;
 
+    wine_tsx11_lock();
     if (!XFindContext( gdi_display, (XID)handle, cursor_context, (char **)&cursor ))
     {
         TRACE( "%p xid %lx\n", handle, cursor );
         XFreeCursor( gdi_display, cursor );
         XDeleteContext( gdi_display, (XID)handle, cursor_context );
     }
+    wine_tsx11_unlock();
 }
 
 /***********************************************************************
@@ -1243,6 +1252,7 @@ BOOL CDECL X11DRV_GetCursorPos(LPPOINT pos)
     unsigned int xstate;
     BOOL ret;
 
+    wine_tsx11_lock();
     ret = XQueryPointer( display, root_window, &root, &child, &rootX, &rootY, &winX, &winY, &xstate );
     if (ret)
     {
@@ -1251,6 +1261,7 @@ BOOL CDECL X11DRV_GetCursorPos(LPPOINT pos)
         pos->y = winY + virtual_screen_rect.top;
         TRACE( "pointer at (%d,%d) server pos %d,%d\n", pos->x, pos->y, old.x, old.y );
     }
+    wine_tsx11_unlock();
     return ret;
 }
 
@@ -1509,6 +1520,7 @@ static void X11DRV_RawMotion( XGenericEventCookie *xev )
     input.u.mi.dx          = 0;
     input.u.mi.dy          = 0;
 
+    wine_tsx11_lock();
     for (i = 0; i < thread_data->xi2_device_count; ++i)
     {
         if (devices[i].deviceid != event->deviceid) continue;
@@ -1538,6 +1550,8 @@ static void X11DRV_RawMotion( XGenericEventCookie *xev )
         }
         break;
     }
+
+    wine_tsx11_unlock();
 
     if (thread_data->warp_serial)
     {

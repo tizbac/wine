@@ -242,9 +242,10 @@ void X11DRV_XDND_EnterEvent( HWND hWnd, XClientMessageEvent *event )
 
     if (TRACE_ON(xdnd))
     {
-        unsigned int i;
+        unsigned int i = 0;
 
-        for (i = 0; i < count; i++)
+        wine_tsx11_lock();
+        for (; i < count; i++)
         {
             if (xdndtypes[i] != 0)
             {
@@ -253,6 +254,7 @@ void X11DRV_XDND_EnterEvent( HWND hWnd, XClientMessageEvent *event )
                 XFree(pn);
             }
         }
+        wine_tsx11_unlock();
     }
 
     /* Do a one-time data read and cache results */
