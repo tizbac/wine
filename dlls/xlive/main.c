@@ -792,3 +792,25 @@ INT WINAPI XUserSetPropertyEx (DWORD dwUserIndex, DWORD dwPropertyId, DWORD cbVa
     CloseHandle(hFile);
     return ERROR_SUCCESS;
 }
+
+DWORD WINAPI XLIVE_76(DWORD a1)
+{
+    FIXME("unk(%d), returning 0\n",a1);
+    return 0;
+}
+DWORD WINAPI XLIVE_78(DWORD a1,DWORD a2,DWORD a3)
+{
+    FIXME("unk %d %d %d, returning 0\n",a1,a2,a3);
+    return 0;
+
+}
+
+void WINAPI XUserSetProperty(
+         DWORD dwUserIndex,
+         DWORD dwPropertyId,
+         DWORD cbValue,
+         CONST VOID *pvValue
+)
+{
+    XUserSetPropertyEx(dwUserIndex,dwPropertyId,cbValue,pvValue,0x0);
+}

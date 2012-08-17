@@ -59,9 +59,9 @@
 72 stub -noname @
 73 stdcall -noname XNetGetTitleXnAddr(long)
 75 stdcall -noname XNetGetEthernetLinkStatus()
-76 stub -noname @
+76 stdcall -noname XLIVE_76(long)
 77 stub -noname @
-78 stub -noname @
+78 stdcall -noname XLIVE_78(long long long)
 79 stub -noname @
 81 stub -noname @
 82 stub -noname @
@@ -151,7 +151,7 @@
 5273 stub -noname @
 5274 stub -noname @
 5275 stub -noname @
-5276 stub -noname @
+5276 stdcall -noname XUserSetProperty(long long long long)
 5277 stdcall -noname XUserSetContext(long long long)
 5278 stdcall -noname XUserWriteAchievements(long long long)
 5279 stub -noname @
