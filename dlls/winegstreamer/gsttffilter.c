@@ -117,8 +117,8 @@ typedef struct GstTfImpl {
     TransformFilter tf;
     IUnknown *seekthru_unk;
     const char *gstreamer_name;
-    GstElement *filter;
-    GstPad *my_src, *my_sink, *their_src, *their_sink;
+    GstElement *filter, *filter2;
+    GstPad *my_src, *my_sink, *their_src, *their_sink, *their_src2, *their_sink2;
     LONG cbBuffer;
 } GstTfImpl;
 
@@ -127,6 +127,8 @@ static HRESULT WINAPI Gstreamer_transform_ProcessBegin(TransformFilter *iface) {
     int ret;
 
     ret = gst_element_set_state(This->filter, GST_STATE_PLAYING);
+    if (This->filter2)
+        gst_element_set_state(This->filter2, GST_STATE_PLAYING);
     TRACE("Returned: %i\n", ret);
     return S_OK;
 }
@@ -270,6 +272,8 @@ static HRESULT WINAPI Gstreamer_transform_ProcessEnd(TransformFilter *iface) {
 
     LeaveCriticalSection(&This->tf.csReceive);
     ret = gst_element_set_state(This->filter, GST_STATE_READY);
+    if (This->filter2)
+        gst_element_set_state(This->filter2, GST_STATE_READY);
     EnterCriticalSection(&This->tf.csReceive);
     TRACE("Returned: %i\n", ret);
     return S_OK;
@@ -280,6 +284,9 @@ static void Gstreamer_transform_pad_added(GstElement *filter, GstPad *pad, GstTf
     int ret;
     if (!GST_PAD_IS_SRC(pad))
         return;
+
+    if (!This->their_src)
+        gst_object_ref(pad);
 
     ret = gst_pad_link(pad, This->my_sink);
     if (ret < 0)
@@ -363,7 +370,14 @@ static HRESULT Gstreamer_transform_ConnectInput(GstTfImpl *This, const AM_MEDIA_
     found = !!This->their_src;
     if (!found)
         g_signal_connect(This->filter, "pad-added", G_CALLBACK(Gstreamer_transform_pad_added), This);
-    ret = gst_pad_link(This->my_src, This->their_sink);
+
+    if (This->filter2) {
+        ret = gst_pad_link(This->my_src, This->their_sink2);
+        if (ret >= 0)
+            ret = gst_pad_link(This->their_src2, This->their_sink);
+    } else
+        ret = gst_pad_link(This->my_src, This->their_sink);
+
     if (ret < 0) {
         WARN("Failed to link with %i\n", ret);
         return E_FAIL;
@@ -388,16 +402,36 @@ static HRESULT WINAPI Gstreamer_transform_Cleanup(TransformFilter *tf, PIN_DIREC
             gst_element_set_state(This->filter, GST_STATE_NULL);
             gst_object_unref(This->filter);
         }
+        if (This->filter2) {
+            gst_element_set_state(This->filter2, GST_STATE_NULL);
+            gst_object_unref(This->filter2);
+        }
         This->filter = NULL;
-        if (This->my_src) {
-            gst_pad_unlink(This->my_src, This->their_sink);
-            gst_object_unref(This->my_src);
-        }
-        if (This->my_sink) {
+
+        if (This->filter2) {
+            gst_pad_unlink(This->my_src, This->their_sink2);
+            gst_pad_unlink(This->their_src2, This->their_sink);
             gst_pad_unlink(This->their_src, This->my_sink);
+        } else if (This->my_src)
+            gst_pad_unlink(This->my_src, This->their_sink);
+        if (This->their_src)
+            gst_pad_unlink(This->their_src, This->my_sink);
+
+        if (This->my_src)
+            gst_object_unref(This->my_src);
+        if (This->their_sink)
+            gst_object_unref(This->their_sink);
+        if (This->their_src)
+            gst_object_unref(This->their_src);
+        if (This->their_sink2)
+            gst_object_unref(This->their_sink2);
+        if (This->their_src2)
+            gst_object_unref(This->their_src2);
+        if (This->my_sink)
             gst_object_unref(This->my_sink);
-        }
         This->my_sink = This->my_src = This->their_sink = This->their_src = NULL;
+        This->their_src2 = This->their_sink2 = NULL;
+        This->filter2 = NULL;
         FIXME("%p stub\n", This);
     }
     return S_OK;
@@ -668,19 +702,73 @@ static HRESULT WINAPI Gstreamer_YUV_SetMediaType(TransformFilter *tf, PIN_DIRECT
                                  "format", GST_TYPE_FOURCC, amt->subtype.Data1,
                                  "width", G_TYPE_INT, width,
                                  "height", G_TYPE_INT, height,
-                                 "framerate", GST_TYPE_FRACTION, 10000000, avgtime,
+                                 "framerate", GST_TYPE_FRACTION, 10000000, (int)avgtime,
                                  NULL);
     capsout = gst_caps_new_simple("video/x-raw-rgb",
-                                  "endianness", G_TYPE_INT, 4321,
-                                  "width", G_TYPE_INT, width,
-                                  "height", G_TYPE_INT, height,
-                                  "framerate", GST_TYPE_FRACTION, 10000000, avgtime,
                                   "bpp", G_TYPE_INT, 24,
                                   "depth", G_TYPE_INT, 24,
+                                  "endianness", G_TYPE_INT, 4321,
                                   "red_mask", G_TYPE_INT, 0xff,
                                   "green_mask", G_TYPE_INT, 0xff00,
                                   "blue_mask", G_TYPE_INT, 0xff0000,
+                                  "width", G_TYPE_INT, width,
+                                  "height", G_TYPE_INT, height,
+                                  "framerate", GST_TYPE_FRACTION, 10000000, (int)avgtime,
                                    NULL);
+
+    This->filter2 = gst_element_factory_make("videoflip", NULL);
+    if (This->filter2) {
+        GstIterator *it;
+        int done = 0;
+
+        g_object_set(This->filter2, "method", 5, NULL);
+
+        it = gst_element_iterate_sink_pads(This->filter2);
+        while (!done) {
+            gpointer item;
+
+            switch (gst_iterator_next(it, &item)) {
+            case GST_ITERATOR_RESYNC:
+                gst_iterator_resync (it);
+                break;
+            case GST_ITERATOR_OK:
+                This->their_sink2 = item;
+            case GST_ITERATOR_ERROR:
+            case GST_ITERATOR_DONE:
+                done = 1;
+                break;
+            }
+        }
+        gst_iterator_free(it);
+
+        done = 0;
+        it = gst_element_iterate_src_pads(This->filter2);
+        while (!done) {
+            gpointer item;
+
+            switch (gst_iterator_next(it, &item)) {
+            case GST_ITERATOR_RESYNC:
+                gst_iterator_resync (it);
+                break;
+            case GST_ITERATOR_OK:
+                This->their_src2 = item;
+            case GST_ITERATOR_ERROR:
+            case GST_ITERATOR_DONE:
+                done = 1;
+                break;
+            }
+        }
+        gst_iterator_free(it);
+
+        if (!This->their_src2 || !This->their_sink2) {
+            if (This->their_src2)
+                gst_object_unref(This->their_src2);
+            if (This->their_sink2)
+                gst_object_unref(This->their_sink2);
+            gst_object_unref(This->filter2);
+            This->filter2 = 0;
+        }
+    }
 
     hr = Gstreamer_transform_ConnectInput(This, amt, capsin, capsout);
     gst_caps_unref(capsin);

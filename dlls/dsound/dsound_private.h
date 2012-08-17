@@ -20,8 +20,8 @@
  */
 
 /* Linux does not support better timing than 10ms */
-#define DS_TIME_RES 2  /* Resolution of multimedia timer */
-#define DS_TIME_DEL 10  /* Delay of multimedia timer callback, and duration of HEL fragment */
+#define DS_TIME_RES 1  /* Resolution of multimedia timer */
+#define DS_TIME_DEL 1  /* Delay of multimedia timer callback, and duration of HEL fragment */
 
 #include "wingdi.h"
 #include "mmdeviceapi.h"
@@ -74,11 +74,9 @@ struct DirectSoundDevice
     GUID                        guid;
     DSCAPS                      drvcaps;
     DWORD                       priolevel;
-    PWAVEFORMATEX               pwfx;
-    UINT                        timerID, playing_offs_bytes, in_mmdev_bytes, prebuf, helfrags;
-    DWORD                       fraglen;
+    PWAVEFORMATEX               pwfx, primary_pwfx;
     LPBYTE                      buffer;
-    DWORD                       writelead, buflen, state, playpos, mixpos;
+    DWORD                       writelead, buflen, aclen, fraglen, state, playpos, pad;
     int                         nrofbuffers;
     IDirectSoundBufferImpl**    buffers;
     RTL_RWLOCK                  buffer_list_lock;
@@ -102,6 +100,7 @@ struct DirectSoundDevice
     IAudioStreamVolume *volume;
     IAudioRenderClient *render;
 
+    HANDLE sleepev, thread;
     struct list entry;
 };
 
@@ -274,6 +273,7 @@ HRESULT DSOUND_PrimaryStop(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT DSOUND_PrimaryGetPosition(DirectSoundDevice *device, LPDWORD playpos, LPDWORD writepos) DECLSPEC_HIDDEN;
 LPWAVEFORMATEX DSOUND_CopyFormat(LPCWAVEFORMATEX wfex) DECLSPEC_HIDDEN;
 HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave) DECLSPEC_HIDDEN;
+HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT primarybuffer_create(DirectSoundDevice *device, IDirectSoundBufferImpl **ppdsb,
     const DSBUFFERDESC *dsbd) DECLSPEC_HIDDEN;
 void primarybuffer_destroy(IDirectSoundBufferImpl *This) DECLSPEC_HIDDEN;
@@ -291,7 +291,7 @@ void DSOUND_AmpFactorToVolPan(PDSVOLUMEPAN volpan) DECLSPEC_HIDDEN;
 void DSOUND_RecalcFormat(IDirectSoundBufferImpl *dsb) DECLSPEC_HIDDEN;
 DWORD DSOUND_secpos_to_bufpos(const IDirectSoundBufferImpl *dsb, DWORD secpos, DWORD secmixpos, float *overshot) DECLSPEC_HIDDEN;
 
-void CALLBACK DSOUND_timer(UINT timerID, UINT msg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2) DECLSPEC_HIDDEN;
+DWORD CALLBACK DSOUND_mixthread(void *ptr) DECLSPEC_HIDDEN;
 
 /* sound3d.c */
 

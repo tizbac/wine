@@ -92,8 +92,8 @@ WCHAR wine_vxd_drv[] = { 'w','i','n','e','m','m','.','v','x','d', 0 };
 
 /* All default settings, you most likely don't want to touch these, see wiki on UsefulRegistryKeys */
 int ds_hel_buflen = 32768 * 2;
-int ds_snd_queue_max = 10;
-int ds_default_sample_rate = 44100;
+int ds_snd_queue_max = 4;
+int ds_default_sample_rate = 48000;
 int ds_default_bits_per_sample = 16;
 static HINSTANCE instance;
 
