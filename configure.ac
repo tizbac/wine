@@ -453,6 +453,7 @@ AC_CHECK_HEADERS(\
 	linux/serial.h \
 	linux/types.h \
 	linux/ucdrom.h \
+	lwp.h \
 	mach-o/nlist.h \
 	mach-o/loader.h \
 	mach/mach.h \
@@ -1472,6 +1473,7 @@ dnl **** Check for pthread functions ****
 WINE_CHECK_LIB_FUNCS(\
         pthread_attr_get_np \
         pthread_getattr_np \
+        pthread_getthreadid_np \
         pthread_get_stackaddr_np \
         pthread_get_stacksize_np,
         [$LIBPTHREAD])

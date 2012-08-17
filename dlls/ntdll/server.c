@@ -28,6 +28,12 @@
 #endif
 #include <errno.h>
 #include <fcntl.h>
+#ifdef HAVE_LWP_H
+#include <lwp.h>
+#endif
+#ifdef HAVE_PTHREAD_NP_H
+# include <pthread_np.h>
+#endif
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -944,13 +950,17 @@ static void send_server_task_port(void)
 static int get_unix_tid(void)
 {
     int ret = -1;
-#ifdef linux
+#ifdef HAVE_PTHREAD_GETTHREADID_NP
+    ret = pthread_getthreadid_np();
+#elif defined(linux)
     ret = syscall( SYS_gettid );
 #elif defined(__sun)
     ret = pthread_self();
 #elif defined(__APPLE__)
     ret = mach_thread_self();
     mach_port_deallocate(mach_task_self(), ret);
+#elif defined(__NetBSD__)
+    ret = _lwp_self();
 #elif defined(__FreeBSD__)
     long lwpid;
     thr_self( &lwpid );

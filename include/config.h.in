@@ -440,6 +440,9 @@
 /* Define to 1 if you have the `lstat' function. */
 #undef HAVE_LSTAT
 
+/* Define to 1 if you have the <lwp.h> header file. */
+#undef HAVE_LWP_H
+
 /* Define to 1 if you have the <machine/cpu.h> header file. */
 #undef HAVE_MACHINE_CPU_H
 
@@ -631,6 +634,9 @@
 
 /* Define to 1 if you have the `pthread_getattr_np' function. */
 #undef HAVE_PTHREAD_GETATTR_NP
+
+/* Define to 1 if you have the `pthread_getthreadid_np' function. */
+#undef HAVE_PTHREAD_GETTHREADID_NP
 
 /* Define to 1 if you have the `pthread_get_stackaddr_np' function. */
 #undef HAVE_PTHREAD_GET_STACKADDR_NP
