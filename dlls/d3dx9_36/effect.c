@@ -190,7 +190,7 @@ struct ID3DXEffectCompilerImpl
 
 static struct d3dx_parameter *get_parameter_by_name(struct ID3DXBaseEffectImpl *base,
         struct d3dx_parameter *parameter, LPCSTR name);
-static struct d3dx_parameter *get_parameter_annotation_by_name(struct d3dx_parameter *parameter, LPCSTR name);
+static struct d3dx_parameter *get_annotation_by_name(UINT handlecount, D3DXHANDLE *handles, LPCSTR name);
 static HRESULT d3dx9_parse_state(struct d3dx_state *state, const char *data, const char **ptr, D3DXHANDLE *objects);
 static void free_parameter_state(D3DXHANDLE handle, BOOL element, BOOL child, enum STATE_TYPE st);
 
@@ -324,12 +324,11 @@ state_table[] =
     {SC_TEXTURESTAGE, D3DTSS_BUMPENVLSCALE, "D3DTSS_BUMPENVLSCALE"},
     {SC_TEXTURESTAGE, D3DTSS_BUMPENVLOFFSET, "D3DTSS_BUMPENVLOFFSET"},
     {SC_TEXTURESTAGE, D3DTSS_TEXTURETRANSFORMFLAGS, "D3DTSS_TEXTURETRANSFORMFLAGS"},
-    /* */
-    {SC_UNKNOWN, 0, "UNKNOWN"},
+    {SC_TEXTURESTAGE, D3DTSS_CONSTANT, "D3DTSS_CONSTANT"},
     /* NPatchMode */
     {SC_NPATCHMODE, 0, "NPatchMode"},
-    /* */
-    {SC_UNKNOWN, 0, "UNKNOWN"},
+    /* FVF */
+    {SC_FVF, 0, "FVF"},
     /* Transform */
     {SC_TRANSFORM, D3DTS_PROJECTION, "D3DTS_PROJECTION"},
     {SC_TRANSFORM, D3DTS_VIEW, "D3DTS_VIEW"},
@@ -447,19 +446,39 @@ static inline D3DXHANDLE get_pass_handle(struct d3dx_pass *pass)
     return (D3DXHANDLE) pass;
 }
 
+static struct d3dx_technique *get_technique_by_name(struct ID3DXBaseEffectImpl *base, LPCSTR name)
+{
+    UINT i;
+
+    if (!name) return NULL;
+
+    for (i = 0; i < base->technique_count; ++i)
+    {
+        struct d3dx_technique *tech = get_technique_struct(base->technique_handles[i]);
+
+        if (!strcmp(tech->name, name)) return tech;
+    }
+
+    return NULL;
+}
+
 static struct d3dx_technique *is_valid_technique(struct ID3DXBaseEffectImpl *base, D3DXHANDLE technique)
 {
+    struct d3dx_technique *tech = NULL;
     unsigned int i;
 
     for (i = 0; i < base->technique_count; ++i)
     {
         if (base->technique_handles[i] == technique)
         {
-            return get_technique_struct(technique);
+            tech = get_technique_struct(technique);
+            break;
         }
     }
 
-    return NULL;
+    if (!tech) tech = get_technique_by_name(base, technique);
+
+    return tech;
 }
 
 static struct d3dx_pass *is_valid_pass(struct ID3DXBaseEffectImpl *base, D3DXHANDLE pass)
@@ -884,7 +903,7 @@ inline static FLOAT get_float(D3DXPARAMETER_TYPE type, LPCVOID data)
 
 static inline BOOL get_bool(LPCVOID data)
 {
-    return (*(DWORD *)data) ? TRUE : FALSE;
+    return (*(DWORD *)data) != 0;
 }
 
 static void set_number(LPVOID outdata, D3DXPARAMETER_TYPE outtype, LPCVOID indata, D3DXPARAMETER_TYPE intype)
@@ -970,12 +989,13 @@ static struct d3dx_parameter *get_parameter_element_by_name(struct d3dx_paramete
 
     TRACE("parameter %p, name %s\n", parameter, debugstr_a(name));
 
-    if (!name || !*name) return parameter;
+    if (!name || !*name) return NULL;
 
     element = atoi(name);
     part = strchr(name, ']') + 1;
 
-    if (parameter->element_count > element)
+    /* check for empty [] && element range */
+    if ((part - name) > 1 && parameter->element_count > element)
     {
         temp_parameter = get_parameter_struct(parameter->member_handles[element]);
 
@@ -985,7 +1005,7 @@ static struct d3dx_parameter *get_parameter_element_by_name(struct d3dx_paramete
                 return get_parameter_by_name(NULL, temp_parameter, part);
 
             case '@':
-                return get_parameter_annotation_by_name(temp_parameter, part);
+                return get_annotation_by_name(temp_parameter->annotation_count, temp_parameter->annotation_handles, part);
 
             case '\0':
                 TRACE("Returning parameter %p\n", temp_parameter);
@@ -1001,22 +1021,22 @@ static struct d3dx_parameter *get_parameter_element_by_name(struct d3dx_paramete
     return NULL;
 }
 
-static struct d3dx_parameter *get_parameter_annotation_by_name(struct d3dx_parameter *parameter, LPCSTR name)
+static struct d3dx_parameter *get_annotation_by_name(UINT handlecount, D3DXHANDLE *handles, LPCSTR name)
 {
     UINT i, length;
     struct d3dx_parameter *temp_parameter;
     LPCSTR part;
 
-    TRACE("parameter %p, name %s\n", parameter, debugstr_a(name));
+    TRACE("handlecount %u, handles %p, name %s\n", handlecount, handles, debugstr_a(name));
 
-    if (!name || !*name) return parameter;
+    if (!name || !*name) return NULL;
 
     length = strcspn( name, "[.@" );
     part = name + length;
 
-    for (i = 0; i < parameter->annotation_count; ++i)
+    for (i = 0; i < handlecount; ++i)
     {
-        temp_parameter = get_parameter_struct(parameter->annotation_handles[i]);
+        temp_parameter = get_parameter_struct(handles[i]);
 
         if (!strcmp(temp_parameter->name, name))
         {
@@ -1054,7 +1074,7 @@ static struct d3dx_parameter *get_parameter_by_name(struct ID3DXBaseEffectImpl *
 
     TRACE("base %p, parameter %p, name %s\n", base, parameter, debugstr_a(name));
 
-    if (!name || !*name) return parameter;
+    if (!name || !*name) return NULL;
 
     if (!parameter)
     {
@@ -1087,7 +1107,7 @@ static struct d3dx_parameter *get_parameter_by_name(struct ID3DXBaseEffectImpl *
                     return get_parameter_by_name(NULL, temp_parameter, part);
 
                 case '@':
-                    return get_parameter_annotation_by_name(temp_parameter, part);
+                    return get_annotation_by_name(temp_parameter->annotation_count, temp_parameter->annotation_handles, part);
 
                 case '[':
                     return get_parameter_element_by_name(temp_parameter, part);
@@ -1418,25 +1438,15 @@ static D3DXHANDLE WINAPI ID3DXBaseEffectImpl_GetTechnique(ID3DXBaseEffect *iface
 static D3DXHANDLE WINAPI ID3DXBaseEffectImpl_GetTechniqueByName(ID3DXBaseEffect *iface, LPCSTR name)
 {
     struct ID3DXBaseEffectImpl *This = impl_from_ID3DXBaseEffect(iface);
-    unsigned int i;
+    struct d3dx_technique *tech = get_technique_by_name(This, name);
 
     TRACE("iface %p, name %s stub\n", This, debugstr_a(name));
 
-    if (!name)
+    if (tech)
     {
-        WARN("Invalid argument specified.\n");
-        return NULL;
-    }
-
-    for (i = 0; i < This->technique_count; ++i)
-    {
-        struct d3dx_technique *tech = get_technique_struct(This->technique_handles[i]);
-
-        if (!strcmp(tech->name, name))
-        {
-            TRACE("Returning technique %p\n", This->technique_handles[i]);
-            return This->technique_handles[i];
-        }
+        D3DXHANDLE t = get_technique_handle(tech);
+        TRACE("Returning technique %p\n", t);
+        return t;
     }
 
     WARN("Invalid argument specified.\n");
@@ -1450,8 +1460,6 @@ static D3DXHANDLE WINAPI ID3DXBaseEffectImpl_GetPass(ID3DXBaseEffect *iface, D3D
     struct d3dx_technique *tech = is_valid_technique(This, technique);
 
     TRACE("iface %p, technique %p, index %u\n", This, technique, index);
-
-    if (!tech) tech = get_technique_struct(iface->lpVtbl->GetTechniqueByName(iface, technique));
 
     if (tech && index < tech->pass_count)
     {
@@ -1470,8 +1478,6 @@ static D3DXHANDLE WINAPI ID3DXBaseEffectImpl_GetPassByName(ID3DXBaseEffect *ifac
     struct d3dx_technique *tech = is_valid_technique(This, technique);
 
     TRACE("iface %p, technique %p, name %s\n", This, technique, debugstr_a(name));
-
-    if (!tech) tech = get_technique_struct(iface->lpVtbl->GetTechniqueByName(iface, technique));
 
     if (tech && name)
     {
@@ -1521,7 +1527,7 @@ static D3DXHANDLE WINAPI ID3DXBaseEffectImpl_GetAnnotation(ID3DXBaseEffect *ifac
     UINT annotation_count = 0;
     D3DXHANDLE *annotation_handles = NULL;
 
-    FIXME("iface %p, object %p, index %u partial stub\n", This, object, index);
+    TRACE("iface %p, object %p, index %u\n", This, object, index);
 
     if (pass)
     {
@@ -1538,7 +1544,10 @@ static D3DXHANDLE WINAPI ID3DXBaseEffectImpl_GetAnnotation(ID3DXBaseEffect *ifac
         annotation_count = param->annotation_count;
         annotation_handles = param->annotation_handles;
     }
-    /* Todo: add funcs */
+    else
+    {
+        FIXME("Functions are not handled, yet!\n");
+    }
 
     if (index < annotation_count)
     {
@@ -1557,10 +1566,11 @@ static D3DXHANDLE WINAPI ID3DXBaseEffectImpl_GetAnnotationByName(ID3DXBaseEffect
     struct d3dx_parameter *param = get_valid_parameter(This, object);
     struct d3dx_pass *pass = is_valid_pass(This, object);
     struct d3dx_technique *technique = is_valid_technique(This, object);
-    UINT annotation_count = 0, i;
+    struct d3dx_parameter *anno = NULL;
+    UINT annotation_count = 0;
     D3DXHANDLE *annotation_handles = NULL;
 
-    FIXME("iface %p, object %p, name %s partial stub\n", This, object, debugstr_a(name));
+    TRACE("iface %p, object %p, name %s\n", This, object, debugstr_a(name));
 
     if (!name)
     {
@@ -1583,17 +1593,16 @@ static D3DXHANDLE WINAPI ID3DXBaseEffectImpl_GetAnnotationByName(ID3DXBaseEffect
         annotation_count = param->annotation_count;
         annotation_handles = param->annotation_handles;
     }
-    /* Todo: add funcs */
-
-    for (i = 0; i < annotation_count; i++)
+    else
     {
-        struct d3dx_parameter *anno = get_parameter_struct(annotation_handles[i]);
+        FIXME("Functions are not handled, yet!\n");
+    }
 
-        if (!strcmp(anno->name, name))
-        {
-            TRACE("Returning parameter %p\n", anno);
-            return get_parameter_handle(anno);
-        }
+    anno = get_annotation_by_name(annotation_count, annotation_handles, name);
+    if (anno)
+    {
+        TRACE("Returning parameter %p\n", anno);
+        return get_parameter_handle(anno);
     }
 
     WARN("Invalid argument specified\n");
@@ -1726,7 +1735,7 @@ static HRESULT WINAPI ID3DXBaseEffectImpl_SetBool(ID3DXBaseEffect *iface, D3DXHA
     if (param && !param->element_count && param->rows == 1 && param->columns == 1)
     {
         /* crop input */
-        b = b ? TRUE : FALSE;
+        b = b != 0;
         set_number(param->data, param->type, &b, D3DXPT_BOOL);
         return D3D_OK;
     }
@@ -3511,23 +3520,11 @@ static HRESULT WINAPI ID3DXEffectImpl_SetTechnique(ID3DXEffect *iface, D3DXHANDL
 
     TRACE("iface %p, technique %p\n", This, technique);
 
-    if (!tech) tech = get_technique_struct(iface->lpVtbl->GetTechniqueByName(iface, technique));
-
     if (tech)
     {
-        UINT i;
-
-        for (i = 0; i < base->technique_count; ++i)
-        {
-            struct d3dx_technique *t = get_technique_struct(base->technique_handles[i]);
-
-            if (tech == t)
-            {
-                This->active_technique = get_technique_handle(t);
-                TRACE("Technique %u (%p)\n", i, tech);
-                return D3D_OK;
-            }
-        }
+        This->active_technique = get_technique_handle(tech);
+        TRACE("Technique %p\n", tech);
+        return D3D_OK;
     }
 
     WARN("Invalid argument supplied.\n");

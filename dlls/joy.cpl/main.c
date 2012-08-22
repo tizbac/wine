@@ -90,6 +90,7 @@ static BOOL CALLBACK enum_callback(const DIDEVICEINSTANCEW *instance, void *cont
     joystick->num_buttons = caps.dwButtons;
     joystick->num_axes = caps.dwAxes;
     joystick->forcefeedback = caps.dwFlags & DIDC_FORCEFEEDBACK;
+    joystick->num_effects = 0;
 
     if (joystick->forcefeedback) data->num_ff++;
 
@@ -130,10 +131,10 @@ static void destroy_joysticks(struct JoystickData *data)
     for (i = 0; i < data->num_joysticks; i++)
     {
 
-        if (data->joysticks[i].forcefeedback)
+        if (data->joysticks[i].forcefeedback && data->joysticks[i].num_effects > 0)
         {
             for (j = 0; j < data->joysticks[i].num_effects; j++)
-            IDirectInputEffect_Release(data->joysticks[i].effects[j].effect);
+                IDirectInputEffect_Release(data->joysticks[i].effects[j].effect);
 
             HeapFree(GetProcessHeap(), 0, data->joysticks[i].effects);
         }
@@ -289,6 +290,7 @@ static DWORD WINAPI input_thread(void *param)
 
             r.left = (TEST_AXIS_X + TEST_NEXT_AXIS_X*i + axes_pos[i][0]);
             r.top = (TEST_AXIS_Y + axes_pos[i][1]);
+            r.bottom = r.right = 0; /* unused */
             MapDialogRect(data->graphics.hwnd, &r);
 
             SetWindowPos(data->graphics.axes[i], 0, r.left, r.top, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
@@ -549,6 +551,7 @@ static DWORD WINAPI ff_input_thread(void *param)
 
         r.left = FF_AXIS_X + state.lX;
         r.top = FF_AXIS_Y + state.lY;
+        r.right = r.bottom = 0; /* unused */
         MapDialogRect(data->graphics.hwnd, &r);
 
         SetWindowPos(data->graphics.ff_axis, 0, r.left, r.top, 0, 0, SWP_NOZORDER | SWP_NOSIZE);

@@ -911,12 +911,8 @@ static void CDECL ReallyFixupVTable(struct dll_fixup *fixup)
     {
         host->mono->mono_thread_attach(domain);
 
-        image = host->mono->mono_image_open_from_module_handle(fixup->dll,
-            filenameA, 1, &status);
+        assembly = host->mono->mono_assembly_open(filenameA, &status);
     }
-
-    if (image)
-        assembly = host->mono->mono_assembly_load_from(image, filenameA, &status);
 
     if (assembly)
     {
@@ -941,7 +937,7 @@ static void CDECL ReallyFixupVTable(struct dll_fixup *fixup)
     }
 
     if (info != NULL)
-        ICLRRuntimeHost_Release(info);
+        ICLRRuntimeInfo_Release(info);
 
     HeapFree(GetProcessHeap(), 0, filenameA);
 

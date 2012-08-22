@@ -101,21 +101,6 @@ static inline struct path_physdev *get_path_physdev( PHYSDEV dev )
     return (struct path_physdev *)dev;
 }
 
-static inline void pop_path_driver( DC *dc, struct path_physdev *physdev )
-{
-    pop_dc_driver( dc, &physdev->dev );
-    HeapFree( GetProcessHeap(), 0, physdev );
-}
-
-static inline struct path_physdev *find_path_physdev( DC *dc )
-{
-    PHYSDEV dev;
-
-    for (dev = dc->physDev; dev->funcs != &null_driver; dev = dev->next)
-        if (dev->funcs == &path_driver) return get_path_physdev( dev );
-    return NULL;
-}
-
 void free_gdi_path( struct gdi_path *path )
 {
     HeapFree( GetProcessHeap(), 0, path->points );
@@ -805,7 +790,8 @@ static BOOL pathdrv_AbortPath( PHYSDEV dev )
 
     if (!dc) return FALSE;
     free_gdi_path( physdev->path );
-    pop_path_driver( dc, physdev );
+    pop_dc_driver( dc, &path_driver );
+    HeapFree( GetProcessHeap(), 0, physdev );
     release_dc_ptr( dc );
     return TRUE;
 }
@@ -821,7 +807,8 @@ static BOOL pathdrv_EndPath( PHYSDEV dev )
 
     if (!dc) return FALSE;
     dc->path = physdev->path;
-    pop_path_driver( dc, physdev );
+    pop_dc_driver( dc, &path_driver );
+    HeapFree( GetProcessHeap(), 0, physdev );
     release_dc_ptr( dc );
     return TRUE;
 }
@@ -856,14 +843,15 @@ static BOOL pathdrv_DeleteDC( PHYSDEV dev )
 
 BOOL PATH_SavePath( DC *dst, DC *src )
 {
-    struct path_physdev *physdev;
+    PHYSDEV dev;
 
     if (src->path)
     {
         if (!(dst->path = copy_gdi_path( src->path ))) return FALSE;
     }
-    else if ((physdev = find_path_physdev( src )))
+    else if ((dev = find_dc_driver( src, &path_driver )))
     {
+        struct path_physdev *physdev = get_path_physdev( dev );
         if (!(dst->path = copy_gdi_path( physdev->path ))) return FALSE;
         dst->path_open = TRUE;
     }
@@ -873,26 +861,25 @@ BOOL PATH_SavePath( DC *dst, DC *src )
 
 BOOL PATH_RestorePath( DC *dst, DC *src )
 {
-    struct path_physdev *physdev = find_path_physdev( dst );
+    PHYSDEV dev;
+    struct path_physdev *physdev;
+
+    if ((dev = pop_dc_driver( dst, &path_driver )))
+    {
+        physdev = get_path_physdev( dev );
+        free_gdi_path( physdev->path );
+        HeapFree( GetProcessHeap(), 0, physdev );
+    }
 
     if (src->path && src->path_open)
     {
-        if (!physdev)
-        {
-            if (!path_driver.pCreateDC( &dst->physDev, NULL, NULL, NULL, NULL )) return FALSE;
-            physdev = get_path_physdev( dst->physDev );
-        }
-        else free_gdi_path( physdev->path );
-
+        if (!path_driver.pCreateDC( &dst->physDev, NULL, NULL, NULL, NULL )) return FALSE;
+        physdev = get_path_physdev( find_dc_driver( dst, &path_driver ));
         physdev->path = src->path;
         src->path_open = FALSE;
         src->path = NULL;
     }
-    else if (physdev)
-    {
-        free_gdi_path( physdev->path );
-        pop_path_driver( dst, physdev );
-    }
+
     if (dst->path) free_gdi_path( dst->path );
     dst->path = src->path;
     src->path = NULL;
@@ -2101,7 +2088,7 @@ BOOL nulldrv_BeginPath( PHYSDEV dev )
         free_gdi_path( path );
         return FALSE;
     }
-    physdev = get_path_physdev( dc->physDev );
+    physdev = get_path_physdev( find_dc_driver( dc, &path_driver ));
     physdev->path = path;
     if (dc->path) free_gdi_path( dc->path );
     dc->path = NULL;
