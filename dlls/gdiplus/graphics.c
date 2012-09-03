@@ -3092,6 +3092,12 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
         GpBitmap* bitmap = (GpBitmap*)image;
         int use_software=0;
 
+        TRACE("graphics: %.2fx%.2f dpi, fmt %#x, scale %f, image: %.2fx%.2f dpi, fmt %#x, color %08x\n",
+            graphics->xres, graphics->yres,
+            graphics->image && graphics->image->type == ImageTypeBitmap ? ((GpBitmap *)graphics->image)->format : 0,
+            graphics->scale, image->xres, image->yres, bitmap->format,
+            imageAttributes ? imageAttributes->outside_color : 0);
+
         if (imageAttributes ||
             (graphics->image && graphics->image->type == ImageTypeBitmap) ||
             ptf[1].Y != ptf[0].Y || ptf[2].X != ptf[0].X ||
@@ -4731,9 +4737,6 @@ GpStatus gdip_format_string(HDC hdc,
     nwidth = rect->Width;
     nheight = rect->Height;
 
-    if (rect->Width >= INT_MAX || rect->Width < 0.5) nwidth = INT_MAX;
-    if (rect->Height >= INT_MAX || rect->Height < 0.5) nheight = INT_MAX;
-
     if (format)
         hkprefix = format->hkprefix;
     else
@@ -4756,6 +4759,10 @@ GpStatus gdip_format_string(HDC hdc,
     for(i = 0, j = 0; i < length; i++){
         /* FIXME: This makes the indexes passed to callback inaccurate. */
         if(!isprintW(string[i]) && (string[i] != '\n'))
+            continue;
+
+        /* FIXME: tabs should be handled using tabstops from stringformat */
+        if (string[i] == '\t')
             continue;
 
         if (seen_prefix && hkprefix == HotkeyPrefixShow && string[i] != '&')
@@ -4877,6 +4884,7 @@ GpStatus gdip_format_string(HDC hdc,
 
 struct measure_ranges_args {
     GpRegion **regions;
+    REAL rel_width, rel_height;
 };
 
 static GpStatus measure_ranges_callback(HDC hdc,
@@ -4898,16 +4906,16 @@ static GpStatus measure_ranges_callback(HDC hdc,
             GpRectF range_rect;
             SIZE range_size;
 
-            range_rect.Y = bounds->Y;
-            range_rect.Height = bounds->Height;
+            range_rect.Y = bounds->Y / args->rel_height;
+            range_rect.Height = bounds->Height / args->rel_height;
 
             GetTextExtentExPointW(hdc, string + index, range_start - index,
                                   INT_MAX, NULL, NULL, &range_size);
-            range_rect.X = bounds->X + range_size.cx;
+            range_rect.X = (bounds->X + range_size.cx) / args->rel_width;
 
             GetTextExtentExPointW(hdc, string + index, range_end - index,
                                   INT_MAX, NULL, NULL, &range_size);
-            range_rect.Width = (bounds->X + range_size.cx) - range_rect.X;
+            range_rect.Width = (bounds->X + range_size.cx) / args->rel_width - range_rect.X;
 
             stat = GdipCombineRegionRect(args->regions[i], &range_rect, CombineModeUnion);
             if (stat != Ok)
@@ -4925,10 +4933,12 @@ GpStatus WINGDIPAPI GdipMeasureCharacterRanges(GpGraphics* graphics,
 {
     GpStatus stat;
     int i;
-    LOGFONTW lfw;
-    HFONT oldfont;
+    HFONT gdifont, oldfont;
     struct measure_ranges_args args;
     HDC hdc, temp_hdc=NULL;
+    GpPointF pt[3];
+    RectF scaled_rect;
+    REAL margin_x;
 
     TRACE("(%p %s %d %p %s %p %d %p)\n", graphics, debugstr_w(string),
             length, font, debugstr_rectf(layoutRect), stringFormat, regionCount, regions);
@@ -4938,8 +4948,6 @@ GpStatus WINGDIPAPI GdipMeasureCharacterRanges(GpGraphics* graphics,
 
     if (regionCount < stringFormat->range_count)
         return InvalidParameter;
-
-    get_log_fontW(font, graphics, &lfw);
 
     if(!graphics->hdc)
     {
@@ -4952,7 +4960,33 @@ GpStatus WINGDIPAPI GdipMeasureCharacterRanges(GpGraphics* graphics,
     if (stringFormat->attr)
         TRACE("may be ignoring some format flags: attr %x\n", stringFormat->attr);
 
-    oldfont = SelectObject(hdc, CreateFontIndirectW(&lfw));
+    pt[0].X = 0.0;
+    pt[0].Y = 0.0;
+    pt[1].X = 1.0;
+    pt[1].Y = 0.0;
+    pt[2].X = 0.0;
+    pt[2].Y = 1.0;
+    GdipTransformPoints(graphics, CoordinateSpaceDevice, CoordinateSpaceWorld, pt, 3);
+    args.rel_width = sqrt((pt[1].Y-pt[0].Y)*(pt[1].Y-pt[0].Y)+
+                     (pt[1].X-pt[0].X)*(pt[1].X-pt[0].X));
+    args.rel_height = sqrt((pt[2].Y-pt[0].Y)*(pt[2].Y-pt[0].Y)+
+                      (pt[2].X-pt[0].X)*(pt[2].X-pt[0].X));
+
+    /* FIXME: GenericTypographic format prevents extra margins */
+    margin_x = units_scale(font->unit, graphics->unit, graphics->xres) * font->emSize / 6.0;
+
+    scaled_rect.X = (layoutRect->X + margin_x) * args.rel_width;
+    scaled_rect.Y = layoutRect->Y * args.rel_height;
+    scaled_rect.Width = layoutRect->Width * args.rel_width;
+    scaled_rect.Height = layoutRect->Height * args.rel_height;
+    if (scaled_rect.Width >= 0.5)
+    {
+        scaled_rect.Width -= margin_x * 2.0 * args.rel_width;
+        if (scaled_rect.Width < 0.5) return Ok; /* doesn't fit */
+    }
+
+    get_font_hfont(graphics, font, &gdifont);
+    oldfont = SelectObject(hdc, gdifont);
 
     for (i=0; i<stringFormat->range_count; i++)
     {
@@ -4963,10 +4997,11 @@ GpStatus WINGDIPAPI GdipMeasureCharacterRanges(GpGraphics* graphics,
 
     args.regions = regions;
 
-    stat = gdip_format_string(hdc, string, length, font, layoutRect, stringFormat,
+    stat = gdip_format_string(hdc, string, length, font, &scaled_rect, stringFormat,
         measure_ranges_callback, &args);
 
-    DeleteObject(SelectObject(hdc, oldfont));
+    SelectObject(hdc, oldfont);
+    DeleteObject(gdifont);
 
     if (temp_hdc)
         DeleteDC(temp_hdc);
@@ -5022,6 +5057,8 @@ GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics,
     HDC temp_hdc=NULL, hdc;
     GpPointF pt[3];
     RectF scaled_rect;
+    REAL margin_x;
+    INT lines, glyphs;
 
     TRACE("(%p, %s, %i, %p, %s, %p, %p, %p, %p)\n", graphics,
         debugstr_wn(string, length), length, font, debugstr_rectf(rect), format,
@@ -5056,13 +5093,24 @@ GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics,
     args.rel_height = sqrt((pt[2].Y-pt[0].Y)*(pt[2].Y-pt[0].Y)+
                       (pt[2].X-pt[0].X)*(pt[2].X-pt[0].X));
 
-    get_font_hfont(graphics, font, &gdifont);
-    oldfont = SelectObject(hdc, gdifont);
+    /* FIXME: GenericTypographic format prevents extra margins */
+    margin_x = units_scale(font->unit, graphics->unit, graphics->xres) * font->emSize / 6.0;
 
-    scaled_rect.X = rect->X * args.rel_width;
+    scaled_rect.X = (rect->X + margin_x) * args.rel_width;
     scaled_rect.Y = rect->Y * args.rel_height;
     scaled_rect.Width = rect->Width * args.rel_width;
     scaled_rect.Height = rect->Height * args.rel_height;
+    if (scaled_rect.Width >= 0.5)
+    {
+        scaled_rect.Width -= margin_x * 2.0 * args.rel_width;
+        if (scaled_rect.Width < 0.5) return Ok; /* doesn't fit */
+    }
+
+    if (scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
+    if (scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
+
+    get_font_hfont(graphics, font, &gdifont);
+    oldfont = SelectObject(hdc, gdifont);
 
     bounds->X = rect->X;
     bounds->Y = rect->Y;
@@ -5070,11 +5118,18 @@ GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics,
     bounds->Height = 0.0;
 
     args.bounds = bounds;
-    args.codepointsfitted = codepointsfitted;
-    args.linesfilled = linesfilled;
+    args.codepointsfitted = &glyphs;
+    args.linesfilled = &lines;
+    lines = glyphs = 0;
 
     gdip_format_string(hdc, string, length, font, &scaled_rect, format,
         measure_string_callback, &args);
+
+    if (linesfilled) *linesfilled = lines;
+    if (codepointsfitted) *codepointsfitted = glyphs;
+
+    if (lines)
+        bounds->Width += margin_x * 2.0;
 
     SelectObject(hdc, oldfont);
     DeleteObject(gdifont);
@@ -5146,7 +5201,7 @@ GpStatus WINGDIPAPI GdipDrawString(GpGraphics *graphics, GDIPCONST WCHAR *string
     HFONT gdifont;
     GpPointF pt[3], rectcpy[4];
     POINT corners[4];
-    REAL rel_width, rel_height;
+    REAL rel_width, rel_height, margin_x;
     INT save_state;
     REAL offsety = 0.0;
     struct draw_string_args args;
@@ -5209,10 +5264,21 @@ GpStatus WINGDIPAPI GdipDrawString(GpGraphics *graphics, GDIPCONST WCHAR *string
     rectcpy[3].Y = rectcpy[2].Y = rect->Y + rect->Height;
     transform_and_round_points(graphics, corners, rectcpy, 4);
 
-    scaled_rect.X = 0.0;
+    /* FIXME: GenericTypographic format prevents extra margins */
+    margin_x = units_scale(font->unit, graphics->unit, graphics->xres) * font->emSize / 6.0;
+
+    scaled_rect.X = margin_x * rel_width;
     scaled_rect.Y = 0.0;
     scaled_rect.Width = rel_width * rect->Width;
     scaled_rect.Height = rel_height * rect->Height;
+    if (scaled_rect.Width >= 0.5)
+    {
+        scaled_rect.Width -= margin_x * 2.0 * rel_width;
+        if (scaled_rect.Width < 0.5) return Ok; /* doesn't fit */
+    }
+
+    if (scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
+    if (scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
 
     if (gdip_round(scaled_rect.Width) != 0 && gdip_round(scaled_rect.Height) != 0)
     {

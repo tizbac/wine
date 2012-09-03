@@ -36,6 +36,9 @@
  *   PropertyStorage_ReadFromStream
  */
 
+#include "config.h"
+#include "wine/port.h"
+
 #include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -55,6 +58,7 @@
 #include "dictionary.h"
 #include "storage32.h"
 #include "enumx.h"
+#include "oleauto.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(storage);
 
@@ -1030,11 +1034,22 @@ static HRESULT PropertyStorage_ReadDictionary(PropertyStorage_impl *This,
     return hr;
 }
 
+#ifdef __i386__
+#define __thiscall __stdcall
+#else
+#define __thiscall __cdecl
+#endif
+
+static __thiscall void* Allocate_CoTaskMemAlloc(void *userdata, ULONG size)
+{
+    return CoTaskMemAlloc(size);
+}
+
 /* FIXME: there isn't any checking whether the read property extends past the
  * end of the buffer.
  */
-static HRESULT PropertyStorage_ReadProperty(PropertyStorage_impl *This,
- PROPVARIANT *prop, const BYTE *data)
+static HRESULT PropertyStorage_ReadProperty(PROPVARIANT *prop, const BYTE *data,
+    UINT codepage, void* (__thiscall *allocate)(void *userdata, ULONG size), void *allocate_data)
 {
     HRESULT hr = S_OK;
 
@@ -1078,21 +1093,21 @@ static HRESULT PropertyStorage_ReadProperty(PropertyStorage_impl *This,
         DWORD count;
        
         StorageUtl_ReadDWord(data, 0, &count);
-        if (This->codePage == CP_UNICODE && count / 2)
+        if (codepage == CP_UNICODE && count % 2)
         {
             WARN("Unicode string has odd number of bytes\n");
             hr = STG_E_INVALIDHEADER;
         }
         else
         {
-            prop->u.pszVal = CoTaskMemAlloc(count);
+            prop->u.pszVal = allocate(allocate_data, count);
             if (prop->u.pszVal)
             {
                 memcpy(prop->u.pszVal, data + sizeof(DWORD), count);
-                /* This is stored in the code page specified in This->codePage.
+                /* This is stored in the code page specified in codepage.
                  * Don't convert it, the caller will just store it as-is.
                  */
-                if (This->codePage == CP_UNICODE)
+                if (codepage == CP_UNICODE)
                 {
                     /* Make sure it's NULL-terminated */
                     prop->u.pszVal[count / sizeof(WCHAR) - 1] = '\0';
@@ -1111,13 +1126,47 @@ static HRESULT PropertyStorage_ReadProperty(PropertyStorage_impl *This,
         }
         break;
     }
+    case VT_BSTR:
+    {
+        DWORD count, wcount;
+
+        StorageUtl_ReadDWord(data, 0, &count);
+        if (codepage == CP_UNICODE && count % 2)
+        {
+            WARN("Unicode string has odd number of bytes\n");
+            hr = STG_E_INVALIDHEADER;
+        }
+        else
+        {
+            if (codepage == CP_UNICODE)
+                wcount = count / 2;
+            else
+                wcount = MultiByteToWideChar(codepage, 0, (LPCSTR)(data + sizeof(DWORD)), count, NULL, 0);
+
+            prop->u.bstrVal = SysAllocStringLen(NULL, wcount); /* FIXME: use allocator? */
+
+            if (prop->u.bstrVal)
+            {
+                if (codepage == CP_UNICODE)
+                    memcpy(prop->u.bstrVal, data + sizeof(DWORD), count);
+                else
+                    MultiByteToWideChar(codepage, 0, (LPCSTR)(data + sizeof(DWORD)), count, prop->u.bstrVal, wcount);
+
+                prop->u.bstrVal[wcount - 1] = '\0';
+                TRACE("Read string value %s\n", debugstr_w(prop->u.bstrVal));
+            }
+            else
+                hr = STG_E_INSUFFICIENTMEMORY;
+        }
+        break;
+    }
     case VT_BLOB:
     {
         DWORD count;
 
         StorageUtl_ReadDWord(data, 0, &count);
         prop->u.blob.cbSize = count;
-        prop->u.blob.pBlobData = CoTaskMemAlloc(count);
+        prop->u.blob.pBlobData = allocate(allocate_data, count);
         if (prop->u.blob.pBlobData)
         {
             memcpy(prop->u.blob.pBlobData, data + sizeof(DWORD), count);
@@ -1132,7 +1181,7 @@ static HRESULT PropertyStorage_ReadProperty(PropertyStorage_impl *This,
         DWORD count;
 
         StorageUtl_ReadDWord(data, 0, &count);
-        prop->u.pwszVal = CoTaskMemAlloc(count * sizeof(WCHAR));
+        prop->u.pwszVal = allocate(allocate_data, count * sizeof(WCHAR));
         if (prop->u.pwszVal)
         {
             memcpy(prop->u.pwszVal, data + sizeof(DWORD),
@@ -1159,10 +1208,10 @@ static HRESULT PropertyStorage_ReadProperty(PropertyStorage_impl *This,
             if (len > 8)
             {
                 len -= 8;
-                prop->u.pclipdata = CoTaskMemAlloc(sizeof (CLIPDATA));
+                prop->u.pclipdata = allocate(allocate_data, sizeof (CLIPDATA));
                 prop->u.pclipdata->cbSize = len;
                 prop->u.pclipdata->ulClipFmt = tag;
-                prop->u.pclipdata->pClipData = CoTaskMemAlloc(len - sizeof(prop->u.pclipdata->ulClipFmt));
+                prop->u.pclipdata->pClipData = allocate(allocate_data, len - sizeof(prop->u.pclipdata->ulClipFmt));
                 memcpy(prop->u.pclipdata->pClipData, data+8, len - sizeof(prop->u.pclipdata->ulClipFmt));
             }
             else
@@ -1399,8 +1448,9 @@ static HRESULT PropertyStorage_ReadFromStream(PropertyStorage_impl *This)
                 PROPVARIANT prop;
 
                 PropVariantInit(&prop);
-                if (SUCCEEDED(PropertyStorage_ReadProperty(This, &prop,
-                 buf + idOffset->dwOffset - sizeof(PROPERTYSECTIONHEADER))))
+                if (SUCCEEDED(PropertyStorage_ReadProperty(&prop,
+                 buf + idOffset->dwOffset - sizeof(PROPERTYSECTIONHEADER),
+                 This->codePage, Allocate_CoTaskMemAlloc, NULL)))
                 {
                     TRACE("Read property with ID 0x%08x, type %d\n",
                      idOffset->propid, prop.vt);
@@ -2672,4 +2722,43 @@ HRESULT WINAPI PropStgNameToFmtId(const LPOLESTR str, FMTID *rfmtid)
     }
 end:
     return hr;
+}
+
+#ifdef __i386__  /* thiscall functions are i386-specific */
+
+#define DEFINE_STDCALL_WRAPPER(num,func,args) \
+   __ASM_STDCALL_FUNC(func, args, \
+                   "popl %eax\n\t" \
+                   "popl %ecx\n\t" \
+                   "pushl %eax\n\t" \
+                   "movl (%ecx), %eax\n\t" \
+                   "jmp *(4*(" #num "))(%eax)" )
+
+DEFINE_STDCALL_WRAPPER(0,Allocate_PMemoryAllocator,8)
+extern void* __thiscall Allocate_PMemoryAllocator(void *this, ULONG cbSize);
+
+#else
+
+static void* __thiscall Allocate_PMemoryAllocator(void *this, ULONG cbSize)
+{
+    void* (__thiscall *fn)(void*,ULONG) = **(void***)this;
+    return fn(this, cbSize);
+}
+
+#endif
+
+BOOLEAN WINAPI StgConvertPropertyToVariant(const SERIALIZEDPROPERTYVALUE* prop,
+    USHORT CodePage, PROPVARIANT* pvar, void* pma)
+{
+    HRESULT hr;
+
+    hr = PropertyStorage_ReadProperty(pvar, (const BYTE*)prop, CodePage, Allocate_PMemoryAllocator, pma);
+
+    if (FAILED(hr))
+    {
+        FIXME("should raise C++ exception on failure\n");
+        PropVariantInit(pvar);
+    }
+
+    return 0;
 }

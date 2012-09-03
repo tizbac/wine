@@ -332,8 +332,7 @@ static Window create_client_window( Display *display, struct x11drv_win_data *da
     attr.bit_gravity = NorthWestGravity;
     attr.win_gravity = NorthWestGravity;
     attr.backing_store = NotUseful;
-    attr.event_mask = (ExposureMask | PointerMotionMask |
-                       ButtonPressMask | ButtonReleaseMask | EnterWindowMask);
+    attr.event_mask = ExposureMask;
     mask = CWEventMask | CWBitGravity | CWWinGravity | CWBackingStore;
 
     if ((cx = data->client_rect.right - data->client_rect.left) <= 0) cx = 1;
@@ -1149,8 +1148,7 @@ static Window get_owner_whole_window( HWND owner, BOOL force_managed )
 
     if (!(data = X11DRV_get_win_data( owner )))
     {
-        if (GetWindowThreadProcessId( owner, NULL ) != GetCurrentThreadId() ||
-            !(data = X11DRV_create_win_data( owner )))
+        if (!(data = X11DRV_create_win_data( owner )))
             return (Window)GetPropA( owner, whole_window_prop );
     }
     else if (!data->managed && force_managed)  /* make it managed */
@@ -1807,21 +1805,9 @@ void CDECL X11DRV_SetWindowStyle( HWND hwnd, INT offset, STYLESTRUCT *style )
     DWORD changed;
 
     if (hwnd == GetDesktopWindow()) return;
-    changed = style->styleNew ^ style->styleOld;
-
-    /* if WS_VISIBLE was set through WM_SETREDRAW, map the window if it's the first time */
-    if (offset == GWL_STYLE && (changed & WS_VISIBLE) && (style->styleNew & WS_VISIBLE) && !data)
-    {
-        if (!(data = X11DRV_create_win_data( hwnd ))) return;
-
-        if (data->whole_window && is_window_rect_mapped( &data->window_rect ))
-        {
-            Display *display = thread_display();
-            set_wm_hints( display, data );
-            if (!data->mapped) map_window( display, data, style->styleNew );
-        }
-    }
     if (!data || !data->whole_window) return;
+
+    changed = style->styleNew ^ style->styleOld;
 
     if (offset == GWL_STYLE && (changed & WS_DISABLED))
         set_wm_hints( thread_display(), data );
@@ -2012,6 +1998,8 @@ struct x11drv_win_data *X11DRV_create_win_data( HWND hwnd )
 
     /* don't create win data for HWND_MESSAGE windows */
     if (parent != GetDesktopWindow() && !GetAncestor( parent, GA_PARENT )) return NULL;
+
+    if (GetWindowThreadProcessId( hwnd, NULL ) != GetCurrentThreadId()) return NULL;
 
     display = thread_init_display();
     if (!(data = alloc_win_data( display, hwnd ))) return NULL;
@@ -2230,10 +2218,7 @@ void CDECL X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
         {
             escape.drawable = data->icon_window;
         }
-        else if (flags & DCX_WINDOW)
-            escape.drawable = data ? data->whole_window : X11DRV_get_whole_window( hwnd );
-        else
-            escape.drawable = escape.gl_drawable;
+        else escape.drawable = data ? data->whole_window : X11DRV_get_whole_window( hwnd );
 
         if (escape.gl_drawable) escape.gl_type = DC_GL_WINDOW;
         /* special case: when repainting the root window, clip out top-level windows */
@@ -2243,21 +2228,22 @@ void CDECL X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
     {
         /* find the first ancestor that has a drawable */
         for (parent = hwnd; parent && parent != top; parent = GetAncestor( parent, GA_PARENT ))
-            if ((escape.drawable = X11DRV_get_client_window( parent ))) break;
+            if ((escape.drawable = X11DRV_get_whole_window( parent ))) break;
 
         if (escape.drawable)
         {
             POINT pt = { 0, 0 };
-            MapWindowPoints( top, parent, &pt, 1 );
+            MapWindowPoints( 0, parent, &pt, 1 );
+            escape.dc_rect = *win_rect;
             OffsetRect( &escape.dc_rect, pt.x, pt.y );
+            if (flags & DCX_CLIPCHILDREN) escape.mode = ClipByChildren;
         }
-        else escape.drawable = X11DRV_get_client_window( top );
+        else escape.drawable = X11DRV_get_whole_window( top );
 
         escape.fbconfig_id = data ? data->fbconfig_id : (XID)GetPropA( hwnd, fbconfig_id_prop );
         escape.gl_drawable = data ? data->gl_drawable : (Drawable)GetPropA( hwnd, gl_drawable_prop );
         escape.pixmap      = data ? data->pixmap : (Pixmap)GetPropA( hwnd, pixmap_prop );
         if (escape.gl_drawable) escape.gl_type = escape.pixmap ? DC_GL_PIXMAP_WIN : DC_GL_CHILD_WIN;
-        if (flags & DCX_CLIPCHILDREN) escape.mode = ClipByChildren;
     }
 
     ExtEscape( hdc, X11DRV_ESCAPE, sizeof(escape), (LPSTR)&escape, 0, NULL );
@@ -2297,7 +2283,7 @@ void CDECL X11DRV_SetCapture( HWND hwnd, UINT flags )
 
     if (hwnd)
     {
-        Window grab_win = X11DRV_get_client_window( GetAncestor( hwnd, GA_ROOT ) );
+        Window grab_win = X11DRV_get_whole_window( GetAncestor( hwnd, GA_ROOT ) );
 
         if (!grab_win) return;
         XFlush( gdi_display );

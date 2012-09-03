@@ -84,6 +84,14 @@ static char const tbl_sregops_t[][5] = {
     "strh", "ldsb", "ldrh", "ldsh"
 };
 
+static char const tbl_miscops_t2[][6] = {
+    "rev", "rev16", "rbit", "revsh"
+};
+
+static char const tbl_width_t2[][2] = {
+    "b", "h", "", "?"
+};
+
 static UINT db_get_inst(void* addr, int size)
 {
     UINT result = 0;
@@ -651,22 +659,33 @@ static UINT thumb2_disasm_misc(UINT inst, ADDRESS64 *addr)
 
     if (op1 == 1)
     {
-        switch (op2)
-        {
-        case 0:
-            dbg_printf("\n\trev\t");
-            break;
-        case 1:
-            dbg_printf("\n\trev16\t");
-            break;
-        case 2:
-            dbg_printf("\n\trbit\t");
-            break;
-        case 3:
-            dbg_printf("\n\trevsh\t");
-            break;
-        }
-        dbg_printf("%s, %s", tbl_regs[get_nibble(inst, 2)], tbl_regs[get_nibble(inst, 0)]);
+        dbg_printf("\n\t%s\t%s, %s", tbl_miscops_t2[op2], tbl_regs[get_nibble(inst, 2)],
+                   tbl_regs[get_nibble(inst, 0)]);
+        return 0;
+    }
+
+    return inst;
+}
+
+static UINT thumb2_disasm_dataprocessingreg(UINT inst, ADDRESS64 *addr)
+{
+    WORD op1 = (inst >> 20) & 0x07;
+    WORD op2 = (inst >> 4) & 0x0f;
+
+    if (!op2)
+    {
+        dbg_printf("\n\t%s%s\t%s, %s, %s", tbl_shifts[op1 >> 1], (op1 & 1)?"s":"",
+                   tbl_regs[get_nibble(inst, 2)], tbl_regs[get_nibble(inst, 4)],
+                   tbl_regs[get_nibble(inst, 0)]);
+        return 0;
+    }
+
+    if ((op2 & 0x0C) == 0x08 && get_nibble(inst, 4) == 0x0f)
+    {
+        dbg_printf("\n\t%sxt%s\t%s, %s", (op1 & 1)?"u":"s", (op1 & 4)?"b":"h",
+                   tbl_regs[get_nibble(inst, 2)], tbl_regs[get_nibble(inst, 0)]);
+        if (op2 & 0x03)
+            dbg_printf(", ROR #%u", (op2 & 3) * 8);
         return 0;
     }
 
@@ -760,6 +779,96 @@ static UINT thumb2_disasm_longmuldiv(UINT inst, ADDRESS64 *addr)
     return inst;
 }
 
+static UINT thumb2_disasm_str(UINT inst, ADDRESS64 *addr)
+{
+    WORD op1 = (inst >> 21) & 0x07;
+    WORD op2 = (inst >> 6) & 0x3f;
+
+    if ((op1 & 0x03) == 3) return inst;
+
+    if (!(op1 & 0x04) && inst & 0x0800)
+    {
+        int offset;
+        dbg_printf("\n\tstr%s\t%s, [%s", tbl_width_t2[op1 & 0x03], tbl_regs[get_nibble(inst, 3)],
+                   tbl_regs[get_nibble(inst, 4)]);
+
+        offset = inst & 0xff;
+        if (!(inst & 0x0200)) offset *= -1;
+
+        if (!(inst & 0x0400) && (inst & 0x0100)) dbg_printf("], #%i", offset);
+        else if (inst & 0x0400) dbg_printf(", #%i]%s", offset, (inst & 0x0100)?"!":"");
+        else return inst;
+        return 0;
+    }
+
+    if (!(op1 & 0x04) && !op2)
+    {
+        dbg_printf("\n\tstr%s\t%s, [%s, %s, LSL #%u]", tbl_width_t2[op1 & 0x03],
+                   tbl_regs[get_nibble(inst, 3)], tbl_regs[get_nibble(inst, 4)],
+                   tbl_regs[get_nibble(inst, 0)], (inst >> 4) & 0x3);
+        return 0;
+    }
+
+    if (op1 & 0x04)
+    {
+        dbg_printf("\n\tstr%s\t%s, [%s, #%u]", tbl_width_t2[op1 & 0x03],
+                   tbl_regs[get_nibble(inst, 3)], tbl_regs[get_nibble(inst, 4)], inst & 0x0fff);
+        return 0;
+    }
+
+    return inst;
+}
+
+static UINT thumb2_disasm_ldrword(UINT inst, ADDRESS64 *addr)
+{
+    WORD op1 = (inst >> 23) & 0x01;
+    WORD op2 = (inst >> 6) & 0x3f;
+    int offset;
+
+    if (get_nibble(inst, 4) == 0x0f)
+    {
+        offset = inst & 0x0fff;
+
+        if (!op1) offset *= -1;
+        offset += 3;
+
+        dbg_printf("\n\tldr\t%s, ", tbl_regs[get_nibble(inst, 3)]);
+        db_printsym(addr->Offset + offset);
+        return 0;
+    }
+
+    if (!op1 && !op2)
+    {
+        dbg_printf("\n\tldr\t%s, [%s, %s, LSL #%u]", tbl_regs[get_nibble(inst, 3)],
+                   tbl_regs[get_nibble(inst, 4)], tbl_regs[get_nibble(inst, 0)], (inst >> 4) & 0x3);
+        return 0;
+    }
+
+    if (!op1 && (op2 & 0x3c) == 0x38)
+    {
+        dbg_printf("\n\tldrt\t%s, [%s, #%u]", tbl_regs[get_nibble(inst, 3)],
+                   tbl_regs[get_nibble(inst, 4)], inst & 0xff);
+        return 0;
+    }
+
+    dbg_printf("\n\tldr\t%s, [%s", tbl_regs[get_nibble(inst, 3)], tbl_regs[get_nibble(inst, 4)]);
+
+    if (op1)
+    {
+        dbg_printf(", #%u]", inst & 0x0fff);
+        return 0;
+    }
+
+    offset = inst & 0xff;
+    if (!(inst & 0x0200)) offset *= -1;
+
+    if (!(inst & 0x0400) && (inst & 0x0100)) dbg_printf("], #%i", offset);
+    else if (inst & 0x0400) dbg_printf(", #%i]%s", offset, (inst & 0x0100)?"!":"");
+    else return inst;
+
+    return 0;
+}
+
 static UINT thumb2_disasm_coprocmov1(UINT inst, ADDRESS64 *addr)
 {
     WORD opc1 = (inst >> 21) & 0x07;
@@ -839,11 +948,13 @@ static const struct inst_thumb16 tbl_thumb16[] = {
 static const struct inst_arm tbl_thumb32[] = {
     { 0xf800f800, 0xf000f800, thumb2_disasm_branchlinked },
     { 0xffc0f0c0, 0xfa80f080, thumb2_disasm_misc },
+    { 0xff80f000, 0xfa00f000, thumb2_disasm_dataprocessingreg },
     { 0xff8000c0, 0xfb000000, thumb2_disasm_mul },
     { 0xff8000f0, 0xfb800000, thumb2_disasm_longmuldiv },
     { 0xff8000f0, 0xfb8000f0, thumb2_disasm_longmuldiv },
-    { 0xef100010, 0xee100010, thumb2_disasm_coprocmov1 },
-    { 0xef100010, 0xee000010, thumb2_disasm_coprocmov1 },
+    { 0xff100000, 0xf8000000, thumb2_disasm_str },
+    { 0xff700000, 0xf8500000, thumb2_disasm_ldrword },
+    { 0xef000010, 0xee000010, thumb2_disasm_coprocmov1 },
     { 0x00000000, 0x00000000, NULL }
 };
 

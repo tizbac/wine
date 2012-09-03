@@ -213,14 +213,12 @@ int WINAPI SetWindowRgn( HWND hwnd, HRGN hrgn, BOOL bRedraw )
         SERVER_END_REQ;
     }
 
-    if (ret) ret = USER_Driver->pSetWindowRgn( hwnd, hrgn, bRedraw );
-
     if (ret)
     {
         UINT swp_flags = SWP_NOSIZE|SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED|SWP_NOCLIENTSIZE|SWP_NOCLIENTMOVE;
         if (!bRedraw) swp_flags |= SWP_NOREDRAW;
         SetWindowPos( hwnd, 0, 0, 0, 0, 0, swp_flags );
-        invalidate_dce( hwnd, NULL );
+        USER_Driver->pSetWindowRgn( hwnd, hrgn, bRedraw );
         if (hrgn) DeleteObject( hrgn );
     }
     return ret;
@@ -1999,17 +1997,15 @@ BOOL set_window_pos( HWND hwnd, HWND insert_after, UINT swp_flags,
         }
     }
     SERVER_END_REQ;
+
+    if (ret && (((swp_flags & SWP_AGG_NOPOSCHANGE) != SWP_AGG_NOPOSCHANGE) ||
+                (swp_flags & (SWP_HIDEWINDOW | SWP_SHOWWINDOW | SWP_STATECHANGED | SWP_FRAMECHANGED))))
+        invalidate_dce( win, &old_window_rect );
+
     WIN_ReleasePtr( win );
 
-    if (ret)
-    {
-        if (((swp_flags & SWP_AGG_NOPOSCHANGE) != SWP_AGG_NOPOSCHANGE) ||
-            (swp_flags & (SWP_HIDEWINDOW | SWP_SHOWWINDOW | SWP_STATECHANGED)))
-            invalidate_dce( hwnd, &old_window_rect );
-
-        USER_Driver->pWindowPosChanged( hwnd, insert_after, swp_flags, window_rect,
-                                        client_rect, &visible_rect, valid_rects );
-    }
+    if (ret) USER_Driver->pWindowPosChanged( hwnd, insert_after, swp_flags, window_rect,
+                                             client_rect, &visible_rect, valid_rects );
     return ret;
 }
 

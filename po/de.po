@@ -5,7 +5,7 @@ msgstr ""
 "Project-Id-Version: Wine\n"
 "Report-Msgid-Bugs-To: http://bugs.winehq.org\n"
 "POT-Creation-Date: N/A\n"
-"PO-Revision-Date: 2012-08-15 20:07+0200\n"
+"PO-Revision-Date: 2012-08-27 01:14+0200\n"
 "Last-Translator: Julian Rüger\n"
 "Language-Team: none\n"
 "Language: German\n"
@@ -635,7 +635,7 @@ msgstr "Nu&r ganzes Wort suchen"
 msgid "Match &Case"
 msgstr "Groß-/Klein&schreibung"
 
-#: comdlg32.rc:317 joy.rc:67
+#: comdlg32.rc:317 joy.rc:68
 msgid "Direction"
 msgstr "Suchrichtung"
 
@@ -3449,23 +3449,31 @@ msgstr "Verbunden"
 msgid "Disabled"
 msgstr "Deaktiviert"
 
-#: joy.rc:46
+#: joy.rc:42
+msgid ""
+"After disabling or enabling a device, the connected joysticks won't be "
+"updated here until you restart this applet."
+msgstr ""
+"Nach dem De-/Aktivieren eines Gerätes wird die Liste der verbundenen "
+"Controller bis zum Neustart dieses Applets nicht mehr aktualisiert."
+
+#: joy.rc:47
 msgid "Test Joystick"
 msgstr "Joystick testen"
 
-#: joy.rc:50
+#: joy.rc:51
 msgid "Buttons"
 msgstr "Tasten"
 
-#: joy.rc:59
+#: joy.rc:60
 msgid "Test Force Feedback"
 msgstr "Force Feedback testen"
 
-#: joy.rc:63
+#: joy.rc:64
 msgid "Available Effects"
 msgstr "Verfügbare Effekte"
 
-#: joy.rc:65
+#: joy.rc:66
 msgid ""
 "Press any button in the controller to activate the chosen effect. The effect "
 "direction can be changed with the controller axis."
@@ -14199,7 +14207,7 @@ msgid ""
 "\tmore files.\n"
 "[/S]  Copy directories and subdirectories.\n"
 "[/E]  Copy directories and subdirectories, including any empty ones.\n"
-"[/Q]  Do not list names during copy, ie quiet.\n"
+"[/Q]  Do not list names during copy, that is be quiet.\n"
 "[/F]  Show full source and destination names during copy.\n"
 "[/L]  Simulate operation, showing names which would be copied.\n"
 "[/W]  Prompts before beginning the copy operation.\n"

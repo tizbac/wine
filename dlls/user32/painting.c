@@ -399,40 +399,38 @@ static void make_dc_dirty( struct dce *dce )
  * rectangle. In addition, pWnd->parent DCEs may need to be updated if
  * DCX_CLIPCHILDREN flag is set.
  */
-void invalidate_dce( HWND hwnd, const RECT *extra_rect )
+void invalidate_dce( WND *win, const RECT *extra_rect )
 {
     RECT window_rect;
     struct dce *dce;
-    HWND hwndScope = GetAncestor( hwnd, GA_PARENT );
 
-    if (!hwndScope) return;
+    if (!win->parent) return;
 
-    GetWindowRect( hwnd, &window_rect );
+    GetWindowRect( win->obj.handle, &window_rect );
 
-    TRACE("%p scope hwnd = %p %s (%s)\n",
-          hwnd, hwndScope, wine_dbgstr_rect(&window_rect), wine_dbgstr_rect(extra_rect) );
+    TRACE("%p parent %p %s (%s)\n",
+          win->obj.handle, win->parent, wine_dbgstr_rect(&window_rect), wine_dbgstr_rect(extra_rect) );
 
     /* walk all DCEs and fixup non-empty entries */
 
-    USER_Lock();
     LIST_FOR_EACH_ENTRY( dce, &dce_list, struct dce, entry )
     {
         TRACE( "%p: hwnd %p dcx %08x %s %s\n", dce, dce->hwnd, dce->flags,
                (dce->flags & DCX_CACHE) ? "Cache" : "Owned", dce->count ? "InUse" : "" );
 
         if (!dce->hwnd) continue;
-        if ((dce->hwnd == hwndScope) && !(dce->flags & DCX_CLIPCHILDREN))
+        if ((dce->hwnd == win->parent) && !(dce->flags & DCX_CLIPCHILDREN))
             continue;  /* child window positions don't bother us */
 
         /* if DCE window is a child of hwnd, it has to be invalidated */
-        if (dce->hwnd == hwnd || IsChild( hwnd, dce->hwnd ))
+        if (dce->hwnd == win->obj.handle || IsChild( win->obj.handle, dce->hwnd ))
         {
             make_dc_dirty( dce );
             continue;
         }
 
         /* otherwise check if the window rectangle intersects this DCE window */
-        if (hwndScope == dce->hwnd || IsChild( hwndScope, dce->hwnd ))
+        if (win->parent == dce->hwnd || IsChild( win->parent, dce->hwnd ))
         {
             RECT dce_rect, tmp;
             GetWindowRect( dce->hwnd, &dce_rect );
@@ -441,7 +439,6 @@ void invalidate_dce( HWND hwnd, const RECT *extra_rect )
                 make_dc_dirty( dce );
         }
     }
-    USER_Unlock();
 }
 
 /***********************************************************************
@@ -1367,17 +1364,8 @@ INT WINAPI ExcludeUpdateRgn( HDC hdc, HWND hwnd )
 }
 
 
-/*************************************************************************
- *		ScrollWindowEx (USER32.@)
- *
- * Note: contrary to what the doc says, pixels that are scrolled from the
- *      outside of clipRect to the inside are NOT painted.
- *
- */
-INT WINAPI ScrollWindowEx( HWND hwnd, INT dx, INT dy,
-                           const RECT *rect, const RECT *clipRect,
-                           HRGN hrgnUpdate, LPRECT rcUpdate,
-                           UINT flags )
+static INT scroll_window( HWND hwnd, INT dx, INT dy, const RECT *rect, const RECT *clipRect,
+                          HRGN hrgnUpdate, LPRECT rcUpdate, UINT flags, BOOL is_ex )
 {
     INT   retVal = NULLREGION;
     BOOL  bOwnRgn = TRUE;
@@ -1416,11 +1404,12 @@ INT WINAPI ScrollWindowEx( HWND hwnd, INT dx, INT dy,
     newCaretPos.x = newCaretPos.y = 0;
 
     if( !IsRectEmpty(&cliprc) && (dx || dy)) {
-        DWORD dcxflags = DCX_CACHE;
+        DWORD dcxflags = 0;
         DWORD style = GetWindowLongW( hwnd, GWL_STYLE );
 
         hwndCaret = fix_caret(hwnd, &rc, dx, dy, flags, &moveCaret, &newCaretPos);
 
+        if (is_ex) dcxflags |= DCX_CACHE;
         if( style & WS_CLIPSIBLINGS) dcxflags |= DCX_CLIPSIBLINGS;
         if( GetClassLongW( hwnd, GCL_STYLE ) & CS_PARENTDC)
             dcxflags |= DCX_PARENTCLIP;
@@ -1523,15 +1512,29 @@ INT WINAPI ScrollWindowEx( HWND hwnd, INT dx, INT dy,
 
 
 /*************************************************************************
+ *		ScrollWindowEx (USER32.@)
+ *
+ * Note: contrary to what the doc says, pixels that are scrolled from the
+ *      outside of clipRect to the inside are NOT painted.
+ *
+ */
+INT WINAPI ScrollWindowEx( HWND hwnd, INT dx, INT dy,
+                           const RECT *rect, const RECT *clipRect,
+                           HRGN hrgnUpdate, LPRECT rcUpdate,
+                           UINT flags )
+{
+    return scroll_window( hwnd, dx, dy, rect, clipRect, hrgnUpdate, rcUpdate, flags, TRUE );
+}
+
+/*************************************************************************
  *		ScrollWindow (USER32.@)
  *
  */
 BOOL WINAPI ScrollWindow( HWND hwnd, INT dx, INT dy,
                           const RECT *rect, const RECT *clipRect )
 {
-    return (ERROR != ScrollWindowEx( hwnd, dx, dy, rect, clipRect, 0, NULL,
-                                     (rect ? 0 : SW_SCROLLCHILDREN) |
-                                     SW_INVALIDATE | SW_ERASE ));
+    return scroll_window( hwnd, dx, dy, rect, clipRect, 0, NULL,
+                          SW_INVALIDATE | SW_ERASE | (rect ? 0 : SW_SCROLLCHILDREN), FALSE ) != ERROR;
 }
 
 

@@ -5,7 +5,7 @@ msgstr ""
 "Project-Id-Version: Wine\n"
 "Report-Msgid-Bugs-To: http://bugs.winehq.org\n"
 "POT-Creation-Date: N/A\n"
-"PO-Revision-Date: 2012-07-17 20:09+0300\n"
+"PO-Revision-Date: 2012-08-24 22:13+0300\n"
 "Last-Translator: Aurimas Fišeras <aurimas@members.fsf.org>\n"
 "Language-Team: komp_lt@konf.lt\n"
 "Language: Lithuanian\n"
@@ -634,7 +634,7 @@ msgstr "Tenkina tik &visas žodis"
 msgid "Match &Case"
 msgstr "Skirti raidžių &dydį"
 
-#: comdlg32.rc:317 joy.rc:67
+#: comdlg32.rc:317 joy.rc:68
 msgid "Direction"
 msgstr "Kryptis"
 
@@ -3450,23 +3450,31 @@ msgstr "Prijungta"
 msgid "Disabled"
 msgstr "Išjungta"
 
-#: joy.rc:46
+#: joy.rc:42
+msgid ""
+"After disabling or enabling a device, the connected joysticks won't be "
+"updated here until you restart this applet."
+msgstr ""
+"Po įtaiso išjungimo ar įjungimo, prijungtos vairasvirtės nebus automatiškai "
+"čia atnaujintos, kol nepaleisite šios programėlės iš naujo."
+
+#: joy.rc:47
 msgid "Test Joystick"
 msgstr "Testuoti vairasvirtę"
 
-#: joy.rc:50
+#: joy.rc:51
 msgid "Buttons"
 msgstr "Mygtukai"
 
-#: joy.rc:59
+#: joy.rc:60
 msgid "Test Force Feedback"
 msgstr "Testuoti „Force Feedback“"
 
-#: joy.rc:63
+#: joy.rc:64
 msgid "Available Effects"
 msgstr "Prieinami efektai"
 
-#: joy.rc:65
+#: joy.rc:66
 msgid ""
 "Press any button in the controller to activate the chosen effect. The effect "
 "direction can be changed with the controller axis."
@@ -14130,7 +14138,7 @@ msgid ""
 "\tmore files.\n"
 "[/S]  Copy directories and subdirectories.\n"
 "[/E]  Copy directories and subdirectories, including any empty ones.\n"
-"[/Q]  Do not list names during copy, ie quiet.\n"
+"[/Q]  Do not list names during copy, that is be quiet.\n"
 "[/F]  Show full source and destination names during copy.\n"
 "[/L]  Simulate operation, showing names which would be copied.\n"
 "[/W]  Prompts before beginning the copy operation.\n"

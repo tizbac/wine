@@ -143,6 +143,8 @@ static const WCHAR prop_serialnumberW[] =
     {'S','e','r','i','a','l','N','u','m','b','e','r',0};
 static const WCHAR prop_servicetypeW[] =
     {'S','e','r','v','i','c','e','T','y','p','e',0};
+static const WCHAR prop_startmodeW[] =
+    {'S','t','a','r','t','M','o','d','e',0};
 static const WCHAR prop_sizeW[] =
     {'S','i','z','e',0};
 static const WCHAR prop_speedW[] =
@@ -151,6 +153,8 @@ static const WCHAR prop_stateW[] =
     {'S','t','a','t','e',0};
 static const WCHAR prop_systemdirectoryW[] =
     {'S','y','s','t','e','m','D','i','r','e','c','t','o','r','y',0};
+static const WCHAR prop_systemnameW[] =
+    {'S','y','s','t','e','m','N','a','m','e',0};
 static const WCHAR prop_tagW[] =
     {'T','a','g',0};
 static const WCHAR prop_threadcountW[] =
@@ -159,6 +163,10 @@ static const WCHAR prop_totalphysicalmemoryW[] =
     {'T','o','t','a','l','P','h','y','s','i','c','a','l','M','e','m','o','r','y',0};
 static const WCHAR prop_typeW[] =
     {'T','y','p','e',0};
+static const WCHAR prop_maxclockspeedW[] =
+    {'M','a','x','C','l','o','c','k','S','p','e','e','d',0};
+static const WCHAR prop_numberoflogicalprocessorsW[] =
+    {'N','u','m','b','e','r','O','f','L','o','g','i','c','a','l','P','r','o','c','e','s','s','o','r','s',0};
 
 static const WCHAR method_enumkeyW[] =
     {'E','n','u','m','K','e','y',0};
@@ -245,11 +253,13 @@ static const struct column col_process[] =
 };
 static const struct column col_processor[] =
 {
-    { prop_cpustatusW,    CIM_UINT16 },
-    { prop_deviceidW,     CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
-    { prop_manufacturerW, CIM_STRING|COL_FLAG_DYNAMIC },
-    { prop_nameW,         CIM_STRING|COL_FLAG_DYNAMIC },
-    { prop_processoridW,  CIM_STRING|COL_FLAG_DYNAMIC }
+    { prop_cpustatusW,                 CIM_UINT16 },
+    { prop_deviceidW,                  CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { prop_manufacturerW,              CIM_STRING|COL_FLAG_DYNAMIC },
+    { prop_maxclockspeedW,             CIM_UINT32 },
+    { prop_nameW,                      CIM_STRING|COL_FLAG_DYNAMIC },
+    { prop_numberoflogicalprocessorsW, CIM_UINT32 },
+    { prop_processoridW,               CIM_STRING|COL_FLAG_DYNAMIC }
 };
 static const struct column col_service[] =
 {
@@ -259,7 +269,9 @@ static const struct column col_service[] =
     { prop_nameW,             CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { prop_processidW,        CIM_UINT32 },
     { prop_servicetypeW,      CIM_STRING },
-    { prop_stateW,            CIM_STRING }
+    { prop_startmodeW,        CIM_STRING },
+    { prop_stateW,            CIM_STRING },
+    { prop_systemnameW,       CIM_STRING|COL_FLAG_DYNAMIC }
 };
 static const struct column col_stdregprov[] =
 {
@@ -384,7 +396,9 @@ struct record_processor
     UINT16       cpu_status;
     const WCHAR *device_id;
     const WCHAR *manufacturer;
+    UINT32       maxclockspeed;
     const WCHAR *name;
+    UINT32       numberoflogicalprocessors;
     const WCHAR *processor_id;
 };
 struct record_service
@@ -395,7 +409,9 @@ struct record_service
     const WCHAR *name;
     UINT32       process_id;
     const WCHAR *servicetype;
+    const WCHAR *startmode;
     const WCHAR *state;
+    const WCHAR *systemname;
 };
 struct record_stdregprov
 {
@@ -739,13 +755,19 @@ static void fill_processor( struct table *table )
     static const WCHAR fmtW[] = {'C','P','U','%','u',0};
     WCHAR device_id[14], processor_id[17], manufacturer[13], name[49] = {0};
     struct record_processor *rec;
-    UINT i, offset = 0, count = get_processor_count();
+    UINT i, offset = 0, count = get_processor_count(), cpuMhz;
+    PROCESSOR_POWER_INFORMATION ppi;
 
     if (!(table->data = heap_alloc( sizeof(*rec) * count ))) return;
 
     get_processor_id( processor_id );
     get_processor_manufacturer( manufacturer );
     get_processor_name( name );
+
+    if(!NtPowerInformation(ProcessorInformation, NULL, 0, &ppi, sizeof(ppi)))
+        cpuMhz = ppi.MaxMhz;
+    else
+        cpuMhz = 1000000;
 
     for (i = 0; i < count; i++)
     {
@@ -754,7 +776,9 @@ static void fill_processor( struct table *table )
         sprintfW( device_id, fmtW, i );
         rec->device_id    = heap_strdupW( device_id );
         rec->manufacturer = heap_strdupW( manufacturer );
+        rec->maxclockspeed = cpuMhz;
         rec->name         = heap_strdupW( name );
+        rec->numberoflogicalprocessors = count;
         rec->processor_id = heap_strdupW( processor_id );
         offset += sizeof(*rec);
     }
@@ -836,12 +860,36 @@ static const WCHAR *get_service_state( DWORD state )
     }
 }
 
+static const WCHAR *get_service_startmode( DWORD mode )
+{
+    static const WCHAR bootW[] = {'B','o','o','t',0};
+    static const WCHAR systemW[] = {'S','y','s','t','e','m',0};
+    static const WCHAR autoW[] = {'A','u','t','o',0};
+    static const WCHAR manualW[] = {'M','a','n','u','a','l',0};
+    static const WCHAR disabledW[] = {'D','i','s','a','b','l','e','d',0};
+    static const WCHAR unknownW[] = {'U','n','k','n','o','w','n',0};
+
+    switch (mode)
+    {
+    case SERVICE_BOOT_START:   return bootW;
+    case SERVICE_SYSTEM_START: return systemW;
+    case SERVICE_AUTO_START:   return autoW;
+    case SERVICE_DEMAND_START: return manualW;
+    case SERVICE_DISABLED:     return disabledW;
+    default:
+        ERR("unknown mode 0x%x\n", mode);
+        return unknownW;
+    }
+}
+
 static void fill_service( struct table *table )
 {
     struct record_service *rec;
     SC_HANDLE manager;
     ENUM_SERVICE_STATUS_PROCESSW *tmp, *services = NULL;
     SERVICE_STATUS_PROCESS *status;
+    WCHAR sysnameW[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD len = sizeof(sysnameW) / sizeof(sysnameW[0]);
     UINT i, num_rows = 0, offset = 0, size = 256, needed, count;
     BOOL ret;
 
@@ -864,8 +912,28 @@ static void fill_service( struct table *table )
     }
     if (!(table->data = heap_alloc( sizeof(*rec) * count ))) goto done;
 
+    GetComputerNameW( sysnameW, &len );
+
     for (i = 0; i < count; i++)
     {
+        QUERY_SERVICE_CONFIGW *config;
+        SC_HANDLE service;
+        DWORD startmode;
+        DWORD size;
+
+        service = OpenServiceW(manager, services[i].lpServiceName, GENERIC_READ);
+        QueryServiceConfigW(service, NULL, 0, &size);
+        config = heap_alloc(size);
+        if (QueryServiceConfigW(service, config, size, &size))
+            startmode = config->dwStartType;
+        else
+        {
+            ERR("failed to get %s service config data\n", debugstr_w(services[i].lpServiceName));
+            startmode = SERVICE_DISABLED;
+        }
+        CloseServiceHandle(service);
+        heap_free(config);
+
         status = &services[i].ServiceStatusProcess;
         rec = (struct record_service *)(table->data + offset);
         rec->accept_pause = (status->dwControlsAccepted & SERVICE_ACCEPT_PAUSE_CONTINUE) ? -1 : 0;
@@ -874,7 +942,9 @@ static void fill_service( struct table *table )
         rec->name         = heap_strdupW( services[i].lpServiceName );
         rec->process_id   = status->dwProcessId;
         rec->servicetype  = get_service_type( status->dwServiceType );
+        rec->startmode    = get_service_startmode( startmode );
         rec->state        = get_service_state( status->dwCurrentState );
+        rec->systemname   = heap_strdupW( sysnameW );
         offset += sizeof(*rec);
         num_rows++;
     }
