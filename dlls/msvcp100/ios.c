@@ -5495,6 +5495,13 @@ basic_ostream_char* __thiscall basic_ostream_char_flush(basic_ostream_char *this
     return this;
 }
 
+/* ?flush@std@@YAAAV?$basic_ostream@DU?$char_traits@D@std@@@1@AAV21@@Z */
+/* ?flush@std@@YAAEAV?$basic_ostream@DU?$char_traits@D@std@@@1@AEAV21@@Z */
+basic_ostream_char* __cdecl flush_ostream_char(basic_ostream_char *ostream)
+{
+    return basic_ostream_char_flush(ostream);
+}
+
 /* ?_Osfx@?$basic_ostream@DU?$char_traits@D@std@@@std@@QAEXXZ */
 /* ?_Osfx@?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAAXXZ */
 DEFINE_THISCALL_WRAPPER(basic_ostream_char__Osfx, 4)
@@ -6138,6 +6145,15 @@ basic_ostream_wchar* __thiscall basic_ostream_wchar_flush(basic_ostream_wchar *t
             && basic_streambuf_wchar_pubsync(basic_ios_wchar_rdbuf_get(base))==-1)
         basic_ios_wchar_setstate(base, IOSTATE_badbit);
     return this;
+}
+
+/* ?flush@std@@YAAAV?$basic_ostream@_WU?$char_traits@_W@std@@@1@AAV21@@Z */
+/* ?flush@std@@YAAEAV?$basic_ostream@_WU?$char_traits@_W@std@@@1@AEAV21@@Z */
+/* ?flush@std@@YAAAV?$basic_ostream@GU?$char_traits@G@std@@@1@AAV21@@Z */
+/* ?flush@std@@YAAEAV?$basic_ostream@GU?$char_traits@G@std@@@1@AEAV21@@Z */
+basic_ostream_wchar* __cdecl flush_ostream_wchar(basic_ostream_wchar *ostream)
+{
+    return basic_ostream_wchar_flush(ostream);
 }
 
 /* ?_Osfx@?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QAEXXZ */
@@ -12343,8 +12359,53 @@ struct {
 /* ?_Ptr_wclog@std@@3PEAV?$basic_ostream@_WU?$char_traits@_W@std@@@1@EA */
 basic_ostream_wchar *_Ptr_wclog = &wclog.obj;
 
-void init_io(void)
+void init_io(void *base)
 {
+#ifdef __x86_64__
+    init_iosb_rtti(base);
+    init_ios_base_rtti(base);
+    init_basic_ios_char_rtti(base);
+    init_basic_ios_wchar_rtti(base);
+    init_basic_ios_short_rtti(base);
+    init_basic_streambuf_char_rtti(base);
+    init_basic_streambuf_wchar_rtti(base);
+    init_basic_streambuf_short_rtti(base);
+    init_basic_filebuf_char_rtti(base);
+    init_basic_filebuf_wchar_rtti(base);
+    init_basic_filebuf_short_rtti(base);
+    init_basic_stringbuf_char_rtti(base);
+    init_basic_stringbuf_wchar_rtti(base);
+    init_basic_stringbuf_short_rtti(base);
+    init_basic_ostream_char_rtti(base);
+    init_basic_ostream_wchar_rtti(base);
+    init_basic_ostream_short_rtti(base);
+    init_basic_istream_char_rtti(base);
+    init_basic_istream_wchar_rtti(base);
+    init_basic_istream_short_rtti(base);
+    init_basic_iostream_char_rtti(base);
+    init_basic_iostream_wchar_rtti(base);
+    init_basic_iostream_short_rtti(base);
+    init_basic_ofstream_char_rtti(base);
+    init_basic_ofstream_wchar_rtti(base);
+    init_basic_ofstream_short_rtti(base);
+    init_basic_ifstream_char_rtti(base);
+    init_basic_ifstream_wchar_rtti(base);
+    init_basic_ifstream_short_rtti(base);
+    init_basic_fstream_char_rtti(base);
+    init_basic_fstream_wchar_rtti(base);
+    init_basic_fstream_short_rtti(base);
+    init_basic_ostringstream_char_rtti(base);
+    init_basic_ostringstream_wchar_rtti(base);
+    init_basic_ostringstream_short_rtti(base);
+    init_basic_istringstream_char_rtti(base);
+    init_basic_istringstream_wchar_rtti(base);
+    init_basic_istringstream_short_rtti(base);
+    init_basic_stringstream_char_rtti(base);
+    init_basic_stringstream_wchar_rtti(base);
+    init_basic_stringstream_short_rtti(base);
+    init_strstreambuf_rtti(base);
+#endif
+
     basic_filebuf_char_ctor_file(&filebuf_char_stdin, stdin);
     basic_istream_char_ctor(&cin.obj, &filebuf_char_stdin.base, FALSE/*FIXME*/, TRUE);
 
