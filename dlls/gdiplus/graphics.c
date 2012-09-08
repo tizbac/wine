@@ -46,6 +46,11 @@ WINE_DEFAULT_DEBUG_CHANNEL(gdiplus);
 #define ANCHOR_WIDTH (2.0)
 #define MAX_ITERS (50)
 
+static GpStatus draw_driver_string(GpGraphics *graphics, GDIPCONST UINT16 *text, INT length,
+                                   GDIPCONST GpFont *font, GDIPCONST GpStringFormat *format,
+                                   GDIPCONST GpBrush *brush, GDIPCONST PointF *positions,
+                                   INT flags, GDIPCONST GpMatrix *matrix);
+
 /* Converts angle (in degrees) to x/y coordinates */
 static void deg2xy(REAL angle, REAL x_0, REAL y_0, REAL *x, REAL *y)
 {
@@ -2110,7 +2115,8 @@ end:
     return stat;
 }
 
-static void get_font_hfont(GpGraphics *graphics, GDIPCONST GpFont *font, HFONT *hfont)
+static void get_font_hfont(GpGraphics *graphics, GDIPCONST GpFont *font,
+                           GDIPCONST GpStringFormat *format, HFONT *hfont)
 {
     HDC hdc = CreateCompatibleDC(0);
     GpPointF pt[3];
@@ -2119,7 +2125,7 @@ static void get_font_hfont(GpGraphics *graphics, GDIPCONST GpFont *font, HFONT *
     HFONT unscaled_font;
     TEXTMETRICW textmet;
 
-    font_to_pixel_scale = units_scale(UnitPoint, UnitPixel, font->family->dpi);
+    font_to_pixel_scale = (format && format->generic_typographic) ? 1.0 : units_scale(UnitPoint, UnitPixel, font->family->dpi);
 
     if (font->unit == UnitPixel)
         font_height = font->emSize * font_to_pixel_scale;
@@ -4972,20 +4978,28 @@ GpStatus WINGDIPAPI GdipMeasureCharacterRanges(GpGraphics* graphics,
     args.rel_height = sqrt((pt[2].Y-pt[0].Y)*(pt[2].Y-pt[0].Y)+
                       (pt[2].X-pt[0].X)*(pt[2].X-pt[0].X));
 
-    /* FIXME: GenericTypographic format prevents extra margins */
-    margin_x = units_scale(font->unit, graphics->unit, graphics->xres) * font->emSize / 6.0;
+    margin_x = stringFormat->generic_typographic ? 0.0 : font->emSize / 6.0;
+    margin_x *= units_scale(font->unit, graphics->unit, graphics->xres);
 
     scaled_rect.X = (layoutRect->X + margin_x) * args.rel_width;
     scaled_rect.Y = layoutRect->Y * args.rel_height;
-    scaled_rect.Width = layoutRect->Width * args.rel_width;
-    scaled_rect.Height = layoutRect->Height * args.rel_height;
+    if (stringFormat->attr & StringFormatFlagsNoClip)
+    {
+        scaled_rect.Width = (REAL)(1 << 23);
+        scaled_rect.Height = (REAL)(1 << 23);
+    }
+    else
+    {
+        scaled_rect.Width = layoutRect->Width * args.rel_width;
+        scaled_rect.Height = layoutRect->Height * args.rel_height;
+    }
     if (scaled_rect.Width >= 0.5)
     {
         scaled_rect.Width -= margin_x * 2.0 * args.rel_width;
         if (scaled_rect.Width < 0.5) return Ok; /* doesn't fit */
     }
 
-    get_font_hfont(graphics, font, &gdifont);
+    get_font_hfont(graphics, font, stringFormat, &gdifont);
     oldfont = SelectObject(hdc, gdifont);
 
     for (i=0; i<stringFormat->range_count; i++)
@@ -5058,7 +5072,7 @@ GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics,
     GpPointF pt[3];
     RectF scaled_rect;
     REAL margin_x;
-    INT lines, glyphs;
+    INT lines, glyphs, format_flags = format ? format->attr : 0;
 
     TRACE("(%p, %s, %i, %p, %s, %p, %p, %p, %p)\n", graphics,
         debugstr_wn(string, length), length, font, debugstr_rectf(rect), format,
@@ -5093,13 +5107,19 @@ GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics,
     args.rel_height = sqrt((pt[2].Y-pt[0].Y)*(pt[2].Y-pt[0].Y)+
                       (pt[2].X-pt[0].X)*(pt[2].X-pt[0].X));
 
-    /* FIXME: GenericTypographic format prevents extra margins */
-    margin_x = units_scale(font->unit, graphics->unit, graphics->xres) * font->emSize / 6.0;
+    margin_x = (format && format->generic_typographic) ? 0.0 : font->emSize / 6.0;
+    margin_x *= units_scale(font->unit, graphics->unit, graphics->xres);
 
     scaled_rect.X = (rect->X + margin_x) * args.rel_width;
     scaled_rect.Y = rect->Y * args.rel_height;
     scaled_rect.Width = rect->Width * args.rel_width;
     scaled_rect.Height = rect->Height * args.rel_height;
+
+    if ((format_flags & StringFormatFlagsNoClip) ||
+        scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
+    if ((format_flags & StringFormatFlagsNoClip) ||
+        scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
+
     if (scaled_rect.Width >= 0.5)
     {
         scaled_rect.Width -= margin_x * 2.0 * args.rel_width;
@@ -5109,7 +5129,7 @@ GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics,
     if (scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
     if (scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
 
-    get_font_hfont(graphics, font, &gdifont);
+    get_font_hfont(graphics, font, format, &gdifont);
     oldfont = SelectObject(hdc, gdifont);
 
     bounds->X = rect->X;
@@ -5159,7 +5179,7 @@ static GpStatus draw_string_callback(HDC hdc,
     position.X = args->x + bounds->X / args->rel_width;
     position.Y = args->y + bounds->Y / args->rel_height + args->ascent;
 
-    stat = GdipDrawDriverString(args->graphics, &string[index], length, font,
+    stat = draw_driver_string(args->graphics, &string[index], length, font, format,
         args->brush, &position,
         DriverStringOptionsCmapLookup|DriverStringOptionsRealizedAdvance, NULL);
 
@@ -5202,7 +5222,7 @@ GpStatus WINGDIPAPI GdipDrawString(GpGraphics *graphics, GDIPCONST WCHAR *string
     GpPointF pt[3], rectcpy[4];
     POINT corners[4];
     REAL rel_width, rel_height, margin_x;
-    INT save_state;
+    INT save_state, format_flags = 0;
     REAL offsety = 0.0;
     struct draw_string_args args;
     RectF scaled_rect;
@@ -5226,6 +5246,8 @@ GpStatus WINGDIPAPI GdipDrawString(GpGraphics *graphics, GDIPCONST WCHAR *string
 
     if(format){
         TRACE("may be ignoring some format flags: attr %x\n", format->attr);
+
+        format_flags = format->attr;
 
         /* Should be no need to explicitly test for StringAlignmentNear as
          * that is default behavior if no alignment is passed. */
@@ -5264,13 +5286,19 @@ GpStatus WINGDIPAPI GdipDrawString(GpGraphics *graphics, GDIPCONST WCHAR *string
     rectcpy[3].Y = rectcpy[2].Y = rect->Y + rect->Height;
     transform_and_round_points(graphics, corners, rectcpy, 4);
 
-    /* FIXME: GenericTypographic format prevents extra margins */
-    margin_x = units_scale(font->unit, graphics->unit, graphics->xres) * font->emSize / 6.0;
+    margin_x = (format && format->generic_typographic) ? 0.0 : font->emSize / 6.0;
+    margin_x *= units_scale(font->unit, graphics->unit, graphics->xres);
 
     scaled_rect.X = margin_x * rel_width;
     scaled_rect.Y = 0.0;
     scaled_rect.Width = rel_width * rect->Width;
     scaled_rect.Height = rel_height * rect->Height;
+
+    if ((format_flags & StringFormatFlagsNoClip) ||
+        scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
+    if ((format_flags & StringFormatFlagsNoClip) ||
+        scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
+
     if (scaled_rect.Width >= 0.5)
     {
         scaled_rect.Width -= margin_x * 2.0 * rel_width;
@@ -5280,14 +5308,15 @@ GpStatus WINGDIPAPI GdipDrawString(GpGraphics *graphics, GDIPCONST WCHAR *string
     if (scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
     if (scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
 
-    if (gdip_round(scaled_rect.Width) != 0 && gdip_round(scaled_rect.Height) != 0)
+    if (!(format_flags & StringFormatFlagsNoClip) &&
+        gdip_round(scaled_rect.Width) != 0 && gdip_round(scaled_rect.Height) != 0)
     {
         /* FIXME: If only the width or only the height is 0, we should probably still clip */
         rgn = CreatePolygonRgn(corners, 4, ALTERNATE);
         SelectClipRgn(hdc, rgn);
     }
 
-    get_font_hfont(graphics, font, &gdifont);
+    get_font_hfont(graphics, font, format, &gdifont);
     SelectObject(hdc, gdifont);
 
     args.graphics = graphics;
@@ -6246,7 +6275,7 @@ GpStatus WINGDIPAPI GdipMeasureDriverString(GpGraphics *graphics, GDIPCONST UINT
     if (matrix)
         FIXME("Ignoring matrix\n");
 
-    get_font_hfont(graphics, font, &hfont);
+    get_font_hfont(graphics, font, NULL, &hfont);
 
     hdc = CreateCompatibleDC(0);
     SelectObject(hdc, hfont);
@@ -6322,9 +6351,9 @@ GpStatus WINGDIPAPI GdipMeasureDriverString(GpGraphics *graphics, GDIPCONST UINT
 }
 
 static GpStatus GDI32_GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UINT16 *text, INT length,
-                                     GDIPCONST GpFont *font, GDIPCONST GpBrush *brush,
-                                     GDIPCONST PointF *positions, INT flags,
-                                     GDIPCONST GpMatrix *matrix )
+                                           GDIPCONST GpFont *font, GDIPCONST GpStringFormat *format,
+                                           GDIPCONST GpBrush *brush, GDIPCONST PointF *positions,
+                                           INT flags, GDIPCONST GpMatrix *matrix)
 {
     static const INT unsupported_flags = ~(DriverStringOptionsRealizedAdvance|DriverStringOptionsCmapLookup);
     INT save_state;
@@ -6348,7 +6377,7 @@ static GpStatus GDI32_GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UINT1
     pt = positions[0];
     GdipTransformPoints(graphics, CoordinateSpaceDevice, CoordinateSpaceWorld, &pt, 1);
 
-    get_font_hfont(graphics, font, &hfont);
+    get_font_hfont(graphics, font, format, &hfont);
     SelectObject(graphics->hdc, hfont);
 
     SetTextAlign(graphics->hdc, TA_BASELINE|TA_LEFT);
@@ -6363,9 +6392,9 @@ static GpStatus GDI32_GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UINT1
 }
 
 static GpStatus SOFTWARE_GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UINT16 *text, INT length,
-                                         GDIPCONST GpFont *font, GDIPCONST GpBrush *brush,
-                                         GDIPCONST PointF *positions, INT flags,
-                                         GDIPCONST GpMatrix *matrix )
+                                        GDIPCONST GpFont *font, GDIPCONST GpStringFormat *format,
+                                        GDIPCONST GpBrush *brush, GDIPCONST PointF *positions,
+                                        INT flags, GDIPCONST GpMatrix *matrix)
 {
     static const INT unsupported_flags = ~(DriverStringOptionsCmapLookup|DriverStringOptionsRealizedAdvance);
     GpStatus stat;
@@ -6423,7 +6452,7 @@ static GpStatus SOFTWARE_GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UI
         GdipFree(real_positions);
     }
 
-    get_font_hfont(graphics, font, &hfont);
+    get_font_hfont(graphics, font, format, &hfont);
 
     hdc = CreateCompatibleDC(0);
     SelectObject(hdc, hfont);
@@ -6556,20 +6585,12 @@ static GpStatus SOFTWARE_GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UI
     return stat;
 }
 
-/*****************************************************************************
- * GdipDrawDriverString [GDIPLUS.@]
- */
-GpStatus WINGDIPAPI GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UINT16 *text, INT length,
-                                         GDIPCONST GpFont *font, GDIPCONST GpBrush *brush,
-                                         GDIPCONST PointF *positions, INT flags,
-                                         GDIPCONST GpMatrix *matrix )
+static GpStatus draw_driver_string(GpGraphics *graphics, GDIPCONST UINT16 *text, INT length,
+                                   GDIPCONST GpFont *font, GDIPCONST GpStringFormat *format,
+                                   GDIPCONST GpBrush *brush, GDIPCONST PointF *positions,
+                                   INT flags, GDIPCONST GpMatrix *matrix)
 {
-    GpStatus stat=NotImplemented;
-
-    TRACE("(%p %s %p %p %p %d %p)\n", graphics, debugstr_wn(text, length), font, brush, positions, flags, matrix);
-
-    if (!graphics || !text || !font || !brush || !positions)
-        return InvalidParameter;
+    GpStatus stat = NotImplemented;
 
     if (length == -1)
         length = strlenW(text);
@@ -6578,14 +6599,29 @@ GpStatus WINGDIPAPI GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UINT16 
         ((flags & DriverStringOptionsRealizedAdvance) || length <= 1) &&
         brush->bt == BrushTypeSolidColor &&
         (((GpSolidFill*)brush)->color & 0xff000000) == 0xff000000)
-        stat = GDI32_GdipDrawDriverString(graphics, text, length, font, brush,
-            positions, flags, matrix);
-
+        stat = GDI32_GdipDrawDriverString(graphics, text, length, font, format,
+                                          brush, positions, flags, matrix);
     if (stat == NotImplemented)
-        stat = SOFTWARE_GdipDrawDriverString(graphics, text, length, font, brush,
-            positions, flags, matrix);
-
+        stat = SOFTWARE_GdipDrawDriverString(graphics, text, length, font, format,
+                                             brush, positions, flags, matrix);
     return stat;
+}
+
+/*****************************************************************************
+ * GdipDrawDriverString [GDIPLUS.@]
+ */
+GpStatus WINGDIPAPI GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UINT16 *text, INT length,
+                                         GDIPCONST GpFont *font, GDIPCONST GpBrush *brush,
+                                         GDIPCONST PointF *positions, INT flags,
+                                         GDIPCONST GpMatrix *matrix )
+{
+    TRACE("(%p %s %p %p %p %d %p)\n", graphics, debugstr_wn(text, length), font, brush, positions, flags, matrix);
+
+    if (!graphics || !text || !font || !brush || !positions)
+        return InvalidParameter;
+
+    return draw_driver_string(graphics, text, length, font, NULL,
+                              brush, positions, flags, matrix);
 }
 
 GpStatus WINGDIPAPI GdipRecordMetafileStream(IStream *stream, HDC hdc, EmfType type, GDIPCONST GpRect *frameRect,

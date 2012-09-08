@@ -968,7 +968,7 @@ void WCMD_echo (const WCHAR *command)
  */
 static void WCMD_part_execute(CMD_LIST **cmdList, const WCHAR *firstcmd,
                               const WCHAR *variable, const WCHAR *value,
-                              BOOL isIF, BOOL conditionTRUE)
+                              BOOL isIF, BOOL executecmds)
 {
   CMD_LIST *curPosition = *cmdList;
   int myDepth = (*cmdList)->bracketDepth;
@@ -976,13 +976,13 @@ static void WCMD_part_execute(CMD_LIST **cmdList, const WCHAR *firstcmd,
   WINE_TRACE("cmdList(%p), firstCmd(%p), with variable '%s'='%s', doIt(%d)\n",
              cmdList, wine_dbgstr_w(firstcmd),
              wine_dbgstr_w(variable), wine_dbgstr_w(value),
-             conditionTRUE);
+             executecmds);
 
   /* Skip leading whitespace between condition and the command */
   while (firstcmd && *firstcmd && (*firstcmd==' ' || *firstcmd=='\t')) firstcmd++;
 
   /* Process the first command, if there is one */
-  if (conditionTRUE && firstcmd && *firstcmd) {
+  if (executecmds && firstcmd && *firstcmd) {
     WCHAR *command = WCMD_strdupW(firstcmd);
     WCMD_execute (firstcmd, (*cmdList)->redirects, variable, value, cmdList);
     HeapFree(GetProcessHeap(), 0, command);
@@ -994,9 +994,7 @@ static void WCMD_part_execute(CMD_LIST **cmdList, const WCHAR *firstcmd,
 
   /* Process any other parts of the command */
   if (*cmdList) {
-    BOOL processThese = TRUE;
-
-    if (isIF) processThese = conditionTRUE;
+    BOOL processThese = executecmds;
 
     while (*cmdList) {
       static const WCHAR ifElse[] = {'e','l','s','e'};
@@ -1086,6 +1084,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
   BOOL   expandDirs  = FALSE;
   BOOL   useNumbers  = FALSE;
   BOOL   doFileset   = FALSE;
+  BOOL   doExecuted  = FALSE;  /* Has the 'do' part been executed */
   LONG   numbers[3] = {0,0,0}; /* Defaults to 0 in native */
   int    itemNum;
   CMD_LIST *thisCmdStart;
@@ -1235,6 +1234,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
                 {
                   thisCmdStart = cmdStart;
                   WINE_TRACE("Processing FOR filename %s\n", wine_dbgstr_w(fd.cFileName));
+                  doExecuted = TRUE;
                   WCMD_part_execute (&thisCmdStart, firstCmd, variable,
                                                fd.cFileName, FALSE, TRUE);
                 }
@@ -1243,6 +1243,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
               FindClose (hff);
             }
           } else {
+            doExecuted = TRUE;
             WCMD_part_execute(&thisCmdStart, firstCmd, variable, item, FALSE, TRUE);
           }
 
@@ -1312,6 +1313,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
                   /* FIXME: The following should be moved into its own routine and
                      reused for the string literal parsing below                  */
                   thisCmdStart = cmdStart;
+                  doExecuted = TRUE;
                   WCMD_part_execute(&thisCmdStart, firstCmd, variable, parm, FALSE, TRUE);
                   cmdEnd = thisCmdStart;
               }
@@ -1342,6 +1344,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
               /* FIXME: The following should be moved into its own routine and
                  reused for the string literal parsing below                  */
               thisCmdStart = cmdStart;
+              doExecuted = TRUE;
               WCMD_part_execute(&thisCmdStart, firstCmd, variable, parm, FALSE, TRUE);
               cmdEnd = thisCmdStart;
           }
@@ -1364,16 +1367,28 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
       WINE_TRACE("FOR /L provided range from %d to %d step %d\n",
                  numbers[0], numbers[2], numbers[1]);
       for (i=numbers[0];
-           (numbers[1]<0)? i>numbers[2] : i<numbers[2];
+           (numbers[1]<0)? i>=numbers[2] : i<=numbers[2];
            i=i + numbers[1]) {
 
           sprintfW(thisNum, fmt, i);
           WINE_TRACE("Processing FOR number %s\n", wine_dbgstr_w(thisNum));
 
           thisCmdStart = cmdStart;
+          doExecuted = TRUE;
           WCMD_part_execute(&thisCmdStart, firstCmd, variable, thisNum, FALSE, TRUE);
-          cmdEnd = thisCmdStart;
       }
+      cmdEnd = thisCmdStart;
+  }
+
+  /* Now skip over the do part if we did not perform the for loop so far.
+     We store in cmdEnd the next command after the do block, but we only
+     know this if something was run. If it has not been, we need to calculate
+     it.                                                                      */
+  if (!doExecuted) {
+    thisCmdStart = cmdStart;
+    WINE_TRACE("Skipping for loop commands due to no valid iterations\n");
+    WCMD_part_execute(&thisCmdStart, firstCmd, NULL, NULL, FALSE, FALSE);
+    cmdEnd = thisCmdStart;
   }
 
   /* When the loop ends, either something like a GOTO or EXIT /b has terminated
@@ -1823,6 +1838,10 @@ void WCMD_remove_dir (WCHAR *command) {
         lpDir.pFrom  = thisArg;
         lpDir.fFlags = FOF_SILENT | FOF_NOCONFIRMATION | FOF_NOERRORUI;
         lpDir.wFunc  = FO_DELETE;
+
+        /* SHFileOperationW needs file list with a double null termination */
+        thisArg[lstrlenW(thisArg) + 1] = 0x00;
+
         if (SHFileOperationW(&lpDir)) WCMD_print_error ();
       }
     }
@@ -1864,7 +1883,7 @@ void WCMD_rename (void)
   }
 
   /* Destination cannot contain a drive letter or directory separator */
-  if ((strchrW(param1,':') != NULL) || (strchrW(param1,'\\') != NULL)) {
+  if ((strchrW(param2,':') != NULL) || (strchrW(param2,'\\') != NULL)) {
       SetLastError(ERROR_INVALID_PARAMETER);
       WCMD_print_error();
       errorlevel = 1;
@@ -2112,7 +2131,7 @@ void WCMD_setshow_default (const WCHAR *command) {
       if (*command != '"') *pos++ = *command;
       command++;
     }
-    while (pos > command && (*(pos-1) == ' ' || *(pos-1) == '\t'))
+    while (pos > string && (*(pos-1) == ' ' || *(pos-1) == '\t'))
       pos--;
     *pos = 0x00;
 
@@ -2342,11 +2361,14 @@ void WCMD_setshow_env (WCHAR *s) {
     *p++ = '\0';
 
     if (strlenW(p) == 0) p = NULL;
+    WINE_TRACE("set: Setting var '%s' to '%s'\n", wine_dbgstr_w(s),
+               wine_dbgstr_w(p));
     status = SetEnvironmentVariableW(s, p);
     gle = GetLastError();
     if ((!status) & (gle == ERROR_ENVVAR_NOT_FOUND)) {
       errorlevel = 1;
     } else if ((!status)) WCMD_print_error();
+    else errorlevel = 0;
   }
 }
 
@@ -2363,7 +2385,7 @@ void WCMD_setshow_path (const WCHAR *command) {
   static const WCHAR pathW[] = {'P','A','T','H','\0'};
   static const WCHAR pathEqW[] = {'P','A','T','H','=','\0'};
 
-  if (strlenW(param1) == 0) {
+  if (strlenW(param1) == 0 && strlenW(param2) == 0) {
     status = GetEnvironmentVariableW(pathW, string, sizeof(string)/sizeof(WCHAR));
     if (status != 0) {
       WCMD_output_asis ( pathEqW);

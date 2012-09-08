@@ -183,14 +183,14 @@ static void test_capabilities(LPDIRECTINPUT pDI, HWND hwnd)
     caps.dwSize = sizeof(caps);
     hr = IDirectInputDevice_GetCapabilities(pKeyboard, &caps);
 
-    ok (SUCCEEDED(hr), "GetCapabilites failed: 0x%08x\n", hr);
-    ok (caps.dwFlags & DIDC_ATTACHED, "GetCapabilites dwFlags: 0x%08x\n", caps.dwFlags);
+    ok (SUCCEEDED(hr), "GetCapabilities failed: 0x%08x\n", hr);
+    ok (caps.dwFlags & DIDC_ATTACHED, "GetCapabilities dwFlags: 0x%08x\n", caps.dwFlags);
     ok (LOWORD(LOBYTE(caps.dwDevType)) == DIDEVTYPE_KEYBOARD,
         "GetCapabilities invalid device type for dwDevType: 0x%08x\n", caps.dwDevType);
     ok (LOWORD(HIBYTE(caps.dwDevType)) != DIDEVTYPEKEYBOARD_UNKNOWN,
         "GetCapabilities invalid device subtype for dwDevType: 0x%08x\n", caps.dwDevType);
 
-    if (pKeyboard) IUnknown_Release(pKeyboard);
+    IUnknown_Release(pKeyboard);
 }
 
 static void keyboard_tests(DWORD version)

@@ -1320,6 +1320,420 @@ void fill_cpu_info(void)
           cached_sci.Architecture, cached_sci.Level, cached_sci.Revision, cached_sci.FeatureSet);
 }
 
+#ifdef linux
+static inline BOOL logical_proc_info_add_by_id(SYSTEM_LOGICAL_PROCESSOR_INFORMATION *data,
+        DWORD *len, DWORD max_len, LOGICAL_PROCESSOR_RELATIONSHIP rel, DWORD id, DWORD proc)
+{
+    int i;
+
+    for(i=0; i<*len; i++)
+    {
+        if(data[i].Relationship!=rel || data[i].u.Reserved[1]!=id)
+            continue;
+
+        data[i].ProcessorMask |= (ULONG_PTR)1<<proc;
+        return TRUE;
+    }
+
+    if(*len == max_len)
+        return FALSE;
+
+    data[i].Relationship = rel;
+    data[i].ProcessorMask = (ULONG_PTR)1<<proc;
+    /* TODO: set processor core flags */
+    data[i].u.Reserved[0] = 0;
+    data[i].u.Reserved[1] = id;
+    *len = i+1;
+    return TRUE;
+}
+
+static inline BOOL logical_proc_info_add_cache(SYSTEM_LOGICAL_PROCESSOR_INFORMATION *data,
+        DWORD *len, DWORD max_len, ULONG_PTR mask, CACHE_DESCRIPTOR *cache)
+{
+    int i;
+
+    for(i=0; i<*len; i++)
+    {
+        if(data[i].Relationship==RelationCache && data[i].ProcessorMask==mask
+                && data[i].u.Cache.Level==cache->Level && data[i].u.Cache.Type==cache->Type)
+            return TRUE;
+    }
+
+    if(*len == max_len)
+        return FALSE;
+
+    data[i].Relationship = RelationCache;
+    data[i].ProcessorMask = mask;
+    data[i].u.Cache = *cache;
+    *len = i+1;
+    return TRUE;
+}
+
+static inline BOOL logical_proc_info_add_numa_node(SYSTEM_LOGICAL_PROCESSOR_INFORMATION *data,
+        DWORD *len, DWORD max_len, ULONG_PTR mask, DWORD node_id)
+{
+    if(*len == max_len)
+        return FALSE;
+
+    data[*len].Relationship = RelationNumaNode;
+    data[*len].ProcessorMask = mask;
+    data[*len].u.NumaNode.NodeNumber = node_id;
+    (*len)++;
+    return TRUE;
+}
+
+static NTSTATUS create_logical_proc_info(SYSTEM_LOGICAL_PROCESSOR_INFORMATION **data, DWORD *max_len)
+{
+    static const char core_info[] = "/sys/devices/system/cpu/cpu%d/%s";
+    static const char cache_info[] = "/sys/devices/system/cpu/cpu%d/cache/index%d/%s";
+    static const char numa_info[] = "/sys/devices/system/node/node%d/cpumap";
+
+    FILE *fcpu_list, *fnuma_list, *f;
+    DWORD len = 0, beg, end, i, j, r;
+    char op, name[MAX_PATH];
+
+    fcpu_list = fopen("/sys/devices/system/cpu/online", "r");
+    if(!fcpu_list)
+        return STATUS_NOT_IMPLEMENTED;
+
+    while(!feof(fcpu_list))
+    {
+        if(!fscanf(fcpu_list, "%u%c ", &beg, &op))
+            break;
+        if(op == '-') fscanf(fcpu_list, "%u%c ", &end, &op);
+        else end = beg;
+
+        for(i=beg; i<=end; i++)
+        {
+            if(i > 8*sizeof(ULONG_PTR))
+            {
+                FIXME("skipping logical processor %d\n", i);
+                continue;
+            }
+
+            sprintf(name, core_info, i, "core_id");
+            f = fopen(name, "r");
+            if(f)
+            {
+                fscanf(f, "%u", &r);
+                fclose(f);
+            }
+            else r = i;
+            if(!logical_proc_info_add_by_id(*data, &len, *max_len, RelationProcessorCore, r, i))
+            {
+                SYSTEM_LOGICAL_PROCESSOR_INFORMATION *new_data;
+
+                *max_len *= 2;
+                new_data = RtlReAllocateHeap(GetProcessHeap(), 0, *data, *max_len*sizeof(*new_data));
+                if(!new_data)
+                {
+                    fclose(fcpu_list);
+                    return STATUS_NO_MEMORY;
+                }
+
+                *data = new_data;
+                logical_proc_info_add_by_id(*data, &len, *max_len, RelationProcessorCore, r, i);
+            }
+
+            sprintf(name, core_info, i, "physical_package_id");
+            f = fopen(name, "r");
+            if(f)
+            {
+                fscanf(f, "%u", &r);
+                fclose(f);
+            }
+            else r = 0;
+            if(!logical_proc_info_add_by_id(*data, &len, *max_len, RelationProcessorPackage, r, i))
+            {
+                SYSTEM_LOGICAL_PROCESSOR_INFORMATION *new_data;
+
+                *max_len *= 2;
+                new_data = RtlReAllocateHeap(GetProcessHeap(), 0, *data, *max_len*sizeof(*new_data));
+                if(!new_data)
+                {
+                    fclose(fcpu_list);
+                    return STATUS_NO_MEMORY;
+                }
+
+                *data = new_data;
+                logical_proc_info_add_by_id(*data, &len, *max_len, RelationProcessorPackage, r, i);
+            }
+
+            for(j=0; j<4; j++)
+            {
+                CACHE_DESCRIPTOR cache;
+                ULONG_PTR mask = 0;
+
+                sprintf(name, cache_info, i, j, "shared_cpu_map");
+                f = fopen(name, "r");
+                if(!f) continue;
+                while(!feof(f))
+                {
+                    if(!fscanf(f, "%x%c ", &r, &op))
+                        break;
+                    mask = (sizeof(ULONG_PTR)>sizeof(int) ? mask<<(8*sizeof(DWORD)) : 0) + r;
+                }
+                fclose(f);
+
+                sprintf(name, cache_info, i, j, "level");
+                f = fopen(name, "r");
+                if(!f) continue;
+                fscanf(f, "%u", &r);
+                fclose(f);
+                cache.Level = r;
+
+                sprintf(name, cache_info, i, j, "ways_of_associativity");
+                f = fopen(name, "r");
+                if(!f) continue;
+                fscanf(f, "%u", &r);
+                fclose(f);
+                cache.Associativity = r;
+
+                sprintf(name, cache_info, i, j, "coherency_line_size");
+                f = fopen(name, "r");
+                if(!f) continue;
+                fscanf(f, "%u", &r);
+                fclose(f);
+                cache.LineSize = r;
+
+                sprintf(name, cache_info, i, j, "size");
+                f = fopen(name, "r");
+                if(!f) continue;
+                fscanf(f, "%u%c", &r, &op);
+                fclose(f);
+                if(op != 'K')
+                    WARN("unknown cache size %u%c\n", r, op);
+                cache.Size = (op=='K' ? r*1024 : r);
+
+                sprintf(name, cache_info, i, j, "type");
+                f = fopen(name, "r");
+                if(!f) continue;
+                fscanf(f, "%s", name);
+                fclose(f);
+                if(!memcmp(name, "Data", 5))
+                    cache.Type = CacheData;
+                else if(!memcmp(name, "Instruction", 11))
+                    cache.Type = CacheInstruction;
+                else
+                    cache.Type = CacheUnified;
+
+                if(!logical_proc_info_add_cache(*data, &len, *max_len, mask, &cache))
+                {
+                    SYSTEM_LOGICAL_PROCESSOR_INFORMATION *new_data;
+
+                    *max_len *= 2;
+                    new_data = RtlReAllocateHeap(GetProcessHeap(), 0, *data, *max_len*sizeof(*new_data));
+                    if(!new_data)
+                    {
+                        fclose(fcpu_list);
+                        return STATUS_NO_MEMORY;
+                    }
+
+                    *data = new_data;
+                    logical_proc_info_add_cache(*data, &len, *max_len, mask, &cache);
+                }
+            }
+        }
+    }
+    fclose(fcpu_list);
+
+    fnuma_list = fopen("/sys/devices/system/node/online", "r");
+    if(!fnuma_list)
+    {
+        ULONG_PTR mask = 0;
+
+        for(i=0; i<len; i++)
+            if((*data)[i].Relationship == RelationProcessorCore)
+                mask |= (*data)[i].ProcessorMask;
+
+        if(len == *max_len)
+        {
+            SYSTEM_LOGICAL_PROCESSOR_INFORMATION *new_data;
+
+            *max_len *= 2;
+            new_data = RtlReAllocateHeap(GetProcessHeap(), 0, *data, *max_len*sizeof(*new_data));
+            if(!new_data)
+                return STATUS_NO_MEMORY;
+
+            *data = new_data;
+        }
+        logical_proc_info_add_numa_node(*data, &len, *max_len, mask, 0);
+    }
+    else
+    {
+        while(!feof(fnuma_list))
+        {
+            if(!fscanf(fnuma_list, "%u%c ", &beg, &op))
+                break;
+            if(op == '-') fscanf(fnuma_list, "%u%c ", &end, &op);
+            else end = beg;
+
+            for(i=beg; i<=end; i++)
+            {
+                ULONG_PTR mask = 0;
+
+                sprintf(name, numa_info, i);
+                f = fopen(name, "r");
+                if(!f) continue;
+                while(!feof(f))
+                {
+                    if(!fscanf(f, "%x%c ", &r, &op))
+                        break;
+                    mask = (sizeof(ULONG_PTR)>sizeof(int) ? mask<<(8*sizeof(DWORD)) : 0) + r;
+                }
+                fclose(f);
+
+                if(len == *max_len)
+                {
+                    SYSTEM_LOGICAL_PROCESSOR_INFORMATION *new_data;
+
+                    *max_len *= 2;
+                    new_data = RtlReAllocateHeap(GetProcessHeap(), 0, *data, *max_len*sizeof(*new_data));
+                    if(!new_data)
+                    {
+                        fclose(fnuma_list);
+                        return STATUS_NO_MEMORY;
+                    }
+
+                    *data = new_data;
+                }
+                logical_proc_info_add_numa_node(*data, &len, *max_len, mask, i);
+            }
+        }
+        fclose(fnuma_list);
+    }
+
+    *max_len = len * sizeof(**data);
+    return STATUS_SUCCESS;
+}
+#elif defined(__APPLE__)
+static NTSTATUS create_logical_proc_info(SYSTEM_LOGICAL_PROCESSOR_INFORMATION **data, DWORD *max_len)
+{
+    DWORD len = 0, i, j, k;
+    DWORD cores_no, lcpu_no, lcpu_per_core, cores_per_package, assoc;
+    size_t size;
+    ULONG_PTR mask;
+    LONGLONG cache_size, cache_line_size, cache_sharing[10];
+    CACHE_DESCRIPTOR cache[4];
+
+    lcpu_no = NtCurrentTeb()->Peb->NumberOfProcessors;
+
+    size = sizeof(cores_no);
+    if(sysctlbyname("machdep.cpu.core_count", &cores_no, &size, NULL, 0))
+        cores_no = lcpu_no;
+
+    lcpu_per_core = lcpu_no/cores_no;
+    for(i=0; i<cores_no; i++)
+    {
+        mask = 0;
+        for(j=lcpu_per_core*i; j<lcpu_per_core*(i+1); j++)
+            mask |= (ULONG_PTR)1<<j;
+
+        (*data)[len].Relationship = RelationProcessorCore;
+        (*data)[len].ProcessorMask = mask;
+        (*data)[len].u.ProcessorCore.Flags = 0; /* TODO */
+        len++;
+    }
+
+    size = sizeof(cores_per_package);
+    if(sysctlbyname("machdep.cpu.cores_per_package", &cores_per_package, &size, NULL, 0))
+        cores_per_package = lcpu_no;
+
+    for(i=0; i<(lcpu_no+cores_per_package-1)/cores_per_package; i++)
+    {
+        mask = 0;
+        for(j=cores_per_package*i; j<cores_per_package*(i+1) && j<lcpu_no; j++)
+            mask |= (ULONG_PTR)1<<j;
+
+        (*data)[len].Relationship = RelationProcessorPackage;
+        (*data)[len].ProcessorMask = mask;
+        len++;
+    }
+
+    memset(cache, 0, sizeof(cache));
+    cache[0].Level = 1;
+    cache[0].Type = CacheInstruction;
+    cache[1].Level = 1;
+    cache[1].Type = CacheData;
+    cache[2].Level = 2;
+    cache[2].Type = CacheUnified;
+    cache[3].Level = 3;
+    cache[3].Type = CacheUnified;
+
+    size = sizeof(cache_line_size);
+    if(!sysctlbyname("hw.cachelinesize", &cache_line_size, &size, NULL, 0))
+    {
+        for(i=0; i<4; i++)
+            cache[i].LineSize = cache_line_size;
+    }
+
+    /* TODO: set associativity for all caches */
+    size = sizeof(assoc);
+    if(!sysctlbyname("machdep.cpu.cache.L2_associativity", &assoc, &size, NULL, 0))
+        cache[2].Associativity = assoc;
+
+    size = sizeof(cache_size);
+    if(!sysctlbyname("hw.l1icachesize", &cache_size, &size, NULL, 0))
+        cache[0].Size = cache_size;
+    size = sizeof(cache_size);
+    if(!sysctlbyname("hw.l1dcachesize", &cache_size, &size, NULL, 0))
+        cache[1].Size = cache_size;
+    size = sizeof(cache_size);
+    if(!sysctlbyname("hw.l2cachesize", &cache_size, &size, NULL, 0))
+        cache[2].Size = cache_size;
+    size = sizeof(cache_size);
+    if(!sysctlbyname("hw.l3cachesize", &cache_size, &size, NULL, 0))
+        cache[3].Size = cache_size;
+
+    size = sizeof(cache_sharing);
+    if(!sysctlbyname("hw.cacheconfig", cache_sharing, &size, NULL, 0))
+    {
+        for(i=1; i<4 && i<size/sizeof(*cache_sharing); i++)
+        {
+            if(!cache_sharing[i] || !cache[i].Size)
+                continue;
+
+            for(j=0; j<lcpu_no/cache_sharing[i]; j++)
+            {
+                mask = 0;
+                for(k=j*cache_sharing[i]; k<lcpu_no && k<(j+1)*cache_sharing[i]; k++)
+                    mask |= (ULONG_PTR)1<<k;
+
+                if(i==1 && cache[0].Size)
+                {
+                    (*data)[len].Relationship = RelationCache;
+                    (*data)[len].ProcessorMask = mask;
+                    (*data)[len].u.Cache = cache[0];
+                    len++;
+                }
+
+                (*data)[len].Relationship = RelationCache;
+                (*data)[len].ProcessorMask = mask;
+                (*data)[len].u.Cache = cache[i];
+                len++;
+            }
+        }
+    }
+
+    mask = 0;
+    for(i=0; i<lcpu_no; i++)
+        mask |= (ULONG_PTR)1<<i;
+    (*data)[len].Relationship = RelationNumaNode;
+    (*data)[len].ProcessorMask = mask;
+    (*data)[len].u.NumaNode.NodeNumber = 0;
+    len++;
+
+    *max_len = len * sizeof(**data);
+    return STATUS_SUCCESS;
+}
+#else
+static NTSTATUS create_logical_proc_info(SYSTEM_LOGICAL_PROCESSOR_INFORMATION **data, DWORD *max_len)
+{
+    FIXME("stub\n");
+    return STATUS_NOT_IMPLEMENTED;
+}
+#endif
+
 /******************************************************************************
  * NtQuerySystemInformation [NTDLL.@]
  * ZwQuerySystemInformation [NTDLL.@]
@@ -1754,6 +2168,36 @@ NTSTATUS WINAPI NtQuerySystemInformation(
             else ret = STATUS_INFO_LENGTH_MISMATCH;
         }
 	break;
+    case SystemLogicalProcessorInformation:
+        {
+            SYSTEM_LOGICAL_PROCESSOR_INFORMATION *buf;
+
+            /* Each logical processor may use up to 7 entries in returned table:
+             * core, numa node, package, L1i, L1d, L2, L3 */
+            len = 7 * NtCurrentTeb()->Peb->NumberOfProcessors;
+            buf = RtlAllocateHeap(GetProcessHeap(), 0, len * sizeof(*buf));
+            if(!buf)
+            {
+                ret = STATUS_NO_MEMORY;
+                break;
+            }
+
+            ret = create_logical_proc_info(&buf, &len);
+            if( ret != STATUS_SUCCESS )
+            {
+                RtlFreeHeap(GetProcessHeap(), 0, buf);
+                break;
+            }
+
+            if( Length >= len)
+            {
+                if (!SystemInformation) ret = STATUS_ACCESS_VIOLATION;
+                else memcpy( SystemInformation, buf, len);
+            }
+            else ret = STATUS_INFO_LENGTH_MISMATCH;
+            RtlFreeHeap(GetProcessHeap(), 0, buf);
+        }
+        break;
     default:
 	FIXME("(0x%08x,%p,0x%08x,%p) stub\n",
 	      SystemInformationClass,SystemInformation,Length,ResultLength);

@@ -2127,8 +2127,7 @@ HRESULT __cdecl wined3d_device_get_front_buffer_data(const struct wined3d_device
         UINT swapchain_idx, struct wined3d_surface *dst_surface);
 void __cdecl wined3d_device_get_gamma_ramp(const struct wined3d_device *device,
         UINT swapchain_idx, struct wined3d_gamma_ramp *ramp);
-HRESULT __cdecl wined3d_device_get_index_buffer(const struct wined3d_device *device,
-        struct wined3d_buffer **index_buffer);
+struct wined3d_buffer * __cdecl wined3d_device_get_index_buffer(const struct wined3d_device *device);
 HRESULT __cdecl wined3d_device_get_light(const struct wined3d_device *device,
         UINT light_idx, struct wined3d_light *light);
 HRESULT __cdecl wined3d_device_get_light_enable(const struct wined3d_device *device, UINT light_idx, BOOL *enable);
@@ -2159,8 +2158,8 @@ HRESULT __cdecl wined3d_device_get_stream_source_freq(const struct wined3d_devic
         UINT stream_idx, UINT *divider);
 HRESULT __cdecl wined3d_device_get_surface_from_dc(const struct wined3d_device *device,
         HDC dc, struct wined3d_surface **surface);
-HRESULT __cdecl wined3d_device_get_swapchain(const struct wined3d_device *device,
-        UINT swapchain_idx, struct wined3d_swapchain **swapchain);
+struct wined3d_swapchain * __cdecl wined3d_device_get_swapchain(const struct wined3d_device *device,
+        UINT swapchain_idx);
 UINT __cdecl wined3d_device_get_swapchain_count(const struct wined3d_device *device);
 HRESULT __cdecl wined3d_device_get_texture(const struct wined3d_device *device,
         UINT stage, struct wined3d_texture **texture);
@@ -2178,7 +2177,6 @@ HRESULT __cdecl wined3d_device_get_vs_consts_f(const struct wined3d_device *devi
         UINT start_register, float *constants, UINT vector4f_count);
 HRESULT __cdecl wined3d_device_get_vs_consts_i(const struct wined3d_device *device,
         UINT start_register, int *constants, UINT vector4i_count);
-HRESULT __cdecl wined3d_device_get_wined3d(const struct wined3d_device *device, struct wined3d **wined3d);
 ULONG __cdecl wined3d_device_incref(struct wined3d_device *device);
 HRESULT __cdecl wined3d_device_init_3d(struct wined3d_device *device, struct wined3d_swapchain_desc *swapchain_desc);
 HRESULT __cdecl wined3d_device_init_gdi(struct wined3d_device *device, struct wined3d_swapchain_desc *swapchain_desc);
@@ -2207,7 +2205,7 @@ HRESULT __cdecl wined3d_device_set_depth_stencil(struct wined3d_device *device, 
 HRESULT __cdecl wined3d_device_set_dialog_box_mode(struct wined3d_device *device, BOOL enable_dialogs);
 void __cdecl wined3d_device_set_gamma_ramp(const struct wined3d_device *device,
         UINT swapchain_idx, DWORD flags, const struct wined3d_gamma_ramp *ramp);
-HRESULT __cdecl wined3d_device_set_index_buffer(struct wined3d_device *device,
+void __cdecl wined3d_device_set_index_buffer(struct wined3d_device *device,
         struct wined3d_buffer *index_buffer, enum wined3d_format_id format_id);
 HRESULT __cdecl wined3d_device_set_light(struct wined3d_device *device,
         UINT light_idx, const struct wined3d_light *light);

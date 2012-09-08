@@ -77,10 +77,10 @@ static HRESULT exec_global_code(script_ctx_t *ctx, vbscode_t *code)
 {
     HRESULT hres;
 
-    code->global_executed = TRUE;
+    code->pending_exec = FALSE;
 
     IActiveScriptSite_OnEnterScript(ctx->site);
-    hres = exec_script(ctx, &code->global_code, NULL, NULL, NULL);
+    hres = exec_script(ctx, &code->main_code, NULL, NULL, NULL);
     IActiveScriptSite_OnLeaveScript(ctx->site);
 
     return hres;
@@ -91,7 +91,7 @@ static void exec_queued_code(script_ctx_t *ctx)
     vbscode_t *iter;
 
     LIST_FOR_EACH_ENTRY(iter, &ctx->code_list, vbscode_t, entry) {
-        if(!iter->global_executed)
+        if(iter->pending_exec)
             exec_global_code(ctx, iter);
     }
 }
@@ -604,7 +604,12 @@ static HRESULT WINAPI VBScriptParse_ParseScriptText(IActiveScriptParse *iface,
     if(FAILED(hres))
         return hres;
 
-    return is_started(This) ? exec_global_code(This->ctx, code) : S_OK;
+    if(!is_started(This)) {
+        code->pending_exec = TRUE;
+        return S_OK;
+    }
+
+    return exec_global_code(This->ctx, code);
 }
 
 static const IActiveScriptParseVtbl VBScriptParseVtbl = {
@@ -645,10 +650,21 @@ static HRESULT WINAPI VBScriptParseProcedure_ParseProcedureText(IActiveScriptPar
         CTXARG_T dwSourceContextCookie, ULONG ulStartingLineNumber, DWORD dwFlags, IDispatch **ppdisp)
 {
     VBScript *This = impl_from_IActiveScriptParseProcedure2(iface);
-    FIXME("(%p)->(%s %s %s %s %p %s %s %u %x %p)\n", This, debugstr_w(pstrCode), debugstr_w(pstrFormalParams),
+    vbscode_t *code;
+    HRESULT hres;
+
+    TRACE("(%p)->(%s %s %s %s %p %s %s %u %x %p)\n", This, debugstr_w(pstrCode), debugstr_w(pstrFormalParams),
           debugstr_w(pstrProcedureName), debugstr_w(pstrItemName), punkContext, debugstr_w(pstrDelimiter),
           wine_dbgstr_longlong(dwSourceContextCookie), ulStartingLineNumber, dwFlags, ppdisp);
-    return E_NOTIMPL;
+
+    if(This->thread_id != GetCurrentThreadId() || This->state == SCRIPTSTATE_CLOSED)
+        return E_UNEXPECTED;
+
+    hres = compile_script(This->ctx, pstrCode, &code);
+    if(FAILED(hres))
+        return hres;
+
+    return create_procedure_disp(This->ctx, code, ppdisp);
 }
 
 static const IActiveScriptParseProcedure2Vtbl VBScriptParseProcedureVtbl = {

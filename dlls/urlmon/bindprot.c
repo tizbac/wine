@@ -34,32 +34,38 @@ struct _task_header_t {
 #define WM_MK_CONTINUE   (WM_USER+101)
 #define WM_MK_RELEASE    (WM_USER+102)
 
+static void process_tasks(BindProtocol *This)
+{
+    task_header_t *task;
+
+    while(1) {
+        EnterCriticalSection(&This->section);
+
+        task = This->task_queue_head;
+        if(task) {
+            This->task_queue_head = task->next;
+            if(!This->task_queue_head)
+                This->task_queue_tail = NULL;
+        }
+
+        LeaveCriticalSection(&This->section);
+
+        if(!task)
+            break;
+
+        This->continue_call++;
+        task->proc(This, task);
+        This->continue_call--;
+    }
+}
+
 static LRESULT WINAPI notif_wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch(msg) {
     case WM_MK_CONTINUE: {
         BindProtocol *This = (BindProtocol*)lParam;
-        task_header_t *task;
 
-        while(1) {
-            EnterCriticalSection(&This->section);
-
-            task = This->task_queue_head;
-            if(task) {
-                This->task_queue_head = task->next;
-                if(!This->task_queue_head)
-                    This->task_queue_tail = NULL;
-            }
-
-            LeaveCriticalSection(&This->section);
-
-            if(!task)
-                break;
-
-            This->continue_call++;
-            task->proc(This, task);
-            This->continue_call--;
-        }
+        process_tasks(This);
 
         IInternetProtocolEx_Release(&This->IInternetProtocolEx_iface);
         return 0;
@@ -165,9 +171,14 @@ static void push_task(BindProtocol *This, task_header_t *task, task_proc_t proc)
     }
 }
 
+static inline BOOL is_apartment_thread(BindProtocol *This)
+{
+    return This->apartment_thread == GetCurrentThreadId();
+}
+
 static inline BOOL do_direct_notif(BindProtocol *This)
 {
-    return !(This->pi & PI_APARTMENTTHREADED) || (This->apartment_thread == GetCurrentThreadId() && !This->continue_call);
+    return !(This->pi & PI_APARTMENTTHREADED) || (is_apartment_thread(This) && !This->continue_call);
 }
 
 static HRESULT handle_mime_filter(BindProtocol *This, IInternetProtocol *mime_filter)
@@ -543,6 +554,8 @@ static HRESULT WINAPI BindProtocol_StartEx(IInternetProtocolEx *iface, IUri *pUr
                 &This->IInternetBindInfo_iface, 0, 0);
     }
 
+    if(SUCCEEDED(hres))
+        process_tasks(This);
     return hres;
 }
 
@@ -727,7 +740,11 @@ static HRESULT WINAPI ProtocolHandler_Read(IInternetProtocol *iface, void *pv,
     if(read < cb) {
         ULONG cread = 0;
 
+        if(is_apartment_thread(This))
+            This->continue_call++;
         hres = IInternetProtocol_Read(This->protocol, (BYTE*)pv+read, cb-read, &cread);
+        if(is_apartment_thread(This))
+            This->continue_call--;
         read += cread;
     }
 
@@ -822,7 +839,7 @@ static HRESULT WINAPI ProtocolSinkHandler_ReportProgress(IInternetProtocolSink *
 {
     BindProtocol *This = impl_from_IInternetProtocolSinkHandler(iface);
 
-    TRACE("(%p)->(%u %s)\n", This, status_code, debugstr_w(status_text));
+    TRACE("(%p)->(%s %s)\n", This, debugstr_bindstatus(status_code), debugstr_w(status_text));
 
     if(!This->protocol_sink)
         return S_OK;

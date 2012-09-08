@@ -100,6 +100,7 @@ typedef struct _class_desc_t {
     unsigned builtin_prop_cnt;
     const builtin_prop_t *builtin_props;
     ITypeInfo *typeinfo;
+    function_t *value_func;
 
     struct _class_desc_t *next;
 } class_desc_t;
@@ -121,6 +122,7 @@ HRESULT vbdisp_get_id(vbdisp_t*,BSTR,vbdisp_invoke_type_t,BOOL,DISPID*) DECLSPEC
 HRESULT disp_call(script_ctx_t*,IDispatch*,DISPID,DISPPARAMS*,VARIANT*) DECLSPEC_HIDDEN;
 HRESULT disp_propput(script_ctx_t*,IDispatch*,DISPID,DISPPARAMS*) DECLSPEC_HIDDEN;
 void collect_objects(script_ctx_t*) DECLSPEC_HIDDEN;
+HRESULT create_procedure_disp(script_ctx_t*,vbscode_t*,IDispatch**) DECLSPEC_HIDDEN;
 
 static inline unsigned arg_cnt(const DISPPARAMS *dp)
 {
@@ -160,6 +162,7 @@ struct _script_ctx_t {
     dynamic_var_t *global_vars;
     function_t *global_funcs;
     class_desc_t *classes;
+    class_desc_t *procs;
 
     vbsheap_t heap;
 
@@ -298,8 +301,8 @@ struct _vbscode_t {
 
     BOOL option_explicit;
 
-    BOOL global_executed;
-    function_t global_code;
+    BOOL pending_exec;
+    function_t main_code;
 
     BSTR *bstr_pool;
     unsigned bstr_pool_size;

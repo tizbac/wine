@@ -1134,7 +1134,10 @@ This probably prevents linking to OpenGL. Try deleting the file and restarting c
 
                  if test "$ac_cv_header_GL_osmesa_h" = "yes"
                  then
-                    WINE_CHECK_SONAME(OSMesa,glAccum,,,[$X_LIBS $X_PRE_LIBS $XLIB -lm $X_EXTRA_LIBS])
+                    WINE_CHECK_SONAME(OSMesa,OSMesaCreateContext,,,[$X_LIBS $X_PRE_LIBS $XLIB -lm $X_EXTRA_LIBS])
+                    if test "x$ac_cv_lib_soname_OSMesa" = "x"; then
+                       WINE_CHECK_SONAME(OSMesa,OSMesaCreateContext,,,[-lglapi $X_LIBS $X_PRE_LIBS $XLIB -lm $X_EXTRA_LIBS])
+                    fi
                  fi
                  WINE_NOTICE_WITH(osmesa,[test "x$ac_cv_lib_soname_OSMesa" = "x"],
                                  [libOSMesa ${notice_platform}development files not found (or too old), OpenGL rendering in bitmaps won't be supported.])
@@ -2806,6 +2809,7 @@ WINE_CONFIG_DLL(msvcp80)
 WINE_CONFIG_DLL(msvcp90)
 WINE_CONFIG_TEST(dlls/msvcp90/tests)
 WINE_CONFIG_DLL(msvcr100)
+WINE_CONFIG_TEST(dlls/msvcr100/tests)
 WINE_CONFIG_DLL(msvcr70,,[implib])
 WINE_CONFIG_DLL(msvcr71,,[implib])
 WINE_CONFIG_DLL(msvcr80)

@@ -643,9 +643,27 @@ echo > bazbaz
 echo --- basic wildcards
 for %%i in (ba*) do echo %%i
 echo --- for /d
-for /d %%i in (baz foo bar) do echo %%i
-rem FIXME for /d incorrectly parses when wildcards are used
-rem for /d %%i in (bazb*) do echo %%i
+for /d %%i in (baz foo bar) do echo %%i 2>&1
+rem Confirm we dont match files:
+for /d %%i in (bazb*) do echo %%i 2>&1
+for /d %%i in (bazb2*) do echo %%i 2>&1
+rem Show we pass through non wildcards
+for /d %%i in (PASSED) do echo %%i
+for /d %%i in (xxx) do (
+  echo %%i - Should be xxx
+  echo Expected second line
+)
+rem Show we issue no messages on failures
+for /d %%i in (FAILED?) do echo %%i 2>&1
+for /d %%i in (FAILED?) do (
+  echo %%i - Unexpected!
+  echo FAILED Unexpected second line
+)
+for /d %%i in (FAILED*) do echo %%i 2>&1
+for /d %%i in (FAILED*) do (
+  echo %%i - Unexpected!
+  echo FAILED Unexpected second line
+)
 rem FIXME can't test wildcard expansion here since it's listed in directory
 rem order, and not in alphabetic order.
 rem Proper testing would need a currently missing "sort" program implementation.
@@ -673,12 +691,23 @@ for /L %%i in (1,2,a) do echo %%i
 echo ErrorLevel %ErrorLevel%
 for /L %%i in (1,a,b) do echo %%i
 echo ErrorLevel %ErrorLevel%
-rem FIXME: following test cases cannot be currently tested due to an inconsistent/buggy 'for /L' parsing.
-rem for /L %%i in (a,2,b) do echo %%i
-rem for /L %%i in (1,1,1) do echo %%i
-rem for /L %%i in (1,-2,-1) do echo %%i
-rem for /L %%i in (-1,-1,-1) do echo %%i
-rem for /L %%i in (1,2, 3) do echo %%i
+rem Test boundaries
+for /l %%i in (1,1,4) do echo %%i
+for /l %%i in (1,2,4) do echo %%i
+for /l %%i in (4,-1,1) do echo %%i
+for /l %%i in (4,-2,1) do echo %%i
+for /l %%i in (1,-1,4) do echo %%i
+for /l %%i in (4,1,1) do echo %%i
+for /L %%i in (a,2,b) do echo %%i
+for /L %%i in (1,1,1) do echo %%i
+for /L %%i in (1,-2,-1) do echo %%i
+for /L %%i in (-1,-1,-1) do echo %%i
+for /L %%i in (1,2, 3) do echo %%i
+rem Test zero iteration skips the body of the for
+for /L %%i in (2,2,1) do (
+  echo %%i
+  echo FAILED
+)
 echo --- for /a
 rem No output when using "set expr" syntax, unless in interactive mode
 rem Need to use "set envvar=expr" to use in a batch script
@@ -1152,7 +1181,7 @@ if not exist foo (
 )
 mkdir foo\bar\baz
 echo foo > foo\bar\brol
-rmdir /s /Q foo
+rmdir /s /Q foo 2>&1
 if not exist foo (
     echo recursive rmdir succeeded
 ) else (
@@ -1518,6 +1547,17 @@ echo goto with a leading tab worked
 if d==d goto dest4
 :dest4@space@
 echo goto with a following space worked
+
+echo ------------ Testing PATH ------------
+set backup_path=%path%
+set path=original
+path
+path try2
+path
+path=try3
+path
+set path=%backup_path%
+set backup_path=
 
 echo ------------ Testing combined CALLs/GOTOs ------------
 echo @echo off>foo.cmd

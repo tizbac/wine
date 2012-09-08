@@ -42,7 +42,7 @@ static void la_to_rgba(const struct vec4 *la, struct vec4 *rgba)
  *
  * Call get_format_info to request information about a specific format.
  */
-static const PixelFormatDesc formats[] =
+static const struct pixel_format_desc formats[] =
 {
     /* format            bpc              shifts            bpp blocks   type            from_rgba     to_rgba */
     {D3DFMT_R8G8B8,      {0,  8,  8,  8}, { 0, 16,  8,  0}, 3, 1, 1,  3, FORMAT_ARGB,    NULL,         NULL      },
@@ -186,10 +186,9 @@ HRESULT write_buffer_to_file(const WCHAR *dst_filename, ID3DXBuffer *buffer)
  *
  * PARAMS
  *   format [I] format whose description is queried
- *   desc   [O] pointer to a StaticPixelFormatDesc structure
  *
  */
-const PixelFormatDesc *get_format_info(D3DFORMAT format)
+const struct pixel_format_desc *get_format_info(D3DFORMAT format)
 {
     unsigned int i = 0;
     while(formats[i].format != format && formats[i].format != D3DFMT_UNKNOWN) i++;
@@ -198,7 +197,7 @@ const PixelFormatDesc *get_format_info(D3DFORMAT format)
     return &formats[i];
 }
 
-const PixelFormatDesc *get_format_info_idx(int idx)
+const struct pixel_format_desc *get_format_info_idx(int idx)
 {
     if(idx >= sizeof(formats) / sizeof(formats[0]))
         return NULL;
@@ -270,3 +269,94 @@ const char *debug_d3dxparameter_registerset(D3DXREGISTER_SET r)
 }
 
 #undef WINE_D3DX_TO_STR
+
+/* parameter type conversion helpers */
+BOOL get_bool(LPCVOID data)
+{
+    return (*(DWORD *)data) != 0;
+}
+
+INT get_int(D3DXPARAMETER_TYPE type, LPCVOID data)
+{
+    INT i;
+
+    switch (type)
+    {
+        case D3DXPT_FLOAT:
+            i = *(FLOAT *)data;
+            break;
+
+        case D3DXPT_INT:
+            i = *(INT *)data;
+            break;
+
+        case D3DXPT_BOOL:
+            i = get_bool(data);
+            break;
+
+        default:
+            i = 0;
+            FIXME("Unhandled type %s. This should not happen!\n", debug_d3dxparameter_type(type));
+            break;
+    }
+
+    return i;
+}
+
+FLOAT get_float(D3DXPARAMETER_TYPE type, LPCVOID data)
+{
+    FLOAT f;
+
+    switch (type)
+    {
+        case D3DXPT_FLOAT:
+            f = *(FLOAT *)data;
+            break;
+
+        case D3DXPT_INT:
+            f = *(INT *)data;
+            break;
+
+        case D3DXPT_BOOL:
+            f = get_bool(data);
+            break;
+
+        default:
+            f = 0.0f;
+            FIXME("Unhandled type %s. This should not happen!\n", debug_d3dxparameter_type(type));
+            break;
+    }
+
+    return f;
+}
+
+void set_number(LPVOID outdata, D3DXPARAMETER_TYPE outtype, LPCVOID indata, D3DXPARAMETER_TYPE intype)
+{
+    TRACE("Changing from type %s to type %s\n", debug_d3dxparameter_type(intype), debug_d3dxparameter_type(outtype));
+
+    if (outtype == intype)
+    {
+        *(DWORD *)outdata = *(DWORD *)indata;
+        return;
+    }
+
+    switch (outtype)
+    {
+        case D3DXPT_FLOAT:
+            *(FLOAT *)outdata = get_float(intype, indata);
+            break;
+
+        case D3DXPT_BOOL:
+            *(BOOL *)outdata = get_bool(indata);
+            break;
+
+        case D3DXPT_INT:
+            *(INT *)outdata = get_int(intype, indata);
+            break;
+
+        default:
+            FIXME("Unhandled type %s. This should not happen!\n", debug_d3dxparameter_type(outtype));
+            *(INT *)outdata = 0;
+            break;
+    }
+}

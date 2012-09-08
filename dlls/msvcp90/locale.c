@@ -8255,8 +8255,23 @@ locale__Locimp* __cdecl locale__Init(void)
 DEFINE_THISCALL_WRAPPER(locale_ctor_locale_locale, 16)
 locale* __thiscall locale_ctor_locale_locale(locale *this, const locale *loc, const locale *other, category cat)
 {
-    FIXME("(%p %p %p %d) stub\n", this, loc, other, cat);
-    return NULL;
+    _Locinfo locinfo;
+
+    TRACE("(%p %p %p %d)\n", this, loc, other, cat);
+
+    this->ptr = MSVCRT_operator_new(sizeof(locale__Locimp));
+    if(!this->ptr) {
+        ERR("Out of memory\n");
+        throw_exception(EXCEPTION_BAD_ALLOC, NULL);
+    }
+    locale__Locimp_copy_ctor(this->ptr, loc->ptr);
+
+    _Locinfo_ctor_cat_cstr(&locinfo, loc->ptr->catmask, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+    _Locinfo__Addcats(&locinfo, cat & other->ptr->catmask, MSVCP_basic_string_char_c_str(&other->ptr->name));
+    locale__Locimp__Makeloc(&locinfo, cat, this->ptr, other);
+    _Locinfo_dtor(&locinfo);
+
+    return this;
 }
 
 /* ??0locale@std@@QAE@ABV01@@Z */
@@ -8293,7 +8308,9 @@ locale* __thiscall locale_ctor_cstr(locale *this, const char *locname, category 
         ERR("Out of memory\n");
         throw_exception(EXCEPTION_BAD_ALLOC, NULL);
     }
-    this->ptr = locale__Init();
+    locale__Locimp_ctor(this->ptr);
+
+    locale__Init();
 
     _Locinfo_ctor_cat_cstr(&locinfo, cat, locname);
     if(!memcmp(MSVCP_basic_string_char_c_str(&locinfo.newlocname), "*", 2)) {
@@ -8721,6 +8738,34 @@ void __asm_dummy_vtables(void) {
 #ifndef __GNUC__
 }
 #endif
+
+void init_locale(void)
+{
+#ifdef __x86_64__
+    void *base = GetModuleHandleA("msvcp90.dll");
+    init_locale_facet_rtti(base);
+    init_collate_char_rtti(base);
+    init_collate_wchar_rtti(base);
+    init_collate_short_rtti(base);
+    init_ctype_base_rtti(base);
+    init_ctype_char_rtti(base);
+    init_ctype_wchar_rtti(base);
+    init_ctype_short_rtti(base);
+    init_codecvt_base_rtti(base);
+    init_codecvt_char_rtti(base);
+    init_codecvt_wchar_rtti(base);
+    init_codecvt_short_rtti(base);
+    init_numpunct_char_rtti(base);
+    init_numpunct_wchar_rtti(base);
+    init_numpunct_short_rtti(base);
+    init_num_get_char_rtti(base);
+    init_num_get_wchar_rtti(base);
+    init_num_get_short_rtti(base);
+    init_num_put_char_rtti(base);
+    init_num_put_wchar_rtti(base);
+    init_num_put_short_rtti(base);
+#endif
+}
 
 void free_locale(void)
 {

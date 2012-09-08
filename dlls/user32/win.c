@@ -34,6 +34,7 @@
 #include "user_private.h"
 #include "controls.h"
 #include "winerror.h"
+#include "wine/gdi_driver.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(win);
@@ -42,6 +43,17 @@ WINE_DEFAULT_DEBUG_CHANNEL(win);
 #define USER_HANDLE_TO_INDEX(hwnd) ((LOWORD(hwnd) - FIRST_USER_HANDLE) >> 1)
 
 static DWORD process_layout = ~0u;
+
+static struct list window_surfaces = LIST_INIT( window_surfaces );
+
+static CRITICAL_SECTION surfaces_section;
+static CRITICAL_SECTION_DEBUG critsect_debug =
+{
+    0, 0, &surfaces_section,
+    { &critsect_debug.ProcessLocksList, &critsect_debug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": surfaces_section") }
+};
+static CRITICAL_SECTION surfaces_section = { &critsect_debug, -1, 0, 0, 0, 0 };
 
 /**********************************************************************/
 
@@ -474,6 +486,45 @@ BOOL is_desktop_window( HWND hwnd )
 }
 
 
+/*******************************************************************
+ *           register_window_surface
+ *
+ * Register a window surface in the global list, possibly replacing another one.
+ */
+void register_window_surface( struct window_surface *old, struct window_surface *new )
+{
+    if (old == new) return;
+    EnterCriticalSection( &surfaces_section );
+    if (old) list_remove( &old->entry );
+    if (new) list_add_tail( &window_surfaces, &new->entry );
+    LeaveCriticalSection( &surfaces_section );
+}
+
+
+/*******************************************************************
+ *           flush_window_surfaces
+ *
+ * Flush pending output from all window surfaces.
+ */
+void flush_window_surfaces( BOOL idle )
+{
+    static DWORD last_idle;
+    DWORD now;
+    struct window_surface *surface;
+
+    EnterCriticalSection( &surfaces_section );
+    now = GetTickCount();
+    if (idle) last_idle = now;
+    /* if not idle, we only flush if there's evidence that the app never goes idle */
+    else if ((int)(now - last_idle) < 1000) goto done;
+
+    LIST_FOR_EACH_ENTRY( surface, &window_surfaces, struct window_surface, entry )
+        surface->funcs->flush( surface );
+done:
+    LeaveCriticalSection( &surfaces_section );
+}
+
+
 /***********************************************************************
  *           WIN_GetPtr
  *
@@ -606,7 +657,7 @@ HWND WIN_SetOwner( HWND hwnd, HWND owner )
  */
 ULONG WIN_SetStyle( HWND hwnd, ULONG set_bits, ULONG clear_bits )
 {
-    BOOL ok;
+    BOOL ok, needs_show = FALSE;
     STYLESTRUCT style;
     WND *win = WIN_GetPtr( hwnd );
 
@@ -638,20 +689,29 @@ ULONG WIN_SetStyle( HWND hwnd, ULONG set_bits, ULONG clear_bits )
         }
     }
     SERVER_END_REQ;
-    WIN_ReleasePtr( win );
-    if (ok)
-    {
-        if ((style.styleOld ^ style.styleNew) & WS_VISIBLE)
-        {
-            RECT window_rect, client_rect;
-            UINT flags = style.styleNew & WS_VISIBLE ? SWP_SHOWWINDOW : 0; /* we don't hide it */
 
-            WIN_GetRectangles( hwnd, COORDS_PARENT, &window_rect, &client_rect );
-            set_window_pos( hwnd, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE |
-                            SWP_NOZORDER | SWP_NOACTIVATE | flags, &window_rect, &client_rect, NULL );
-        }
-        USER_Driver->pSetWindowStyle( hwnd, GWL_STYLE, &style );
+    if (ok && ((style.styleOld ^ style.styleNew) & WS_VISIBLE))
+    {
+        /* Some apps try to make their window visible through WM_SETREDRAW.
+         * Only do that if the window was never explicitly hidden,
+         * because Steam messes with WM_SETREDRAW after hiding its windows. */
+        needs_show = !(win->flags & WIN_HIDDEN) && (style.styleNew & WS_VISIBLE);
+        invalidate_dce( win, NULL );
     }
+    WIN_ReleasePtr( win );
+
+    if (!ok) return 0;
+
+    if (needs_show)
+    {
+        RECT window_rect, client_rect;
+        WIN_GetRectangles( hwnd, COORDS_PARENT, &window_rect, &client_rect );
+        set_window_pos( hwnd, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE |
+                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                        &window_rect, &client_rect, NULL );
+    }
+
+    USER_Driver->pSetWindowStyle( hwnd, GWL_STYLE, &style );
     return style.styleOld;
 }
 
@@ -801,6 +861,7 @@ LRESULT WIN_DestroyWindow( HWND hwnd )
     HWND *list;
     HMENU menu = 0, sys_menu;
     HWND icon_title;
+    struct window_surface *surface;
 
     TRACE("%p\n", hwnd );
 
@@ -845,11 +906,18 @@ LRESULT WIN_DestroyWindow( HWND hwnd )
     wndPtr->text = NULL;
     HeapFree( GetProcessHeap(), 0, wndPtr->pScroll );
     wndPtr->pScroll = NULL;
+    surface = wndPtr->surface;
+    wndPtr->surface = NULL;
     WIN_ReleasePtr( wndPtr );
 
     if (icon_title) DestroyWindow( icon_title );
     if (menu) DestroyMenu( menu );
     if (sys_menu) DestroyMenu( sys_menu );
+    if (surface)
+    {
+        register_window_surface( surface, NULL );
+        window_surface_release( surface );
+    }
 
     USER_Driver->pDestroyWindow( hwnd );
 
@@ -868,6 +936,7 @@ static void destroy_thread_window( HWND hwnd )
     WND *wndPtr;
     HWND *list;
     HMENU menu = 0, sys_menu = 0;
+    struct window_surface *surface = NULL;
     WORD index;
 
     /* free child windows */
@@ -893,6 +962,8 @@ static void destroy_thread_window( HWND hwnd )
         if ((wndPtr->dwStyle & (WS_CHILD | WS_POPUP)) != WS_CHILD) menu = (HMENU)wndPtr->wIDmenu;
         sys_menu = wndPtr->hSysMenu;
         free_dce( wndPtr->dce, hwnd );
+        surface = wndPtr->surface;
+        wndPtr->surface = NULL;
         InterlockedCompareExchangePointer( &user_handles[index], NULL, wndPtr );
     }
     USER_Unlock();
@@ -900,6 +971,11 @@ static void destroy_thread_window( HWND hwnd )
     HeapFree( GetProcessHeap(), 0, wndPtr );
     if (menu) DestroyMenu( menu );
     if (sys_menu) DestroyMenu( sys_menu );
+    if (surface)
+    {
+        register_window_surface( surface, NULL );
+        window_surface_release( surface );
+    }
 }
 
 
@@ -2135,7 +2211,7 @@ static LONG_PTR WIN_GetWindowLong( HWND hwnd, INT offset, UINT size, BOOL unicod
 LONG_PTR WIN_SetWindowLong( HWND hwnd, INT offset, UINT size, LONG_PTR newval, BOOL unicode )
 {
     STYLESTRUCT style;
-    BOOL ok;
+    BOOL ok, needs_show = FALSE;
     LONG_PTR retval = 0;
     WND *wndPtr;
 
@@ -2334,23 +2410,28 @@ LONG_PTR WIN_SetWindowLong( HWND hwnd, INT offset, UINT size, LONG_PTR newval, B
         }
     }
     SERVER_END_REQ;
+
+    if (offset == GWL_STYLE && ((style.styleOld ^ style.styleNew) & WS_VISIBLE))
+    {
+        needs_show = !(wndPtr->flags & WIN_HIDDEN) && (style.styleNew & WS_VISIBLE);
+        invalidate_dce( wndPtr, NULL );
+    }
     WIN_ReleasePtr( wndPtr );
 
     if (!ok) return 0;
 
+    if (needs_show)
+    {
+        RECT window_rect, client_rect;
+        WIN_GetRectangles( hwnd, COORDS_PARENT, &window_rect, &client_rect );
+        set_window_pos( hwnd, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE |
+                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                        &window_rect, &client_rect, NULL );
+    }
     if (offset == GWL_STYLE || offset == GWL_EXSTYLE)
     {
         style.styleOld = retval;
         style.styleNew = newval;
-        if (offset == GWL_STYLE && ((style.styleOld ^ style.styleNew) & WS_VISIBLE))
-        {
-            RECT window_rect, client_rect;
-            UINT flags = style.styleNew & WS_VISIBLE ? SWP_SHOWWINDOW : 0; /* we don't hide it */
-
-            WIN_GetRectangles( hwnd, COORDS_PARENT, &window_rect, &client_rect );
-            set_window_pos( hwnd, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE |
-                            SWP_NOZORDER | SWP_NOACTIVATE | flags, &window_rect, &client_rect, NULL );
-        }
         USER_Driver->pSetWindowStyle( hwnd, offset, &style );
         SendMessageW( hwnd, WM_STYLECHANGED, offset, (LPARAM)&style );
     }

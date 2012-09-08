@@ -250,7 +250,7 @@ static inline WCHAR *MergeChmString(LPCWSTR src, WCHAR **dst)
     return *dst;
 }
 
-void MergeChmProperties(HH_WINTYPEW *src, HHInfo *info)
+void MergeChmProperties(HH_WINTYPEW *src, HHInfo *info, BOOL override)
 {
     DWORD unhandled_params = src->fsValidMembers & ~(HHWIN_PARAM_PROPERTIES|HHWIN_PARAM_STYLES
                              |HHWIN_PARAM_EXSTYLES|HHWIN_PARAM_RECT|HHWIN_PARAM_NAV_WIDTH
@@ -258,7 +258,7 @@ void MergeChmProperties(HH_WINTYPEW *src, HHInfo *info)
                              |HHWIN_PARAM_EXPANSION|HHWIN_PARAM_TABPOS|HHWIN_PARAM_TABORDER
                              |HHWIN_PARAM_HISTORY_COUNT|HHWIN_PARAM_CUR_TAB);
     HH_WINTYPEW *dst = &info->WinType;
-    DWORD merge = src->fsValidMembers & ~dst->fsValidMembers;
+    DWORD merge = override ? src->fsValidMembers : src->fsValidMembers & ~dst->fsValidMembers;
 
     if (unhandled_params)
         FIXME("Unsupported fsValidMembers fields: 0x%x\n", unhandled_params);
@@ -366,10 +366,8 @@ BOOL LoadWinTypeFromCHM(HHInfo *info)
         wintype.cbStruct = sizeof(wintype);
         wintype.fUniCodeStrings = TRUE;
         wintype.pszType    = pszType     = strdupW(info->pCHMInfo->defWindow ? info->pCHMInfo->defWindow : defaultwinW);
-        wintype.pszFile    = pszFile     = strdupW(info->pCHMInfo->defTopic ? info->pCHMInfo->defTopic : null);
         wintype.pszToc     = pszToc      = strdupW(info->pCHMInfo->defToc ? info->pCHMInfo->defToc : null);
         wintype.pszIndex   = pszIndex    = strdupW(null);
-        wintype.pszCaption = pszCaption  = strdupW(info->pCHMInfo->defTitle ? info->pCHMInfo->defTitle : null);
         wintype.fsValidMembers = 0;
         wintype.fsWinProperties = HHWIN_PROP_TRI_PANE;
         wintype.dwStyles = WS_POPUP;
@@ -379,13 +377,15 @@ BOOL LoadWinTypeFromCHM(HHInfo *info)
     }
 
     /* merge the new data with any pre-existing HH_WINTYPE structure */
-    MergeChmProperties(&wintype, info);
+    MergeChmProperties(&wintype, info, FALSE);
+    if (!info->WinType.pszCaption)
+        info->WinType.pszCaption = info->stringsW.pszCaption = strdupW(info->pCHMInfo->defTitle ? info->pCHMInfo->defTitle : null);
     if (!info->WinType.pszFile)
-        info->WinType.pszFile  = info->stringsW.pszFile  = strdupW(info->pCHMInfo->defTopic ? info->pCHMInfo->defTopic : null);
+        info->WinType.pszFile    = info->stringsW.pszFile    = strdupW(info->pCHMInfo->defTopic ? info->pCHMInfo->defTopic : null);
     if (!info->WinType.pszToc)
-        info->WinType.pszToc   = info->stringsW.pszToc   = FindHTMLHelpSetting(info, toc_extW);
+        info->WinType.pszToc     = info->stringsW.pszToc     = FindHTMLHelpSetting(info, toc_extW);
     if (!info->WinType.pszIndex)
-        info->WinType.pszIndex = info->stringsW.pszIndex = FindHTMLHelpSetting(info, index_extW);
+        info->WinType.pszIndex   = info->stringsW.pszIndex   = FindHTMLHelpSetting(info, index_extW);
 
     heap_free(pszType);
     heap_free(pszFile);

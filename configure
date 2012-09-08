@@ -9062,11 +9062,11 @@ LIBS="-lOSMesa $X_LIBS $X_PRE_LIBS $XLIB -lm $X_EXTRA_LIBS $LIBS"
 #ifdef __cplusplus
 extern "C"
 #endif
-char glAccum ();
+char OSMesaCreateContext ();
 int
 main ()
 {
-return glAccum ();
+return OSMesaCreateContext ();
   ;
   return 0;
 }
@@ -9096,6 +9096,58 @@ _ACEOF
 
 
 fi
+                    if test "x$ac_cv_lib_soname_OSMesa" = "x"; then
+                       { $as_echo "$as_me:${as_lineno-$LINENO}: checking for -lOSMesa" >&5
+$as_echo_n "checking for -lOSMesa... " >&6; }
+if ${ac_cv_lib_soname_OSMesa+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_soname_save_LIBS=$LIBS
+LIBS="-lOSMesa -lglapi $X_LIBS $X_PRE_LIBS $XLIB -lm $X_EXTRA_LIBS $LIBS"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char OSMesaCreateContext ();
+int
+main ()
+{
+return OSMesaCreateContext ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  case "$LIBEXT" in
+    dll) ac_cv_lib_soname_OSMesa=`$ac_cv_path_LDD conftest.exe | grep "OSMesa" | sed -e "s/dll.*/dll/"';2,$d'` ;;
+    dylib) ac_cv_lib_soname_OSMesa=`otool -L conftest$ac_exeext | grep "libOSMesa\\.[0-9A-Za-z.]*dylib" | sed -e "s/^.*\/\(libOSMesa\.[0-9A-Za-z.]*dylib\).*$/\1/"';2,$d'` ;;
+    *) ac_cv_lib_soname_OSMesa=`$ac_cv_path_LDD conftest$ac_exeext | grep "libOSMesa\\.$LIBEXT" | sed -e "s/^.*\(libOSMesa\.$LIBEXT[^	 ]*\).*$/\1/"';2,$d'` ;;
+  esac
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+  LIBS=$ac_check_soname_save_LIBS
+fi
+if test "x$ac_cv_lib_soname_OSMesa" = "x"; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
+$as_echo "not found" >&6; }
+
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_soname_OSMesa" >&5
+$as_echo "$ac_cv_lib_soname_OSMesa" >&6; }
+
+cat >>confdefs.h <<_ACEOF
+#define SONAME_LIBOSMESA "$ac_cv_lib_soname_OSMesa"
+_ACEOF
+
+
+fi
+                    fi
                  fi
                  if test "x$ac_cv_lib_soname_OSMesa" = "x"; then :
   case "x$with_osmesa" in
@@ -15575,6 +15627,7 @@ wine_fn_config_dll msvcp80 enable_msvcp80
 wine_fn_config_dll msvcp90 enable_msvcp90
 wine_fn_config_test dlls/msvcp90/tests msvcp90_test
 wine_fn_config_dll msvcr100 enable_msvcr100
+wine_fn_config_test dlls/msvcr100/tests msvcr100_test
 wine_fn_config_dll msvcr70 enable_msvcr70 implib
 wine_fn_config_dll msvcr71 enable_msvcr71 implib
 wine_fn_config_dll msvcr80 enable_msvcr80

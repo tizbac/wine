@@ -23,6 +23,8 @@
 #include "config.h"
 #include <stdarg.h>
 
+#include "ntstatus.h"
+#define WIN32_NO_STATUS
 #include "windef.h"
 #include "winbase.h"
 #include "wbemcli.h"
@@ -97,6 +99,8 @@ static const WCHAR prop_directionW[] =
     {'D','i','r','e','c','t','i','o','n',0};
 static const WCHAR prop_displaynameW[] =
     {'D','i','s','p','l','a','y','N','a','m','e',0};
+static const WCHAR prop_domainroleW[] =
+    {'D','o','m','a','i','n','R','o','l','e',0};
 static const WCHAR prop_drivetypeW[] =
     {'D','r','i','v','e','T','y','p','e',0};
 static const WCHAR prop_filesystemW[] =
@@ -111,6 +115,8 @@ static const WCHAR prop_macaddressW[] =
     {'M','A','C','A','d','d','r','e','s','s',0};
 static const WCHAR prop_manufacturerW[] =
     {'M','a','n','u','f','a','c','t','u','r','e','r',0};
+static const WCHAR prop_maxclockspeedW[] =
+    {'M','a','x','C','l','o','c','k','S','p','e','e','d',0};
 static const WCHAR prop_methodW[] =
     {'M','e','t','h','o','d',0};
 static const WCHAR prop_modelW[] =
@@ -163,10 +169,6 @@ static const WCHAR prop_totalphysicalmemoryW[] =
     {'T','o','t','a','l','P','h','y','s','i','c','a','l','M','e','m','o','r','y',0};
 static const WCHAR prop_typeW[] =
     {'T','y','p','e',0};
-static const WCHAR prop_maxclockspeedW[] =
-    {'M','a','x','C','l','o','c','k','S','p','e','e','d',0};
-static const WCHAR prop_numberoflogicalprocessorsW[] =
-    {'N','u','m','b','e','r','O','f','L','o','g','i','c','a','l','P','r','o','c','e','s','s','o','r','s',0};
 
 static const WCHAR method_enumkeyW[] =
     {'E','n','u','m','K','e','y',0};
@@ -201,6 +203,7 @@ static const struct column col_bios[] =
 static const struct column col_compsys[] =
 {
     { prop_descriptionW,          CIM_STRING },
+    { prop_domainroleW,           CIM_UINT16 },
     { prop_manufacturerW,         CIM_STRING },
     { prop_modelW,                CIM_STRING },
     { prop_numlogicalprocessorsW, CIM_UINT32, VT_I4 },
@@ -253,13 +256,13 @@ static const struct column col_process[] =
 };
 static const struct column col_processor[] =
 {
-    { prop_cpustatusW,                 CIM_UINT16 },
-    { prop_deviceidW,                  CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
-    { prop_manufacturerW,              CIM_STRING|COL_FLAG_DYNAMIC },
-    { prop_maxclockspeedW,             CIM_UINT32 },
-    { prop_nameW,                      CIM_STRING|COL_FLAG_DYNAMIC },
-    { prop_numberoflogicalprocessorsW, CIM_UINT32 },
-    { prop_processoridW,               CIM_STRING|COL_FLAG_DYNAMIC }
+    { prop_cpustatusW,            CIM_UINT16 },
+    { prop_deviceidW,             CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { prop_manufacturerW,         CIM_STRING|COL_FLAG_DYNAMIC },
+    { prop_maxclockspeedW,        CIM_UINT32 },
+    { prop_nameW,                 CIM_STRING|COL_FLAG_DYNAMIC },
+    { prop_numlogicalprocessorsW, CIM_UINT32, VT_I4 },
+    { prop_processoridW,          CIM_STRING|COL_FLAG_DYNAMIC }
 };
 static const struct column col_service[] =
 {
@@ -341,6 +344,7 @@ struct record_bios
 struct record_computersystem
 {
     const WCHAR *description;
+    UINT16       domainrole;
     const WCHAR *manufacturer;
     const WCHAR *model;
     UINT32       num_logical_processors;
@@ -398,7 +402,7 @@ struct record_processor
     const WCHAR *manufacturer;
     UINT32       maxclockspeed;
     const WCHAR *name;
-    UINT32       numberoflogicalprocessors;
+    UINT32       num_logical_processors;
     const WCHAR *processor_id;
 };
 struct record_service
@@ -473,6 +477,32 @@ static UINT get_processor_count(void)
     return info.NumberOfProcessors;
 }
 
+static UINT get_logical_processor_count(void)
+{
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION *info;
+    UINT i, j, count = 0;
+    NTSTATUS status;
+    ULONG len;
+
+    status = NtQuerySystemInformation( SystemLogicalProcessorInformation, NULL, 0, &len );
+    if (status != STATUS_INFO_LENGTH_MISMATCH) return get_processor_count();
+
+    if (!(info = heap_alloc( len ))) return get_processor_count();
+    status = NtQuerySystemInformation( SystemLogicalProcessorInformation, info, len, &len );
+    if (status != STATUS_SUCCESS)
+    {
+        heap_free( info );
+        return get_processor_count();
+    }
+    for (i = 0; i < len / sizeof(*info); i++)
+    {
+        if (info[i].Relationship != RelationProcessorCore) continue;
+        for (j = 0; j < sizeof(ULONG_PTR); j++) if (info[i].ProcessorMask & (1 << j)) count++;
+    }
+    heap_free( info );
+    return count;
+}
+
 static UINT64 get_total_physical_memory(void)
 {
     MEMORYSTATUSEX status;
@@ -490,10 +520,11 @@ static void fill_compsys( struct table *table )
 
     rec = (struct record_computersystem *)table->data;
     rec->description            = compsys_descriptionW;
+    rec->domainrole             = 0; /* standalone workstation */
     rec->manufacturer           = compsys_manufacturerW;
     rec->model                  = compsys_modelW;
-    rec->num_logical_processors = get_processor_count();
-    rec->num_processors         = rec->num_logical_processors;
+    rec->num_logical_processors = get_logical_processor_count();
+    rec->num_processors         = get_processor_count();
     rec->total_physical_memory  = get_total_physical_memory();
 
     TRACE("created 1 row\n");
@@ -749,14 +780,19 @@ static void get_processor_name( WCHAR *name )
         regs_to_str( regs, 16, name + 32 );
     }
 }
+static UINT get_processor_maxclockspeed( void )
+{
+    PROCESSOR_POWER_INFORMATION info;
+    if (!NtPowerInformation( ProcessorInformation, NULL, 0, &info, sizeof(info) )) return info.MaxMhz;
+    return 1000000;
+}
 
 static void fill_processor( struct table *table )
 {
     static const WCHAR fmtW[] = {'C','P','U','%','u',0};
     WCHAR device_id[14], processor_id[17], manufacturer[13], name[49] = {0};
     struct record_processor *rec;
-    UINT i, offset = 0, count = get_processor_count(), cpuMhz;
-    PROCESSOR_POWER_INFORMATION ppi;
+    UINT i, offset = 0, maxclockspeed, num_logical_processors, count = get_processor_count();
 
     if (!(table->data = heap_alloc( sizeof(*rec) * count ))) return;
 
@@ -764,22 +800,20 @@ static void fill_processor( struct table *table )
     get_processor_manufacturer( manufacturer );
     get_processor_name( name );
 
-    if(!NtPowerInformation(ProcessorInformation, NULL, 0, &ppi, sizeof(ppi)))
-        cpuMhz = ppi.MaxMhz;
-    else
-        cpuMhz = 1000000;
+    maxclockspeed = get_processor_maxclockspeed();
+    num_logical_processors = get_logical_processor_count() / count;
 
     for (i = 0; i < count; i++)
     {
         rec = (struct record_processor *)(table->data + offset);
-        rec->cpu_status   = 1; /* CPU Enabled */
+        rec->cpu_status             = 1; /* CPU Enabled */
         sprintfW( device_id, fmtW, i );
-        rec->device_id    = heap_strdupW( device_id );
-        rec->manufacturer = heap_strdupW( manufacturer );
-        rec->maxclockspeed = cpuMhz;
-        rec->name         = heap_strdupW( name );
-        rec->numberoflogicalprocessors = count;
-        rec->processor_id = heap_strdupW( processor_id );
+        rec->device_id              = heap_strdupW( device_id );
+        rec->manufacturer           = heap_strdupW( manufacturer );
+        rec->maxclockspeed          = maxclockspeed;
+        rec->name                   = heap_strdupW( name );
+        rec->num_logical_processors = num_logical_processors;
+        rec->processor_id           = heap_strdupW( processor_id );
         offset += sizeof(*rec);
     }
 
@@ -882,6 +916,25 @@ static const WCHAR *get_service_startmode( DWORD mode )
     }
 }
 
+static QUERY_SERVICE_CONFIGW *query_service_config( SC_HANDLE manager, const WCHAR *name )
+{
+    QUERY_SERVICE_CONFIGW *config = NULL;
+    SC_HANDLE service;
+    DWORD size;
+
+    if (!(service = OpenServiceW( manager, name, SERVICE_QUERY_CONFIG ))) return NULL;
+    QueryServiceConfigW( service, NULL, 0, &size );
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) goto done;
+    if (!(config = heap_alloc( size ))) goto done;
+    if (QueryServiceConfigW( service, config, size, &size )) goto done;
+    heap_free( config );
+    config = NULL;
+
+done:
+    CloseServiceHandle( service );
+    return config;
+}
+
 static void fill_service( struct table *table )
 {
     struct record_service *rec;
@@ -917,22 +970,8 @@ static void fill_service( struct table *table )
     for (i = 0; i < count; i++)
     {
         QUERY_SERVICE_CONFIGW *config;
-        SC_HANDLE service;
-        DWORD startmode;
-        DWORD size;
 
-        service = OpenServiceW(manager, services[i].lpServiceName, GENERIC_READ);
-        QueryServiceConfigW(service, NULL, 0, &size);
-        config = heap_alloc(size);
-        if (QueryServiceConfigW(service, config, size, &size))
-            startmode = config->dwStartType;
-        else
-        {
-            ERR("failed to get %s service config data\n", debugstr_w(services[i].lpServiceName));
-            startmode = SERVICE_DISABLED;
-        }
-        CloseServiceHandle(service);
-        heap_free(config);
+        if (!(config = query_service_config( manager, services[i].lpServiceName ))) continue;
 
         status = &services[i].ServiceStatusProcess;
         rec = (struct record_service *)(table->data + offset);
@@ -942,9 +981,10 @@ static void fill_service( struct table *table )
         rec->name         = heap_strdupW( services[i].lpServiceName );
         rec->process_id   = status->dwProcessId;
         rec->servicetype  = get_service_type( status->dwServiceType );
-        rec->startmode    = get_service_startmode( startmode );
+        rec->startmode    = get_service_startmode( config->dwStartType );
         rec->state        = get_service_state( status->dwCurrentState );
         rec->systemname   = heap_strdupW( sysnameW );
+        heap_free( config );
         offset += sizeof(*rec);
         num_rows++;
     }

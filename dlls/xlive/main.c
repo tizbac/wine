@@ -592,7 +592,7 @@ INT WINAPI XUserWriteAchievements (DWORD dwNumAchievements,
     for ( k = 0; k < dwNumAchievements; k++ )
     {
         char buf[512];
-        sprintf(buf,"%s%d",xlivedir,curr->dwUserIndex);
+        sprintf(buf,"%sachievements\\%d",xlivedir,curr->dwUserIndex);
         if (!DirectoryExists(buf))
         {
             if ( !CreateDirectoryA(buf,NULL))
@@ -601,8 +601,8 @@ INT WINAPI XUserWriteAchievements (DWORD dwNumAchievements,
                 return E_FAIL;
             }
         }
-        sprintf(buf,"%s%d\\%d.achievement",xlivedir,curr->dwUserIndex,curr->dwAchievementId);
-        HANDLE hFile = CreateFileA(buf,GENERIC_WRITE,0x0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+        sprintf(buf,"%sachievements\\%d\\%d.achievement",xlivedir,curr->dwUserIndex,curr->dwAchievementId);
+        HANDLE hFile = CreateFileA(buf,GENERIC_WRITE,0x0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
         if ( hFile == INVALID_HANDLE_VALUE )
         {
             ERR("Cannot create file %s\n",buf);

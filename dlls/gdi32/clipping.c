@@ -268,13 +268,15 @@ INT WINAPI ExtSelectClipRgn( HDC hdc, HRGN hrgn, INT fnMode )
 /***********************************************************************
  *           __wine_set_visible_region   (GDI32.@)
  */
-void CDECL __wine_set_visible_region( HDC hdc, HRGN hrgn, const RECT *vis_rect )
+void CDECL __wine_set_visible_region( HDC hdc, HRGN hrgn, const RECT *vis_rect, const RECT *device_rect,
+                                      struct window_surface *surface )
 {
     DC * dc;
 
     if (!(dc = get_dc_ptr( hdc ))) return;
 
-    TRACE( "%p %p %s\n", hdc, hrgn, wine_dbgstr_rect(vis_rect) );
+    TRACE( "%p %p %s %s %p\n", hdc, hrgn,
+           wine_dbgstr_rect(vis_rect), wine_dbgstr_rect(device_rect), surface );
 
     /* map region to DC coordinates */
     OffsetRgn( hrgn, -vis_rect->left, -vis_rect->top );
@@ -282,7 +284,9 @@ void CDECL __wine_set_visible_region( HDC hdc, HRGN hrgn, const RECT *vis_rect )
     if (dc->hVisRgn) DeleteObject( dc->hVisRgn );
     dc->dirty = 0;
     dc->vis_rect = *vis_rect;
+    dc->device_rect = *device_rect;
     dc->hVisRgn = hrgn;
+    dibdrv_set_window_surface( dc, surface );
     DC_UpdateXforms( dc );
     update_dc_clipping( dc );
     release_dc_ptr( dc );
@@ -415,14 +419,14 @@ INT WINAPI GetClipBox( HDC hdc, LPRECT rect )
     if (get_dc_region( dc ))
     {
         ret = GetRgnBox( get_dc_region( dc ), rect );
-        if (get_dc_device_rect( dc, &visrect ) && !intersect_rect( rect, rect, &visrect ))
-            ret = NULLREGION;
     }
     else
     {
         ret = is_rect_empty( &dc->vis_rect ) ? ERROR : SIMPLEREGION;
         *rect = dc->vis_rect;
     }
+
+    if (get_dc_device_rect( dc, &visrect ) && !intersect_rect( rect, rect, &visrect )) ret = NULLREGION;
 
     if (dc->layout & LAYOUT_RTL)
     {

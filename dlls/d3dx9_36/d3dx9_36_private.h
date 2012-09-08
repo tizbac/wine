@@ -45,12 +45,12 @@ struct volume
 };
 
 /* for internal use */
-typedef enum _FormatType {
+enum format_type {
     FORMAT_ARGB,   /* unsigned */
     FORMAT_UNKNOWN
-} FormatType;
+};
 
-typedef struct _PixelFormatDesc {
+struct pixel_format_desc {
     D3DFORMAT format;
     BYTE bits[4];
     BYTE shift[4];
@@ -58,24 +58,24 @@ typedef struct _PixelFormatDesc {
     UINT block_width;
     UINT block_height;
     UINT block_byte_count;
-    FormatType type;
+    enum format_type type;
     void (*from_rgba)(const struct vec4 *src, struct vec4 *dst);
     void (*to_rgba)(const struct vec4 *src, struct vec4 *dst);
-} PixelFormatDesc;
+};
 
 HRESULT map_view_of_file(LPCWSTR filename, LPVOID *buffer, DWORD *length) DECLSPEC_HIDDEN;
 HRESULT load_resource_into_memory(HMODULE module, HRSRC resinfo, LPVOID *buffer, DWORD *length) DECLSPEC_HIDDEN;
 
 HRESULT write_buffer_to_file(const WCHAR *filename, ID3DXBuffer *buffer) DECLSPEC_HIDDEN;
 
-const PixelFormatDesc *get_format_info(D3DFORMAT format) DECLSPEC_HIDDEN;
-const PixelFormatDesc *get_format_info_idx(int idx) DECLSPEC_HIDDEN;
+const struct pixel_format_desc *get_format_info(D3DFORMAT format) DECLSPEC_HIDDEN;
+const struct pixel_format_desc *get_format_info_idx(int idx) DECLSPEC_HIDDEN;
 
-void copy_simple_data(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch, struct volume *src_size, const PixelFormatDesc *src_format,
-        BYTE *dst, UINT dst_row_pitch, UINT dst_slice_pitch, struct volume *dst_size, const PixelFormatDesc *dst_format,
+void copy_simple_data(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch, struct volume *src_size, const struct pixel_format_desc *src_format,
+        BYTE *dst, UINT dst_row_pitch, UINT dst_slice_pitch, struct volume *dst_size, const struct pixel_format_desc *dst_format,
         D3DCOLOR color_key) DECLSPEC_HIDDEN;
-void point_filter_simple_data(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch, struct volume *src_size, const PixelFormatDesc *src_format,
-        BYTE *dst, UINT dst_row_pitch, UINT dst_slice_pitch, struct volume *dst_size, const PixelFormatDesc *dst_format,
+void point_filter_simple_data(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch, struct volume *src_size, const struct pixel_format_desc *src_format,
+        BYTE *dst, UINT dst_row_pitch, UINT dst_slice_pitch, struct volume *dst_size, const struct pixel_format_desc *dst_format,
         D3DCOLOR color_key) DECLSPEC_HIDDEN;
 
 HRESULT load_texture_from_dds(IDirect3DTexture9 *texture, const void *src_data, const PALETTEENTRY *palette,
@@ -92,5 +92,11 @@ HRESULT load_volume_texture_from_dds(IDirect3DVolumeTexture9 *volume_texture, co
 const char *debug_d3dxparameter_class(D3DXPARAMETER_CLASS c) DECLSPEC_HIDDEN;
 const char *debug_d3dxparameter_type(D3DXPARAMETER_TYPE t) DECLSPEC_HIDDEN;
 const char *debug_d3dxparameter_registerset(D3DXREGISTER_SET r) DECLSPEC_HIDDEN;
+
+/* parameter type conversion helpers */
+INT get_int(D3DXPARAMETER_TYPE type, LPCVOID data) DECLSPEC_HIDDEN;
+FLOAT get_float(D3DXPARAMETER_TYPE type, LPCVOID data) DECLSPEC_HIDDEN;
+BOOL get_bool(LPCVOID data) DECLSPEC_HIDDEN;
+void set_number(LPVOID outdata, D3DXPARAMETER_TYPE outtype, LPCVOID indata, D3DXPARAMETER_TYPE intype) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_D3DX9_36_PRIVATE_H */

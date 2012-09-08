@@ -33,6 +33,7 @@
 #include "wine/server.h"
 #include "controls.h"
 #include "user_private.h"
+#include "wine/gdi_driver.h"
 #include "win.h"
 #include "wine/debug.h"
 
@@ -1872,6 +1873,9 @@ static BOOL fixup_flags( WINDOWPOS *winpos )
     parent = GetAncestor( winpos->hwnd, GA_PARENT );
     if (!IsWindowVisible( parent )) winpos->flags |= SWP_NOREDRAW;
 
+    if (winpos->flags & SWP_HIDEWINDOW) wndPtr->flags |= WIN_HIDDEN;
+    else if (winpos->flags & SWP_SHOWWINDOW) wndPtr->flags &= ~WIN_HIDDEN;
+
     if (wndPtr->dwStyle & WS_VISIBLE) winpos->flags &= ~SWP_SHOWWINDOW;
     else
     {
@@ -1946,18 +1950,23 @@ BOOL set_window_pos( HWND hwnd, HWND insert_after, UINT swp_flags,
 {
     WND *win;
     BOOL ret;
-    RECT visible_rect, old_window_rect;
     int old_width;
+    RECT visible_rect, old_visible_rect, old_window_rect;
+    struct window_surface *old_surface, *new_surface = NULL;
 
     visible_rect = *window_rect;
     USER_Driver->pWindowPosChanging( hwnd, insert_after, swp_flags,
-                                     window_rect, client_rect, &visible_rect );
+                                     window_rect, client_rect, &visible_rect, &new_surface );
 
     WIN_GetRectangles( hwnd, COORDS_SCREEN, &old_window_rect, NULL );
 
-    if (!(win = WIN_GetPtr( hwnd ))) return FALSE;
-    if (win == WND_DESKTOP || win == WND_OTHER_PROCESS) return FALSE;
+    if (!(win = WIN_GetPtr( hwnd )) || win == WND_DESKTOP || win == WND_OTHER_PROCESS)
+    {
+        if (new_surface) window_surface_release( new_surface );
+        return FALSE;
+    }
     old_width = win->rectClient.right - win->rectClient.left;
+    old_visible_rect = win->visible_rect;
 
     SERVER_START_REQ( set_window_pos )
     {
@@ -1984,12 +1993,16 @@ BOOL set_window_pos( HWND hwnd, HWND insert_after, UINT swp_flags,
             win->dwExStyle  = reply->new_ex_style;
             win->rectWindow = *window_rect;
             win->rectClient = *client_rect;
+            win->visible_rect = visible_rect;
+            old_surface       = win->surface;
+            win->surface      = new_surface;
             if (GetWindowLongW( win->parent, GWL_EXSTYLE ) & WS_EX_LAYOUTRTL)
             {
                 RECT client;
                 GetClientRect( win->parent, &client );
                 mirror_rect( &client, &win->rectWindow );
                 mirror_rect( &client, &win->rectClient );
+                mirror_rect( &client, &win->visible_rect );
             }
             /* if an RTL window is resized the children have moved */
             if (win->dwExStyle & WS_EX_LAYOUTRTL && client_rect->right - client_rect->left != old_width)
@@ -2004,8 +2017,25 @@ BOOL set_window_pos( HWND hwnd, HWND insert_after, UINT swp_flags,
 
     WIN_ReleasePtr( win );
 
-    if (ret) USER_Driver->pWindowPosChanged( hwnd, insert_after, swp_flags, window_rect,
-                                             client_rect, &visible_rect, valid_rects );
+    if (ret)
+    {
+        TRACE( "win %p surface %p -> %p\n", hwnd, old_surface, new_surface );
+        register_window_surface( old_surface, new_surface );
+        if (old_surface)
+        {
+            if (!IsRectEmpty( valid_rects ))
+            {
+                move_window_bits( hwnd, old_surface, new_surface, &visible_rect,
+                                  &old_visible_rect, client_rect, valid_rects );
+                valid_rects = NULL;  /* prevent the driver from trying to also move the bits */
+            }
+            window_surface_release( old_surface );
+        }
+        USER_Driver->pWindowPosChanged( hwnd, insert_after, swp_flags, window_rect,
+                                        client_rect, &visible_rect, valid_rects, new_surface );
+    }
+    else if (new_surface) window_surface_release( new_surface );
+
     return ret;
 }
 
@@ -2541,11 +2571,7 @@ void WINPOS_SysCommandSizeMove( HWND hwnd, WPARAM wParam )
     else
     {
         parent = 0;
-        GetClientRect( GetDesktopWindow(), &mouseRect );
-        mouseRect.left = GetSystemMetrics( SM_XVIRTUALSCREEN );
-        mouseRect.top = GetSystemMetrics( SM_YVIRTUALSCREEN );
-        mouseRect.right = mouseRect.left + GetSystemMetrics( SM_CXVIRTUALSCREEN );
-        mouseRect.bottom = mouseRect.top + GetSystemMetrics( SM_CYVIRTUALSCREEN );
+        mouseRect = get_virtual_screen_rect();
     }
 
     if (ON_LEFT_BORDER(hittest))

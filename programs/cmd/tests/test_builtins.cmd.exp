@@ -201,13 +201,13 @@ baz@space@
 @todo_wine@0
 ------------ Testing 'set' ------------
 1
-@todo_wine@0
+0
 FOOBAR not defined
-@todo_wine@  baz
+  baz
 FOOBAR =  baz
-@todo_wine@0
-@todo_wine@  baz2
-@todo_wine@0
+0
+  baz2
+0
  bar
 @todo_wine@FOOBAR= bar
 @todo_wine@FOOBAR =  baz2
@@ -455,9 +455,12 @@ C
 --- basic wildcards
 bazbaz
 --- for /d
-baz
-foo
-bar
+baz@space@
+foo@space@
+bar@space@
+PASSED
+xxx - Should be xxx
+Expected second line
 --- for /L
 1
 3
@@ -469,8 +472,27 @@ bar
 2
 1
 -1
-@todo_wine@ErrorLevel 0
-@todo_wine@ErrorLevel 0
+ErrorLevel 0
+ErrorLevel 0
+1
+2
+3
+4
+1
+3
+4
+3
+2
+1
+4
+2
+0
+1
+1
+-1
+-1
+1
+3
 --- for /a
 ------ individual operations
 0
@@ -610,8 +632,8 @@ read-only file renamed
 dir renamed
 read-only dir renamed
 --- rename in other directory
-@todo_wine@rename impossible in other directory
-@todo_wine@original file still present
+rename impossible in other directory
+original file still present
 ------------ Testing move ------------
 --- file move
 file move succeeded
@@ -806,6 +828,10 @@ goto with no leading space worked
 goto with a leading space worked
 goto with a leading tab worked
 goto with a following space worked
+------------ Testing PATH ------------
+PATH=original
+PATH=try2
+PATH=try3
 ------------ Testing combined CALLs/GOTOs ------------
 world
 cheball

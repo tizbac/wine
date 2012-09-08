@@ -752,7 +752,7 @@ static struct ctab_constant *get_constant_by_name(struct ID3DXConstantTableImpl 
         handles = constant->constants;
     }
 
-    length = strcspn( name, "[." );
+    length = strcspn(name, "[.");
     part = name + length;
 
     for (i = 0; i < count; i++)
@@ -767,13 +767,9 @@ static struct ctab_constant *get_constant_by_name(struct ID3DXConstantTableImpl 
                 case '[':
                     return get_constant_element_by_name(&handles[i], part);
 
-                case '\0':
+                default:
                     TRACE("Returning parameter %p\n", &handles[i]);
                     return &handles[i];
-
-                default:
-                    FIXME("Unhandled case \"%c\"\n", *--part);
-                    break;
             }
         }
     }
@@ -914,7 +910,7 @@ static HRESULT WINAPI ID3DXConstantTableImpl_GetDesc(ID3DXConstantTable *iface, 
     if (!desc)
         return D3DERR_INVALIDCALL;
 
-    memcpy(desc, &This->desc, sizeof(This->desc));
+    *desc = This->desc;
 
     return D3D_OK;
 }
@@ -1009,7 +1005,7 @@ static D3DXHANDLE WINAPI ID3DXConstantTableImpl_GetConstantElement(ID3DXConstant
 
     if (c && index < c->desc.Elements)
     {
-        if (c->constants) c = &c->constants[index];
+        if (c->desc.Elements > 1) c = &c->constants[index];
         TRACE("Returning constant %p\n", c);
         return handle_from_constant(c);
     }
