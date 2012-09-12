@@ -486,23 +486,87 @@ UINT WINAPI GetRawInputDeviceList(PRAWINPUTDEVICELIST pRawInputDeviceList, PUINT
 /******************************************************************
 *		RegisterRawInputDevices (USER32.@)
 */
-BOOL WINAPI DECLSPEC_HOTPATCH RegisterRawInputDevices(PRAWINPUTDEVICE pRawInputDevices, UINT uiNumDevices, UINT cbSize)
+BOOL WINAPI DECLSPEC_HOTPATCH RegisterRawInputDevices(RAWINPUTDEVICE *devices, UINT device_count, UINT size)
 {
-    FIXME("(pRawInputDevices=%p, uiNumDevices=%d, cbSize=%d) stub!\n", pRawInputDevices, uiNumDevices, cbSize);
+    struct rawinput_device *d;
+    BOOL ret;
+    UINT i;
 
-    return TRUE;
+    TRACE("devices %p, device_count %u, size %u.\n", devices, device_count, size);
+
+    if (size != sizeof(*devices))
+    {
+        WARN("Invalid structure size %u.\n", size);
+        return FALSE;
+    }
+
+    if (!(d = HeapAlloc( GetProcessHeap(), 0, device_count * sizeof(*d) ))) return FALSE;
+
+    for (i = 0; i < device_count; ++i)
+    {
+        TRACE("device %u: page %#x, usage %#x, flags %#x, target %p.\n",
+                i, devices[i].usUsagePage, devices[i].usUsage,
+                devices[i].dwFlags, devices[i].hwndTarget);
+        if (devices[i].dwFlags & ~RIDEV_REMOVE)
+            FIXME("Unhandled flags %#x for device %u.\n", devices[i].dwFlags, i);
+
+        d[i].usage_page = devices[i].usUsagePage;
+        d[i].usage = devices[i].usUsage;
+        d[i].flags = devices[i].dwFlags;
+        d[i].target = wine_server_user_handle( devices[i].hwndTarget );
+    }
+
+    SERVER_START_REQ( update_rawinput_devices )
+    {
+        wine_server_add_data( req, d, device_count * sizeof(*d) );
+        ret = !wine_server_call( req );
+    }
+    SERVER_END_REQ;
+
+    HeapFree( GetProcessHeap(), 0, d );
+
+    return ret;
 }
 
 
 /******************************************************************
 *		GetRawInputData (USER32.@)
 */
-UINT WINAPI GetRawInputData(HRAWINPUT hRawInput, UINT uiCommand, LPVOID pData, PUINT pcbSize, UINT cbSizeHeader)
+UINT WINAPI GetRawInputData(HRAWINPUT rawinput, UINT command, void *data, UINT *data_size, UINT header_size)
 {
-    FIXME("(hRawInput=%p, uiCommand=%d, pData=%p, pcbSize=%p, cbSizeHeader=%d) stub!\n",
-            hRawInput, uiCommand, pData, pcbSize, cbSizeHeader);
+    RAWINPUT *ri = (RAWINPUT *)rawinput;
+    UINT s;
 
-    return 0;
+    TRACE("rawinput %p, command %#x, data %p, data_size %p, header_size %u.\n",
+            rawinput, command, data, data_size, header_size);
+
+    if (header_size != sizeof(RAWINPUTHEADER))
+    {
+        WARN("Invalid structure size %u.\n", header_size);
+        return ~0U;
+    }
+
+    switch (command)
+    {
+    case RID_INPUT:
+        s = ri->header.dwSize;
+        break;
+    case RID_HEADER:
+        s = sizeof(RAWINPUTHEADER);
+        break;
+    default:
+        return ~0U;
+    }
+
+    if (!data)
+    {
+        *data_size = s;
+        return 0;
+    }
+
+    if (*data_size < s) return ~0U;
+    memcpy(data, ri, s);
+    return s;
 }
 
 

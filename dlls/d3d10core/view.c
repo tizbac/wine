@@ -211,6 +211,7 @@ static ULONG STDMETHODCALLTYPE d3d10_depthstencil_view_Release(ID3D10DepthStenci
 
     if (!refcount)
     {
+        ID3D10Resource_Release(This->resource);
         HeapFree(GetProcessHeap(), 0, This);
     }
 
@@ -255,7 +256,12 @@ static HRESULT STDMETHODCALLTYPE d3d10_depthstencil_view_SetPrivateDataInterface
 static void STDMETHODCALLTYPE d3d10_depthstencil_view_GetResource(ID3D10DepthStencilView *iface,
         ID3D10Resource **resource)
 {
-    FIXME("iface %p, resource %p stub!\n", iface, resource);
+    struct d3d10_depthstencil_view *view = impl_from_ID3D10DepthStencilView(iface);
+
+    TRACE("iface %p, resource %p.\n", iface, resource);
+
+    *resource = view->resource;
+    ID3D10Resource_AddRef(*resource);
 }
 
 /* ID3D10DepthStencilView methods */
@@ -283,10 +289,14 @@ static const struct ID3D10DepthStencilViewVtbl d3d10_depthstencil_view_vtbl =
     d3d10_depthstencil_view_GetDesc,
 };
 
-HRESULT d3d10_depthstencil_view_init(struct d3d10_depthstencil_view *view)
+HRESULT d3d10_depthstencil_view_init(struct d3d10_depthstencil_view *view,
+        ID3D10Resource *resource)
 {
     view->ID3D10DepthStencilView_iface.lpVtbl = &d3d10_depthstencil_view_vtbl;
     view->refcount = 1;
+
+    view->resource = resource;
+    ID3D10Resource_AddRef(resource);
 
     return S_OK;
 }
@@ -339,6 +349,7 @@ static ULONG STDMETHODCALLTYPE d3d10_rendertarget_view_Release(ID3D10RenderTarge
     if (!refcount)
     {
         wined3d_rendertarget_view_decref(This->wined3d_view);
+        ID3D10Resource_Release(This->resource);
         HeapFree(GetProcessHeap(), 0, This);
     }
 
@@ -383,29 +394,12 @@ static HRESULT STDMETHODCALLTYPE d3d10_rendertarget_view_SetPrivateDataInterface
 static void STDMETHODCALLTYPE d3d10_rendertarget_view_GetResource(ID3D10RenderTargetView *iface,
         ID3D10Resource **resource)
 {
-    struct d3d10_rendertarget_view *This = impl_from_ID3D10RenderTargetView(iface);
-    struct wined3d_resource *wined3d_resource;
-    IUnknown *parent;
-    HRESULT hr;
+    struct d3d10_rendertarget_view *view = impl_from_ID3D10RenderTargetView(iface);
 
     TRACE("iface %p, resource %p\n", iface, resource);
 
-    wined3d_resource = wined3d_rendertarget_view_get_resource(This->wined3d_view);
-    if (!wined3d_resource)
-    {
-        ERR("Failed to get wined3d resource.\n");
-        *resource = NULL;
-        return;
-    }
-
-    parent = wined3d_resource_get_parent(wined3d_resource);
-    hr = IUnknown_QueryInterface(parent, &IID_ID3D10Resource, (void **)&resource);
-    if (FAILED(hr))
-    {
-        ERR("Resource parent isn't a d3d10 resource, hr %#x\n", hr);
-        *resource = NULL;
-        return;
-    }
+    *resource = view->resource;
+    ID3D10Resource_AddRef(*resource);
 }
 
 /* ID3D10RenderTargetView methods */
@@ -469,6 +463,9 @@ HRESULT d3d10_rendertarget_view_init(struct d3d10_rendertarget_view *view,
         WARN("Failed to create a wined3d rendertarget view, hr %#x.\n", hr);
         return hr;
     }
+
+    view->resource = resource;
+    ID3D10Resource_AddRef(resource);
 
     return S_OK;
 }

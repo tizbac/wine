@@ -61,6 +61,10 @@ static const classinfo wic_classes[] = {
     {&CLSID_WineTgaDecoder, TgaDecoder_CreateInstance},
     {&CLSID_WICUnknownMetadataReader, UnknownMetadataReader_CreateInstance},
     {&CLSID_WICIfdMetadataReader, IfdMetadataReader_CreateInstance},
+    {&CLSID_WICPngTextMetadataReader, PngTextReader_CreateInstance},
+    {&CLSID_WICLSDMetadataReader, LSDReader_CreateInstance},
+    {&CLSID_WICIMDMetadataReader, IMDReader_CreateInstance},
+    {&CLSID_WICGCEMetadataReader, GCEReader_CreateInstance},
     {0}};
 
 typedef struct {

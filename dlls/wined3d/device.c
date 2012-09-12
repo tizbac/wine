@@ -2291,7 +2291,7 @@ INT CDECL wined3d_device_get_base_vertex_index(const struct wined3d_device *devi
     return device->stateBlock->state.base_vertex_index;
 }
 
-HRESULT CDECL wined3d_device_set_viewport(struct wined3d_device *device, const struct wined3d_viewport *viewport)
+void CDECL wined3d_device_set_viewport(struct wined3d_device *device, const struct wined3d_viewport *viewport)
 {
     TRACE("device %p, viewport %p.\n", device, viewport);
     TRACE("x %u, y %u, w %u, h %u, min_z %.8e, max_z %.8e.\n",
@@ -2304,24 +2304,20 @@ HRESULT CDECL wined3d_device_set_viewport(struct wined3d_device *device, const s
     if (device->isRecordingState)
     {
         TRACE("Recording... not performing anything\n");
-        return WINED3D_OK;
+        return;
     }
 
     device_invalidate_state(device, STATE_VIEWPORT);
-
-    return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_device_get_viewport(const struct wined3d_device *device, struct wined3d_viewport *viewport)
+void CDECL wined3d_device_get_viewport(const struct wined3d_device *device, struct wined3d_viewport *viewport)
 {
     TRACE("device %p, viewport %p.\n", device, viewport);
 
     *viewport = device->stateBlock->state.viewport;
-
-    return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_device_set_render_state(struct wined3d_device *device,
+void CDECL wined3d_device_set_render_state(struct wined3d_device *device,
         enum wined3d_render_state state, DWORD value)
 {
     DWORD old_value = device->stateBlock->state.render_states[state];
@@ -2335,7 +2331,7 @@ HRESULT CDECL wined3d_device_set_render_state(struct wined3d_device *device,
     if (device->isRecordingState)
     {
         TRACE("Recording... not performing anything.\n");
-        return WINED3D_OK;
+        return;
     }
 
     /* Compared here and not before the assignment to allow proper stateblock recording. */
@@ -2343,18 +2339,13 @@ HRESULT CDECL wined3d_device_set_render_state(struct wined3d_device *device,
         TRACE("Application is setting the old value over, nothing to do.\n");
     else
         device_invalidate_state(device, STATE_RENDER(state));
-
-    return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_device_get_render_state(const struct wined3d_device *device,
-        enum wined3d_render_state state, DWORD *value)
+DWORD CDECL wined3d_device_get_render_state(const struct wined3d_device *device, enum wined3d_render_state state)
 {
-    TRACE("device %p, state %s (%#x), value %p.\n", device, debug_d3drenderstate(state), state, value);
+    TRACE("device %p, state %s (%#x).\n", device, debug_d3drenderstate(state), state);
 
-    *value = device->stateBlock->state.render_states[state];
-
-    return WINED3D_OK;
+    return device->stateBlock->state.render_states[state];
 }
 
 HRESULT CDECL wined3d_device_set_sampler_state(struct wined3d_device *device,

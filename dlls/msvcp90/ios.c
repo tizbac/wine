@@ -1812,11 +1812,11 @@ streamsize __thiscall basic_streambuf_wchar__Xsgetn_s(basic_streambuf_wchar *thi
             chunk = count-copied;
 
         if(chunk > 0) {
-            memcpy_s(ptr+copied, size, *this->prpos, chunk);
+            memcpy_s(ptr+copied, size, *this->prpos, chunk*sizeof(wchar_t));
             *this->prpos += chunk;
             *this->prsize -= chunk;
             copied += chunk;
-            size -= chunk;
+            size -= chunk*sizeof(wchar_t);
         }else if((c = call_basic_streambuf_wchar_uflow(this)) != WEOF) {
             ptr[copied] = c;
             copied++;
@@ -2305,7 +2305,7 @@ streamsize __thiscall basic_streambuf_wchar_xsputn(basic_streambuf_wchar *this, 
             chunk = count-copied;
 
         if(chunk > 0) {
-            memcpy(*this->pwpos, ptr+copied, chunk);
+            memcpy(*this->pwpos, ptr+copied, chunk*sizeof(wchar_t));
             *this->pwpos += chunk;
             *this->pwsize -= chunk;
             copied += chunk;
@@ -3938,7 +3938,7 @@ void __thiscall basic_stringbuf_wchar__Init(basic_stringbuf_wchar *this, const w
             throw_exception(EXCEPTION_BAD_ALLOC, NULL);
         }
 
-        memcpy(buf, str, count);
+        memcpy(buf, str, count*sizeof(wchar_t));
         this->seekhigh = buf + count;
 
         this->state |= STRINGBUF_allocated;
@@ -8103,8 +8103,11 @@ basic_istream_char* __cdecl basic_istream_char_getline_bstr_delim(
     if(basic_istream_char_sentry_create(istream, TRUE)) {
         MSVCP_basic_string_char_clear(str);
 
-        for(c = basic_istream_char_get(istream); c!=delim && c!=EOF;
-                c = basic_istream_char_get(istream)) {
+        c = basic_istream_char_get(istream);
+        if(c != EOF)
+            state = IOSTATE_goodbit;
+
+        for(; c!=delim && c!=EOF; c = basic_istream_char_get(istream)) {
             state = IOSTATE_goodbit;
             MSVCP_basic_string_char_append_ch(str, c);
         }
@@ -9523,8 +9526,11 @@ basic_istream_wchar* __cdecl basic_istream_wchar_getline_bstr_delim(
     if(basic_istream_wchar_sentry_create(istream, TRUE)) {
         MSVCP_basic_string_wchar_clear(str);
 
-        for(c = basic_istream_wchar_get(istream); c!=delim && c!=WEOF;
-                c = basic_istream_wchar_get(istream)) {
+        c = basic_istream_wchar_get(istream);
+        if(c != WEOF)
+            state = IOSTATE_goodbit;
+
+        for(; c!=delim && c!=WEOF; c = basic_istream_wchar_get(istream)) {
             state = IOSTATE_goodbit;
             MSVCP_basic_string_wchar_append_ch(str, c);
         }

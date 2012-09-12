@@ -1503,6 +1503,65 @@ static const struct reader_containers ifd_containers[] = {
     { NULL } /* list terminator */
 };
 
+static const BYTE tEXt[] = "tEXt";
+
+static const struct metadata_pattern pngtext_metadata_pattern[] = {
+    { 4, 4, tEXt, mask_all, 4 },
+    { 0 }
+};
+
+static const struct reader_containers pngtext_containers[] = {
+    {
+        &GUID_ContainerFormatPng,
+        pngtext_metadata_pattern
+    },
+    { NULL } /* list terminator */
+};
+
+static const struct metadata_pattern lsd_metadata_patterns[] = {
+    { 0, 6, gif87a_magic, mask_all, 0 },
+    { 0, 6, gif89a_magic, mask_all, 0 },
+    { 0 }
+};
+
+static const struct reader_containers lsd_containers[] = {
+    {
+        &GUID_ContainerFormatGif,
+        lsd_metadata_patterns
+    },
+    { NULL } /* list terminator */
+};
+
+static const BYTE imd_magic[] = { 0x2c };
+
+static const struct metadata_pattern imd_metadata_pattern[] = {
+    { 0, 1, imd_magic, mask_all, 1 },
+    { 0 }
+};
+
+static const struct reader_containers imd_containers[] = {
+    {
+        &GUID_ContainerFormatGif,
+        imd_metadata_pattern
+    },
+    { NULL } /* list terminator */
+};
+
+static const BYTE gce_magic[] = { 0x21, 0xf9, 0x04 };
+
+static const struct metadata_pattern gce_metadata_pattern[] = {
+    { 0, 3, gce_magic, mask_all, 3 },
+    { 0 }
+};
+
+static const struct reader_containers gce_containers[] = {
+    {
+        &GUID_ContainerFormatGif,
+        gce_metadata_pattern
+    },
+    { NULL } /* list terminator */
+};
+
 static struct regsvr_metadatareader const metadatareader_list[] = {
     {   &CLSID_WICUnknownMetadataReader,
         "The Wine Project",
@@ -1514,8 +1573,7 @@ static struct regsvr_metadatareader const metadatareader_list[] = {
         0, 0, 0,
         NULL
     },
-    {
-        &CLSID_WICIfdMetadataReader,
+    {   &CLSID_WICIfdMetadataReader,
         "The Wine Project",
         "Ifd Reader",
         "1.0.0.0",
@@ -1524,6 +1582,46 @@ static struct regsvr_metadatareader const metadatareader_list[] = {
         &GUID_MetadataFormatIfd,
         1, 1, 0,
         ifd_containers
+    },
+    {   &CLSID_WICPngTextMetadataReader,
+        "The Wine Project",
+        "Chunk tEXt Reader",
+        "1.0.0.0",
+        "1.0.0.0",
+        &GUID_VendorMicrosoft,
+        &GUID_MetadataFormatChunktEXt,
+        0, 0, 0,
+        pngtext_containers
+    },
+    {   &CLSID_WICLSDMetadataReader,
+        "The Wine Project",
+        "Logical Screen Descriptor Reader",
+        "1.0.0.0",
+        "1.0.0.0",
+        &GUID_VendorMicrosoft,
+        &GUID_MetadataFormatLSD,
+        0, 0, 0,
+        lsd_containers
+    },
+    {   &CLSID_WICIMDMetadataReader,
+        "The Wine Project",
+        "Image Descriptor Reader",
+        "1.0.0.0",
+        "1.0.0.0",
+        &GUID_VendorMicrosoft,
+        &GUID_MetadataFormatIMD,
+        0, 0, 0,
+        imd_containers
+    },
+    {   &CLSID_WICGCEMetadataReader,
+        "The Wine Project",
+        "Graphic Control Extension Reader",
+        "1.0.0.0",
+        "1.0.0.0",
+        &GUID_VendorMicrosoft,
+        &GUID_MetadataFormatGCE,
+        0, 0, 0,
+        gce_containers
     },
     { NULL }			/* list terminator */
 };

@@ -12434,7 +12434,33 @@ fi
 
     for ac_flag in $CFLAGS; do
     case $ac_flag in
-      -g) { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -gdwarf-2" >&5
+      -g) case $host_os in
+            darwin*) { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -gstabs+" >&5
+$as_echo_n "checking whether the compiler supports -gstabs+... " >&6; }
+if ${ac_cv_cflags__gstabsp+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_wine_try_cflags_saved=$CFLAGS
+CFLAGS="$CFLAGS -gstabs+"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+int main(int argc, char **argv) { return 0; }
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_cflags__gstabsp=yes
+else
+  ac_cv_cflags__gstabsp=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+CFLAGS=$ac_wine_try_cflags_saved
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_cflags__gstabsp" >&5
+$as_echo "$ac_cv_cflags__gstabsp" >&6; }
+if test $ac_cv_cflags__gstabsp = yes; then :
+  EXTRACFLAGS="$EXTRACFLAGS -gstabs+"
+fi ;;
+            *) { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -gdwarf-2" >&5
 $as_echo_n "checking whether the compiler supports -gdwarf-2... " >&6; }
 if ${ac_cv_cflags__gdwarf_2+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -12459,7 +12485,7 @@ $as_echo "$ac_cv_cflags__gdwarf_2" >&6; }
 if test $ac_cv_cflags__gdwarf_2 = yes; then :
   EXTRACFLAGS="$EXTRACFLAGS -gdwarf-2"
 fi
-          { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -gstrict-dwarf" >&5
+               { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -gstrict-dwarf" >&5
 $as_echo_n "checking whether the compiler supports -gstrict-dwarf... " >&6; }
 if ${ac_cv_cflags__gstrict_dwarf+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -12484,6 +12510,7 @@ $as_echo "$ac_cv_cflags__gstrict_dwarf" >&6; }
 if test $ac_cv_cflags__gstrict_dwarf = yes; then :
   EXTRACFLAGS="$EXTRACFLAGS -gstrict-dwarf"
 fi ;;
+          esac ;;
     esac
   done
 
@@ -14316,7 +14343,16 @@ _ACEOF
 fi
 
 
-ac_fn_c_check_member "$LINENO" "struct icmpstat" "icps_inhist" "ac_cv_member_struct_icmpstat_icps_inhist" "#ifdef HAVE_NETINET_ICMP_VAR
+ac_fn_c_check_member "$LINENO" "struct icmpstat" "icps_inhist" "ac_cv_member_struct_icmpstat_icps_inhist" "#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef HAVE_NETINET_IP_H
+#include <netinet/ip.h>
+#endif
+#ifdef HAVE_NETINET_IP_ICMP_H
+#include <netinet/ip_icmp.h>
+#endif
+#ifdef HAVE_NETINET_ICMP_VAR_H
 #include <netinet/icmp_var.h>
 #endif
 "
@@ -14360,7 +14396,7 @@ ac_fn_c_check_member "$LINENO" "struct icmpstat" "icps_outhist" "ac_cv_member_st
 #ifdef HAVE_NETINET_IP_ICMP_H
 #include <netinet/ip_icmp.h>
 #endif
-#ifdef HAVE_NETINET_ICMP_VAR
+#ifdef HAVE_NETINET_ICMP_VAR_H
 #include <netinet/icmp_var.h>
 #endif
 "
@@ -14374,7 +14410,16 @@ _ACEOF
 fi
 
 
-ac_fn_c_check_member "$LINENO" "struct ipstat" "ips_total" "ac_cv_member_struct_ipstat_ips_total" "#ifdef HAVE_NETINET_IP_VAR_H
+ac_fn_c_check_member "$LINENO" "struct ipstat" "ips_total" "ac_cv_member_struct_ipstat_ips_total" "#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef HAVE_SYS_SOCKETVAR_H
+#include <sys/socketvar.h>
+#endif
+#ifdef HAVE_NETINET_IN_H
+#include <netinet/in.h>
+#endif
+#ifdef HAVE_NETINET_IP_VAR_H
 #include <netinet/ip_var.h>
 #endif
 "
@@ -14402,7 +14447,19 @@ _ACEOF
 fi
 
 
-ac_fn_c_check_member "$LINENO" "struct tcpstat" "tcps_connattempt" "ac_cv_member_struct_tcpstat_tcps_connattempt" "#ifdef HAVE_NETINET_TCP_VAR_H
+ac_fn_c_check_member "$LINENO" "struct tcpstat" "tcps_connattempt" "ac_cv_member_struct_tcpstat_tcps_connattempt" "#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef HAVE_SYS_SOCKETVAR_H
+#include <sys/socketvar.h>
+#endif
+#ifdef HAVE_NETINET_IN_H
+#include <netinet/in.h>
+#endif
+#ifdef HAVE_NETINET_TCP_H
+#include <netinet/tcp.h>
+#endif
+#ifdef HAVE_NETINET_TCP_VAR_H
 #include <netinet/tcp_var.h>
 #endif
 "
@@ -14430,7 +14487,19 @@ _ACEOF
 fi
 
 
-ac_fn_c_check_member "$LINENO" "struct udpstat" "udps_ipackets" "ac_cv_member_struct_udpstat_udps_ipackets" "#ifdef HAVE_NETINET_UDP_VAR_H
+ac_fn_c_check_member "$LINENO" "struct udpstat" "udps_ipackets" "ac_cv_member_struct_udpstat_udps_ipackets" "#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef HAVE_NETINET_IN_H
+#include <netinet/in.h>
+#endif
+#ifdef HAVE_NETINET_IP_VAR_H
+#include <netinet/ip_var.h>
+#endif
+#ifdef HAVE_NETINET_UDP_H
+#include <netinet/udp.h>
+#endif
+#ifdef HAVE_NETINET_UDP_VAR_H
 #include <netinet/udp_var.h>
 #endif
 "

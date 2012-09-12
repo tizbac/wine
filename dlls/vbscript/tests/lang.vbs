@@ -144,6 +144,19 @@ Call ok(1 = 1 < 0, "! 1 = 1 < 0")
 Call ok(1 <= 2, "! 1 <= 2")
 Call ok(2 <= 2, "! 2 <= 2")
 
+Call ok(isNull(0 = null), "'(0 = null)' is not null")
+Call ok(isNull(null = 1), "'(null = 1)' is not null")
+Call ok(isNull(0 > null), "'(0 > null)' is not null")
+Call ok(isNull(null > 1), "'(null > 1)' is not null")
+Call ok(isNull(0 < null), "'(0 < null)' is not null")
+Call ok(isNull(null < 1), "'(null < 1)' is not null")
+Call ok(isNull(0 <> null), "'(0 <> null)' is not null")
+Call ok(isNull(null <> 1), "'(null <> 1)' is not null")
+Call ok(isNull(0 >= null), "'(0 >= null)' is not null")
+Call ok(isNull(null >= 1), "'(null >= 1)' is not null")
+Call ok(isNull(0 <= null), "'(0 <= null)' is not null")
+Call ok(isNull(null <= 1), "'(null <= 1)' is not null")
+
 x = 3
 Call ok(2+2 = 4, "2+2 = " & (2+2))
 Call ok(false + 6 + true = 5, "false + 6 + true <> 5")
@@ -420,6 +433,12 @@ do while true
         exit do
     next
 loop
+
+if null then call ok(false, "if null evaluated")
+
+while null
+    call ok(false, "while null evaluated")
+wend
 
 Call collectionObj.reset()
 y = 0

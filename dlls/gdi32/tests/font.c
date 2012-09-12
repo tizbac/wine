@@ -2777,6 +2777,7 @@ end:
 }
 
 #define TT_PLATFORM_MICROSOFT 3
+#define TT_MS_ID_SYMBOL_CS 0
 #define TT_MS_ID_UNICODE_CS 1
 #define TT_MS_LANGID_ENGLISH_UNITED_STATES 0x0409
 #define TT_NAME_ID_FONT_FAMILY 1
@@ -2840,7 +2841,7 @@ static BOOL get_ttf_nametable_entry(HDC hdc, WORD name_id, WCHAR *out_buf, SIZE_
     for (i = 0; i < header->number_of_record; i++)
     {
         if (GET_BE_WORD(entry[i].platform_id) != TT_PLATFORM_MICROSOFT ||
-            GET_BE_WORD(entry[i].encoding_id) != TT_MS_ID_UNICODE_CS ||
+            (GET_BE_WORD(entry[i].encoding_id) != TT_MS_ID_UNICODE_CS && GET_BE_WORD(entry[i].encoding_id) != TT_MS_ID_SYMBOL_CS) ||
             GET_BE_WORD(entry[i].language_id) != language_id ||
             GET_BE_WORD(entry[i].name_id) != name_id)
         {
@@ -4037,7 +4038,7 @@ static void test_fullname(void)
         bufA[0] = 0;
         ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FULL_NAME, bufW, sizeof(bufW), TT_MS_LANGID_ENGLISH_UNITED_STATES);
         ok(ret, "face full name could not be read\n");
-        WideCharToMultiByte(CP_ACP, 0, bufW, -1, bufA, sizeof(bufW), NULL, FALSE);
+        WideCharToMultiByte(CP_ACP, 0, bufW, -1, bufA, sizeof(bufA), NULL, FALSE);
         ok(!lstrcmpA(bufA, TestName[i]), "font full names don't match: %s != %s\n", TestName[i], bufA);
         SelectObject(hdc, of);
         DeleteObject(hfont);
@@ -4107,7 +4108,7 @@ static void test_fullname2_helper(const char *Family)
         ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FONT_FAMILY, bufW, buf_size, GetSystemDefaultLangID());
         if (!ret)
         {
-            trace("no localized name found.\n");
+            trace("no localized FONT_FAMILY found.\n");
             ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FONT_FAMILY, bufW, buf_size, TT_MS_LANGID_ENGLISH_UNITED_STATES);
         }
         ok(ret, "FAMILY (family name) could not be read\n");
@@ -4121,7 +4122,7 @@ static void test_fullname2_helper(const char *Family)
         ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FULL_NAME, bufW, buf_size, GetSystemDefaultLangID());
         if (!ret)
         {
-            trace("no localized name found.\n");
+            trace("no localized FULL_NAME found.\n");
             ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FULL_NAME, bufW, buf_size, TT_MS_LANGID_ENGLISH_UNITED_STATES);
         }
         ok(ret, "FULL_NAME (face name) could not be read\n");
@@ -4132,10 +4133,15 @@ static void test_fullname2_helper(const char *Family)
 
         bufW[0] = 0;
         bufA[0] = 0;
-        ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FONT_SUBFAMILY, bufW, buf_size, TT_MS_LANGID_ENGLISH_UNITED_STATES);
+        ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FONT_SUBFAMILY, bufW, buf_size, GetSystemDefaultLangID());
+        if (!ret)
+        {
+            trace("no localized FONT_SUBFAMILY font.\n");
+            ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FONT_SUBFAMILY, bufW, buf_size, TT_MS_LANGID_ENGLISH_UNITED_STATES);
+        }
         ok(ret, "SUBFAMILY (style name) could not be read\n");
         WideCharToMultiByte(CP_ACP, 0, bufW, -1, bufA, buf_size, NULL, FALSE);
-        ok(!lstrcmpA(StyleName, bufA), "style names don't match: returned %s, expect %s\n", FaceName, bufA);
+        ok(!lstrcmpA(StyleName, bufA), "style names don't match: returned %s, expect %s\n", StyleName, bufA);
         otmStr = (LPSTR)otm + (UINT_PTR)otm->otmpStyleName;
         ok(!lstrcmpA(StyleName, otmStr), "StyleName %s doesn't match otmpStyleName %s\n", StyleName, otmStr);
 
@@ -4160,6 +4166,8 @@ static void test_fullname2_helper(const char *Family)
 static void test_fullname2(void)
 {
     test_fullname2_helper("Lucida Sans");
+    test_fullname2_helper("Webdings");
+    test_fullname2_helper("Wingdings");
 }
 
 static BOOL write_ttf_file(const char *fontname, char *tmp_name)

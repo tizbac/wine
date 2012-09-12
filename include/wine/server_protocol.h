@@ -279,6 +279,17 @@ struct hardware_msg_data
     int             y;
     unsigned int    hw_id;
     unsigned int    flags;
+    union
+    {
+        int type;
+        struct
+        {
+            int            type;
+            int            x;
+            int            y;
+            unsigned int   data;
+        } mouse;
+    } rawinput;
 };
 
 struct callback_msg_data
@@ -593,6 +604,14 @@ typedef union
         obj_handle_t     handle;
     } create_thread;
 } apc_result_t;
+
+struct rawinput_device
+{
+    unsigned short usage_page;
+    unsigned short usage;
+    unsigned int   flags;
+    user_handle_t  target;
+};
 
 
 
@@ -4866,6 +4885,19 @@ struct set_cursor_reply
 
 
 
+struct update_rawinput_devices_request
+{
+    struct request_header __header;
+    /* VARARG(devices,rawinput_devices); */
+    char __pad_12[4];
+};
+struct update_rawinput_devices_reply
+{
+    struct reply_header __header;
+};
+
+
+
 struct get_suspend_context_request
 {
     struct request_header __header;
@@ -5138,6 +5170,7 @@ enum request
     REQ_alloc_user_handle,
     REQ_free_user_handle,
     REQ_set_cursor,
+    REQ_update_rawinput_devices,
     REQ_get_suspend_context,
     REQ_set_suspend_context,
     REQ_NB_REQUESTS
@@ -5392,6 +5425,7 @@ union generic_request
     struct alloc_user_handle_request alloc_user_handle_request;
     struct free_user_handle_request free_user_handle_request;
     struct set_cursor_request set_cursor_request;
+    struct update_rawinput_devices_request update_rawinput_devices_request;
     struct get_suspend_context_request get_suspend_context_request;
     struct set_suspend_context_request set_suspend_context_request;
 };
@@ -5644,10 +5678,11 @@ union generic_reply
     struct alloc_user_handle_reply alloc_user_handle_reply;
     struct free_user_handle_reply free_user_handle_reply;
     struct set_cursor_reply set_cursor_reply;
+    struct update_rawinput_devices_reply update_rawinput_devices_reply;
     struct get_suspend_context_reply get_suspend_context_reply;
     struct set_suspend_context_reply set_suspend_context_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 432
+#define SERVER_PROTOCOL_VERSION 434
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */
