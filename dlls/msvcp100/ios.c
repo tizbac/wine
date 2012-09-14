@@ -50,6 +50,11 @@ typedef struct {
     streamsize arg;
 } manip_streamsize;
 
+typedef struct {
+    void (__cdecl *pfunc)(ios_base*, int);
+    int arg;
+} manip_int;
+
 typedef enum {
     INITFL_new   = 0,
     INITFL_open  = 1,
@@ -7225,6 +7230,32 @@ basic_istream_char* __thiscall basic_istream_char_ignore(basic_istream_char *thi
     return this;
 }
 
+/* ?ws@std@@YAAAV?$basic_istream@DU?$char_traits@D@std@@@1@AAV21@@Z */
+/* ?ws@std@@YAAEAV?$basic_istream@DU?$char_traits@D@std@@@1@AEAV21@@Z */
+basic_istream_char* __cdecl ws_basic_istream_char(basic_istream_char *istream)
+{
+    basic_ios_char *base = basic_istream_char_get_basic_ios(istream);
+    int ch = '\n';
+
+    TRACE("(%p)\n", istream);
+
+    if(basic_istream_char_sentry_create(istream, TRUE)) {
+        basic_streambuf_char *strbuf = basic_ios_char_rdbuf_get(base);
+        const ctype_char *ctype = ctype_char_use_facet(strbuf->loc);
+
+        for(ch = basic_streambuf_char_sgetc(strbuf); ctype_char_is_ch(ctype, _SPACE, ch);
+                ch = basic_streambuf_char_snextc(strbuf)) {
+            if(ch == EOF)
+                break;
+        }
+    }
+    basic_istream_char_sentry_destroy(istream);
+
+    if(ch == EOF)
+        basic_ios_char_setstate(base, IOSTATE_eofbit);
+    return istream;
+}
+
 /* ?peek@?$basic_istream@DU?$char_traits@D@std@@@std@@QAEHXZ */
 /* ?peek@?$basic_istream@DU?$char_traits@D@std@@@std@@QEAAHXZ */
 DEFINE_THISCALL_WRAPPER(basic_istream_char_peek, 4)
@@ -8322,6 +8353,34 @@ basic_istream_wchar* __thiscall basic_istream_wchar_ignore(basic_istream_wchar *
     if(ch == WEOF)
         basic_ios_wchar_setstate(base, IOSTATE_eofbit);
     return this;
+}
+
+/* ?ws@std@@YAAAV?$basic_istream@_WU?$char_traits@_W@std@@@1@AAV21@@Z */
+/* ?ws@std@@YAAEAV?$basic_istream@_WU?$char_traits@_W@std@@@1@AEAV21@@Z */
+/* ?ws@std@@YAAAV?$basic_istream@GU?$char_traits@G@std@@@1@AAV21@@Z */
+/* ?ws@std@@YAAEAV?$basic_istream@GU?$char_traits@G@std@@@1@AEAV21@@Z */
+basic_istream_wchar* __cdecl ws_basic_istream_wchar(basic_istream_wchar *istream)
+{
+    basic_ios_wchar *base = basic_istream_wchar_get_basic_ios(istream);
+    unsigned short ch = '\n';
+
+    TRACE("(%p)\n", istream);
+
+    if(basic_istream_wchar_sentry_create(istream, TRUE)) {
+        basic_streambuf_wchar *strbuf = basic_ios_wchar_rdbuf_get(base);
+        const ctype_wchar *ctype = ctype_wchar_use_facet(strbuf->loc);
+
+        for(ch = basic_streambuf_wchar_sgetc(strbuf); ctype_wchar_is_ch(ctype, _SPACE, ch);
+                ch = basic_streambuf_wchar_snextc(strbuf)) {
+            if(ch == WEOF)
+                break;
+        }
+    }
+    basic_istream_wchar_sentry_destroy(istream);
+
+    if(ch == WEOF)
+        basic_ios_wchar_setstate(base, IOSTATE_eofbit);
+    return istream;
 }
 
 /* ?peek@?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAEGXZ */
@@ -12236,6 +12295,60 @@ manip_streamsize* __cdecl setw(manip_streamsize *ret, streamsize width)
 
     ret->pfunc = setw_func;
     ret->arg = width;
+    return ret;
+}
+
+static void __cdecl resetioflags_func(ios_base *base, int mask)
+{
+    ios_base_setf_mask(base, 0, mask);
+}
+
+/* ?resetiosflags@std@@YA?AU?$_Smanip@H@1@H@Z */
+manip_int* __cdecl resetiosflags(manip_int *ret, int mask)
+{
+    TRACE("(%p %d)\n", ret, mask);
+
+    ret->pfunc = resetioflags_func;
+    ret->arg = mask;
+    return ret;
+}
+
+static void __cdecl setiosflags_func(ios_base *base, int mask)
+{
+    ios_base_setf_mask(base, FMTFLAG_mask, mask);
+}
+
+/* ?setiosflags@std@@YA?AU?$_Smanip@H@1@H@Z */
+manip_int* __cdecl setiosflags(manip_int *ret, int mask)
+{
+    TRACE("(%p %d)\n", ret, mask);
+
+    ret->pfunc = setiosflags_func;
+    ret->arg = mask;
+    return ret;
+}
+
+static void __cdecl setbase_func(ios_base *base, int set_base)
+{
+    if(set_base == 10)
+        set_base = FMTFLAG_dec;
+    else if(set_base == 8)
+        set_base = FMTFLAG_oct;
+    else if(set_base == 16)
+        set_base = FMTFLAG_hex;
+    else
+        set_base = 0;
+
+    ios_base_setf_mask(base, set_base, FMTFLAG_basefield);
+}
+
+/* ?setbase@std@@YA?AU?$_Smanip@H@1@H@Z */
+manip_int* __cdecl setbase(manip_int *ret, int base)
+{
+    TRACE("(%p %d)\n", ret, base);
+
+    ret->pfunc = setbase_func;
+    ret->arg = base;
     return ret;
 }
 

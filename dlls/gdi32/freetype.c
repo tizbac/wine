@@ -1724,6 +1724,9 @@ static Face *create_face( FT_Face ft_face, FT_Long face_index, const char *file,
     face->FullName = get_face_name( ft_face, TT_NAME_ID_FULL_NAME, GetSystemDefaultLangID() );
     if (!face->FullName)
         face->FullName = get_face_name( ft_face, TT_NAME_ID_FULL_NAME, TT_MS_LANGID_ENGLISH_UNITED_STATES );
+    if (vertical)
+        face->FullName = prepend_at( face->FullName );
+
     if (file)
     {
         face->file = strdupA( file );
@@ -6576,9 +6579,12 @@ static BOOL get_outline_text_metrics(GdiFont *font)
         FIXME("failed to read face_nameW for font %s!\n", wine_dbgstr_w(font->name));
         face_nameW = strdupW(font->name);
     }
+    if (font->name[0] == '@') face_nameW = prepend_at( face_nameW );
     lenface = (strlenW(face_nameW) + 1) * sizeof(WCHAR);
 
-    full_nameW = get_face_name( ft_face, TT_NAME_ID_UNIQUE_ID, TT_MS_LANGID_ENGLISH_UNITED_STATES );
+    full_nameW = get_face_name( ft_face, TT_NAME_ID_UNIQUE_ID, GetSystemDefaultLangID() );
+    if (!full_nameW)
+        full_nameW = get_face_name( ft_face, TT_NAME_ID_UNIQUE_ID, TT_MS_LANGID_ENGLISH_UNITED_STATES );
     if (!full_nameW)
     {
         WCHAR fake_nameW[] = {'f','a','k','e',' ','n','a','m','e', 0};

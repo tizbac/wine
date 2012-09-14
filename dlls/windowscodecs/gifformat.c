@@ -1,5 +1,6 @@
 /*
  * Copyright 2009 Vincent Povirk for CodeWeavers
+ * Copyright 2012 Dmitry Timoshkov
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -48,6 +49,7 @@ static LPWSTR strdupAtoW(const char *src)
 static HRESULT load_LSD_metadata(IStream *stream, const GUID *vendor, DWORD options,
                                  MetadataItem **items, DWORD *count)
 {
+#include "pshpack1.h"
     struct logical_screen_descriptor
     {
         char signature[6];
@@ -62,6 +64,7 @@ static HRESULT load_LSD_metadata(IStream *stream, const GUID *vendor, DWORD opti
         BYTE background_color_index;
         BYTE pixel_aspect_ratio;
     } lsd_data;
+#include "poppack.h"
     HRESULT hr;
     ULONG bytesread, i;
     MetadataItem *result;
@@ -85,7 +88,7 @@ static HRESULT load_LSD_metadata(IStream *stream, const GUID *vendor, DWORD opti
     result[0].id.vt = VT_LPWSTR;
     result[0].id.u.pwszVal = strdupAtoW("Signature");
     result[0].value.vt = VT_UI1|VT_VECTOR;
-    result[0].value.u.caub.cElems = 6;
+    result[0].value.u.caub.cElems = sizeof(lsd_data.signature);
     result[0].value.u.caub.pElems = HeapAlloc(GetProcessHeap(), 0, sizeof(lsd_data.signature));
     memcpy(result[0].value.u.caub.pElems, lsd_data.signature, sizeof(lsd_data.signature));
 
@@ -107,7 +110,7 @@ static HRESULT load_LSD_metadata(IStream *stream, const GUID *vendor, DWORD opti
     result[4].id.vt = VT_LPWSTR;
     result[4].id.u.pwszVal = strdupAtoW("ColorResolution");
     result[4].value.vt = VT_UI1;
-    result[4].value.u.bVal = (lsd_data.packed >> 6) & 7;
+    result[4].value.u.bVal = (lsd_data.packed >> 4) & 7;
 
     result[5].id.vt = VT_LPWSTR;
     result[5].id.u.pwszVal = strdupAtoW("SortFlag");
@@ -146,23 +149,27 @@ HRESULT LSDReader_CreateInstance(IUnknown *pUnkOuter, REFIID iid, void **ppv)
     return MetadataReader_Create(&LSDReader_Vtbl, pUnkOuter, iid, ppv);
 }
 
+#include "pshpack1.h"
+struct image_descriptor
+{
+    USHORT left;
+    USHORT top;
+    USHORT width;
+    USHORT height;
+    BYTE packed;
+    /* local_color_table_flag : 1;
+     * interlace_flag : 1;
+     * sort_flag : 1;
+     * reserved : 2;
+     * local_color_table_size : 3;
+     */
+};
+#include "poppack.h"
+
 static HRESULT load_IMD_metadata(IStream *stream, const GUID *vendor, DWORD options,
                                  MetadataItem **items, DWORD *count)
 {
-    struct image_descriptor
-    {
-        USHORT left;
-        USHORT top;
-        USHORT width;
-        USHORT height;
-        BYTE packed;
-        /* local_color_table_flag : 1;
-         * interlace_flag : 1;
-         * sort_flag : 1;
-         * reserved : 2;
-         * local_color_table_size : 3;
-         */
-    } imd_data;
+    struct image_descriptor imd_data;
     HRESULT hr;
     ULONG bytesread, i;
     MetadataItem *result;
@@ -318,8 +325,28 @@ HRESULT GCEReader_CreateInstance(IUnknown *pUnkOuter, REFIID iid, void **ppv)
     return MetadataReader_Create(&GCEReader_Vtbl, pUnkOuter, iid, ppv);
 }
 
+static IStream *create_stream(const void *data, int data_size)
+{
+    HRESULT hr;
+    IStream *stream;
+    HGLOBAL hdata;
+    void *locked_data;
+
+    hdata = GlobalAlloc(GMEM_MOVEABLE, data_size);
+    if (!hdata) return NULL;
+
+    locked_data = GlobalLock(hdata);
+    memcpy(locked_data, data, data_size);
+    GlobalUnlock(hdata);
+
+    hr = CreateStreamOnHGlobal(hdata, TRUE, &stream);
+    return FAILED(hr) ? NULL : stream;
+}
+
 typedef struct {
     IWICBitmapDecoder IWICBitmapDecoder_iface;
+    IWICMetadataBlockReader IWICMetadataBlockReader_iface;
+    BYTE LSD_data[13]; /* Logical Screen Descriptor */
     LONG ref;
     BOOL initialized;
     GifFileType *gif;
@@ -328,6 +355,7 @@ typedef struct {
 
 typedef struct {
     IWICBitmapFrameDecode IWICBitmapFrameDecode_iface;
+    IWICMetadataBlockReader IWICMetadataBlockReader_iface;
     LONG ref;
     SavedImage *frame;
     GifDecoder *parent;
@@ -338,9 +366,19 @@ static inline GifDecoder *impl_from_IWICBitmapDecoder(IWICBitmapDecoder *iface)
     return CONTAINING_RECORD(iface, GifDecoder, IWICBitmapDecoder_iface);
 }
 
+static inline GifDecoder *impl_from_IWICMetadataBlockReader(IWICMetadataBlockReader *iface)
+{
+    return CONTAINING_RECORD(iface, GifDecoder, IWICMetadataBlockReader_iface);
+}
+
 static inline GifFrameDecode *impl_from_IWICBitmapFrameDecode(IWICBitmapFrameDecode *iface)
 {
     return CONTAINING_RECORD(iface, GifFrameDecode, IWICBitmapFrameDecode_iface);
+}
+
+static inline GifFrameDecode *frame_from_IWICMetadataBlockReader(IWICMetadataBlockReader *iface)
+{
+    return CONTAINING_RECORD(iface, GifFrameDecode, IWICMetadataBlockReader_iface);
 }
 
 static HRESULT WINAPI GifFrameDecode_QueryInterface(IWICBitmapFrameDecode *iface, REFIID iid,
@@ -356,6 +394,10 @@ static HRESULT WINAPI GifFrameDecode_QueryInterface(IWICBitmapFrameDecode *iface
         IsEqualIID(&IID_IWICBitmapFrameDecode, iid))
     {
         *ppv = &This->IWICBitmapFrameDecode_iface;
+    }
+    else if (IsEqualIID(&IID_IWICMetadataBlockReader, iid))
+    {
+        *ppv = &This->IWICMetadataBlockReader_iface;
     }
     else
     {
@@ -574,6 +616,189 @@ static const IWICBitmapFrameDecodeVtbl GifFrameDecode_Vtbl = {
     GifFrameDecode_GetThumbnail
 };
 
+static HRESULT WINAPI GifFrameDecode_Block_QueryInterface(IWICMetadataBlockReader *iface,
+    REFIID iid, void **ppv)
+{
+    GifFrameDecode *This = frame_from_IWICMetadataBlockReader(iface);
+    return IWICBitmapFrameDecode_QueryInterface(&This->IWICBitmapFrameDecode_iface, iid, ppv);
+}
+
+static ULONG WINAPI GifFrameDecode_Block_AddRef(IWICMetadataBlockReader *iface)
+{
+    GifFrameDecode *This = frame_from_IWICMetadataBlockReader(iface);
+    return IWICBitmapFrameDecode_AddRef(&This->IWICBitmapFrameDecode_iface);
+}
+
+static ULONG WINAPI GifFrameDecode_Block_Release(IWICMetadataBlockReader *iface)
+{
+    GifFrameDecode *This = frame_from_IWICMetadataBlockReader(iface);
+    return IWICBitmapFrameDecode_Release(&This->IWICBitmapFrameDecode_iface);
+}
+
+static HRESULT WINAPI GifFrameDecode_Block_GetContainerFormat(IWICMetadataBlockReader *iface,
+    GUID *guid)
+{
+    TRACE("(%p,%p)\n", iface, guid);
+
+    if (!guid) return E_INVALIDARG;
+
+    *guid = GUID_ContainerFormatGif;
+    return S_OK;
+}
+
+static const void *get_GCE_data(GifFrameDecode *This)
+{
+    int i;
+
+    for (i = 0; i < This->frame->ExtensionBlockCount; i++)
+    {
+        if (This->frame->ExtensionBlocks[i].Function == GRAPHICS_EXT_FUNC_CODE &&
+            This->frame->ExtensionBlocks[i].ByteCount == 4)
+            return This->frame->ExtensionBlocks[i].Bytes;
+    }
+    return NULL;
+}
+
+static HRESULT WINAPI GifFrameDecode_Block_GetCount(IWICMetadataBlockReader *iface,
+    UINT *count)
+{
+    GifFrameDecode *This = frame_from_IWICMetadataBlockReader(iface);
+
+    TRACE("%p,%p\n", iface, count);
+
+    if (!count) return E_INVALIDARG;
+
+    *count = 1;
+    if (get_GCE_data(This)) *count += 1;
+    return S_OK;
+}
+
+static HRESULT create_IMD_metadata_reader(GifFrameDecode *This, IWICMetadataReader **reader)
+{
+    HRESULT hr;
+    IWICMetadataReader *metadata_reader;
+    IWICPersistStream *persist;
+    IStream *stream;
+    struct image_descriptor IMD_data;
+
+    /* FIXME: Use IWICComponentFactory_CreateMetadataReader once it's implemented */
+
+    hr = CoCreateInstance(&CLSID_WICIMDMetadataReader, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_IWICMetadataReader, (void **)&metadata_reader);
+    if (FAILED(hr)) return hr;
+
+    hr = IWICMetadataReader_QueryInterface(metadata_reader, &IID_IWICPersistStream, (void **)&persist);
+    if (FAILED(hr))
+    {
+        IWICMetadataReader_Release(metadata_reader);
+        return hr;
+    }
+
+    /* recreate IMD structure from GIF decoder data */
+    IMD_data.left = This->frame->ImageDesc.Left;
+    IMD_data.top = This->frame->ImageDesc.Top;
+    IMD_data.width = This->frame->ImageDesc.Width;
+    IMD_data.height = This->frame->ImageDesc.Height;
+    IMD_data.packed = 0;
+    /* interlace_flag */
+    IMD_data.packed |= This->frame->ImageDesc.Interlace ? (1 << 6) : 0;
+    if (This->frame->ImageDesc.ColorMap)
+    {
+        /* local_color_table_flag */
+        IMD_data.packed |= 1 << 7;
+        /* local_color_table_size */
+        IMD_data.packed |= This->frame->ImageDesc.ColorMap->BitsPerPixel;
+        /* FIXME: sort_flag */
+    }
+
+    stream = create_stream(&IMD_data, sizeof(IMD_data));
+    IWICPersistStream_LoadEx(persist, stream, NULL, WICPersistOptionsDefault);
+    IStream_Release(stream);
+
+    IWICPersistStream_Release(persist);
+
+    *reader = metadata_reader;
+    return S_OK;
+}
+
+static HRESULT create_GCE_metadata_reader(const void *GCE_data, IWICMetadataReader **reader)
+{
+    HRESULT hr;
+    IWICMetadataReader *metadata_reader;
+    IWICPersistStream *persist;
+    IStream *stream;
+
+    /* FIXME: Use IWICComponentFactory_CreateMetadataReader once it's implemented */
+
+    hr = CoCreateInstance(&CLSID_WICGCEMetadataReader, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_IWICMetadataReader, (void **)&metadata_reader);
+    if (FAILED(hr)) return hr;
+
+    hr = IWICMetadataReader_QueryInterface(metadata_reader, &IID_IWICPersistStream, (void **)&persist);
+    if (FAILED(hr))
+    {
+        IWICMetadataReader_Release(metadata_reader);
+        return hr;
+    }
+
+    stream = create_stream(GCE_data, 4);
+    IWICPersistStream_LoadEx(persist, stream, NULL, WICPersistOptionsDefault);
+    IStream_Release(stream);
+
+    IWICPersistStream_Release(persist);
+
+    *reader = metadata_reader;
+    return S_OK;
+}
+
+static HRESULT WINAPI GifFrameDecode_Block_GetReaderByIndex(IWICMetadataBlockReader *iface,
+    UINT index, IWICMetadataReader **reader)
+{
+    GifFrameDecode *This = frame_from_IWICMetadataBlockReader(iface);
+    UINT block_count = 1;
+    const void *GCE_data;
+
+    TRACE("(%p,%u,%p)\n", iface, index, reader);
+
+    GCE_data = get_GCE_data(This);
+    if (GCE_data) block_count++;
+    /* FIXME: add support for Application Extension metadata block
+    APE_data = get_APE_data(This);
+    if (APE_data) block_count++;
+    */
+    if (!reader || index >= block_count) return E_INVALIDARG;
+
+    if (index == 0)
+        return create_IMD_metadata_reader(This, reader);
+
+    if (index == 1 && GCE_data)
+        return create_GCE_metadata_reader(GCE_data, reader);
+
+    /* FIXME: add support for Application Extension metadata block
+    if (APE_data)
+        return create_APE_metadata_reader(APE_data, reader);
+    */
+    return E_INVALIDARG;
+}
+
+static HRESULT WINAPI GifFrameDecode_Block_GetEnumerator(IWICMetadataBlockReader *iface,
+    IEnumUnknown **enumerator)
+{
+    FIXME("(%p,%p): stub\n", iface, enumerator);
+    return E_NOTIMPL;
+}
+
+static const IWICMetadataBlockReaderVtbl GifFrameDecode_BlockVtbl =
+{
+    GifFrameDecode_Block_QueryInterface,
+    GifFrameDecode_Block_AddRef,
+    GifFrameDecode_Block_Release,
+    GifFrameDecode_Block_GetContainerFormat,
+    GifFrameDecode_Block_GetCount,
+    GifFrameDecode_Block_GetReaderByIndex,
+    GifFrameDecode_Block_GetEnumerator
+};
+
 static HRESULT WINAPI GifDecoder_QueryInterface(IWICBitmapDecoder *iface, REFIID iid,
     void **ppv)
 {
@@ -586,6 +811,10 @@ static HRESULT WINAPI GifDecoder_QueryInterface(IWICBitmapDecoder *iface, REFIID
         IsEqualIID(&IID_IWICBitmapDecoder, iid))
     {
         *ppv = &This->IWICBitmapDecoder_iface;
+    }
+    else if (IsEqualIID(&IID_IWICMetadataBlockReader, iid))
+    {
+        *ppv = &This->IWICMetadataBlockReader_iface;
     }
     else
     {
@@ -688,6 +917,10 @@ static HRESULT WINAPI GifDecoder_Initialize(IWICBitmapDecoder *iface, IStream *p
     /* make sure we don't use the stream after this method returns */
     This->gif->UserData = NULL;
 
+    seek.QuadPart = 0;
+    IStream_Seek(pIStream, seek, STREAM_SEEK_SET, NULL);
+    IStream_Read(pIStream, &This->LSD_data, sizeof(This->LSD_data), NULL);
+
     This->initialized = TRUE;
 
     LeaveCriticalSection(&This->lock);
@@ -786,6 +1019,7 @@ static HRESULT WINAPI GifDecoder_GetFrame(IWICBitmapDecoder *iface,
     if (!result) return E_OUTOFMEMORY;
 
     result->IWICBitmapFrameDecode_iface.lpVtbl = &GifFrameDecode_Vtbl;
+    result->IWICMetadataBlockReader_iface.lpVtbl = &GifFrameDecode_BlockVtbl;
     result->ref = 1;
     result->frame = &This->gif->SavedImages[index];
     IWICBitmapDecoder_AddRef(iface);
@@ -813,6 +1047,107 @@ static const IWICBitmapDecoderVtbl GifDecoder_Vtbl = {
     GifDecoder_GetFrame
 };
 
+static HRESULT WINAPI GifDecoder_Block_QueryInterface(IWICMetadataBlockReader *iface,
+    REFIID iid, void **ppv)
+{
+    GifDecoder *This = impl_from_IWICMetadataBlockReader(iface);
+    return IWICBitmapDecoder_QueryInterface(&This->IWICBitmapDecoder_iface, iid, ppv);
+}
+
+static ULONG WINAPI GifDecoder_Block_AddRef(IWICMetadataBlockReader *iface)
+{
+    GifDecoder *This = impl_from_IWICMetadataBlockReader(iface);
+    return IWICBitmapDecoder_AddRef(&This->IWICBitmapDecoder_iface);
+}
+
+static ULONG WINAPI GifDecoder_Block_Release(IWICMetadataBlockReader *iface)
+{
+    GifDecoder *This = impl_from_IWICMetadataBlockReader(iface);
+    return IWICBitmapDecoder_Release(&This->IWICBitmapDecoder_iface);
+}
+
+static HRESULT WINAPI GifDecoder_Block_GetContainerFormat(IWICMetadataBlockReader *iface,
+    GUID *guid)
+{
+    TRACE("(%p,%p)\n", iface, guid);
+
+    if (!guid) return E_INVALIDARG;
+
+    *guid = GUID_ContainerFormatGif;
+    return S_OK;
+}
+
+static HRESULT WINAPI GifDecoder_Block_GetCount(IWICMetadataBlockReader *iface,
+    UINT *count)
+{
+    TRACE("%p,%p\n", iface, count);
+
+    if (!count) return E_INVALIDARG;
+
+    *count = 1;
+    return S_OK;
+}
+
+static HRESULT create_LSD_metadata_reader(GifDecoder *This, IWICMetadataReader **reader)
+{
+    HRESULT hr;
+    IWICMetadataReader *metadata_reader;
+    IWICPersistStream *persist;
+    IStream *stream;
+
+    /* FIXME: Use IWICComponentFactory_CreateMetadataReader once it's implemented */
+
+    hr = CoCreateInstance(&CLSID_WICLSDMetadataReader, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_IWICMetadataReader, (void **)&metadata_reader);
+    if (FAILED(hr)) return hr;
+
+    hr = IWICMetadataReader_QueryInterface(metadata_reader, &IID_IWICPersistStream, (void **)&persist);
+    if (FAILED(hr))
+    {
+        IWICMetadataReader_Release(metadata_reader);
+        return hr;
+    }
+
+    stream = create_stream(This->LSD_data, sizeof(This->LSD_data));
+    IWICPersistStream_LoadEx(persist, stream, NULL, WICPersistOptionsDefault);
+    IStream_Release(stream);
+
+    IWICPersistStream_Release(persist);
+
+    *reader = metadata_reader;
+    return S_OK;
+}
+
+static HRESULT WINAPI GifDecoder_Block_GetReaderByIndex(IWICMetadataBlockReader *iface,
+    UINT index, IWICMetadataReader **reader)
+{
+    GifDecoder *This = impl_from_IWICMetadataBlockReader(iface);
+
+    TRACE("(%p,%u,%p)\n", iface, index, reader);
+
+    if (!reader || index != 0) return E_INVALIDARG;
+
+    return create_LSD_metadata_reader(This, reader);
+}
+
+static HRESULT WINAPI GifDecoder_Block_GetEnumerator(IWICMetadataBlockReader *iface,
+    IEnumUnknown **enumerator)
+{
+    FIXME("(%p,%p): stub\n", iface, enumerator);
+    return E_NOTIMPL;
+}
+
+static const IWICMetadataBlockReaderVtbl GifDecoder_BlockVtbl =
+{
+    GifDecoder_Block_QueryInterface,
+    GifDecoder_Block_AddRef,
+    GifDecoder_Block_Release,
+    GifDecoder_Block_GetContainerFormat,
+    GifDecoder_Block_GetCount,
+    GifDecoder_Block_GetReaderByIndex,
+    GifDecoder_Block_GetEnumerator
+};
+
 HRESULT GifDecoder_CreateInstance(IUnknown *pUnkOuter, REFIID iid, void** ppv)
 {
     GifDecoder *This;
@@ -828,6 +1163,7 @@ HRESULT GifDecoder_CreateInstance(IUnknown *pUnkOuter, REFIID iid, void** ppv)
     if (!This) return E_OUTOFMEMORY;
 
     This->IWICBitmapDecoder_iface.lpVtbl = &GifDecoder_Vtbl;
+    This->IWICMetadataBlockReader_iface.lpVtbl = &GifDecoder_BlockVtbl;
     This->ref = 1;
     This->initialized = FALSE;
     This->gif = NULL;

@@ -4046,6 +4046,16 @@ static void test_fullname(void)
     DeleteDC(hdc);
 }
 
+static WCHAR *prepend_at(WCHAR *family)
+{
+    if (!family)
+        return NULL;
+
+    memmove(family + 1, family, (lstrlenW(family) + 1) * sizeof(WCHAR));
+    family[0] = '@';
+    return family;
+}
+
 static void test_fullname2_helper(const char *Family)
 {
     char *FamilyName, *FaceName, *StyleName, *otmStr;
@@ -4058,6 +4068,8 @@ static void test_fullname2_helper(const char *Family)
     int i;
     DWORD otm_size, ret, buf_size;
     OUTLINETEXTMETRICA *otm;
+    BOOL want_vertical, get_vertical;
+    want_vertical = ( Family[0] == '@' );
 
     hdc = CreateCompatibleDC(0);
     ok(hdc != NULL, "CreateCompatibleDC failed\n");
@@ -4083,6 +4095,9 @@ static void test_fullname2_helper(const char *Family)
         StyleName = (char *)efnd.elf[i].elfStyle;
 
         trace("Checking font %s:\nFamilyName: %s; FaceName: %s; StyleName: %s\n", Family, FamilyName, FaceName, StyleName);
+
+        get_vertical = ( FamilyName[0] == '@' );
+        ok(get_vertical == want_vertical, "Vertical flags don't match: %s %s\n", Family, FamilyName);
 
         lstrcpyA(lf.lfFaceName, FaceName);
         hfont = CreateFontIndirectA(&lf);
@@ -4112,6 +4127,7 @@ static void test_fullname2_helper(const char *Family)
             ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FONT_FAMILY, bufW, buf_size, TT_MS_LANGID_ENGLISH_UNITED_STATES);
         }
         ok(ret, "FAMILY (family name) could not be read\n");
+        if (want_vertical) bufW = prepend_at(bufW);
         WideCharToMultiByte(CP_ACP, 0, bufW, -1, bufA, buf_size, NULL, FALSE);
         ok(!lstrcmpA(FamilyName, bufA), "font family names don't match: returned %s, expect %s\n", FamilyName, bufA);
         otmStr = (LPSTR)otm + (UINT_PTR)otm->otmpFamilyName;
@@ -4126,6 +4142,7 @@ static void test_fullname2_helper(const char *Family)
             ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FULL_NAME, bufW, buf_size, TT_MS_LANGID_ENGLISH_UNITED_STATES);
         }
         ok(ret, "FULL_NAME (face name) could not be read\n");
+        if (want_vertical) bufW = prepend_at(bufW);
         WideCharToMultiByte(CP_ACP, 0, bufW, -1, bufA, buf_size, NULL, FALSE);
         ok(!lstrcmpA(FaceName, bufA), "font face names don't match: returned %s, expect %s\n", FaceName, bufA);
         otmStr = (LPSTR)otm + (UINT_PTR)otm->otmpFaceName;
@@ -4147,7 +4164,12 @@ static void test_fullname2_helper(const char *Family)
 
         bufW[0] = 0;
         bufA[0] = 0;
-        ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_UNIQUE_ID, bufW, buf_size, TT_MS_LANGID_ENGLISH_UNITED_STATES);
+        ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_UNIQUE_ID, bufW, buf_size, GetSystemDefaultLangID());
+        if (!ret)
+        {
+            trace("no localized UNIQUE_ID found.\n");
+            ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_UNIQUE_ID, bufW, buf_size, TT_MS_LANGID_ENGLISH_UNITED_STATES);
+        }
         ok(ret, "UNIQUE_ID (full name) could not be read\n");
         WideCharToMultiByte(CP_ACP, 0, bufW, -1, bufA, buf_size, NULL, FALSE);
         otmStr = (LPSTR)otm + (UINT_PTR)otm->otmpFullName;
@@ -4165,9 +4187,43 @@ static void test_fullname2_helper(const char *Family)
 
 static void test_fullname2(void)
 {
+    test_fullname2_helper("Arial");
+    test_fullname2_helper("DejaVu Sans");
     test_fullname2_helper("Lucida Sans");
+    test_fullname2_helper("Tahoma");
     test_fullname2_helper("Webdings");
     test_fullname2_helper("Wingdings");
+    test_fullname2_helper("SimSun");
+    test_fullname2_helper("NSimSun");
+    test_fullname2_helper("MingLiu");
+    test_fullname2_helper("PMingLiu");
+    test_fullname2_helper("WenQuanYi Micro Hei");
+    test_fullname2_helper("MS UI Gothic");
+    test_fullname2_helper("Ume UI Gothic");
+    test_fullname2_helper("MS Gothic");
+    test_fullname2_helper("Ume Gothic");
+    test_fullname2_helper("MS PGothic");
+    test_fullname2_helper("Ume P Gothic");
+    test_fullname2_helper("Gulim");
+    test_fullname2_helper("Batang");
+    test_fullname2_helper("UnBatang");
+    test_fullname2_helper("UnDotum");
+    test_fullname2_helper("@SimSun");
+    test_fullname2_helper("@NSimSun");
+    test_fullname2_helper("@MingLiu");
+    test_fullname2_helper("@PMingLiu");
+    test_fullname2_helper("@WenQuanYi Micro Hei");
+    test_fullname2_helper("@MS UI Gothic");
+    test_fullname2_helper("@Ume UI Gothic");
+    test_fullname2_helper("@MS Gothic");
+    test_fullname2_helper("@Ume Gothic");
+    test_fullname2_helper("@MS PGothic");
+    test_fullname2_helper("@Ume P Gothic");
+    test_fullname2_helper("@Gulim");
+    test_fullname2_helper("@Batang");
+    test_fullname2_helper("@UnBatang");
+    test_fullname2_helper("@UnDotum");
+
 }
 
 static BOOL write_ttf_file(const char *fontname, char *tmp_name)

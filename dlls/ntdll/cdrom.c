@@ -175,6 +175,7 @@ X(IOCTL_CDROM_SEEK_AUDIO_MSF)
 X(IOCTL_CDROM_SET_VOLUME)
 X(IOCTL_CDROM_STOP_AUDIO)
 X(IOCTL_CDROM_TRACK_ISRC)
+X(IOCTL_DISK_GET_MEDIA_TYPES)
 X(IOCTL_DISK_MEDIA_REMOVAL)
 X(IOCTL_DVD_END_SESSION)
 X(IOCTL_DVD_GET_REGION)
@@ -924,7 +925,7 @@ static NTSTATUS CDROM_ReadQChannel(int dev, int fd, const CDROM_SUB_Q_DATA_FORMA
         break;
     default:
 	TRACE("status=%02X !\n", sc.cdsc_audiostatus);
-        break;
+        hdr->AudioStatus = AUDIO_STATUS_NO_STATUS;
     }
     switch (fmt->Format)
     {
@@ -1035,6 +1036,7 @@ static NTSTATUS CDROM_ReadQChannel(int dev, int fd, const CDROM_SUB_Q_DATA_FORMA
         break;
     default:
 	TRACE("status=%02X !\n", sc.header.audio_status);
+        hdr->AudioStatus = AUDIO_STATUS_NO_STATUS;
     }
     switch (fmt->Format)
     {
@@ -2906,6 +2908,7 @@ NTSTATUS CDROM_DeviceIoControl(HANDLE hDevice,
         else status = CDROM_ControlEjection(fd, lpInBuffer);
         break;
 
+    case IOCTL_DISK_GET_MEDIA_TYPES:
     case IOCTL_STORAGE_GET_MEDIA_TYPES:
     case IOCTL_STORAGE_GET_MEDIA_TYPES_EX:
         sz = sizeof(GET_MEDIA_TYPES);

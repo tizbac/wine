@@ -1,5 +1,7 @@
 /*
- * Copyright 2009 Jacek Caban
+ * msls31.dll
+ *
+ * Copyright 2012 Josh DuBois for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,14 +18,27 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-/* @makedep: exectest.html */
-exectest.html HTML "exectest.html"
+#include "config.h"
 
-/* @makedep: jstest.html */
-jstest.html HTML "jstest.html"
+#include <stdarg.h>
 
-/* @makedep: vbtest.html */
-vbtest.html HTML "vbtest.html"
+#include "windef.h"
+#include "winbase.h"
+#include "wine/debug.h"
 
-/* @makedep: events.html */
-events.html HTML "events.html"
+WINE_DEFAULT_DEBUG_CHANNEL(msls31);
+
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
+{
+    TRACE("(%p, %d, %p)\n", hinstDLL, fdwReason, lpvReserved);
+
+    switch (fdwReason)
+    {
+    case DLL_WINE_PREATTACH:
+        return FALSE;  /* prefer native version */
+    case DLL_PROCESS_ATTACH:
+        DisableThreadLibraryCalls(hinstDLL);
+        break;
+    }
+    return TRUE;
+}

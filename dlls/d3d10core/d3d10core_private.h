@@ -129,11 +129,12 @@ struct d3d10_depthstencil_view
     ID3D10DepthStencilView ID3D10DepthStencilView_iface;
     LONG refcount;
 
+    D3D10_DEPTH_STENCIL_VIEW_DESC desc;
     ID3D10Resource *resource;
 };
 
 HRESULT d3d10_depthstencil_view_init(struct d3d10_depthstencil_view *view,
-        ID3D10Resource *resource) DECLSPEC_HIDDEN;
+        ID3D10Resource *resource, const D3D10_DEPTH_STENCIL_VIEW_DESC *desc) DECLSPEC_HIDDEN;
 
 /* ID3D10RenderTargetView */
 struct d3d10_rendertarget_view
@@ -155,9 +156,12 @@ struct d3d10_shader_resource_view
 {
     ID3D10ShaderResourceView ID3D10ShaderResourceView_iface;
     LONG refcount;
+
+    ID3D10Resource *resource;
 };
 
-HRESULT d3d10_shader_resource_view_init(struct d3d10_shader_resource_view *view) DECLSPEC_HIDDEN;
+HRESULT d3d10_shader_resource_view_init(struct d3d10_shader_resource_view *view,
+        ID3D10Resource *resource) DECLSPEC_HIDDEN;
 
 /* ID3D10InputLayout */
 struct d3d10_input_layout
