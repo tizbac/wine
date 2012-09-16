@@ -633,6 +633,251 @@ static void test_PropVariantToGUID(void)
     PropVariantClear(&propvar);
 }
 
+static void test_PropVariantCompare(void)
+{
+    PROPVARIANT empty, null, emptyarray, i2_0, i2_2, i4_large, i4_largeneg, i4_2, str_2, str_02, str_b;
+    INT res;
+    static const WCHAR str_2W[] = {'2', 0};
+    static const WCHAR str_02W[] = {'0', '2', 0};
+    static const WCHAR str_bW[] = {'b', 0};
+    SAFEARRAY emptysafearray;
+
+    PropVariantInit(&empty);
+    PropVariantInit(&null);
+    PropVariantInit(&emptyarray);
+    PropVariantInit(&i2_0);
+    PropVariantInit(&i2_2);
+    PropVariantInit(&i4_large);
+    PropVariantInit(&i4_largeneg);
+    PropVariantInit(&i4_2);
+    PropVariantInit(&str_2);
+    PropVariantInit(&str_b);
+
+    empty.vt = VT_EMPTY;
+    null.vt = VT_NULL;
+    emptyarray.vt = VT_ARRAY | VT_I4;
+    emptyarray.u.parray = &emptysafearray;
+    emptysafearray.cDims = 1;
+    emptysafearray.fFeatures = FADF_FIXEDSIZE;
+    emptysafearray.cbElements = 4;
+    emptysafearray.cLocks = 0;
+    emptysafearray.pvData = NULL;
+    emptysafearray.rgsabound[0].cElements = 0;
+    emptysafearray.rgsabound[0].lLbound = 0;
+    i2_0.vt = VT_I2;
+    i2_0.u.iVal = 0;
+    i2_2.vt = VT_I2;
+    i2_2.u.iVal = 2;
+    i4_large.vt = VT_I4;
+    i4_large.u.lVal = 65536;
+    i4_largeneg.vt = VT_I4;
+    i4_largeneg.u.lVal = -65536;
+    i4_2.vt = VT_I4;
+    i4_2.u.lVal = 2;
+    str_2.vt = VT_BSTR;
+    str_2.u.bstrVal = SysAllocString(str_2W);
+    str_02.vt = VT_BSTR;
+    str_02.u.bstrVal = SysAllocString(str_02W);
+    str_b.vt = VT_BSTR;
+    str_b.u.bstrVal = SysAllocString(str_bW);
+
+    res = PropVariantCompareEx(&empty, &empty, 0, 0);
+    ok(res == 0, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&empty, &null, 0, 0);
+    ok(res == 0, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&null, &emptyarray, 0, 0);
+    ok(res == 0, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&null, &i2_0, 0, 0);
+    ok(res == -1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i2_0, &null, 0, 0);
+    ok(res == 1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&null, &i2_0, 0, PVCF_TREATEMPTYASGREATERTHAN);
+    ok(res == 1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i2_0, &null, 0, PVCF_TREATEMPTYASGREATERTHAN);
+    ok(res == -1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i2_2, &i2_0, 0, 0);
+    ok(res == 1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i2_0, &i2_2, 0, 0);
+    ok(res == -1, "res=%i\n", res);
+
+    /* Always return -1 if second value cannot be converted to first type */
+    res = PropVariantCompareEx(&i2_0, &i4_large, 0, 0);
+    ok(res == -1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i2_0, &i4_largeneg, 0, 0);
+    ok(res == -1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i4_large, &i2_0, 0, 0);
+    ok(res == 1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i4_largeneg, &i2_0, 0, 0);
+    ok(res == -1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i2_2, &i4_2, 0, 0);
+    ok(res == 0, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i2_2, &str_2, 0, 0);
+    todo_wine ok(res == 0, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i2_2, &str_02, 0, 0);
+    todo_wine ok(res == 0, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&str_2, &i2_2, 0, 0);
+    todo_wine ok(res == 0, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&str_02, &i2_2, 0, 0);
+    ok(res == -1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&str_02, &str_2, 0, 0);
+    ok(res == -1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&str_02, &str_b, 0, 0);
+    ok(res == -1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&str_2, &str_02, 0, 0);
+    ok(res == 1, "res=%i\n", res);
+
+    res = PropVariantCompareEx(&i4_large, &str_b, 0, 0);
+    todo_wine ok(res == -5 /* ??? */, "res=%i\n", res);
+
+    SysFreeString(str_2.u.bstrVal);
+    SysFreeString(str_02.u.bstrVal);
+    SysFreeString(str_b.u.bstrVal);
+}
+
+static inline const char* debugstr_longlong(ULONGLONG ll)
+{
+    static char string[17];
+    if (sizeof(ll) > sizeof(unsigned long) && ll >> 32)
+        sprintf(string, "%lx%08lx", (unsigned long)(ll >> 32), (unsigned long)ll);
+    else
+        sprintf(string, "%lx", (unsigned long)ll);
+    return string;
+}
+
+static void test_intconversions(void)
+{
+    PROPVARIANT propvar;
+    SHORT sval;
+    USHORT usval;
+    LONG lval;
+    ULONG ulval;
+    LONGLONG llval;
+    ULONGLONG ullval;
+    HRESULT hr;
+
+    PropVariantClear(&propvar);
+
+    propvar.vt = VT_I8;
+    propvar.u.hVal.QuadPart = (LONGLONG)1 << 63;
+
+    hr = PropVariantToInt64(&propvar, &llval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(llval == (LONGLONG)1 << 63, "got wrong value %s\n", debugstr_longlong(llval));
+
+    hr = PropVariantToUInt64(&propvar, &ullval);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW), "hr=%x\n", hr);
+
+    hr = PropVariantToInt32(&propvar, &lval);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW), "hr=%x\n", hr);
+
+    hr = PropVariantToUInt32(&propvar, &ulval);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW), "hr=%x\n", hr);
+
+    hr = PropVariantToInt16(&propvar, &sval);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW), "hr=%x\n", hr);
+
+    hr = PropVariantToUInt16(&propvar, &usval);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW), "hr=%x\n", hr);
+
+    propvar.vt = VT_UI8;
+    propvar.u.uhVal.QuadPart = 5;
+
+    hr = PropVariantToInt64(&propvar, &llval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(llval == 5, "got wrong value %s\n", debugstr_longlong(llval));
+
+    hr = PropVariantToUInt64(&propvar, &ullval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(ullval == 5, "got wrong value %s\n", debugstr_longlong(ullval));
+
+    hr = PropVariantToInt32(&propvar, &lval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(lval == 5, "got wrong value %d\n", lval);
+
+    hr = PropVariantToUInt32(&propvar, &ulval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(ulval == 5, "got wrong value %d\n", ulval);
+
+    hr = PropVariantToInt16(&propvar, &sval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(sval == 5, "got wrong value %d\n", sval);
+
+    hr = PropVariantToUInt16(&propvar, &usval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(usval == 5, "got wrong value %d\n", usval);
+
+    propvar.vt = VT_I8;
+    propvar.u.hVal.QuadPart = -5;
+
+    hr = PropVariantToInt64(&propvar, &llval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(llval == -5, "got wrong value %s\n", debugstr_longlong(llval));
+
+    hr = PropVariantToUInt64(&propvar, &ullval);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW), "hr=%x\n", hr);
+
+    hr = PropVariantToInt32(&propvar, &lval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(lval == -5, "got wrong value %d\n", lval);
+
+    hr = PropVariantToUInt32(&propvar, &ulval);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW), "hr=%x\n", hr);
+
+    hr = PropVariantToInt16(&propvar, &sval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(sval == -5, "got wrong value %d\n", sval);
+
+    hr = PropVariantToUInt16(&propvar, &usval);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW), "hr=%x\n", hr);
+
+    propvar.vt = VT_UI4;
+    propvar.u.ulVal = 6;
+
+    hr = PropVariantToInt64(&propvar, &llval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(llval == 6, "got wrong value %s\n", debugstr_longlong(llval));
+
+    propvar.vt = VT_I4;
+    propvar.u.lVal = -6;
+
+    hr = PropVariantToInt64(&propvar, &llval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(llval == -6, "got wrong value %s\n", debugstr_longlong(llval));
+
+    propvar.vt = VT_UI2;
+    propvar.u.uiVal = 7;
+
+    hr = PropVariantToInt64(&propvar, &llval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(llval == 7, "got wrong value %s\n", debugstr_longlong(llval));
+
+    propvar.vt = VT_I2;
+    propvar.u.iVal = -7;
+
+    hr = PropVariantToInt64(&propvar, &llval);
+    ok(hr == S_OK, "hr=%x\n", hr);
+    ok(llval == -7, "got wrong value %s\n", debugstr_longlong(llval));
+}
+
 START_TEST(propsys)
 {
     test_PSStringFromPropertyKey();
@@ -641,4 +886,6 @@ START_TEST(propsys)
     test_InitPropVariantFromGUIDAsString();
     test_InitPropVariantFromBuffer();
     test_PropVariantToGUID();
+    test_PropVariantCompare();
+    test_intconversions();
 }
