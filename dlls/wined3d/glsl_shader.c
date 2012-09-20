@@ -2202,6 +2202,11 @@ static void shader_glsl_cross(const struct wined3d_shader_instruction *ins)
     shader_addline(ins->ctx->buffer, "cross(%s, %s)%s);\n", src0_param.param_str, src1_param.param_str, dst_mask);
 }
 
+static void shader_glsl_cut(const struct wined3d_shader_instruction *ins)
+{
+    shader_addline(ins->ctx->buffer, "EndPrimitive();\n");
+}
+
 /* Process the WINED3DSIO_POW instruction in GLSL (dst = |src0|^src1)
  * Src0 and src1 are scalars. Note that D3D uses the absolute of src0, while
  * GLSL uses the value as-is. */
@@ -2982,6 +2987,11 @@ static void shader_glsl_ifc(const struct wined3d_shader_instruction *ins)
 static void shader_glsl_else(const struct wined3d_shader_instruction *ins)
 {
     shader_addline(ins->ctx->buffer, "} else {\n");
+}
+
+static void shader_glsl_emit(const struct wined3d_shader_instruction *ins)
+{
+    shader_addline(ins->ctx->buffer, "EmitVertex();\n");
 }
 
 static void shader_glsl_break(const struct wined3d_shader_instruction *ins)
@@ -4954,27 +4964,25 @@ static void shader_glsl_context_destroyed(void *shader_priv, const struct wined3
 
 static void shader_glsl_get_caps(const struct wined3d_gl_info *gl_info, struct shader_caps *caps)
 {
+    UINT shader_model;
+
     if (gl_info->supported[EXT_GPU_SHADER4] && gl_info->supported[ARB_GEOMETRY_SHADER4]
             && gl_info->glsl_version >= MAKEDWORD_VERSION(1, 50))
-    {
-        caps->VertexShaderVersion = 4;
-        caps->PixelShaderVersion = 4;
-    }
+        shader_model = 4;
     /* ARB_shader_texture_lod or EXT_gpu_shader4 is required for the SM3
      * texldd and texldl instructions. */
     else if (gl_info->supported[ARB_SHADER_TEXTURE_LOD] || gl_info->supported[EXT_GPU_SHADER4])
-    {
-        caps->VertexShaderVersion = 3;
-        caps->PixelShaderVersion = 3;
-    }
+        shader_model = 3;
     else
-    {
-        caps->VertexShaderVersion = 2;
-        caps->PixelShaderVersion = 2;
-    }
+        shader_model = 2;
+    TRACE("Shader model %u.\n", shader_model);
 
-    caps->MaxVertexShaderConst = gl_info->limits.glsl_vs_float_constants;
-    caps->MaxPixelShaderConst = gl_info->limits.glsl_ps_float_constants;
+    caps->vs_version = shader_model;
+    caps->gs_version = shader_model;
+    caps->ps_version = shader_model;
+
+    caps->vs_uniform_count = gl_info->limits.glsl_vs_float_constants;
+    caps->ps_uniform_count = gl_info->limits.glsl_ps_float_constants;
 
     /* FIXME: The following line is card dependent. -8.0 to 8.0 is the
      * Direct3D minimum requirement.
@@ -4988,12 +4996,9 @@ static void shader_glsl_get_caps(const struct wined3d_gl_info *gl_info, struct s
      * the shader will generate incorrect results too. Unfortunately, GL deliberately doesn't
      * offer a way to query this.
      */
-    caps->PixelShader1xMaxValue = 8.0;
+    caps->ps_1x_max_value = 8.0;
 
-    caps->VSClipping = TRUE;
-
-    TRACE("Hardware vertex shader version %u enabled (GLSL).\n", caps->VertexShaderVersion);
-    TRACE("Hardware pixel shader version %u enabled (GLSL).\n", caps->PixelShaderVersion);
+    caps->vs_clipping = TRUE;
 }
 
 static BOOL shader_glsl_color_fixup_supported(struct color_fixup_desc fixup)
@@ -5017,113 +5022,116 @@ static BOOL shader_glsl_color_fixup_supported(struct color_fixup_desc fixup)
 
 static const SHADER_HANDLER shader_glsl_instruction_handler_table[WINED3DSIH_TABLE_SIZE] =
 {
-    /* WINED3DSIH_ABS           */ shader_glsl_map2gl,
-    /* WINED3DSIH_ADD           */ shader_glsl_arith,
-    /* WINED3DSIH_AND           */ NULL,
-    /* WINED3DSIH_BEM           */ shader_glsl_bem,
-    /* WINED3DSIH_BREAK         */ shader_glsl_break,
-    /* WINED3DSIH_BREAKC        */ shader_glsl_breakc,
-    /* WINED3DSIH_BREAKP        */ NULL,
-    /* WINED3DSIH_CALL          */ shader_glsl_call,
-    /* WINED3DSIH_CALLNZ        */ shader_glsl_callnz,
-    /* WINED3DSIH_CMP           */ shader_glsl_cmp,
-    /* WINED3DSIH_CND           */ shader_glsl_cnd,
-    /* WINED3DSIH_CRS           */ shader_glsl_cross,
-    /* WINED3DSIH_CUT           */ NULL,
-    /* WINED3DSIH_DCL           */ shader_glsl_nop,
-    /* WINED3DSIH_DEF           */ shader_glsl_nop,
-    /* WINED3DSIH_DEFB          */ shader_glsl_nop,
-    /* WINED3DSIH_DEFI          */ shader_glsl_nop,
-    /* WINED3DSIH_DIV           */ NULL,
-    /* WINED3DSIH_DP2ADD        */ shader_glsl_dp2add,
-    /* WINED3DSIH_DP3           */ shader_glsl_dot,
-    /* WINED3DSIH_DP4           */ shader_glsl_dot,
-    /* WINED3DSIH_DST           */ shader_glsl_dst,
-    /* WINED3DSIH_DSX           */ shader_glsl_map2gl,
-    /* WINED3DSIH_DSY           */ shader_glsl_map2gl,
-    /* WINED3DSIH_ELSE          */ shader_glsl_else,
-    /* WINED3DSIH_EMIT          */ NULL,
-    /* WINED3DSIH_ENDIF         */ shader_glsl_end,
-    /* WINED3DSIH_ENDLOOP       */ shader_glsl_end,
-    /* WINED3DSIH_ENDREP        */ shader_glsl_end,
-    /* WINED3DSIH_EQ            */ NULL,
-    /* WINED3DSIH_EXP           */ shader_glsl_map2gl,
-    /* WINED3DSIH_EXPP          */ shader_glsl_expp,
-    /* WINED3DSIH_FRC           */ shader_glsl_map2gl,
-    /* WINED3DSIH_FTOI          */ NULL,
-    /* WINED3DSIH_GE            */ NULL,
-    /* WINED3DSIH_IADD          */ NULL,
-    /* WINED3DSIH_IEQ           */ NULL,
-    /* WINED3DSIH_IF            */ shader_glsl_if,
-    /* WINED3DSIH_IFC           */ shader_glsl_ifc,
-    /* WINED3DSIH_IGE           */ NULL,
-    /* WINED3DSIH_IMUL          */ NULL,
-    /* WINED3DSIH_ITOF          */ NULL,
-    /* WINED3DSIH_LABEL         */ shader_glsl_label,
-    /* WINED3DSIH_LD            */ NULL,
-    /* WINED3DSIH_LIT           */ shader_glsl_lit,
-    /* WINED3DSIH_LOG           */ shader_glsl_log,
-    /* WINED3DSIH_LOGP          */ shader_glsl_log,
-    /* WINED3DSIH_LOOP          */ shader_glsl_loop,
-    /* WINED3DSIH_LRP           */ shader_glsl_lrp,
-    /* WINED3DSIH_LT            */ NULL,
-    /* WINED3DSIH_M3x2          */ shader_glsl_mnxn,
-    /* WINED3DSIH_M3x3          */ shader_glsl_mnxn,
-    /* WINED3DSIH_M3x4          */ shader_glsl_mnxn,
-    /* WINED3DSIH_M4x3          */ shader_glsl_mnxn,
-    /* WINED3DSIH_M4x4          */ shader_glsl_mnxn,
-    /* WINED3DSIH_MAD           */ shader_glsl_mad,
-    /* WINED3DSIH_MAX           */ shader_glsl_map2gl,
-    /* WINED3DSIH_MIN           */ shader_glsl_map2gl,
-    /* WINED3DSIH_MOV           */ shader_glsl_mov,
-    /* WINED3DSIH_MOVA          */ shader_glsl_mov,
-    /* WINED3DSIH_MOVC          */ NULL,
-    /* WINED3DSIH_MUL           */ shader_glsl_arith,
-    /* WINED3DSIH_NOP           */ shader_glsl_nop,
-    /* WINED3DSIH_NRM           */ shader_glsl_nrm,
-    /* WINED3DSIH_PHASE         */ shader_glsl_nop,
-    /* WINED3DSIH_POW           */ shader_glsl_pow,
-    /* WINED3DSIH_RCP           */ shader_glsl_rcp,
-    /* WINED3DSIH_REP           */ shader_glsl_rep,
-    /* WINED3DSIH_RET           */ shader_glsl_ret,
-    /* WINED3DSIH_ROUND_NI      */ NULL,
-    /* WINED3DSIH_RSQ           */ shader_glsl_rsq,
-    /* WINED3DSIH_SAMPLE        */ NULL,
-    /* WINED3DSIH_SAMPLE_GRAD   */ NULL,
-    /* WINED3DSIH_SAMPLE_LOD    */ NULL,
-    /* WINED3DSIH_SETP          */ NULL,
-    /* WINED3DSIH_SGE           */ shader_glsl_compare,
-    /* WINED3DSIH_SGN           */ shader_glsl_sgn,
-    /* WINED3DSIH_SINCOS        */ shader_glsl_sincos,
-    /* WINED3DSIH_SLT           */ shader_glsl_compare,
-    /* WINED3DSIH_SQRT          */ NULL,
-    /* WINED3DSIH_SUB           */ shader_glsl_arith,
-    /* WINED3DSIH_TEX           */ shader_glsl_tex,
-    /* WINED3DSIH_TEXBEM        */ shader_glsl_texbem,
-    /* WINED3DSIH_TEXBEML       */ shader_glsl_texbem,
-    /* WINED3DSIH_TEXCOORD      */ shader_glsl_texcoord,
-    /* WINED3DSIH_TEXDEPTH      */ shader_glsl_texdepth,
-    /* WINED3DSIH_TEXDP3        */ shader_glsl_texdp3,
-    /* WINED3DSIH_TEXDP3TEX     */ shader_glsl_texdp3tex,
-    /* WINED3DSIH_TEXKILL       */ shader_glsl_texkill,
-    /* WINED3DSIH_TEXLDD        */ shader_glsl_texldd,
-    /* WINED3DSIH_TEXLDL        */ shader_glsl_texldl,
-    /* WINED3DSIH_TEXM3x2DEPTH  */ shader_glsl_texm3x2depth,
-    /* WINED3DSIH_TEXM3x2PAD    */ shader_glsl_texm3x2pad,
-    /* WINED3DSIH_TEXM3x2TEX    */ shader_glsl_texm3x2tex,
-    /* WINED3DSIH_TEXM3x3       */ shader_glsl_texm3x3,
-    /* WINED3DSIH_TEXM3x3DIFF   */ NULL,
-    /* WINED3DSIH_TEXM3x3PAD    */ shader_glsl_texm3x3pad,
-    /* WINED3DSIH_TEXM3x3SPEC   */ shader_glsl_texm3x3spec,
-    /* WINED3DSIH_TEXM3x3TEX    */ shader_glsl_texm3x3tex,
-    /* WINED3DSIH_TEXM3x3VSPEC  */ shader_glsl_texm3x3vspec,
-    /* WINED3DSIH_TEXREG2AR     */ shader_glsl_texreg2ar,
-    /* WINED3DSIH_TEXREG2GB     */ shader_glsl_texreg2gb,
-    /* WINED3DSIH_TEXREG2RGB    */ shader_glsl_texreg2rgb,
-    /* WINED3DSIH_UDIV          */ NULL,
-    /* WINED3DSIH_USHR          */ NULL,
-    /* WINED3DSIH_UTOF          */ NULL,
-    /* WINED3DSIH_XOR           */ NULL,
+    /* WINED3DSIH_ABS                   */ shader_glsl_map2gl,
+    /* WINED3DSIH_ADD                   */ shader_glsl_arith,
+    /* WINED3DSIH_AND                   */ NULL,
+    /* WINED3DSIH_BEM                   */ shader_glsl_bem,
+    /* WINED3DSIH_BREAK                 */ shader_glsl_break,
+    /* WINED3DSIH_BREAKC                */ shader_glsl_breakc,
+    /* WINED3DSIH_BREAKP                */ NULL,
+    /* WINED3DSIH_CALL                  */ shader_glsl_call,
+    /* WINED3DSIH_CALLNZ                */ shader_glsl_callnz,
+    /* WINED3DSIH_CMP                   */ shader_glsl_cmp,
+    /* WINED3DSIH_CND                   */ shader_glsl_cnd,
+    /* WINED3DSIH_CRS                   */ shader_glsl_cross,
+    /* WINED3DSIH_CUT                   */ shader_glsl_cut,
+    /* WINED3DSIH_DCL                   */ shader_glsl_nop,
+    /* WINED3DSIH_DCL_INPUT_PRIMITIVE   */ shader_glsl_nop,
+    /* WINED3DSIH_DCL_OUTPUT_TOPOLOGY   */ shader_glsl_nop,
+    /* WINED3DSIH_DCL_VERTICES_OUT      */ shader_glsl_nop,
+    /* WINED3DSIH_DEF                   */ shader_glsl_nop,
+    /* WINED3DSIH_DEFB                  */ shader_glsl_nop,
+    /* WINED3DSIH_DEFI                  */ shader_glsl_nop,
+    /* WINED3DSIH_DIV                   */ NULL,
+    /* WINED3DSIH_DP2ADD                */ shader_glsl_dp2add,
+    /* WINED3DSIH_DP3                   */ shader_glsl_dot,
+    /* WINED3DSIH_DP4                   */ shader_glsl_dot,
+    /* WINED3DSIH_DST                   */ shader_glsl_dst,
+    /* WINED3DSIH_DSX                   */ shader_glsl_map2gl,
+    /* WINED3DSIH_DSY                   */ shader_glsl_map2gl,
+    /* WINED3DSIH_ELSE                  */ shader_glsl_else,
+    /* WINED3DSIH_EMIT                  */ shader_glsl_emit,
+    /* WINED3DSIH_ENDIF                 */ shader_glsl_end,
+    /* WINED3DSIH_ENDLOOP               */ shader_glsl_end,
+    /* WINED3DSIH_ENDREP                */ shader_glsl_end,
+    /* WINED3DSIH_EQ                    */ NULL,
+    /* WINED3DSIH_EXP                   */ shader_glsl_map2gl,
+    /* WINED3DSIH_EXPP                  */ shader_glsl_expp,
+    /* WINED3DSIH_FRC                   */ shader_glsl_map2gl,
+    /* WINED3DSIH_FTOI                  */ NULL,
+    /* WINED3DSIH_GE                    */ NULL,
+    /* WINED3DSIH_IADD                  */ NULL,
+    /* WINED3DSIH_IEQ                   */ NULL,
+    /* WINED3DSIH_IF                    */ shader_glsl_if,
+    /* WINED3DSIH_IFC                   */ shader_glsl_ifc,
+    /* WINED3DSIH_IGE                   */ NULL,
+    /* WINED3DSIH_IMUL                  */ NULL,
+    /* WINED3DSIH_ITOF                  */ NULL,
+    /* WINED3DSIH_LABEL                 */ shader_glsl_label,
+    /* WINED3DSIH_LD                    */ NULL,
+    /* WINED3DSIH_LIT                   */ shader_glsl_lit,
+    /* WINED3DSIH_LOG                   */ shader_glsl_log,
+    /* WINED3DSIH_LOGP                  */ shader_glsl_log,
+    /* WINED3DSIH_LOOP                  */ shader_glsl_loop,
+    /* WINED3DSIH_LRP                   */ shader_glsl_lrp,
+    /* WINED3DSIH_LT                    */ NULL,
+    /* WINED3DSIH_M3x2                  */ shader_glsl_mnxn,
+    /* WINED3DSIH_M3x3                  */ shader_glsl_mnxn,
+    /* WINED3DSIH_M3x4                  */ shader_glsl_mnxn,
+    /* WINED3DSIH_M4x3                  */ shader_glsl_mnxn,
+    /* WINED3DSIH_M4x4                  */ shader_glsl_mnxn,
+    /* WINED3DSIH_MAD                   */ shader_glsl_mad,
+    /* WINED3DSIH_MAX                   */ shader_glsl_map2gl,
+    /* WINED3DSIH_MIN                   */ shader_glsl_map2gl,
+    /* WINED3DSIH_MOV                   */ shader_glsl_mov,
+    /* WINED3DSIH_MOVA                  */ shader_glsl_mov,
+    /* WINED3DSIH_MOVC                  */ NULL,
+    /* WINED3DSIH_MUL                   */ shader_glsl_arith,
+    /* WINED3DSIH_NOP                   */ shader_glsl_nop,
+    /* WINED3DSIH_NRM                   */ shader_glsl_nrm,
+    /* WINED3DSIH_PHASE                 */ shader_glsl_nop,
+    /* WINED3DSIH_POW                   */ shader_glsl_pow,
+    /* WINED3DSIH_RCP                   */ shader_glsl_rcp,
+    /* WINED3DSIH_REP                   */ shader_glsl_rep,
+    /* WINED3DSIH_RET                   */ shader_glsl_ret,
+    /* WINED3DSIH_ROUND_NI              */ NULL,
+    /* WINED3DSIH_RSQ                   */ shader_glsl_rsq,
+    /* WINED3DSIH_SAMPLE                */ NULL,
+    /* WINED3DSIH_SAMPLE_GRAD           */ NULL,
+    /* WINED3DSIH_SAMPLE_LOD            */ NULL,
+    /* WINED3DSIH_SETP                  */ NULL,
+    /* WINED3DSIH_SGE                   */ shader_glsl_compare,
+    /* WINED3DSIH_SGN                   */ shader_glsl_sgn,
+    /* WINED3DSIH_SINCOS                */ shader_glsl_sincos,
+    /* WINED3DSIH_SLT                   */ shader_glsl_compare,
+    /* WINED3DSIH_SQRT                  */ NULL,
+    /* WINED3DSIH_SUB                   */ shader_glsl_arith,
+    /* WINED3DSIH_TEX                   */ shader_glsl_tex,
+    /* WINED3DSIH_TEXBEM                */ shader_glsl_texbem,
+    /* WINED3DSIH_TEXBEML               */ shader_glsl_texbem,
+    /* WINED3DSIH_TEXCOORD              */ shader_glsl_texcoord,
+    /* WINED3DSIH_TEXDEPTH              */ shader_glsl_texdepth,
+    /* WINED3DSIH_TEXDP3                */ shader_glsl_texdp3,
+    /* WINED3DSIH_TEXDP3TEX             */ shader_glsl_texdp3tex,
+    /* WINED3DSIH_TEXKILL               */ shader_glsl_texkill,
+    /* WINED3DSIH_TEXLDD                */ shader_glsl_texldd,
+    /* WINED3DSIH_TEXLDL                */ shader_glsl_texldl,
+    /* WINED3DSIH_TEXM3x2DEPTH          */ shader_glsl_texm3x2depth,
+    /* WINED3DSIH_TEXM3x2PAD            */ shader_glsl_texm3x2pad,
+    /* WINED3DSIH_TEXM3x2TEX            */ shader_glsl_texm3x2tex,
+    /* WINED3DSIH_TEXM3x3               */ shader_glsl_texm3x3,
+    /* WINED3DSIH_TEXM3x3DIFF           */ NULL,
+    /* WINED3DSIH_TEXM3x3PAD            */ shader_glsl_texm3x3pad,
+    /* WINED3DSIH_TEXM3x3SPEC           */ shader_glsl_texm3x3spec,
+    /* WINED3DSIH_TEXM3x3TEX            */ shader_glsl_texm3x3tex,
+    /* WINED3DSIH_TEXM3x3VSPEC          */ shader_glsl_texm3x3vspec,
+    /* WINED3DSIH_TEXREG2AR             */ shader_glsl_texreg2ar,
+    /* WINED3DSIH_TEXREG2GB             */ shader_glsl_texreg2gb,
+    /* WINED3DSIH_TEXREG2RGB            */ shader_glsl_texreg2rgb,
+    /* WINED3DSIH_UDIV                  */ NULL,
+    /* WINED3DSIH_USHR                  */ NULL,
+    /* WINED3DSIH_UTOF                  */ NULL,
+    /* WINED3DSIH_XOR                   */ NULL,
 };
 
 static void shader_glsl_handle_instruction(const struct wined3d_shader_instruction *ins) {

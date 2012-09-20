@@ -138,8 +138,8 @@ static IUnknown *create_activex_object(script_ctx_t *ctx, const WCHAR *progid)
     return obj;
 }
 
-static HRESULT ActiveXObject_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT ActiveXObject_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     IDispatch *disp;
     IUnknown *obj;
@@ -164,14 +164,14 @@ static HRESULT ActiveXObject_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flag
         return E_NOTIMPL;
     }
 
-    hres = to_string(ctx, argv, ei, &progid);
+    hres = to_string(ctx, argv[0], &progid);
     if(FAILED(hres))
         return hres;
 
     obj = create_activex_object(ctx, progid);
     SysFreeString(progid);
     if(!obj)
-        return throw_generic_error(ctx, ei, JS_E_CANNOT_CREATE_OBJ, NULL);
+        return throw_generic_error(ctx, JS_E_CANNOT_CREATE_OBJ, NULL);
 
     hres = IUnknown_QueryInterface(obj, &IID_IDispatch, (void**)&disp);
     IUnknown_Release(obj);
@@ -180,8 +180,7 @@ static HRESULT ActiveXObject_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flag
         return E_NOTIMPL;
     }
 
-    V_VT(retv) = VT_DISPATCH;
-    V_DISPATCH(retv) = disp;
+    *r = jsval_disp(disp);
     return S_OK;
 }
 

@@ -682,23 +682,34 @@ static HRESULT WINAPI ScriptDisp_GetTypeInfo(IDispatchEx *iface, UINT iTInfo, LC
 }
 
 static HRESULT WINAPI ScriptDisp_GetIDsOfNames(IDispatchEx *iface, REFIID riid,
-                                                LPOLESTR *rgszNames, UINT cNames, LCID lcid,
-                                                DISPID *rgDispId)
+        LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId)
 {
     ScriptDisp *This = ScriptDisp_from_IDispatchEx(iface);
-    FIXME("(%p)->(%s %p %u %u %p)\n", This, debugstr_guid(riid), rgszNames, cNames,
+    UINT i;
+    HRESULT hres;
+
+    TRACE("(%p)->(%s %p %u %u %p)\n", This, debugstr_guid(riid), rgszNames, cNames,
           lcid, rgDispId);
-    return E_NOTIMPL;
+
+    for(i=0; i < cNames; i++) {
+        hres = IDispatchEx_GetDispID(&This->IDispatchEx_iface, rgszNames[i], 0, rgDispId+i);
+        if(FAILED(hres))
+            return hres;
+    }
+
+    return S_OK;
 }
 
-static HRESULT WINAPI ScriptDisp_Invoke(IDispatchEx *iface, DISPID dispIdMember,
-                                        REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams,
-                            VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
+static HRESULT WINAPI ScriptDisp_Invoke(IDispatchEx *iface, DISPID dispIdMember, REFIID riid, LCID lcid,
+         WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
 {
     ScriptDisp *This = ScriptDisp_from_IDispatchEx(iface);
-    FIXME("(%p)->(%d %s %d %d %p %p %p %p)\n", This, dispIdMember, debugstr_guid(riid),
+
+    TRACE("(%p)->(%d %s %d %d %p %p %p %p)\n", This, dispIdMember, debugstr_guid(riid),
           lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
-    return E_NOTIMPL;
+
+    return IDispatchEx_InvokeEx(&This->IDispatchEx_iface, dispIdMember, lcid, wFlags,
+            pDispParams, pVarResult, pExcepInfo, NULL);
 }
 
 static HRESULT WINAPI ScriptDisp_GetDispID(IDispatchEx *iface, BSTR bstrName, DWORD grfdex, DISPID *pid)
@@ -772,10 +783,17 @@ static HRESULT WINAPI ScriptDisp_InvokeEx(IDispatchEx *iface, DISPID id, LCID lc
         return invoke_variant_prop(&ident->u.var->v, wFlags, pdp, pvarRes);
     }
 
-
-    IActiveScriptSite_OnEnterScript(This->ctx->site);
-    hres = exec_script(This->ctx, ident->u.func, NULL, pdp, pvarRes);
-    IActiveScriptSite_OnLeaveScript(This->ctx->site);
+    switch(wFlags) {
+    case DISPATCH_METHOD:
+    case DISPATCH_METHOD|DISPATCH_PROPERTYGET:
+        IActiveScriptSite_OnEnterScript(This->ctx->site);
+        hres = exec_script(This->ctx, ident->u.func, NULL, pdp, pvarRes);
+        IActiveScriptSite_OnLeaveScript(This->ctx->site);
+        break;
+    default:
+        FIXME("Unsupported flags %x\n", wFlags);
+        hres = E_NOTIMPL;
+    }
 
     return hres;
 }

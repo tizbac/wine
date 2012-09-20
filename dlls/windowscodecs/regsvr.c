@@ -1562,6 +1562,36 @@ static const struct reader_containers gce_containers[] = {
     { NULL } /* list terminator */
 };
 
+static const BYTE ape_magic[] = { 0x21, 0xff, 0x0b };
+
+static const struct metadata_pattern ape_metadata_pattern[] = {
+    { 0, 3, ape_magic, mask_all, 0 },
+    { 0 }
+};
+
+static const struct reader_containers ape_containers[] = {
+    {
+        &GUID_ContainerFormatGif,
+        ape_metadata_pattern
+    },
+    { NULL } /* list terminator */
+};
+
+static const BYTE gif_comment_magic[] = { 0x21, 0xfe };
+
+static const struct metadata_pattern gif_comment_metadata_pattern[] = {
+    { 0, 2, gif_comment_magic, mask_all, 0 },
+    { 0 }
+};
+
+static const struct reader_containers gif_comment_containers[] = {
+    {
+        &GUID_ContainerFormatGif,
+        gif_comment_metadata_pattern
+    },
+    { NULL } /* list terminator */
+};
+
 static struct regsvr_metadatareader const metadatareader_list[] = {
     {   &CLSID_WICUnknownMetadataReader,
         "The Wine Project",
@@ -1622,6 +1652,26 @@ static struct regsvr_metadatareader const metadatareader_list[] = {
         &GUID_MetadataFormatGCE,
         0, 0, 0,
         gce_containers
+    },
+    {   &CLSID_WICAPEMetadataReader,
+        "The Wine Project",
+        "Application Extension Reader",
+        "1.0.0.0",
+        "1.0.0.0",
+        &GUID_VendorMicrosoft,
+        &GUID_MetadataFormatAPE,
+        0, 0, 0,
+        ape_containers
+    },
+    {   &CLSID_WICGifCommentMetadataReader,
+        "The Wine Project",
+        "Comment Extension Reader",
+        "1.0.0.0",
+        "1.0.0.0",
+        &GUID_VendorMicrosoft,
+        &GUID_MetadataFormatGifComment,
+        0, 0, 0,
+        gif_comment_containers
     },
     { NULL }			/* list terminator */
 };

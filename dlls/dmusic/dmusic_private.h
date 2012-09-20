@@ -2,6 +2,7 @@
  * DirectMusic Private Include
  *
  * Copyright (C) 2003-2004 Rok Mandeljc
+ * Copyright (C) 2012 Christian Costa
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -48,14 +49,12 @@ typedef struct IDirectMusic8Impl IDirectMusic8Impl;
 typedef struct IDirectMusicBufferImpl IDirectMusicBufferImpl;
 typedef struct IDirectMusicDownloadedInstrumentImpl IDirectMusicDownloadedInstrumentImpl;
 typedef struct IDirectMusicDownloadImpl IDirectMusicDownloadImpl;
-typedef struct IDirectMusicPortDownloadImpl IDirectMusicPortDownloadImpl;
-typedef struct IDirectMusicPortImpl IDirectMusicPortImpl;
-typedef struct IDirectMusicThruImpl IDirectMusicThruImpl;
 typedef struct IReferenceClockImpl IReferenceClockImpl;
 
 typedef struct IDirectMusicCollectionImpl IDirectMusicCollectionImpl;
 typedef struct IDirectMusicInstrumentImpl IDirectMusicInstrumentImpl;
 
+typedef struct SynthPortImpl SynthPortImpl;
 
 /*****************************************************************************
  * Some stuff to make my life easier :=)
@@ -71,6 +70,12 @@ typedef struct DMUSIC_PRIVATE_MCHANNEL_ {
 typedef struct DMUSIC_PRIVATE_CHANNEL_GROUP_ {
 	DMUSIC_PRIVATE_MCHANNEL channel[16]; /* 16 channels in a group */
 } DMUSIC_PRIVATE_CHANNEL_GROUP, *LPDMUSIC_PRIVATE_CHANNEL_GROUP;
+
+typedef struct port_info {
+    DMUS_PORTCAPS caps;
+    HRESULT (*create)(LPCGUID guid, LPVOID *object, LPUNKNOWN unkouter, LPDMUS_PORTPARAMS port_params, LPDMUS_PORTCAPS port_caps, DWORD device);
+    ULONG device;
+} port_info;
 
 
 /*****************************************************************************
@@ -100,6 +105,8 @@ struct IDirectMusic8Impl {
     IReferenceClockImpl* pMasterClock;
     IDirectMusicPort** ppPorts;
     int nrofports;
+    port_info* system_ports;
+    int nb_system_ports;
 };
 
 /*****************************************************************************
@@ -141,16 +148,16 @@ struct IDirectMusicDownloadImpl {
 };
 
 /*****************************************************************************
- * IDirectMusicPortImpl implementation structure
+ * SynthPortImpl implementation structure
  */
-struct IDirectMusicPortImpl {
+struct SynthPortImpl {
     /* IUnknown fields */
     IDirectMusicPort IDirectMusicPort_iface;
     IDirectMusicPortDownload IDirectMusicPortDownload_iface;
     IDirectMusicThru IDirectMusicThru_iface;
     LONG ref;
 
-    /* IDirectMusicPortImpl fields */
+    /* IDirectMusicPort fields */
     IDirectSound* pDirectSound;
     IReferenceClock* pLatencyClock;
     BOOL fActive;
@@ -161,7 +168,9 @@ struct IDirectMusicPortImpl {
 };
 
 /** Internal factory */
-extern HRESULT DMUSIC_CreateDirectMusicPortImpl (LPCGUID lpcGUID, LPVOID *ppobj, LPUNKNOWN pUnkOuter, LPDMUS_PORTPARAMS pPortParams, LPDMUS_PORTCAPS pPortCaps) DECLSPEC_HIDDEN;
+extern HRESULT DMUSIC_CreateSynthPortImpl(LPCGUID guid, LPVOID *object, LPUNKNOWN unkouter, LPDMUS_PORTPARAMS port_params, LPDMUS_PORTCAPS port_caps, DWORD device) DECLSPEC_HIDDEN;
+extern HRESULT DMUSIC_CreateMidiOutPortImpl(LPCGUID guid, LPVOID *object, LPUNKNOWN unkouter, LPDMUS_PORTPARAMS port_params, LPDMUS_PORTCAPS port_caps, DWORD device) DECLSPEC_HIDDEN;
+extern HRESULT DMUSIC_CreateMidiInPortImpl(LPCGUID guid, LPVOID *object, LPUNKNOWN unkouter, LPDMUS_PORTPARAMS port_params, LPDMUS_PORTCAPS port_caps, DWORD device) DECLSPEC_HIDDEN;
 
 /*****************************************************************************
  * IReferenceClockImpl implementation structure

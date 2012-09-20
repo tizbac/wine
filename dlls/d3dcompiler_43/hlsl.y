@@ -175,6 +175,76 @@ static BOOL declare_variable(struct hlsl_ir_var *decl, BOOL local)
 
 static DWORD add_modifier(DWORD modifiers, DWORD mod, const struct YYLTYPE *loc);
 
+BOOL add_type_to_scope(struct hlsl_scope *scope, struct hlsl_type *def)
+{
+    if (get_type(scope, def->name, FALSE))
+        return FALSE;
+
+    list_add_tail(&scope->types, &def->scope_entry);
+    return TRUE;
+}
+
+static void declare_predefined_types(struct hlsl_scope *scope)
+{
+    struct hlsl_type *type;
+    unsigned int x, y, bt;
+    static const char *names[] =
+    {
+        "float",
+        "half",
+        "double",
+        "int",
+        "uint",
+        "bool",
+    };
+    char name[10];
+
+    for (bt = 0; bt <= HLSL_TYPE_LAST_SCALAR; ++bt)
+    {
+        for (y = 1; y <= 4; ++y)
+        {
+            for (x = 1; x <= 4; ++x)
+            {
+                sprintf(name, "%s%ux%u", names[bt], x, y);
+                type = new_hlsl_type(d3dcompiler_strdup(name), HLSL_CLASS_MATRIX, bt, x, y);
+                add_type_to_scope(scope, type);
+
+                if (y == 1)
+                {
+                    sprintf(name, "%s%u", names[bt], x);
+                    type = new_hlsl_type(d3dcompiler_strdup(name), HLSL_CLASS_VECTOR, bt, x, y);
+                    add_type_to_scope(scope, type);
+
+                    if (x == 1)
+                    {
+                        sprintf(name, "%s", names[bt]);
+                        type = new_hlsl_type(d3dcompiler_strdup(name), HLSL_CLASS_SCALAR, bt, x, y);
+                        add_type_to_scope(scope, type);
+                    }
+                }
+            }
+        }
+    }
+
+    /* DX8 effects predefined types */
+    type = new_hlsl_type(d3dcompiler_strdup("DWORD"), HLSL_CLASS_SCALAR, HLSL_TYPE_INT, 1, 1);
+    add_type_to_scope(scope, type);
+    type = new_hlsl_type(d3dcompiler_strdup("FLOAT"), HLSL_CLASS_SCALAR, HLSL_TYPE_FLOAT, 1, 1);
+    add_type_to_scope(scope, type);
+    type = new_hlsl_type(d3dcompiler_strdup("VECTOR"), HLSL_CLASS_VECTOR, HLSL_TYPE_FLOAT, 4, 1);
+    add_type_to_scope(scope, type);
+    type = new_hlsl_type(d3dcompiler_strdup("MATRIX"), HLSL_CLASS_MATRIX, HLSL_TYPE_FLOAT, 4, 4);
+    add_type_to_scope(scope, type);
+    type = new_hlsl_type(d3dcompiler_strdup("STRING"), HLSL_CLASS_OBJECT, HLSL_TYPE_STRING, 1, 1);
+    add_type_to_scope(scope, type);
+    type = new_hlsl_type(d3dcompiler_strdup("TEXTURE"), HLSL_CLASS_OBJECT, HLSL_TYPE_TEXTURE, 1, 1);
+    add_type_to_scope(scope, type);
+    type = new_hlsl_type(d3dcompiler_strdup("PIXELSHADER"), HLSL_CLASS_OBJECT, HLSL_TYPE_PIXELSHADER, 1, 1);
+    add_type_to_scope(scope, type);
+    type = new_hlsl_type(d3dcompiler_strdup("VERTEXSHADER"), HLSL_CLASS_OBJECT, HLSL_TYPE_VERTEXSHADER, 1, 1);
+    add_type_to_scope(scope, type);
+}
+
 static unsigned int components_count_expr_list(struct list *list)
 {
     struct hlsl_ir_node *node;
@@ -185,6 +255,103 @@ static unsigned int components_count_expr_list(struct list *list)
         count += components_count_type(node->data_type);
     }
     return count;
+}
+
+static struct hlsl_ir_swizzle *new_swizzle(DWORD s, unsigned int components,
+        struct hlsl_ir_node *val, struct source_location *loc)
+{
+    struct hlsl_ir_swizzle *swizzle = d3dcompiler_alloc(sizeof(*swizzle));
+
+    if (!swizzle)
+        return NULL;
+    swizzle->node.type = HLSL_IR_SWIZZLE;
+    swizzle->node.loc = *loc;
+    swizzle->node.data_type = new_hlsl_type(NULL, HLSL_CLASS_VECTOR, val->data_type->base_type, components, 1);
+    swizzle->val = val;
+    swizzle->swizzle = s;
+    return swizzle;
+}
+
+static struct hlsl_ir_swizzle *get_swizzle(struct hlsl_ir_node *value, const char *swizzle,
+        struct source_location *loc)
+{
+    unsigned int len = strlen(swizzle), component = 0;
+    unsigned int i, set, swiz = 0;
+    BOOL valid;
+
+    if (value->data_type->type == HLSL_CLASS_MATRIX)
+    {
+        /* Matrix swizzle */
+        BOOL m_swizzle;
+        unsigned int inc, x, y;
+
+        if (len < 3 || swizzle[0] != '_')
+            return NULL;
+        m_swizzle = swizzle[1] == 'm';
+        inc = m_swizzle ? 4 : 3;
+
+        if (len % inc || len > inc * 4)
+            return NULL;
+
+        for (i = 0; i < len; i += inc)
+        {
+            if (swizzle[i] != '_')
+                return NULL;
+            if (m_swizzle)
+            {
+                if (swizzle[i + 1] != 'm')
+                    return NULL;
+                x = swizzle[i + 2] - '0';
+                y = swizzle[i + 3] - '0';
+            }
+            else
+            {
+                x = swizzle[i + 1] - '1';
+                y = swizzle[i + 2] - '1';
+            }
+
+            if (x >= value->data_type->dimx || y >= value->data_type->dimy)
+                return NULL;
+            swiz |= (y << 4 | x) << component * 8;
+            component++;
+        }
+        return new_swizzle(swiz, component, value, loc);
+    }
+
+    /* Vector swizzle */
+    if (len > 4)
+        return NULL;
+
+    for (set = 0; set < 2; ++set)
+    {
+        valid = TRUE;
+        component = 0;
+        for (i = 0; i < len; ++i)
+        {
+            char c[2][4] = {{'x', 'y', 'z', 'w'}, {'r', 'g', 'b', 'a'}};
+            unsigned int s = 0;
+
+            for (s = 0; s < 4; ++s)
+            {
+                if (swizzle[i] == c[set][s])
+                    break;
+            }
+            if (s == 4)
+            {
+                valid = FALSE;
+                break;
+            }
+
+            if (s >= value->data_type->dimx)
+                return NULL;
+            swiz |= s << component * 2;
+            component++;
+        }
+        if (valid)
+            return new_swizzle(swiz, component, value, loc);
+    }
+
+    return NULL;
 }
 
 %}
@@ -330,6 +497,7 @@ static unsigned int components_count_expr_list(struct list *list)
 %type <list> statement
 %type <list> statement_list
 %type <list> compound_statement
+%type <list> jump_statement
 %type <function> func_declaration
 %type <function> func_prototype
 %type <parameter> parameter
@@ -823,16 +991,32 @@ statement_list:           statement
                             }
 
 statement:                declaration_statement
-                            {
-                                $$ = $1;
-                            }
                         | expr_statement
-                            {
-                                $$ = $1;
-                            }
                         | compound_statement
+                        | jump_statement
+
+                          /* FIXME: add rule for return with no value */
+jump_statement:           KW_RETURN expr ';'
                             {
-                                $$ = $1;
+                                struct hlsl_ir_jump *jump = d3dcompiler_alloc(sizeof(*jump));
+                                if (!jump)
+                                {
+                                    ERR("Out of memory\n");
+                                    return -1;
+                                }
+                                jump->node.type = HLSL_IR_JUMP;
+                                set_location(&jump->node.loc, &@1);
+                                jump->type = HLSL_IR_JUMP_RETURN;
+                                jump->node.data_type = $2->data_type;
+                                jump->return_value = $2;
+
+                                FIXME("Check for valued return on void function.\n");
+                                FIXME("Implicit conversion to the return type if needed, "
+				        "error out if conversion not possible.\n");
+
+                                $$ = d3dcompiler_alloc(sizeof(*$$));
+                                list_init($$);
+                                list_add_tail($$, &jump->node.entry);
                             }
 
 expr_statement:           ';'
@@ -929,20 +1113,63 @@ postfix_expr:             primary_expr
                                 struct hlsl_ir_node *operands[3];
                                 struct source_location loc;
 
+                                set_location(&loc, &@2);
+                                if ($1->data_type->modifiers & HLSL_MODIFIER_CONST)
+                                {
+                                    hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_ERROR,
+                                            "modifying a const expression");
+                                    return 1;
+                                }
                                 operands[0] = $1;
                                 operands[1] = operands[2] = NULL;
-                                set_location(&loc, &@2);
                                 $$ = &new_expr(HLSL_IR_BINOP_POSTINC, operands, &loc)->node;
+                                /* Post increment/decrement expressions are considered const */
+                                $$->data_type = clone_hlsl_type($$->data_type);
+                                $$->data_type->modifiers |= HLSL_MODIFIER_CONST;
                             }
                         | postfix_expr OP_DEC
                             {
                                 struct hlsl_ir_node *operands[3];
                                 struct source_location loc;
 
+                                set_location(&loc, &@2);
+                                if ($1->data_type->modifiers & HLSL_MODIFIER_CONST)
+                                {
+                                    hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_ERROR,
+                                            "modifying a const expression");
+                                    return 1;
+                                }
                                 operands[0] = $1;
                                 operands[1] = operands[2] = NULL;
-                                set_location(&loc, &@2);
                                 $$ = &new_expr(HLSL_IR_BINOP_POSTDEC, operands, &loc)->node;
+                                /* Post increment/decrement expressions are considered const */
+                                $$->data_type = clone_hlsl_type($$->data_type);
+                                $$->data_type->modifiers |= HLSL_MODIFIER_CONST;
+                            }
+                        | postfix_expr '.' any_identifier
+                            {
+                                struct source_location loc;
+
+                                set_location(&loc, &@2);
+                                if ($1->data_type->type <= HLSL_CLASS_LAST_NUMERIC)
+                                {
+                                    struct hlsl_ir_swizzle *swizzle;
+
+                                    swizzle = get_swizzle($1, $3, &loc);
+                                    if (!swizzle)
+                                    {
+                                        hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_ERROR,
+                                                "invalid swizzle %s", debugstr_a($3));
+                                        return 1;
+                                    }
+                                    $$ = &swizzle->node;
+                                }
+                                else
+                                {
+                                    hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_ERROR,
+                                            "invalid subscript %s", debugstr_a($3));
+                                    return 1;
+                                }
                             }
                           /* "var_modifiers" doesn't make sense in this case, but it's needed
                              in the grammar to avoid shift/reduce conflicts. */
@@ -991,9 +1218,15 @@ unary_expr:               postfix_expr
                                 struct hlsl_ir_node *operands[3];
                                 struct source_location loc;
 
+                                set_location(&loc, &@1);
+                                if ($2->data_type->modifiers & HLSL_MODIFIER_CONST)
+                                {
+                                    hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_ERROR,
+                                            "modifying a const expression");
+                                    return 1;
+                                }
                                 operands[0] = $2;
                                 operands[1] = operands[2] = NULL;
-                                set_location(&loc, &@1);
                                 $$ = &new_expr(HLSL_IR_BINOP_PREINC, operands, &loc)->node;
                             }
                         | OP_DEC unary_expr
@@ -1001,9 +1234,15 @@ unary_expr:               postfix_expr
                                 struct hlsl_ir_node *operands[3];
                                 struct source_location loc;
 
+                                set_location(&loc, &@1);
+                                if ($2->data_type->modifiers & HLSL_MODIFIER_CONST)
+                                {
+                                    hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_ERROR,
+                                            "modifying a const expression");
+                                    return 1;
+                                }
                                 operands[0] = $2;
                                 operands[1] = operands[2] = NULL;
-                                set_location(&loc, &@1);
                                 $$ = &new_expr(HLSL_IR_BINOP_PREDEC, operands, &loc)->node;
                             }
                         | unary_op unary_expr
@@ -1213,10 +1452,19 @@ assignment_expr:          conditional_expr
                             }
                         | unary_expr assign_op assignment_expr
                             {
+                                struct source_location loc;
+
+                                set_location(&loc, &@2);
+                                if ($1->data_type->modifiers & HLSL_MODIFIER_CONST)
+                                {
+                                    hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_ERROR,
+                                            "l-value is const");
+                                    return 1;
+                                }
                                 $$ = make_assignment($1, $2, BWRITERSP_WRITEMASK_ALL, $3);
                                 if (!$$)
                                     return 1;
-                                set_location(&$$->loc, &@2);
+                                $$->loc = loc;
                             }
 
 assign_op:                '='
@@ -1325,6 +1573,7 @@ struct bwriter_shader *parse_hlsl(enum shader_type type, DWORD major, DWORD mino
 
     push_scope(&hlsl_ctx);
     hlsl_ctx.globals = hlsl_ctx.cur_scope;
+    declare_predefined_types(hlsl_ctx.globals);
 
     hlsl_parse();
 

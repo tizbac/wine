@@ -26,7 +26,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(jscript);
 typedef struct {
     jsdisp_t dispex;
 
-    VARIANT_BOOL val;
+    BOOL val;
 } BoolInstance;
 
 static const WCHAR toStringW[] = {'t','o','S','t','r','i','n','g',0};
@@ -38,8 +38,7 @@ static inline BoolInstance *bool_this(vdisp_t *jsthis)
 }
 
 /* ECMA-262 3rd Edition    15.6.4.2 */
-static HRESULT Bool_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Bool_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv, jsval_t *r)
 {
     BoolInstance *bool;
 
@@ -49,9 +48,9 @@ static HRESULT Bool_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, uns
     TRACE("\n");
 
     if(!(bool = bool_this(jsthis)))
-        return throw_type_error(ctx, ei, JS_E_BOOLEAN_EXPECTED, NULL);
+        return throw_type_error(ctx, JS_E_BOOLEAN_EXPECTED, NULL);
 
-    if(retv) {
+    if(r) {
         BSTR val;
 
         if(bool->val) val = SysAllocString(trueW);
@@ -60,40 +59,35 @@ static HRESULT Bool_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, uns
         if(!val)
             return E_OUTOFMEMORY;
 
-        V_VT(retv) = VT_BSTR;
-        V_BSTR(retv) = val;
+        *r = jsval_string(val);
     }
 
     return S_OK;
 }
 
 /* ECMA-262 3rd Edition    15.6.4.3 */
-static HRESULT Bool_valueOf(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Bool_valueOf(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv, jsval_t *r)
 {
     BoolInstance *bool;
 
     TRACE("\n");
 
     if(!(bool = bool_this(jsthis)))
-        return throw_type_error(ctx, ei, JS_E_BOOLEAN_EXPECTED, NULL);
+        return throw_type_error(ctx, JS_E_BOOLEAN_EXPECTED, NULL);
 
-    if(retv) {
-        V_VT(retv) = VT_BOOL;
-        V_BOOL(retv) = bool->val;
-    }
-
+    if(r)
+        *r = jsval_bool(bool->val);
     return S_OK;
 }
 
-static HRESULT Bool_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Bool_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     TRACE("\n");
 
     switch(flags) {
     case INVOKE_FUNC:
-        return throw_type_error(ctx, ei, JS_E_FUNCTION_EXPECTED, NULL);
+        return throw_type_error(ctx, JS_E_FUNCTION_EXPECTED, NULL);
     default:
         FIXME("unimplemented flags %x\n", flags);
         return E_NOTIMPL;
@@ -125,14 +119,14 @@ static const builtin_info_t BoolInst_info = {
     NULL
 };
 
-static HRESULT BoolConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT BoolConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
+    BOOL value = FALSE;
     HRESULT hres;
-    VARIANT_BOOL value = VARIANT_FALSE;
 
     if(argc) {
-        hres = to_boolean(argv, &value);
+        hres = to_boolean(argv[0], &value);
         if(FAILED(hres))
             return hres;
     }
@@ -145,15 +139,13 @@ static HRESULT BoolConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, 
         if(FAILED(hres))
             return hres;
 
-        var_set_jsdisp(retv, bool);
+        *r = jsval_obj(bool);
         return S_OK;
     }
 
     case INVOKE_FUNC:
-        if(retv) {
-            V_VT(retv) = VT_BOOL;
-            V_BOOL(retv) = value;
-        }
+        if(r)
+            *r = jsval_bool(value);
         return S_OK;
 
     default:
@@ -205,7 +197,7 @@ HRESULT create_bool_constr(script_ctx_t *ctx, jsdisp_t *object_prototype, jsdisp
     return hres;
 }
 
-HRESULT create_bool(script_ctx_t *ctx, VARIANT_BOOL b, jsdisp_t **ret)
+HRESULT create_bool(script_ctx_t *ctx, BOOL b, jsdisp_t **ret)
 {
     BoolInstance *bool;
     HRESULT hres;

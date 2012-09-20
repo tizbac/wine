@@ -2168,7 +2168,7 @@ HRESULT CDECL wined3d_device_get_clip_status(const struct wined3d_device *device
     return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_device_set_material(struct wined3d_device *device, const struct wined3d_material *material)
+void CDECL wined3d_device_set_material(struct wined3d_device *device, const struct wined3d_material *material)
 {
     TRACE("device %p, material %p.\n", device, material);
 
@@ -2179,15 +2179,13 @@ HRESULT CDECL wined3d_device_set_material(struct wined3d_device *device, const s
     if (device->isRecordingState)
     {
         TRACE("Recording... not performing anything.\n");
-        return WINED3D_OK;
+        return;
     }
 
     device_invalidate_state(device, STATE_MATERIAL);
-
-    return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_device_get_material(const struct wined3d_device *device, struct wined3d_material *material)
+void CDECL wined3d_device_get_material(const struct wined3d_device *device, struct wined3d_material *material)
 {
     TRACE("device %p, material %p.\n", device, material);
 
@@ -2206,8 +2204,6 @@ HRESULT CDECL wined3d_device_get_material(const struct wined3d_device *device, s
             material->emissive.r, material->emissive.g,
             material->emissive.b, material->emissive.a);
     TRACE("power %.8e.\n", material->power);
-
-    return WINED3D_OK;
 }
 
 void CDECL wined3d_device_set_index_buffer(struct wined3d_device *device,
@@ -2329,7 +2325,7 @@ DWORD CDECL wined3d_device_get_render_state(const struct wined3d_device *device,
     return device->stateBlock->state.render_states[state];
 }
 
-HRESULT CDECL wined3d_device_set_sampler_state(struct wined3d_device *device,
+void CDECL wined3d_device_set_sampler_state(struct wined3d_device *device,
         UINT sampler_idx, enum wined3d_sampler_state state, DWORD value)
 {
     DWORD old_value;
@@ -2344,7 +2340,7 @@ HRESULT CDECL wined3d_device_set_sampler_state(struct wined3d_device *device,
             / sizeof(*device->stateBlock->state.sampler_states))
     {
         WARN("Invalid sampler %u.\n", sampler_idx);
-        return WINED3D_OK; /* Windows accepts overflowing this array ... we do not. */
+        return; /* Windows accepts overflowing this array ... we do not. */
     }
 
     old_value = device->stateBlock->state.sampler_states[sampler_idx][state];
@@ -2355,25 +2351,23 @@ HRESULT CDECL wined3d_device_set_sampler_state(struct wined3d_device *device,
     if (device->isRecordingState)
     {
         TRACE("Recording... not performing anything.\n");
-        return WINED3D_OK;
+        return;
     }
 
     if (old_value == value)
     {
         TRACE("Application is setting the old value over, nothing to do.\n");
-        return WINED3D_OK;
+        return;
     }
 
     device_invalidate_state(device, STATE_SAMPLER(sampler_idx));
-
-    return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_device_get_sampler_state(const struct wined3d_device *device,
-        UINT sampler_idx, enum wined3d_sampler_state state, DWORD *value)
+DWORD CDECL wined3d_device_get_sampler_state(const struct wined3d_device *device,
+        UINT sampler_idx, enum wined3d_sampler_state state)
 {
-    TRACE("device %p, sampler_idx %u, state %s, value %p.\n",
-            device, sampler_idx, debug_d3dsamplerstate(state), value);
+    TRACE("device %p, sampler_idx %u, state %s.\n",
+            device, sampler_idx, debug_d3dsamplerstate(state));
 
     if (sampler_idx >= WINED3DVERTEXTEXTURESAMPLER0 && sampler_idx <= WINED3DVERTEXTEXTURESAMPLER3)
         sampler_idx -= (WINED3DVERTEXTEXTURESAMPLER0 - MAX_FRAGMENT_SAMPLERS);
@@ -2382,13 +2376,10 @@ HRESULT CDECL wined3d_device_get_sampler_state(const struct wined3d_device *devi
             / sizeof(*device->stateBlock->state.sampler_states))
     {
         WARN("Invalid sampler %u.\n", sampler_idx);
-        return WINED3D_OK; /* Windows accepts overflowing this array ... we do not. */
+        return 0; /* Windows accepts overflowing this array ... we do not. */
     }
 
-    *value = device->stateBlock->state.sampler_states[sampler_idx][state];
-    TRACE("Returning %#x.\n", *value);
-
-    return WINED3D_OK;
+    return device->stateBlock->state.sampler_states[sampler_idx][state];
 }
 
 HRESULT CDECL wined3d_device_set_scissor_rect(struct wined3d_device *device, const RECT *rect)
@@ -5556,11 +5547,12 @@ HRESULT device_init(struct wined3d_device *device, struct wined3d *wined3d,
     if (device->shader_backend)
     {
         device->shader_backend->shader_get_caps(&adapter->gl_info, &shader_caps);
-        device->vshader_version = shader_caps.VertexShaderVersion;
-        device->pshader_version = shader_caps.PixelShaderVersion;
-        device->d3d_vshader_constantF = shader_caps.MaxVertexShaderConst;
-        device->d3d_pshader_constantF = shader_caps.MaxPixelShaderConst;
-        device->vs_clipping = shader_caps.VSClipping;
+        device->vs_version = shader_caps.vs_version;
+        device->gs_version = shader_caps.gs_version;
+        device->ps_version = shader_caps.ps_version;
+        device->d3d_vshader_constantF = shader_caps.vs_uniform_count;
+        device->d3d_pshader_constantF = shader_caps.ps_uniform_count;
+        device->vs_clipping = shader_caps.vs_clipping;
     }
     fragment_pipeline = adapter->fragment_pipe;
     device->frag_pipe = fragment_pipeline;

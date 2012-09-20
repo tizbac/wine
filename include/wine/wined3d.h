@@ -2131,7 +2131,7 @@ struct wined3d_buffer * __cdecl wined3d_device_get_index_buffer(const struct win
 HRESULT __cdecl wined3d_device_get_light(const struct wined3d_device *device,
         UINT light_idx, struct wined3d_light *light);
 HRESULT __cdecl wined3d_device_get_light_enable(const struct wined3d_device *device, UINT light_idx, BOOL *enable);
-HRESULT __cdecl wined3d_device_get_material(const struct wined3d_device *device, struct wined3d_material *material);
+void __cdecl wined3d_device_get_material(const struct wined3d_device *device, struct wined3d_material *material);
 float __cdecl wined3d_device_get_npatch_mode(const struct wined3d_device *device);
 struct wined3d_shader * __cdecl wined3d_device_get_pixel_shader(const struct wined3d_device *device);
 void __cdecl wined3d_device_get_primitive_type(const struct wined3d_device *device,
@@ -2147,8 +2147,8 @@ HRESULT __cdecl wined3d_device_get_raster_status(const struct wined3d_device *de
 DWORD __cdecl wined3d_device_get_render_state(const struct wined3d_device *device, enum wined3d_render_state state);
 HRESULT __cdecl wined3d_device_get_render_target(const struct wined3d_device *device,
         UINT render_target_idx, struct wined3d_surface **render_target);
-HRESULT __cdecl wined3d_device_get_sampler_state(const struct wined3d_device *device,
-        UINT sampler_idx, enum wined3d_sampler_state state, DWORD *value);
+DWORD __cdecl wined3d_device_get_sampler_state(const struct wined3d_device *device,
+        UINT sampler_idx, enum wined3d_sampler_state state);
 HRESULT __cdecl wined3d_device_get_scissor_rect(const struct wined3d_device *device, RECT *rect);
 BOOL __cdecl wined3d_device_get_software_vertex_processing(const struct wined3d_device *device);
 HRESULT __cdecl wined3d_device_get_stream_source(const struct wined3d_device *device,
@@ -2209,7 +2209,7 @@ void __cdecl wined3d_device_set_index_buffer(struct wined3d_device *device,
 HRESULT __cdecl wined3d_device_set_light(struct wined3d_device *device,
         UINT light_idx, const struct wined3d_light *light);
 HRESULT __cdecl wined3d_device_set_light_enable(struct wined3d_device *device, UINT light_idx, BOOL enable);
-HRESULT __cdecl wined3d_device_set_material(struct wined3d_device *device, const struct wined3d_material *material);
+void __cdecl wined3d_device_set_material(struct wined3d_device *device, const struct wined3d_material *material);
 void __cdecl wined3d_device_set_multithreaded(struct wined3d_device *device);
 HRESULT __cdecl wined3d_device_set_npatch_mode(struct wined3d_device *device, float segments);
 HRESULT __cdecl wined3d_device_set_pixel_shader(struct wined3d_device *device, struct wined3d_shader *shader);
@@ -2225,7 +2225,7 @@ void __cdecl wined3d_device_set_render_state(struct wined3d_device *device,
         enum wined3d_render_state state, DWORD value);
 HRESULT __cdecl wined3d_device_set_render_target(struct wined3d_device *device,
         UINT render_target_idx, struct wined3d_surface *render_target, BOOL set_viewport);
-HRESULT __cdecl wined3d_device_set_sampler_state(struct wined3d_device *device,
+void __cdecl wined3d_device_set_sampler_state(struct wined3d_device *device,
         UINT sampler_idx, enum wined3d_sampler_state state, DWORD value);
 HRESULT __cdecl wined3d_device_set_scissor_rect(struct wined3d_device *device, const RECT *rect);
 HRESULT __cdecl wined3d_device_set_software_vertex_processing(struct wined3d_device *device, BOOL software);

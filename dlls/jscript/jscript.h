@@ -33,14 +33,10 @@
 #include "wine/unicode.h"
 #include "wine/list.h"
 
+typedef struct _jsval_t jsval_t;
 typedef struct _script_ctx_t script_ctx_t;
 typedef struct _exec_ctx_t exec_ctx_t;
 typedef struct _dispex_prop_t dispex_prop_t;
-
-typedef struct {
-    EXCEPINFO ei;
-    VARIANT var;
-} jsexcept_t;
 
 typedef struct {
     void **blocks;
@@ -152,7 +148,7 @@ static inline jsdisp_t *get_jsdisp(vdisp_t *vdisp)
     return is_jsdisp(vdisp) ? vdisp->u.jsdisp : NULL;
 }
 
-typedef HRESULT (*builtin_invoke_t)(script_ctx_t*,vdisp_t*,WORD,unsigned,VARIANT*,VARIANT*,jsexcept_t*);
+typedef HRESULT (*builtin_invoke_t)(script_ctx_t*,vdisp_t*,WORD,unsigned,jsval_t*,jsval_t*);
 
 typedef struct {
     const WCHAR *name;
@@ -192,9 +188,10 @@ static inline IDispatch *to_disp(jsdisp_t *jsdisp)
 jsdisp_t *as_jsdisp(IDispatch*) DECLSPEC_HIDDEN;
 jsdisp_t *to_jsdisp(IDispatch*) DECLSPEC_HIDDEN;
 
-static inline void jsdisp_addref(jsdisp_t *jsdisp)
+static inline jsdisp_t *jsdisp_addref(jsdisp_t *jsdisp)
 {
     IDispatchEx_AddRef(&jsdisp->IDispatchEx_iface);
+    return jsdisp;
 }
 
 static inline void jsdisp_release(jsdisp_t *jsdisp)
@@ -206,47 +203,47 @@ HRESULT create_dispex(script_ctx_t*,const builtin_info_t*,jsdisp_t*,jsdisp_t**) 
 HRESULT init_dispex(jsdisp_t*,script_ctx_t*,const builtin_info_t*,jsdisp_t*) DECLSPEC_HIDDEN;
 HRESULT init_dispex_from_constr(jsdisp_t*,script_ctx_t*,const builtin_info_t*,jsdisp_t*) DECLSPEC_HIDDEN;
 
-HRESULT disp_call(script_ctx_t*,IDispatch*,DISPID,WORD,unsigned,VARIANT*,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT disp_call_value(script_ctx_t*,IDispatch*,IDispatch*,WORD,unsigned,VARIANT*,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_call_value(jsdisp_t*,IDispatch*,WORD,unsigned,VARIANT*,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_call(jsdisp_t*,DISPID,WORD,unsigned,VARIANT*,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_call_name(jsdisp_t*,const WCHAR*,WORD,unsigned,VARIANT*,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT disp_propget(script_ctx_t*,IDispatch*,DISPID,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT disp_propput(script_ctx_t*,IDispatch*,DISPID,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_propget(jsdisp_t*,DISPID,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_propput_name(jsdisp_t*,const WCHAR*,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_propput_const(jsdisp_t*,const WCHAR*,VARIANT*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_propput_dontenum(jsdisp_t*,const WCHAR*,VARIANT*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_propput_idx(jsdisp_t*,DWORD,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_propget_name(jsdisp_t*,LPCWSTR,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT jsdisp_get_idx(jsdisp_t*,DWORD,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
+HRESULT disp_call(script_ctx_t*,IDispatch*,DISPID,WORD,unsigned,jsval_t*,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT disp_call_value(script_ctx_t*,IDispatch*,IDispatch*,WORD,unsigned,jsval_t*,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT jsdisp_call_value(jsdisp_t*,IDispatch*,WORD,unsigned,jsval_t*,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT jsdisp_call(jsdisp_t*,DISPID,WORD,unsigned,jsval_t*,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT jsdisp_call_name(jsdisp_t*,const WCHAR*,WORD,unsigned,jsval_t*,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT disp_propget(script_ctx_t*,IDispatch*,DISPID,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT disp_propput(script_ctx_t*,IDispatch*,DISPID,jsval_t) DECLSPEC_HIDDEN;
+HRESULT jsdisp_propget(jsdisp_t*,DISPID,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT jsdisp_propput_name(jsdisp_t*,const WCHAR*,jsval_t) DECLSPEC_HIDDEN;
+HRESULT jsdisp_propput_const(jsdisp_t*,const WCHAR*,jsval_t) DECLSPEC_HIDDEN;
+HRESULT jsdisp_propput_dontenum(jsdisp_t*,const WCHAR*,jsval_t) DECLSPEC_HIDDEN;
+HRESULT jsdisp_propput_idx(jsdisp_t*,DWORD,jsval_t) DECLSPEC_HIDDEN;
+HRESULT jsdisp_propget_name(jsdisp_t*,LPCWSTR,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT jsdisp_get_idx(jsdisp_t*,DWORD,jsval_t*) DECLSPEC_HIDDEN;
 HRESULT jsdisp_get_id(jsdisp_t*,const WCHAR*,DWORD,DISPID*) DECLSPEC_HIDDEN;
 HRESULT jsdisp_delete_idx(jsdisp_t*,DWORD) DECLSPEC_HIDDEN;
-HRESULT jsdisp_is_own_prop(jsdisp_t*,BSTR,VARIANT_BOOL*) DECLSPEC_HIDDEN;
+HRESULT jsdisp_is_own_prop(jsdisp_t*,BSTR,BOOL*) DECLSPEC_HIDDEN;
 
 HRESULT create_builtin_function(script_ctx_t*,builtin_invoke_t,const WCHAR*,const builtin_info_t*,DWORD,
         jsdisp_t*,jsdisp_t**) DECLSPEC_HIDDEN;
 HRESULT create_builtin_constructor(script_ctx_t*,builtin_invoke_t,const WCHAR*,const builtin_info_t*,DWORD,
         jsdisp_t*,jsdisp_t**) DECLSPEC_HIDDEN;
-HRESULT Function_value(script_ctx_t*,vdisp_t*,WORD,unsigned,VARIANT*,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
-HRESULT Function_invoke(jsdisp_t*,IDispatch*,WORD,unsigned,VARIANT*,VARIANT*,jsexcept_t*);
+HRESULT Function_value(script_ctx_t*,vdisp_t*,WORD,unsigned,jsval_t*,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT Function_invoke(jsdisp_t*,IDispatch*,WORD,unsigned,jsval_t*,jsval_t*) DECLSPEC_HIDDEN;
 
-HRESULT throw_eval_error(script_ctx_t*,jsexcept_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
-HRESULT throw_generic_error(script_ctx_t*,jsexcept_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
-HRESULT throw_range_error(script_ctx_t*,jsexcept_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
-HRESULT throw_reference_error(script_ctx_t*,jsexcept_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
-HRESULT throw_regexp_error(script_ctx_t*,jsexcept_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
-HRESULT throw_syntax_error(script_ctx_t*,jsexcept_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
-HRESULT throw_type_error(script_ctx_t*,jsexcept_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
-HRESULT throw_uri_error(script_ctx_t*,jsexcept_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
+HRESULT throw_eval_error(script_ctx_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
+HRESULT throw_generic_error(script_ctx_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
+HRESULT throw_range_error(script_ctx_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
+HRESULT throw_reference_error(script_ctx_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
+HRESULT throw_regexp_error(script_ctx_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
+HRESULT throw_syntax_error(script_ctx_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
+HRESULT throw_type_error(script_ctx_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
+HRESULT throw_uri_error(script_ctx_t*,HRESULT,const WCHAR*) DECLSPEC_HIDDEN;
 
 HRESULT create_object(script_ctx_t*,jsdisp_t*,jsdisp_t**) DECLSPEC_HIDDEN;
 HRESULT create_math(script_ctx_t*,jsdisp_t**) DECLSPEC_HIDDEN;
 HRESULT create_array(script_ctx_t*,DWORD,jsdisp_t**) DECLSPEC_HIDDEN;
 HRESULT create_regexp(script_ctx_t*,const WCHAR *,int,DWORD,jsdisp_t**) DECLSPEC_HIDDEN;
-HRESULT create_regexp_var(script_ctx_t*,VARIANT*,VARIANT*,jsdisp_t**) DECLSPEC_HIDDEN;
+HRESULT create_regexp_var(script_ctx_t*,jsval_t,jsval_t*,jsdisp_t**) DECLSPEC_HIDDEN;
 HRESULT create_string(script_ctx_t*,const WCHAR*,DWORD,jsdisp_t**) DECLSPEC_HIDDEN;
-HRESULT create_bool(script_ctx_t*,VARIANT_BOOL,jsdisp_t**) DECLSPEC_HIDDEN;
+HRESULT create_bool(script_ctx_t*,BOOL,jsdisp_t**) DECLSPEC_HIDDEN;
 HRESULT create_number(script_ctx_t*,double,jsdisp_t**) DECLSPEC_HIDDEN;
 HRESULT create_vbarray(script_ctx_t*,SAFEARRAY*,jsdisp_t**) DECLSPEC_HIDDEN;
 
@@ -256,14 +253,14 @@ typedef enum {
     HINT_NUMBER
 } hint_t;
 
-HRESULT to_primitive(script_ctx_t*,VARIANT*,jsexcept_t*,VARIANT*, hint_t) DECLSPEC_HIDDEN;
-HRESULT to_boolean(VARIANT*,VARIANT_BOOL*) DECLSPEC_HIDDEN;
-HRESULT to_number(script_ctx_t*,VARIANT*,jsexcept_t*,double*) DECLSPEC_HIDDEN;
-HRESULT to_integer(script_ctx_t*,VARIANT*,jsexcept_t*,double*) DECLSPEC_HIDDEN;
-HRESULT to_int32(script_ctx_t*,VARIANT*,jsexcept_t*,INT*) DECLSPEC_HIDDEN;
-HRESULT to_uint32(script_ctx_t*,VARIANT*,jsexcept_t*,DWORD*) DECLSPEC_HIDDEN;
-HRESULT to_string(script_ctx_t*,VARIANT*,jsexcept_t*,BSTR*) DECLSPEC_HIDDEN;
-HRESULT to_object(script_ctx_t*,VARIANT*,IDispatch**) DECLSPEC_HIDDEN;
+HRESULT to_primitive(script_ctx_t*,jsval_t,jsval_t*, hint_t) DECLSPEC_HIDDEN;
+HRESULT to_boolean(jsval_t,BOOL*) DECLSPEC_HIDDEN;
+HRESULT to_number(script_ctx_t*,jsval_t,double*) DECLSPEC_HIDDEN;
+HRESULT to_integer(script_ctx_t*,jsval_t,double*) DECLSPEC_HIDDEN;
+HRESULT to_int32(script_ctx_t*,jsval_t,INT*) DECLSPEC_HIDDEN;
+HRESULT to_uint32(script_ctx_t*,jsval_t,DWORD*) DECLSPEC_HIDDEN;
+HRESULT to_string(script_ctx_t*,jsval_t,BSTR*) DECLSPEC_HIDDEN;
+HRESULT to_object(script_ctx_t*,jsval_t,IDispatch**) DECLSPEC_HIDDEN;
 
 HRESULT variant_change_type(script_ctx_t*,VARIANT*,VARIANT*,VARTYPE) DECLSPEC_HIDDEN;
 
@@ -295,6 +292,13 @@ typedef struct {
     script_ctx_t *ctx;
 } JSCaller;
 
+#include "jsval.h"
+
+typedef struct {
+    EXCEPINFO ei;
+    jsval_t val;
+} jsexcept_t;
+
 struct _script_ctx_t {
     LONG ref;
 
@@ -310,6 +314,7 @@ struct _script_ctx_t {
     LCID lcid;
     cc_ctx_t *cc;
     JSCaller *jscaller;
+    jsexcept_t ei;
 
     jsheap_t tmp_heap;
 
@@ -341,6 +346,7 @@ struct _script_ctx_t {
 };
 
 void script_release(script_ctx_t*) DECLSPEC_HIDDEN;
+void clear_ei(script_ctx_t*) DECLSPEC_HIDDEN;
 
 static inline void script_addref(script_ctx_t *ctx)
 {
@@ -377,7 +383,7 @@ HRESULT regexp_match_next(script_ctx_t*,jsdisp_t*,DWORD,const WCHAR*,DWORD,const
         DWORD*,DWORD*,match_result_t*) DECLSPEC_HIDDEN;
 HRESULT regexp_match(script_ctx_t*,jsdisp_t*,const WCHAR*,DWORD,BOOL,match_result_t**,DWORD*) DECLSPEC_HIDDEN;
 HRESULT parse_regexp_flags(const WCHAR*,DWORD,DWORD*) DECLSPEC_HIDDEN;
-HRESULT regexp_string_match(script_ctx_t*,jsdisp_t*,BSTR,VARIANT*,jsexcept_t*) DECLSPEC_HIDDEN;
+HRESULT regexp_string_match(script_ctx_t*,jsdisp_t*,BSTR,jsval_t*) DECLSPEC_HIDDEN;
 
 static inline BOOL is_class(jsdisp_t *jsdisp, jsclass_t class)
 {
@@ -387,16 +393,6 @@ static inline BOOL is_class(jsdisp_t *jsdisp, jsclass_t class)
 static inline BOOL is_vclass(vdisp_t *vdisp, jsclass_t class)
 {
     return is_jsdisp(vdisp) && is_class(vdisp->u.jsdisp, class);
-}
-
-static inline BOOL is_num_vt(enum VARENUM vt)
-{
-    return vt == VT_I4 || vt == VT_R8;
-}
-
-static inline DOUBLE num_val(const VARIANT *v)
-{
-    return V_VT(v) == VT_I4 ? V_I4(v) : V_R8(v);
 }
 
 #ifndef INT32_MIN
@@ -410,29 +406,6 @@ static inline DOUBLE num_val(const VARIANT *v)
 static inline BOOL is_int32(double d)
 {
     return INT32_MIN <= d && d <= INT32_MAX && (double)(int)d == d;
-}
-
-static inline void num_set_int(VARIANT *v, INT i)
-{
-    V_VT(v) = VT_I4;
-    V_I4(v) = i;
-}
-
-static inline void num_set_val(VARIANT *v, DOUBLE d)
-{
-    if(is_int32(d)) {
-        V_VT(v) = VT_I4;
-        V_I4(v) = d;
-    }else {
-        V_VT(v) = VT_R8;
-        V_R8(v) = d;
-    }
-}
-
-static inline void var_set_jsdisp(VARIANT *v, jsdisp_t *jsdisp)
-{
-    V_VT(v) = VT_DISPATCH;
-    V_DISPATCH(v) = to_disp(jsdisp);
 }
 
 static inline DWORD make_grfdex(script_ctx_t *ctx, DWORD flags)
@@ -487,6 +460,7 @@ static inline BOOL is_jscript_error(HRESULT hres)
 }
 
 const char *debugstr_variant(const VARIANT*) DECLSPEC_HIDDEN;
+const char *debugstr_jsval(const jsval_t) DECLSPEC_HIDDEN;
 
 HRESULT create_jscript_object(BOOL,REFIID,void**) DECLSPEC_HIDDEN;
 

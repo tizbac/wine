@@ -62,6 +62,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(wininet);
 
 #define ENTRY_START_OFFSET      0x4000
 #define DIR_LENGTH              8
+#define MAX_DIR_NO              0x20
 #define BLOCKSIZE               128
 #define HASHTABLE_SIZE          448
 #define HASHTABLE_NUM_ENTRIES   64 /* this needs to be power of 2, that divides HASHTABLE_SIZE */
@@ -78,6 +79,10 @@ WINE_DEFAULT_DEBUG_CHANNEL(wininet);
 #define HASHTABLE_FREE          3
 #define HASHTABLE_REDR          5
 #define HASHTABLE_FLAG_BITS     5
+
+#define PENDING_DELETE_CACHE_ENTRY  0x00400000
+
+#define CACHE_HEADER_DATA_ROOT_LEAK_OFFSET 0x16
 
 #define DWORD_SIG(a,b,c,d)  (a | (b << 8) | (c << 16) | (d << 24))
 #define URL_SIGNATURE   DWORD_SIG('U','R','L',' ')
@@ -122,8 +127,8 @@ typedef struct _URL_CACHEFILE_ENTRY
     WORD wLastSyncTime; /* last sync time in dos format */
     DWORD dwHitRate; /* see INTERNET_CACHE_ENTRY_INFO::dwHitRate */
     DWORD dwUseCount; /* see INTERNET_CACHE_ENTRY_INFO::dwUseCount */
-    WORD wUnknownDate; /* usually same as wLastSyncDate */
-    WORD wUnknownTime; /* usually same as wLastSyncTime */
+    WORD LastWriteDate;
+    WORD LastWriteTime;
     DWORD dwUnknown7; /* usually zero */
     DWORD dwUnknown8; /* usually zero */
     /* packing to dword align start of next field */
@@ -165,8 +170,10 @@ typedef struct _URLCACHE_HEADER
     ULARGE_INTEGER CacheLimit;
     ULARGE_INTEGER CacheUsage;
     ULARGE_INTEGER ExemptUsage;
-    DWORD DirectoryCount; /* number of directory_data's */
-    DIRECTORY_DATA directory_data[1]; /* first directory entry */
+    DWORD DirectoryCount;
+    DIRECTORY_DATA directory_data[MAX_DIR_NO];
+    DWORD options[0x21];
+    BYTE allocation_table[ALLOCATION_TABLE_SIZE];
 } URLCACHE_HEADER, *LPURLCACHE_HEADER;
 typedef const URLCACHE_HEADER *LPCURLCACHE_HEADER;
 
@@ -184,6 +191,7 @@ typedef struct _URLCACHECONTAINER
     HANDLE hMapping; /* handle of file mapping */
     DWORD file_size; /* size of file when mapping was opened */
     HANDLE hMutex; /* handle of mutex */
+    DWORD default_entry_type;
 } URLCACHECONTAINER;
 
 
@@ -473,7 +481,8 @@ static void URLCacheContainer_CloseIndex(URLCACHECONTAINER * pContainer)
     pContainer->hMapping = NULL;
 }
 
-static BOOL URLCacheContainers_AddContainer(LPCWSTR cache_prefix, LPCWSTR path, LPWSTR mutex_name)
+static BOOL URLCacheContainers_AddContainer(LPCWSTR cache_prefix,
+        LPCWSTR path, DWORD default_entry_type, LPWSTR mutex_name)
 {
     URLCACHECONTAINER * pContainer = heap_alloc(sizeof(URLCACHECONTAINER));
     int cache_prefix_len = strlenW(cache_prefix);
@@ -485,6 +494,7 @@ static BOOL URLCacheContainers_AddContainer(LPCWSTR cache_prefix, LPCWSTR path, 
 
     pContainer->hMapping = NULL;
     pContainer->file_size = 0;
+    pContainer->default_entry_type = default_entry_type;
 
     pContainer->path = heap_strdupW(path);
     if (!pContainer->path)
@@ -543,11 +553,12 @@ void URLCacheContainers_CreateDefaults(void)
         int nFolder; /* CSIDL_* constant */
         const WCHAR * shpath_suffix; /* suffix on path returned by SHGetSpecialFolderPath */
         const WCHAR * cache_prefix; /* prefix used to reference the container */
+        DWORD default_entry_type;
     } DefaultContainerData[] = 
     {
-        { CSIDL_INTERNET_CACHE, UrlSuffix, UrlPrefix },
-        { CSIDL_HISTORY, HistorySuffix, HistoryPrefix },
-        { CSIDL_COOKIES, CookieSuffix, CookiePrefix },
+        { CSIDL_INTERNET_CACHE, UrlSuffix, UrlPrefix, NORMAL_CACHE_ENTRY },
+        { CSIDL_HISTORY, HistorySuffix, HistoryPrefix, URLHISTORY_CACHE_ENTRY },
+        { CSIDL_COOKIES, CookieSuffix, CookiePrefix, COOKIE_CACHE_ENTRY },
     };
     DWORD i;
 
@@ -583,7 +594,8 @@ void URLCacheContainers_CreateDefaults(void)
             wszCachePath[path_len + suffix_len + 2] = '\0';
         }
 
-        URLCacheContainers_AddContainer(DefaultContainerData[i].cache_prefix, wszCachePath, wszMutexName);
+        URLCacheContainers_AddContainer(DefaultContainerData[i].cache_prefix, wszCachePath,
+                DefaultContainerData[i].default_entry_type, wszMutexName);
     }
 }
 
@@ -742,44 +754,6 @@ static BOOL URLCacheContainer_UnlockIndex(URLCACHECONTAINER * pContainer, LPURLC
     return UnmapViewOfFile(pHeader);
 }
 
-/***********************************************************************
- *           URLCacheContainer_CleanIndex (Internal)
- *
- * This function is meant to make place in index file by removing old
- * entries and resizing the file.
- *
- * CAUTION: file view may get mapped to new memory
- * TODO: implement entries cleaning
- *
- * RETURNS
- *     ERROR_SUCCESS when new memory is available
- *     error code otherwise
- */
-static DWORD URLCacheContainer_CleanIndex(URLCACHECONTAINER *container, URLCACHE_HEADER **file_view)
-{
-    URLCACHE_HEADER *header = *file_view;
-    DWORD ret;
-
-    FIXME("(%s %s) semi-stub\n", debugstr_w(container->cache_prefix), debugstr_w(container->path));
-
-    if(header->dwFileSize >= ALLOCATION_TABLE_SIZE*8*BLOCKSIZE + ENTRY_START_OFFSET) {
-        WARN("index file has maximal size\n");
-        return ERROR_NOT_ENOUGH_MEMORY;
-    }
-
-    URLCacheContainer_CloseIndex(container);
-    ret = URLCacheContainer_OpenIndex(container, header->dwIndexCapacityInBlocks*2);
-    if(ret != ERROR_SUCCESS)
-        return ret;
-    header = MapViewOfFile(container->hMapping, FILE_MAP_WRITE, 0, 0, 0);
-    if(!header)
-        return GetLastError();
-
-    UnmapViewOfFile(*file_view);
-    *file_view = header;
-    return ERROR_SUCCESS;
-}
-
 #ifndef CHAR_BIT
 #define CHAR_BIT    (8 * sizeof(CHAR))
 #endif
@@ -843,7 +817,6 @@ static inline void URLCache_Allocation_BlockAllocate(BYTE * AllocationTable, DWO
  */
 static DWORD URLCache_FindFirstFreeEntry(URLCACHE_HEADER * pHeader, DWORD dwBlocksNeeded, CACHEFILE_ENTRY ** ppEntry)
 {
-    LPBYTE AllocationTable = (LPBYTE)pHeader + ALLOCATION_TABLE_OFFSET;
     DWORD dwBlockNumber;
     DWORD dwFreeCounter;
     for (dwBlockNumber = 0; dwBlockNumber < pHeader->dwIndexCapacityInBlocks; dwBlockNumber++)
@@ -851,7 +824,7 @@ static DWORD URLCache_FindFirstFreeEntry(URLCACHE_HEADER * pHeader, DWORD dwBloc
         for (dwFreeCounter = 0; 
             dwFreeCounter < dwBlocksNeeded &&
               dwFreeCounter + dwBlockNumber < pHeader->dwIndexCapacityInBlocks &&
-              URLCache_Allocation_BlockIsFree(AllocationTable, dwBlockNumber + dwFreeCounter);
+              URLCache_Allocation_BlockIsFree(pHeader->allocation_table, dwBlockNumber + dwFreeCounter);
             dwFreeCounter++)
                 TRACE("Found free block at no. %d (0x%x)\n", dwBlockNumber, ENTRY_START_OFFSET + dwBlockNumber * BLOCKSIZE);
 
@@ -860,7 +833,7 @@ static DWORD URLCache_FindFirstFreeEntry(URLCACHE_HEADER * pHeader, DWORD dwBloc
             DWORD index;
             TRACE("Found free blocks starting at no. %d (0x%x)\n", dwBlockNumber, ENTRY_START_OFFSET + dwBlockNumber * BLOCKSIZE);
             for (index = 0; index < dwBlocksNeeded; index++)
-                URLCache_Allocation_BlockAllocate(AllocationTable, dwBlockNumber + index);
+                URLCache_Allocation_BlockAllocate(pHeader->allocation_table, dwBlockNumber + index);
             *ppEntry = (CACHEFILE_ENTRY *)((LPBYTE)pHeader + ENTRY_START_OFFSET + dwBlockNumber * BLOCKSIZE);
             for (index = 0; index < dwBlocksNeeded * BLOCKSIZE / sizeof(DWORD); index++)
                 ((DWORD*)*ppEntry)[index] = 0xdeadbeef;
@@ -886,12 +859,11 @@ static BOOL URLCache_DeleteEntry(LPURLCACHE_HEADER pHeader, CACHEFILE_ENTRY * pE
 {
     DWORD dwStartBlock;
     DWORD dwBlock;
-    BYTE * AllocationTable = (LPBYTE)pHeader + ALLOCATION_TABLE_OFFSET;
 
     /* update allocation table */
     dwStartBlock = ((DWORD)((BYTE *)pEntry - (BYTE *)pHeader) - ENTRY_START_OFFSET) / BLOCKSIZE;
     for (dwBlock = dwStartBlock; dwBlock < dwStartBlock + pEntry->dwBlocksUsed; dwBlock++)
-        URLCache_Allocation_BlockFree(AllocationTable, dwBlock);
+        URLCache_Allocation_BlockFree(pHeader->allocation_table, dwBlock);
 
     return TRUE;
 }
@@ -986,6 +958,127 @@ static BOOL URLCache_LocalFileNameToPathA(
     }
     *lpBufferSize = nRequired;
     return FALSE;
+}
+
+/* Just like FileTimeToDosDateTime, except that it also maps the special
+ * case of a filetime of (0,0) to a DOS date/time of (0,0).
+ */
+static void URLCache_FileTimeToDosDateTime(const FILETIME *ft, WORD *fatdate,
+                                           WORD *fattime)
+{
+    if (!ft->dwLowDateTime && !ft->dwHighDateTime)
+        *fatdate = *fattime = 0;
+    else
+        FileTimeToDosDateTime(ft, fatdate, fattime);
+}
+
+/***********************************************************************
+ *           URLCache_DeleteFile (Internal)
+ */
+static DWORD URLCache_DeleteFile(const URLCACHECONTAINER *container,
+        URLCACHE_HEADER *header, URL_CACHEFILE_ENTRY *url_entry)
+{
+    WIN32_FILE_ATTRIBUTE_DATA attr;
+    WCHAR path[MAX_PATH];
+    LONG path_size = sizeof(path);
+    DWORD err;
+    WORD date, time;
+
+    if(!url_entry->dwOffsetLocalName)
+        goto succ;
+
+    if(!URLCache_LocalFileNameToPathW(container, header,
+                (LPCSTR)url_entry+url_entry->dwOffsetLocalName,
+                url_entry->CacheDir, path, &path_size))
+        goto succ;
+
+    if(!GetFileAttributesExW(path, GetFileExInfoStandard, &attr))
+        goto succ;
+    URLCache_FileTimeToDosDateTime(&attr.ftLastWriteTime, &date, &time);
+    if(date != url_entry->LastWriteDate || time != url_entry->LastWriteTime)
+        goto succ;
+
+    err = (DeleteFileW(path) ? ERROR_SUCCESS : GetLastError());
+    if(err == ERROR_ACCESS_DENIED || err == ERROR_SHARING_VIOLATION)
+        return err;
+
+succ:
+    if (url_entry->CacheDir < header->DirectoryCount)
+    {
+        if (header->directory_data[url_entry->CacheDir].dwNumFiles)
+            header->directory_data[url_entry->CacheDir].dwNumFiles--;
+    }
+    if (url_entry->CacheEntryType & STICKY_CACHE_ENTRY)
+    {
+        if (url_entry->size.QuadPart < header->ExemptUsage.QuadPart)
+            header->ExemptUsage.QuadPart -= url_entry->size.QuadPart;
+        else
+            header->ExemptUsage.QuadPart = 0;
+    }
+    else
+    {
+        if (url_entry->size.QuadPart < header->CacheUsage.QuadPart)
+            header->CacheUsage.QuadPart -= url_entry->size.QuadPart;
+        else
+            header->CacheUsage.QuadPart = 0;
+    }
+
+    return ERROR_SUCCESS;
+}
+
+/***********************************************************************
+ *           URLCacheContainer_CleanIndex (Internal)
+ *
+ * This function is meant to make place in index file by removing leaked
+ * files entries and resizing the file.
+ *
+ * CAUTION: file view may get mapped to new memory
+ *
+ * RETURNS
+ *     ERROR_SUCCESS when new memory is available
+ *     error code otherwise
+ */
+static DWORD URLCacheContainer_CleanIndex(URLCACHECONTAINER *container, URLCACHE_HEADER **file_view)
+{
+    URLCACHE_HEADER *header = *file_view;
+    DWORD ret;
+    DWORD *leak_off;
+    BOOL freed = FALSE;
+
+    TRACE("(%s %s)\n", debugstr_w(container->cache_prefix), debugstr_w(container->path));
+
+    leak_off = &(*file_view)->options[CACHE_HEADER_DATA_ROOT_LEAK_OFFSET];
+    while(*leak_off) {
+        URL_CACHEFILE_ENTRY *url_entry = (URL_CACHEFILE_ENTRY*)((LPBYTE)(*file_view) + *leak_off);
+
+        if(SUCCEEDED(URLCache_DeleteFile(container, *file_view, url_entry))) {
+            *leak_off = url_entry->dwExemptDelta;
+            URLCache_DeleteEntry(*file_view, &url_entry->CacheFileEntry);
+            freed = TRUE;
+        }else {
+            leak_off = &url_entry->dwExemptDelta;
+        }
+    }
+
+    if(freed)
+        return ERROR_SUCCESS;
+
+    if(header->dwFileSize >= ALLOCATION_TABLE_SIZE*8*BLOCKSIZE + ENTRY_START_OFFSET) {
+        WARN("index file has maximal size\n");
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+
+    URLCacheContainer_CloseIndex(container);
+    ret = URLCacheContainer_OpenIndex(container, header->dwIndexCapacityInBlocks*2);
+    if(ret != ERROR_SUCCESS)
+        return ret;
+    header = MapViewOfFile(container->hMapping, FILE_MAP_WRITE, 0, 0, 0);
+    if(!header)
+        return GetLastError();
+
+    UnmapViewOfFile(*file_view);
+    *file_view = header;
+    return ERROR_SUCCESS;
 }
 
 /* Just like DosDateTimeToFileTime, except that it also maps the special
@@ -1128,18 +1221,6 @@ static DWORD URLCache_CopyEntry(
     }
     *lpdwBufferSize = dwRequiredSize;
     return ERROR_SUCCESS;
-}
-
-/* Just like FileTimeToDosDateTime, except that it also maps the special
- * case of a filetime of (0,0) to a DOS date/time of (0,0).
- */
-static void URLCache_FileTimeToDosDateTime(const FILETIME *ft, WORD *fatdate,
-                                           WORD *fattime)
-{
-    if (!ft->dwLowDateTime && !ft->dwHighDateTime)
-        *fatdate = *fattime = 0;
-    else
-        FileTimeToDosDateTime(ft, fatdate, fattime);
 }
 
 /***********************************************************************
@@ -1548,6 +1629,38 @@ static BOOL URLCache_DeleteCacheDirectory(LPCWSTR lpszPath)
     if (ret)
         ERR("SHFileOperationW on %s returned %i\n", debugstr_w(path), ret);
     return !(ret || shfos.fAnyOperationsAborted);
+}
+
+/***********************************************************************
+ *           URLCache_IsLocked (Internal)
+ *
+ *  Checks if entry is locked. Unlocks it if possible.
+ */
+static BOOL URLCache_IsLocked(struct _HASH_ENTRY *hash_entry, URL_CACHEFILE_ENTRY *url_entry)
+{
+    FILETIME cur_time;
+    ULARGE_INTEGER acc_time, time;
+
+    if ((hash_entry->dwHashKey & ((1<<HASHTABLE_FLAG_BITS)-1)) != HASHTABLE_LOCK)
+        return FALSE;
+
+    GetSystemTimeAsFileTime(&cur_time);
+    time.u.LowPart = cur_time.dwLowDateTime;
+    time.u.HighPart = cur_time.dwHighDateTime;
+
+    acc_time.u.LowPart = url_entry->LastAccessTime.dwLowDateTime;
+    acc_time.u.HighPart = url_entry->LastAccessTime.dwHighDateTime;
+
+    time.QuadPart -= acc_time.QuadPart;
+
+    /* check if entry was locked for at least a day */
+    if(time.QuadPart > (ULONGLONG)24*60*60*10000000) {
+        URLCache_HashEntrySetFlags(hash_entry, HASHTABLE_URL);
+        url_entry->dwUseCount = 0;
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 /***********************************************************************
@@ -2173,8 +2286,8 @@ BOOL WINAPI RetrieveUrlCacheEntryFileW(
     return TRUE;
 }
 
-static BOOL DeleteUrlCacheEntryInternal(LPURLCACHE_HEADER pHeader,
-        struct _HASH_ENTRY *pHashEntry)
+static BOOL DeleteUrlCacheEntryInternal(const URLCACHECONTAINER * pContainer,
+        LPURLCACHE_HEADER pHeader, struct _HASH_ENTRY *pHashEntry)
 {
     CACHEFILE_ENTRY * pEntry;
     URL_CACHEFILE_ENTRY * pUrlEntry;
@@ -2189,36 +2302,25 @@ static BOOL DeleteUrlCacheEntryInternal(LPURLCACHE_HEADER pHeader,
     }
 
     pUrlEntry = (URL_CACHEFILE_ENTRY *)pEntry;
-    if ((pHashEntry->dwHashKey & ((1<<HASHTABLE_FLAG_BITS)-1)) == HASHTABLE_LOCK)
+    if(URLCache_IsLocked(pHashEntry, pUrlEntry))
     {
-        /* FIXME: implement timeout object unlocking */
         TRACE("Trying to delete locked entry\n");
-        pUrlEntry->CacheEntryType |= DELETED_CACHE_ENTRY;
+        pUrlEntry->CacheEntryType |= PENDING_DELETE_CACHE_ENTRY;
         SetLastError(ERROR_SHARING_VIOLATION);
         return FALSE;
     }
 
-    if (pUrlEntry->CacheDir < pHeader->DirectoryCount)
+    if(!URLCache_DeleteFile(pContainer, pHeader, pUrlEntry))
     {
-        if (pHeader->directory_data[pUrlEntry->CacheDir].dwNumFiles)
-            pHeader->directory_data[pUrlEntry->CacheDir].dwNumFiles--;
-    }
-    if (pUrlEntry->CacheEntryType & STICKY_CACHE_ENTRY)
-    {
-        if (pUrlEntry->size.QuadPart < pHeader->ExemptUsage.QuadPart)
-            pHeader->ExemptUsage.QuadPart -= pUrlEntry->size.QuadPart;
-        else
-            pHeader->ExemptUsage.QuadPart = 0;
+        URLCache_DeleteEntry(pHeader, pEntry);
     }
     else
     {
-        if (pUrlEntry->size.QuadPart < pHeader->CacheUsage.QuadPart)
-            pHeader->CacheUsage.QuadPart -= pUrlEntry->size.QuadPart;
-        else
-            pHeader->CacheUsage.QuadPart = 0;
+        /* Add entry to leaked files list */
+        pUrlEntry->CacheFileEntry.dwSignature = LEAK_SIGNATURE;
+        pUrlEntry->dwExemptDelta = pHeader->options[CACHE_HEADER_DATA_ROOT_LEAK_OFFSET];
+        pHeader->options[CACHE_HEADER_DATA_ROOT_LEAK_OFFSET] = pHashEntry->dwOffsetEntry;
     }
-
-    URLCache_DeleteEntry(pHeader, pEntry);
 
     URLCache_DeleteEntryFromHash(pHashEntry);
     return TRUE;
@@ -2294,8 +2396,8 @@ BOOL WINAPI UnlockUrlCacheEntryFileA(
     if (!pUrlEntry->dwUseCount)
     {
         URLCache_HashEntrySetFlags(pHashEntry, HASHTABLE_URL);
-        if (pUrlEntry->CacheEntryType & DELETED_CACHE_ENTRY)
-            DeleteUrlCacheEntryInternal(pHeader, pHashEntry);
+        if (pUrlEntry->CacheEntryType & PENDING_DELETE_CACHE_ENTRY)
+            DeleteUrlCacheEntryInternal(pContainer, pHeader, pHashEntry);
     }
 
     URLCacheContainer_UnlockIndex(pContainer, pHeader);
@@ -2647,12 +2749,15 @@ static BOOL CommitUrlCacheEntryInternal(
     DWORD dwOffsetLocalFileName = 0;
     DWORD dwOffsetHeader = 0;
     DWORD dwOffsetFileExtension = 0;
+    WIN32_FILE_ATTRIBUTE_DATA file_attr;
     LARGE_INTEGER file_size;
     BYTE cDirectory = 0;
     char achFile[MAX_PATH];
     LPSTR lpszUrlNameA = NULL;
     LPSTR lpszFileExtensionA = NULL;
     char *pchLocalFileName = 0;
+    DWORD hit_rate = 0;
+    DWORD exempt_delta = 0;
     DWORD error;
 
     TRACE("(%s, %s, ..., ..., %x, %p, %d, %s, %s)\n",
@@ -2672,28 +2777,14 @@ static BOOL CommitUrlCacheEntryInternal(
     if (lpszOriginalUrl)
         WARN(": lpszOriginalUrl ignored\n");
 
-    file_size.QuadPart = 0;
+    memset(&file_attr, 0, sizeof(file_attr));
     if (lpszLocalFileName)
     {
-        HANDLE hFile;
-
-        hFile = CreateFileW(lpszLocalFileName, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
-        if (hFile == INVALID_HANDLE_VALUE)
-        {
-            ERR("couldn't open file %s (error is %d)\n", debugstr_w(lpszLocalFileName), GetLastError());
+        if(!GetFileAttributesExW(lpszLocalFileName, GetFileExInfoStandard, &file_attr))
             return FALSE;
-        }
-
-        /* Get file size */
-        if (!GetFileSizeEx(hFile, &file_size))
-        {
-            ERR("couldn't get file size (error is %d)\n", GetLastError());
-            CloseHandle(hFile);
-            return FALSE;
-        }
-
-        CloseHandle(hFile);
     }
+    file_size.u.LowPart = file_attr.nFileSizeLow;
+    file_size.u.HighPart = file_attr.nFileSizeHigh;
 
     error = URLCacheContainers_FindContainerW(lpszUrlName, &pContainer);
     if (error != ERROR_SUCCESS)
@@ -2727,20 +2818,17 @@ static BOOL CommitUrlCacheEntryInternal(
 
     if (URLCache_FindHash(pHeader, lpszUrlNameA, &pHashEntry))
     {
-        if ((pHashEntry->dwHashKey & ((1<<HASHTABLE_FLAG_BITS)-1)) == HASHTABLE_LOCK)
+        URL_CACHEFILE_ENTRY *pUrlEntry = (URL_CACHEFILE_ENTRY*)((LPBYTE)pHeader + pHashEntry->dwOffsetEntry);
+        if (URLCache_IsLocked(pHashEntry, pUrlEntry))
         {
-            /* FIXME: implement timeout object unlocking */
-            FIXME("Trying to overwrite locked entry\n");
-            SetLastError(ERROR_SHARING_VIOLATION);
+            TRACE("Trying to overwrite locked entry\n");
+            error = ERROR_SHARING_VIOLATION;
             goto cleanup;
         }
 
-        FIXME("entry already in cache - don't know what to do!\n");
-/*
- *        SetLastError(ERROR_FILE_NOT_FOUND);
- *        return FALSE;
- */
-        goto cleanup;
+        hit_rate = pUrlEntry->dwHitRate;
+        exempt_delta = pUrlEntry->dwExemptDelta;
+        DeleteUrlCacheEntryInternal(pContainer, pHeader, pHashEntry);
     }
 
     if (lpszLocalFileName)
@@ -2819,16 +2907,15 @@ static BOOL CommitUrlCacheEntryInternal(
     url_entry_offset = (LPBYTE)pUrlEntry - (LPBYTE)pHeader;
     pUrlEntry->CacheFileEntry.dwSignature = URL_SIGNATURE;
     pUrlEntry->CacheDir = cDirectory;
-    pUrlEntry->CacheEntryType = CacheEntryType;
+    pUrlEntry->CacheEntryType = CacheEntryType | pContainer->default_entry_type;
     pUrlEntry->dwHeaderInfoSize = dwHeaderSize;
-    if (CacheEntryType & STICKY_CACHE_ENTRY)
+    if ((CacheEntryType & STICKY_CACHE_ENTRY) && !exempt_delta)
     {
         /* Sticky entries have a default exempt time of one day */
-        pUrlEntry->dwExemptDelta = 86400;
+        exempt_delta = 86400;
     }
-    else
-        pUrlEntry->dwExemptDelta = 0;
-    pUrlEntry->dwHitRate = 0;
+    pUrlEntry->dwExemptDelta = exempt_delta;
+    pUrlEntry->dwHitRate = hit_rate+1;
     pUrlEntry->dwOffsetFileExtension = dwOffsetFileExtension;
     pUrlEntry->dwOffsetHeaderInfo = dwOffsetHeader;
     pUrlEntry->dwOffsetLocalName = dwOffsetLocalFileName;
@@ -2839,8 +2926,7 @@ static BOOL CommitUrlCacheEntryInternal(
     pUrlEntry->LastModifiedTime = LastModifiedTime;
     URLCache_FileTimeToDosDateTime(&pUrlEntry->LastAccessTime, &pUrlEntry->wLastSyncDate, &pUrlEntry->wLastSyncTime);
     URLCache_FileTimeToDosDateTime(&ExpireTime, &pUrlEntry->wExpiredDate, &pUrlEntry->wExpiredTime);
-    pUrlEntry->wUnknownDate = pUrlEntry->wLastSyncDate;
-    pUrlEntry->wUnknownTime = pUrlEntry->wLastSyncTime;
+    URLCache_FileTimeToDosDateTime(&file_attr.ftLastWriteTime, &pUrlEntry->LastWriteDate, &pUrlEntry->LastWriteTime);
 
     /*** Unknowns ***/
     pUrlEntry->dwUnknown1 = 0;
@@ -3239,7 +3325,7 @@ BOOL WINAPI DeleteUrlCacheEntryA(LPCSTR lpszUrlName)
         return FALSE;
     }
 
-    ret = DeleteUrlCacheEntryInternal(pHeader, pHashEntry);
+    ret = DeleteUrlCacheEntryInternal(pContainer, pHeader, pHashEntry);
 
     URLCacheContainer_UnlockIndex(pContainer, pHeader);
 
@@ -3299,7 +3385,7 @@ BOOL WINAPI DeleteUrlCacheEntryW(LPCWSTR lpszUrlName)
         return FALSE;
     }
 
-    ret = DeleteUrlCacheEntryInternal(pHeader, pHashEntry);
+    ret = DeleteUrlCacheEntryInternal(pContainer, pHeader, pHashEntry);
 
     URLCacheContainer_UnlockIndex(pContainer, pHeader);
     heap_free(urlA);

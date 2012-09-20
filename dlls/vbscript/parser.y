@@ -185,6 +185,7 @@ SimpleStatement
     | tDO tNL StatementsNl_opt tLOOP DoType Expression
                                             { $$ = new_while_statement(ctx, $5 ? STAT_DOWHILE : STAT_DOUNTIL, $6, $3);
                                               CHECK_ERROR; }
+    | tDO tNL StatementsNl_opt tLOOP        { $$ = new_while_statement(ctx, STAT_DOWHILE, NULL, $3); CHECK_ERROR; }
     | FunctionDecl                          { $$ = new_function_statement(ctx, $1); CHECK_ERROR; }
     | tEXIT tDO                             { $$ = new_statement(ctx, STAT_EXITDO, 0); CHECK_ERROR; }
     | tEXIT tFOR                            { $$ = new_statement(ctx, STAT_EXITFOR, 0); CHECK_ERROR; }
@@ -228,7 +229,7 @@ Step_opt
     | tSTEP Expression                      { $$ = $2; }
 
 IfStatement
-    : tIF Expression tTHEN tNL StatementsNl ElseIfs_opt Else_opt tEND tIF
+    : tIF Expression tTHEN tNL StatementsNl_opt ElseIfs_opt Else_opt tEND tIF
                                             { $$ = new_if_statement(ctx, $2, $5, $6, $7); CHECK_ERROR; }
     | tIF Expression tTHEN Statement        { $$ = new_if_statement(ctx, $2, $4, NULL, NULL); CHECK_ERROR; }
     | tIF Expression tTHEN Statement tELSE Statement EndIf_opt
@@ -247,12 +248,12 @@ ElseIfs
     | ElseIf ElseIfs                        { $1->next = $2; $$ = $1; }
 
 ElseIf
-    : tELSEIF Expression tTHEN tNL StatementsNl
+    : tELSEIF Expression tTHEN tNL StatementsNl_opt
                                             { $$ = new_elseif_decl(ctx, $2, $5); }
 
 Else_opt
     : /* empty */                           { $$ = NULL; }
-    | tELSE tNL StatementsNl                { $$ = $3; }
+    | tELSE tNL StatementsNl_opt            { $$ = $3; }
 
 CaseClausules
     : /* empty */                          { $$ = NULL; }

@@ -439,6 +439,9 @@ enum WINED3D_SHADER_INSTRUCTION_HANDLER
     WINED3DSIH_CRS,
     WINED3DSIH_CUT,
     WINED3DSIH_DCL,
+    WINED3DSIH_DCL_INPUT_PRIMITIVE,
+    WINED3DSIH_DCL_OUTPUT_TOPOLOGY,
+    WINED3DSIH_DCL_VERTICES_OUT,
     WINED3DSIH_DEF,
     WINED3DSIH_DEFB,
     WINED3DSIH_DEFI,
@@ -663,7 +666,12 @@ struct wined3d_shader_instruction
     const struct wined3d_shader_dst_param *dst;
     UINT src_count;
     const struct wined3d_shader_src_param *src;
-    struct wined3d_shader_semantic semantic;
+    union
+    {
+        struct wined3d_shader_semantic semantic;
+        enum wined3d_primitive_type primitive_type;
+        UINT count;
+    } declaration;
 };
 
 struct wined3d_shader_attribute
@@ -694,15 +702,17 @@ extern const struct wined3d_shader_frontend sm4_shader_frontend DECLSPEC_HIDDEN;
 
 typedef void (*SHADER_HANDLER)(const struct wined3d_shader_instruction *);
 
-struct shader_caps {
-    DWORD               VertexShaderVersion;
-    DWORD               MaxVertexShaderConst;
+struct shader_caps
+{
+    UINT vs_version;
+    UINT gs_version;
+    UINT ps_version;
 
-    DWORD               PixelShaderVersion;
-    float               PixelShader1xMaxValue;
-    DWORD               MaxPixelShaderConst;
+    DWORD vs_uniform_count;
+    DWORD ps_uniform_count;
+    float ps_1x_max_value;
 
-    BOOL                VSClipping;
+    BOOL vs_clipping;
 };
 
 enum tex_types
@@ -1365,6 +1375,7 @@ enum wined3d_pci_device
     CARD_NVIDIA_GEFORCE_8800GTS     = 0x0193,
     CARD_NVIDIA_GEFORCE_8800GTX     = 0x0191,
     CARD_NVIDIA_GEFORCE_9200        = 0x086d,
+    CARD_NVIDIA_GEFORCE_9300        = 0x086c,
     CARD_NVIDIA_GEFORCE_9400M       = 0x0863,
     CARD_NVIDIA_GEFORCE_9400GT      = 0x042c,
     CARD_NVIDIA_GEFORCE_9500GT      = 0x0640,
@@ -1687,7 +1698,7 @@ struct wined3d_device
     const struct blit_shader *blitter;
 
     unsigned int max_ffp_textures;
-    DWORD vshader_version, pshader_version;
+    UINT vs_version, gs_version, ps_version;
     DWORD d3d_vshader_constantF, d3d_pshader_constantF; /* Advertised d3d caps, not GL ones */
     DWORD vs_clipping;
 

@@ -218,8 +218,8 @@ static inline void number_to_exponential(double val, int prec, BSTR *out)
 }
 
 /* ECMA-262 3rd Edition    15.7.4.2 */
-static HRESULT Number_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Number_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     NumberInstance *number;
     INT radix = 10;
@@ -230,24 +230,21 @@ static HRESULT Number_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, u
     TRACE("\n");
 
     if(!(number = number_this(jsthis)))
-        return throw_type_error(ctx, ei, JS_E_NUMBER_EXPECTED, NULL);
+        return throw_type_error(ctx, JS_E_NUMBER_EXPECTED, NULL);
 
     if(argc) {
-        hres = to_int32(ctx, argv, ei, &radix);
+        hres = to_int32(ctx, argv[0], &radix);
         if(FAILED(hres))
             return hres;
 
         if(radix<2 || radix>36)
-            return throw_type_error(ctx, ei, JS_E_INVALIDARG, NULL);
+            return throw_type_error(ctx, JS_E_INVALIDARG, NULL);
     }
 
     val = number->value;
 
     if(radix==10 || isnan(val) || isinf(val)) {
-        VARIANT v;
-
-        num_set_val(&v, val);
-        hres = to_string(ctx, &v, ei, &str);
+        hres = to_string(ctx, jsval_number(val), &str);
         if(FAILED(hres))
             return hres;
     }else {
@@ -334,24 +331,22 @@ static HRESULT Number_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, u
             return E_OUTOFMEMORY;
     }
 
-    if(retv) {
-        V_VT(retv) = VT_BSTR;
-        V_BSTR(retv) = str;
-    }else {
+    if(r)
+        *r = jsval_string(str);
+    else
         SysFreeString(str);
-    }
     return S_OK;
 }
 
-static HRESULT Number_toLocaleString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Number_toLocaleString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     FIXME("\n");
     return E_NOTIMPL;
 }
 
-static HRESULT Number_toFixed(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Number_toFixed(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     NumberInstance *number;
     DOUBLE val;
@@ -362,40 +357,35 @@ static HRESULT Number_toFixed(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, un
     TRACE("\n");
 
     if(!(number = number_this(jsthis)))
-        return throw_type_error(ctx, ei, JS_E_NUMBER_EXPECTED, NULL);
+        return throw_type_error(ctx, JS_E_NUMBER_EXPECTED, NULL);
 
     if(argc) {
-        hres = to_int32(ctx, argv, ei, &prec);
+        hres = to_int32(ctx, argv[0], &prec);
         if(FAILED(hres))
             return hres;
 
         if(prec<0 || prec>20)
-            return throw_range_error(ctx, ei, JS_E_FRACTION_DIGITS_OUT_OF_RANGE, NULL);
+            return throw_range_error(ctx, JS_E_FRACTION_DIGITS_OUT_OF_RANGE, NULL);
     }
 
     val = number->value;
     if(isinf(val) || isnan(val)) {
-        VARIANT v;
-
-        num_set_val(&v, val);
-        hres = to_string(ctx, &v, ei, &str);
+        hres = to_string(ctx, jsval_number(val), &str);
         if(FAILED(hres))
             return hres;
     }else {
         number_to_fixed(val, prec, &str);
     }
 
-    if(retv) {
-        V_VT(retv) = VT_BSTR;
-        V_BSTR(retv) = str;
-    }else {
+    if(r)
+        *r = jsval_string(str);
+    else
         SysFreeString(str);
-    }
     return S_OK;
 }
 
-static HRESULT Number_toExponential(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Number_toExponential(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     NumberInstance *number;
     DOUBLE val;
@@ -406,23 +396,20 @@ static HRESULT Number_toExponential(script_ctx_t *ctx, vdisp_t *jsthis, WORD fla
     TRACE("\n");
 
     if(!(number = number_this(jsthis)))
-        return throw_type_error(ctx, ei, JS_E_NUMBER_EXPECTED, NULL);
+        return throw_type_error(ctx, JS_E_NUMBER_EXPECTED, NULL);
 
     if(argc) {
-        hres = to_int32(ctx, argv, ei, &prec);
+        hres = to_int32(ctx, argv[0], &prec);
         if(FAILED(hres))
             return hres;
 
         if(prec<0 || prec>20)
-            return throw_range_error(ctx, ei, JS_E_FRACTION_DIGITS_OUT_OF_RANGE, NULL);
+            return throw_range_error(ctx, JS_E_FRACTION_DIGITS_OUT_OF_RANGE, NULL);
     }
 
     val = number->value;
     if(isinf(val) || isnan(val)) {
-        VARIANT v;
-
-        num_set_val(&v, val);
-        hres = to_string(ctx, &v, ei, &str);
+        hres = to_string(ctx, jsval_number(val), &str);
         if(FAILED(hres))
             return hres;
     }else {
@@ -431,17 +418,15 @@ static HRESULT Number_toExponential(script_ctx_t *ctx, vdisp_t *jsthis, WORD fla
         number_to_exponential(val, prec, &str);
     }
 
-    if(retv) {
-        V_VT(retv) = VT_BSTR;
-        V_BSTR(retv) = str;
-    }else {
+    if(r)
+        *r = jsval_string(str);
+    else
         SysFreeString(str);
-    }
     return S_OK;
 }
 
-static HRESULT Number_toPrecision(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Number_toPrecision(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     NumberInstance *number;
     INT prec = 0, size;
@@ -450,23 +435,20 @@ static HRESULT Number_toPrecision(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
     HRESULT hres;
 
     if(!(number = number_this(jsthis)))
-        return throw_type_error(ctx, ei, JS_E_NUMBER_EXPECTED, NULL);
+        return throw_type_error(ctx, JS_E_NUMBER_EXPECTED, NULL);
 
     if(argc) {
-        hres = to_int32(ctx, argv, ei, &prec);
+        hres = to_int32(ctx, argv[0], &prec);
         if(FAILED(hres))
             return hres;
 
         if(prec<1 || prec>21)
-            return throw_range_error(ctx, ei, JS_E_PRECISION_OUT_OF_RANGE, NULL);
+            return throw_range_error(ctx, JS_E_PRECISION_OUT_OF_RANGE, NULL);
     }
 
     val = number->value;
     if(isinf(val) || isnan(val) || !prec) {
-        VARIANT v;
-
-        num_set_val(&v, val);
-        hres = to_string(ctx, &v, ei, &str);
+        hres = to_string(ctx, jsval_number(val), &str);
         if(FAILED(hres))
             return hres;
     }else {
@@ -481,40 +463,38 @@ static HRESULT Number_toPrecision(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
             number_to_fixed(val, prec-size, &str);
     }
 
-    if(retv) {
-        V_VT(retv) = VT_BSTR;
-        V_BSTR(retv) = str;
-    }else {
+    if(r)
+        *r = jsval_string(str);
+    else
         SysFreeString(str);
-    }
     return S_OK;
 }
 
-static HRESULT Number_valueOf(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Number_valueOf(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     NumberInstance *number;
 
     TRACE("\n");
 
     if(!(number = number_this(jsthis)))
-        return throw_type_error(ctx, ei, JS_E_NUMBER_EXPECTED, NULL);
+        return throw_type_error(ctx, JS_E_NUMBER_EXPECTED, NULL);
 
-    if(retv)
-        num_set_val(retv, number->value);
+    if(r)
+        *r = jsval_number(number->value);
     return S_OK;
 }
 
-static HRESULT Number_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT Number_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     NumberInstance *number = number_from_vdisp(jsthis);
 
     switch(flags) {
     case INVOKE_FUNC:
-        return throw_type_error(ctx, ei, JS_E_FUNCTION_EXPECTED, NULL);
+        return throw_type_error(ctx, JS_E_FUNCTION_EXPECTED, NULL);
     case DISPATCH_PROPERTYGET:
-        num_set_val(retv, number->value);
+        *r = jsval_number(number->value);
         break;
 
     default:
@@ -551,8 +531,8 @@ static const builtin_info_t NumberInst_info = {
     NULL
 };
 
-static HRESULT NumberConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, VARIANT *argv,
-        VARIANT *retv, jsexcept_t *ei)
+static HRESULT NumberConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
     double n;
     HRESULT hres;
@@ -562,24 +542,24 @@ static HRESULT NumberConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
     switch(flags) {
     case INVOKE_FUNC:
         if(!argc) {
-            if(retv)
-                num_set_int(retv, 0);
+            if(r)
+                *r = jsval_number(0);
             return S_OK;
         }
 
-        hres = to_number(ctx, argv, ei, &n);
+        hres = to_number(ctx, argv[0], &n);
         if(FAILED(hres))
             return hres;
 
-        if(retv)
-            num_set_val(retv, n);
+        if(r)
+            *r = jsval_number(n);
         break;
 
     case DISPATCH_CONSTRUCT: {
         jsdisp_t *obj;
 
         if(argc) {
-            hres = to_number(ctx, argv, ei, &n);
+            hres = to_number(ctx, argv[0], &n);
             if(FAILED(hres))
                 return hres;
         }else {
@@ -590,7 +570,7 @@ static HRESULT NumberConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
         if(FAILED(hres))
             return hres;
 
-        var_set_jsdisp(retv, obj);
+        *r = jsval_obj(obj);
         break;
     }
     default:

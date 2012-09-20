@@ -74,6 +74,7 @@ static ULONG WINAPI IDirectMusic8Impl_Release(LPDIRECTMUSIC8 iface)
     TRACE("(%p)->(): new ref = %u\n", This, ref);
 
     if (!ref) {
+        HeapFree(GetProcessHeap(), 0, This->system_ports);
         HeapFree(GetProcessHeap(), 0, This->ppPorts);
         HeapFree(GetProcessHeap(), 0, This);
     }
@@ -87,155 +88,91 @@ static ULONG WINAPI IDirectMusic8Impl_Release(LPDIRECTMUSIC8 iface)
 static HRESULT WINAPI IDirectMusic8Impl_EnumPort(LPDIRECTMUSIC8 iface, DWORD index, LPDMUS_PORTCAPS port_caps)
 {
     IDirectMusic8Impl *This = impl_from_IDirectMusic8(iface);
-    ULONG nb_midi_out;
-    ULONG nb_midi_in;
-    const WCHAR emulated[] = {' ','[','E','m','u','l','a','t','e','d',']',0};
 
     TRACE("(%p, %d, %p)\n", This, index, port_caps);
 
     if (!port_caps)
         return E_POINTER;
 
-    /* NOTE: It seems some native versions get the rest of devices through dmusic32.EnumLegacyDevices...*sigh*...which is undocumented */
+    if (index >= This->nb_system_ports)
+        return S_FALSE;
 
-    /* NOTE: Should we enum wave devices ? Native does not seem to */
+    *port_caps = This->system_ports[index].caps;
 
-    /* Fill common port caps for winmm ports */
-    port_caps->dwType = DMUS_PORT_WINMM_DRIVER;
-    port_caps->dwMemorySize = 0;
-    port_caps->dwMaxChannelGroups = 1;
-    port_caps->dwMaxVoices = 0;
-    port_caps->dwMaxAudioChannels = 0;
-    port_caps->dwEffectFlags = DMUS_EFFECT_NONE;
-    /* Fake port GUID */
-    port_caps->guidPort = IID_IUnknown;
-    port_caps->guidPort.Data1 = index + 1;
-
-    nb_midi_out = midiOutGetNumDevs();
-
-    if (index == 0)
-    {
-        MIDIOUTCAPSW caps;
-        midiOutGetDevCapsW(MIDI_MAPPER, &caps, sizeof(caps));
-        strcpyW(port_caps->wszDescription, caps.szPname);
-        strcatW(port_caps->wszDescription, emulated);
-        port_caps->dwFlags = DMUS_PC_SHAREABLE;
-        port_caps->dwClass = DMUS_PC_OUTPUTCLASS;
-        TRACE("Enumerating port: %s\n", debugstr_w(port_caps->wszDescription));
-        return S_OK;
-    }
-
-    if (index < (nb_midi_out + 1))
-    {
-        MIDIOUTCAPSW caps;
-        midiOutGetDevCapsW(index - 1, &caps, sizeof(caps));
-        strcpyW(port_caps->wszDescription, caps.szPname);
-        strcatW(port_caps->wszDescription, emulated);
-        port_caps->dwFlags = DMUS_PC_SHAREABLE | DMUS_PC_EXTERNAL;
-        port_caps->dwClass = DMUS_PC_OUTPUTCLASS;
-        TRACE("Enumerating port: %s\n", debugstr_w(port_caps->wszDescription));
-        return S_OK;
-    }
-
-    nb_midi_in = midiInGetNumDevs();
-
-    if (index < (nb_midi_in + nb_midi_out + 1))
-    {
-        MIDIINCAPSW caps;
-        midiInGetDevCapsW(index - nb_midi_out - 1, &caps, sizeof(caps));
-        strcpyW(port_caps->wszDescription, caps.szPname);
-        strcatW(port_caps->wszDescription, emulated);
-        port_caps->dwFlags = DMUS_PC_EXTERNAL;
-        port_caps->dwClass = DMUS_PC_INPUTCLASS;
-        TRACE("Enumerating port: %s\n", debugstr_w(port_caps->wszDescription));
-        return S_OK;
-    }
-
-    if (index == (nb_midi_in + nb_midi_out + 1))
-    {
-        IDirectMusicSynth8* synth = NULL;
-        HRESULT hr;
-        hr = CoCreateInstance(&CLSID_DirectMusicSynth, NULL, CLSCTX_INPROC_SERVER, &IID_IDirectMusicSynth8, (void**)&synth);
-        if (SUCCEEDED(hr))
-            hr = IDirectMusicSynth8_GetPortCaps(synth, port_caps);
-        if (SUCCEEDED(hr))
-            TRACE("Enumerating port: %s\n", debugstr_w(port_caps->wszDescription));
-        if (synth)
-            IDirectMusicSynth8_Release(synth);
-        return hr;
-    }
-
-    return S_FALSE;
+    return S_OK;
 }
 
-static HRESULT WINAPI IDirectMusic8Impl_CreateMusicBuffer(LPDIRECTMUSIC8 iface, LPDMUS_BUFFERDESC pBufferDesc, LPDIRECTMUSICBUFFER* ppBuffer, LPUNKNOWN pUnkOuter)
+static HRESULT WINAPI IDirectMusic8Impl_CreateMusicBuffer(LPDIRECTMUSIC8 iface, LPDMUS_BUFFERDESC buffer_desc, LPDIRECTMUSICBUFFER* buffer, LPUNKNOWN unkouter)
 {
-	IDirectMusic8Impl *This = impl_from_IDirectMusic8(iface);
+    IDirectMusic8Impl *This = impl_from_IDirectMusic8(iface);
 
-	TRACE("(%p, %p, %p, %p)\n", This, pBufferDesc, ppBuffer, pUnkOuter);
+    TRACE("(%p)->(%p, %p, %p)\n", This, buffer_desc, buffer, unkouter);
 
-	if (pUnkOuter)
-		return CLASS_E_NOAGGREGATION;
+    if (unkouter)
+        return CLASS_E_NOAGGREGATION;
 
-	if (!pBufferDesc || !ppBuffer)
-		return E_POINTER;
+    if (!buffer_desc || !buffer)
+        return E_POINTER;
 
-	return DMUSIC_CreateDirectMusicBufferImpl(pBufferDesc, (LPVOID)ppBuffer);
+    return DMUSIC_CreateDirectMusicBufferImpl(buffer_desc, (LPVOID)buffer);
 }
 
-static HRESULT WINAPI IDirectMusic8Impl_CreatePort(LPDIRECTMUSIC8 iface, REFCLSID rclsidPort, LPDMUS_PORTPARAMS pPortParams, LPDIRECTMUSICPORT* ppPort, LPUNKNOWN pUnkOuter)
+static HRESULT WINAPI IDirectMusic8Impl_CreatePort(LPDIRECTMUSIC8 iface, REFCLSID rclsid_port, LPDMUS_PORTPARAMS port_params, LPDIRECTMUSICPORT* port, LPUNKNOWN unkouter)
 {
-	IDirectMusic8Impl *This = impl_from_IDirectMusic8(iface);
-	int i;
-	DMUS_PORTCAPS PortCaps;
-	IDirectMusicPort* pNewPort = NULL;
-	HRESULT hr;
-	GUID default_port;
-	const GUID *request_port = rclsidPort;
+    IDirectMusic8Impl *This = impl_from_IDirectMusic8(iface);
+    int i;
+    DMUS_PORTCAPS port_caps;
+    IDirectMusicPort* new_port = NULL;
+    HRESULT hr;
+    GUID default_port;
+    const GUID *request_port = rclsid_port;
 
-	TRACE("(%p, %s, %p, %p, %p)\n", This, debugstr_dmguid(rclsidPort), pPortParams, ppPort, pUnkOuter);
+    TRACE("(%p)->(%s, %p, %p, %p)\n", This, debugstr_dmguid(rclsid_port), port_params, port, unkouter);
 
-	if (TRACE_ON(dmusic))
-		dump_DMUS_PORTPARAMS(pPortParams);
+    if (TRACE_ON(dmusic))
+        dump_DMUS_PORTPARAMS(port_params);
 
-	if (!rclsidPort)
-		return E_POINTER;
-	if (!pPortParams)
-		return E_INVALIDARG;
-	if (!ppPort)
-		return E_POINTER;
-	if (pUnkOuter)
-		return CLASS_E_NOAGGREGATION;
+    if (!rclsid_port)
+        return E_POINTER;
+    if (!port_params)
+        return E_INVALIDARG;
+    if (!port)
+        return E_POINTER;
+    if (unkouter)
+        return CLASS_E_NOAGGREGATION;
 
-	if (TRACE_ON(dmusic))
-		dump_DMUS_PORTPARAMS(pPortParams);
+    if (TRACE_ON(dmusic))
+        dump_DMUS_PORTPARAMS(port_params);
 
-	ZeroMemory(&PortCaps, sizeof(DMUS_PORTCAPS));
-	PortCaps.dwSize = sizeof(DMUS_PORTCAPS);
+    ZeroMemory(&port_caps, sizeof(DMUS_PORTCAPS));
+    port_caps.dwSize = sizeof(DMUS_PORTCAPS);
 
-	if(IsEqualGUID(request_port, &GUID_NULL)){
-		hr = IDirectMusic8_GetDefaultPort(iface, &default_port);
-		if(FAILED(hr))
-			return hr;
-		request_port = &default_port;
-	}
+    if (IsEqualGUID(request_port, &GUID_NULL)) {
+        hr = IDirectMusic8_GetDefaultPort(iface, &default_port);
+        if(FAILED(hr))
+            return hr;
+        request_port = &default_port;
+    }
 
-	for (i = 0; S_FALSE != IDirectMusic8Impl_EnumPort(iface, i, &PortCaps); i++) {
-		if (IsEqualCLSID (request_port, &PortCaps.guidPort)) {
-			hr = DMUSIC_CreateDirectMusicPortImpl(&IID_IDirectMusicPort, (LPVOID*) &pNewPort, (LPUNKNOWN) This, pPortParams, &PortCaps);
-			if (FAILED(hr)) {
-			  *ppPort = NULL;
-			  return hr;
-			}
-			This->nrofports++;
-			if (!This->ppPorts) This->ppPorts = HeapAlloc(GetProcessHeap(), 0, sizeof(LPDIRECTMUSICPORT) * This->nrofports);
-			else This->ppPorts = HeapReAlloc(GetProcessHeap(), 0, This->ppPorts, sizeof(LPDIRECTMUSICPORT) * This->nrofports);
-			This->ppPorts[This->nrofports - 1] = pNewPort;
-			*ppPort = pNewPort;
-			return S_OK;
-		}
-	}
-	return E_NOINTERFACE;
+    for (i = 0; S_FALSE != IDirectMusic8Impl_EnumPort(iface, i, &port_caps); i++) {
+        if (IsEqualCLSID(request_port, &port_caps.guidPort)) {
+            hr = This->system_ports[i].create(&IID_IDirectMusicPort, (LPVOID*)&new_port, (LPUNKNOWN)This, port_params, &port_caps, This->system_ports[i].device);
+            if (FAILED(hr)) {
+                 *port = NULL;
+                 return hr;
+            }
+            This->nrofports++;
+            if (!This->ppPorts)
+                This->ppPorts = HeapAlloc(GetProcessHeap(), 0, sizeof(LPDIRECTMUSICPORT) * This->nrofports);
+            else
+                This->ppPorts = HeapReAlloc(GetProcessHeap(), 0, This->ppPorts, sizeof(LPDIRECTMUSICPORT) * This->nrofports);
+            This->ppPorts[This->nrofports - 1] = new_port;
+            *port = new_port;
+            return S_OK;
+        }
+    }
+
+    return E_NOINTERFACE;
 }
 
 static HRESULT WINAPI IDirectMusic8Impl_EnumMasterClock(LPDIRECTMUSIC8 iface, DWORD index, LPDMUS_CLOCKINFO clock_info)
@@ -270,17 +207,18 @@ static HRESULT WINAPI IDirectMusic8Impl_EnumMasterClock(LPDIRECTMUSIC8 iface, DW
     return S_OK;
 }
 
-static HRESULT WINAPI IDirectMusic8Impl_GetMasterClock(LPDIRECTMUSIC8 iface, LPGUID pguidClock, IReferenceClock** ppReferenceClock)
+static HRESULT WINAPI IDirectMusic8Impl_GetMasterClock(LPDIRECTMUSIC8 iface, LPGUID guid_clock, IReferenceClock** reference_clock)
 {
-	IDirectMusic8Impl *This = impl_from_IDirectMusic8(iface);
+    IDirectMusic8Impl *This = impl_from_IDirectMusic8(iface);
 
-	TRACE("(%p, %p, %p)\n", This, pguidClock, ppReferenceClock);
-	if (pguidClock)
-		*pguidClock = This->pMasterClock->pClockInfo.guidClock;
-	if(ppReferenceClock)
-		*ppReferenceClock = (IReferenceClock *)This->pMasterClock;
+    TRACE("(%p)->(%p, %p)\n", This, guid_clock, reference_clock);
 
-	return S_OK;
+    if (guid_clock)
+        *guid_clock = This->pMasterClock->pClockInfo.guidClock;
+    if (reference_clock)
+        *reference_clock = (IReferenceClock*)This->pMasterClock;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI IDirectMusic8Impl_SetMasterClock(LPDIRECTMUSIC8 iface, REFGUID rguidClock)
@@ -354,20 +292,115 @@ static HRESULT WINAPI IDirectMusic8Impl_SetExternalMasterClock(LPDIRECTMUSIC8 if
 }
 
 static const IDirectMusic8Vtbl DirectMusic8_Vtbl = {
-	IDirectMusic8Impl_QueryInterface,
-	IDirectMusic8Impl_AddRef,
-	IDirectMusic8Impl_Release,
-	IDirectMusic8Impl_EnumPort,
-	IDirectMusic8Impl_CreateMusicBuffer,
-	IDirectMusic8Impl_CreatePort,
-	IDirectMusic8Impl_EnumMasterClock,
-	IDirectMusic8Impl_GetMasterClock,
-	IDirectMusic8Impl_SetMasterClock,
-	IDirectMusic8Impl_Activate,
-	IDirectMusic8Impl_GetDefaultPort,
-	IDirectMusic8Impl_SetDirectSound,
-	IDirectMusic8Impl_SetExternalMasterClock
+    IDirectMusic8Impl_QueryInterface,
+    IDirectMusic8Impl_AddRef,
+    IDirectMusic8Impl_Release,
+    IDirectMusic8Impl_EnumPort,
+    IDirectMusic8Impl_CreateMusicBuffer,
+    IDirectMusic8Impl_CreatePort,
+    IDirectMusic8Impl_EnumMasterClock,
+    IDirectMusic8Impl_GetMasterClock,
+    IDirectMusic8Impl_SetMasterClock,
+    IDirectMusic8Impl_Activate,
+    IDirectMusic8Impl_GetDefaultPort,
+    IDirectMusic8Impl_SetDirectSound,
+    IDirectMusic8Impl_SetExternalMasterClock
 };
+
+static void create_system_ports_list(IDirectMusic8Impl* object)
+{
+    port_info * port;
+    const WCHAR emulated[] = {' ','[','E','m','u','l','a','t','e','d',']',0};
+    ULONG nb_ports;
+    ULONG nb_midi_out;
+    ULONG nb_midi_in;
+    MIDIOUTCAPSW caps_out;
+    MIDIINCAPSW caps_in;
+    IDirectMusicSynth8* synth;
+    HRESULT hr;
+    int i;
+
+    TRACE("(%p)\n", object);
+
+    /* NOTE:
+       - it seems some native versions get the rest of devices through dmusic32.EnumLegacyDevices...*sigh*...which is undocumented
+       - should we enum wave devices ? Native does not seem to
+    */
+
+    nb_midi_out = midiOutGetNumDevs();
+    nb_midi_in = midiInGetNumDevs();
+    nb_ports = 1 /* midi mapper */ + nb_midi_out + nb_midi_in + 1 /* synth port */;
+
+    port = object->system_ports = HeapAlloc(GetProcessHeap(), 0, nb_ports * sizeof(port_info));
+    if (!object->system_ports)
+        return;
+
+    /* Fill common port caps for all winmm ports */
+    for (i = 0; i < (nb_ports - 1 /* synth port*/); i++)
+    {
+        object->system_ports[i].caps.dwSize = sizeof(DMUS_PORTCAPS);
+        object->system_ports[i].caps.dwType = DMUS_PORT_WINMM_DRIVER;
+        object->system_ports[i].caps.dwMemorySize = 0;
+        object->system_ports[i].caps.dwMaxChannelGroups = 1;
+        object->system_ports[i].caps.dwMaxVoices = 0;
+        object->system_ports[i].caps.dwMaxAudioChannels = 0;
+        object->system_ports[i].caps.dwEffectFlags = DMUS_EFFECT_NONE;
+        /* Fake port GUID */
+        object->system_ports[i].caps.guidPort = IID_IUnknown;
+        object->system_ports[i].caps.guidPort.Data1 = i + 1;
+    }
+
+    /* Fill midi mapper port info */
+    port->device = MIDI_MAPPER;
+    port->create = DMUSIC_CreateMidiOutPortImpl;
+    midiOutGetDevCapsW(MIDI_MAPPER, &caps_out, sizeof(caps_out));
+    strcpyW(port->caps.wszDescription, caps_out.szPname);
+    strcatW(port->caps.wszDescription, emulated);
+    port->caps.dwFlags = DMUS_PC_SHAREABLE;
+    port->caps.dwClass = DMUS_PC_OUTPUTCLASS;
+    port++;
+
+    /* Fill midi out port info */
+    for (i = 0; i < nb_midi_out; i++)
+    {
+        port->device = i;
+        port->create = DMUSIC_CreateMidiOutPortImpl;
+        midiOutGetDevCapsW(i, &caps_out, sizeof(caps_out));
+        strcpyW(port->caps.wszDescription, caps_in.szPname);
+        strcatW(port->caps.wszDescription, emulated);
+        port->caps.dwFlags = DMUS_PC_SHAREABLE | DMUS_PC_EXTERNAL;
+        port->caps.dwClass = DMUS_PC_OUTPUTCLASS;
+        port++;
+    }
+
+    /* Fill midi in port info */
+    for (i = 0; i < nb_midi_in; i++)
+    {
+        port->device = i;
+        port->create = DMUSIC_CreateMidiInPortImpl;
+        midiInGetDevCapsW(i, &caps_in, sizeof(caps_in));
+        strcpyW(port->caps.wszDescription, caps_in.szPname);
+        strcatW(port->caps.wszDescription, emulated);
+        port->caps.dwFlags = DMUS_PC_EXTERNAL;
+        port->caps.dwClass = DMUS_PC_INPUTCLASS;
+        port++;
+    }
+
+    /* Fill synth port info */
+    port->create = DMUSIC_CreateSynthPortImpl;
+    hr = CoCreateInstance(&CLSID_DirectMusicSynth, NULL, CLSCTX_INPROC_SERVER, &IID_IDirectMusicSynth8, (void**)&synth);
+    if (SUCCEEDED(hr))
+    {
+        hr = IDirectMusicSynth8_GetPortCaps(synth, &port->caps);
+        IDirectMusicSynth8_Release(synth);
+    }
+    else
+    {
+        nb_ports--;
+    }
+
+    object->nb_system_ports = nb_ports;
+}
 
 /* For ClassFactory */
 HRESULT WINAPI DMUSIC_CreateDirectMusicImpl(LPCGUID riid, LPVOID* ret_iface, LPUNKNOWN unkouter)
@@ -400,6 +433,8 @@ HRESULT WINAPI DMUSIC_CreateDirectMusicImpl(LPCGUID riid, LPVOID* ret_iface, LPU
         HeapFree(GetProcessHeap(), 0, dmusic);
         return ret;
     }
+
+    create_system_ports_list(dmusic);
 
     return S_OK;
 }

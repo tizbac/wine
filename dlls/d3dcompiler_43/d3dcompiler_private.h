@@ -706,6 +706,8 @@ enum hlsl_ir_node_type
     HLSL_IR_DEREF,
     HLSL_IR_EXPR,
     HLSL_IR_FUNCTION_DECL,
+    HLSL_IR_JUMP,
+    HLSL_IR_SWIZZLE,
 };
 
 struct hlsl_ir_node
@@ -730,6 +732,8 @@ struct hlsl_ir_node
 #define HLSL_MODIFIER_COLUMN_MAJOR   0x00000400
 #define HLSL_MODIFIER_IN             0x00000800
 #define HLSL_MODIFIER_OUT            0x00001000
+
+#define HLSL_MODIFIERS_COMPARISON_MASK (HLSL_MODIFIER_ROW_MAJOR | HLSL_MODIFIER_COLUMN_MAJOR)
 
 struct hlsl_ir_var
 {
@@ -832,6 +836,28 @@ struct hlsl_ir_expr
     enum hlsl_ir_expr_op op;
     struct hlsl_ir_node *operands[3];
     struct list *subexpressions;
+};
+
+enum hlsl_ir_jump_type
+{
+    HLSL_IR_JUMP_BREAK,
+    HLSL_IR_JUMP_CONTINUE,
+    HLSL_IR_JUMP_DISCARD,
+    HLSL_IR_JUMP_RETURN,
+};
+
+struct hlsl_ir_jump
+{
+    struct hlsl_ir_node node;
+    enum hlsl_ir_jump_type type;
+    struct hlsl_ir_node *return_value;
+};
+
+struct hlsl_ir_swizzle
+{
+    struct hlsl_ir_node node;
+    struct hlsl_ir_node *val;
+    DWORD swizzle;
 };
 
 enum hlsl_ir_deref_type
@@ -993,10 +1019,22 @@ static inline struct hlsl_ir_constant *constant_from_node(const struct hlsl_ir_n
     return CONTAINING_RECORD(node, struct hlsl_ir_constant, node);
 }
 
+static inline struct hlsl_ir_jump *jump_from_node(const struct hlsl_ir_node *node)
+{
+    assert(node->type == HLSL_IR_JUMP);
+    return CONTAINING_RECORD(node, struct hlsl_ir_jump, node);
+}
+
 static inline struct hlsl_ir_assignment *assignment_from_node(const struct hlsl_ir_node *node)
 {
     assert(node->type == HLSL_IR_ASSIGNMENT);
     return CONTAINING_RECORD(node, struct hlsl_ir_assignment, node);
+}
+
+static inline struct hlsl_ir_swizzle *swizzle_from_node(const struct hlsl_ir_node *node)
+{
+    assert(node->type == HLSL_IR_SWIZZLE);
+    return CONTAINING_RECORD(node, struct hlsl_ir_swizzle, node);
 }
 
 static inline struct hlsl_ir_constructor *constructor_from_node(const struct hlsl_ir_node *node)
@@ -1013,6 +1051,7 @@ BOOL add_func_parameter(struct list *list, struct parse_parameter *param,
 struct hlsl_type *new_hlsl_type(const char *name, enum hlsl_type_class type_class,
         enum hlsl_base_type base_type, unsigned dimx, unsigned dimy) DECLSPEC_HIDDEN;
 struct hlsl_type *new_array_type(struct hlsl_type *basic_type, unsigned int array_size) DECLSPEC_HIDDEN;
+struct hlsl_type *clone_hlsl_type(struct hlsl_type *old) DECLSPEC_HIDDEN;
 struct hlsl_type *get_type(struct hlsl_scope *scope, const char *name, BOOL recursive) DECLSPEC_HIDDEN;
 BOOL find_function(const char *name) DECLSPEC_HIDDEN;
 unsigned int components_count_type(struct hlsl_type *type) DECLSPEC_HIDDEN;

@@ -358,12 +358,14 @@ static void test_urlcacheA(void)
 
     ret = CreateUrlCacheEntry(TEST_URL, 0, "html", filenameA1, 0);
     ok(ret, "CreateUrlCacheEntry failed with error %d\n", GetLastError());
+    check_file_exists(filenameA1);
+    DeleteFileA(filenameA1);
 
     ok(lstrcmpiA(filenameA, filenameA1), "expected a different file name\n");
 
     create_and_write_file(filenameA, &zero_byte, sizeof(zero_byte));
 
-    ret = CommitUrlCacheEntry(TEST_URL1, NULL, filetime_zero, filetime_zero, NORMAL_CACHE_ENTRY|URLHISTORY_CACHE_ENTRY, NULL, 0, "html", NULL);
+    ret = CommitUrlCacheEntry(TEST_URL1, NULL, filetime_zero, filetime_zero, NORMAL_CACHE_ENTRY, NULL, 0, "html", NULL);
     ok(ret, "CommitUrlCacheEntry failed with error %d\n", GetLastError());
     cbCacheEntryInfo = 0;
     ret = GetUrlCacheEntryInfo(TEST_URL1, NULL, &cbCacheEntryInfo);
@@ -401,10 +403,8 @@ static void test_urlcacheA(void)
     ret = GetUrlCacheEntryInfo(TEST_URL1, lpCacheEntryInfo2, &cbCacheEntryInfo);
     ok(ret, "GetUrlCacheEntryInfo failed with error %d\n", GetLastError());
     /* but it does change the time.. */
-    todo_wine
     ok(memcmp(&lpCacheEntryInfo2->ExpireTime, &filetime_zero, sizeof(FILETIME)),
        "expected positive ExpireTime\n");
-    todo_wine
     ok(memcmp(&lpCacheEntryInfo2->LastModifiedTime, &filetime_zero, sizeof(FILETIME)),
        "expected positive LastModifiedTime\n");
     ok(lpCacheEntryInfo2->CacheEntryType == (NORMAL_CACHE_ENTRY|URLHISTORY_CACHE_ENTRY) ||
@@ -412,21 +412,17 @@ static void test_urlcacheA(void)
        "expected type NORMAL_CACHE_ENTRY|URLHISTORY_CACHE_ENTRY, got %08x\n",
        lpCacheEntryInfo2->CacheEntryType);
     /* and set the headers. */
-    todo_wine
     ok(lpCacheEntryInfo2->dwHeaderInfoSize == 19,
         "expected headers size 19, got %d\n",
         lpCacheEntryInfo2->dwHeaderInfoSize);
     /* Hit rate gets incremented by 1 */
-    todo_wine
     ok((lpCacheEntryInfo->dwHitRate + 1) == lpCacheEntryInfo2->dwHitRate,
         "HitRate not incremented by one on commit\n");
     /* Last access time should be updated */
-    todo_wine
     ok(!(lpCacheEntryInfo->LastAccessTime.dwHighDateTime == lpCacheEntryInfo2->LastAccessTime.dwHighDateTime &&
         lpCacheEntryInfo->LastAccessTime.dwLowDateTime == lpCacheEntryInfo2->LastAccessTime.dwLowDateTime),
         "Last accessed time was not updated by commit\n");
     /* File extension should be unset */
-    todo_wine
     ok(lpCacheEntryInfo2->lpszFileExtension == NULL,
         "Fileextension isn't unset: %s\n",
         lpCacheEntryInfo2->lpszFileExtension);
@@ -481,7 +477,6 @@ static void test_urlcacheA(void)
 
     SetLastError(0xdeadbeef);
     ret = DeleteFile(filenameA);
-    todo_wine
     ok(!ret && GetLastError() == ERROR_FILE_NOT_FOUND, "local file should no longer exist\n");
 
     /* Creating two entries with the same URL */
@@ -524,12 +519,10 @@ static void test_urlcacheA(void)
        "expected cache entry type NORMAL_CACHE_ENTRY, got %d (0x%08x)\n",
        lpCacheEntryInfo->CacheEntryType, lpCacheEntryInfo->CacheEntryType);
     /* and the headers overwritten.. */
-    todo_wine
     ok(!lpCacheEntryInfo->dwHeaderInfoSize, "expected headers size 0, got %d\n",
        lpCacheEntryInfo->dwHeaderInfoSize);
     HeapFree(GetProcessHeap(), 0, lpCacheEntryInfo);
     /* and the previous filename shouldn't exist. */
-    todo_wine
     check_file_not_exists(filenameA);
     check_file_exists(filenameA1);
 
@@ -537,9 +530,7 @@ static void test_urlcacheA(void)
     {
         ret = pDeleteUrlCacheEntryA(TEST_URL);
         ok(ret, "DeleteUrlCacheEntryA failed with error %d\n", GetLastError());
-        todo_wine
         check_file_not_exists(filenameA);
-        todo_wine
         check_file_not_exists(filenameA1);
         /* Just in case, clean up files */
         DeleteFileA(filenameA1);
@@ -582,8 +573,8 @@ static void test_urlcacheA(void)
     memset(lpCacheEntryInfo, 0, cbCacheEntryInfo);
     ret = GetUrlCacheEntryInfo(TEST_URL, lpCacheEntryInfo, &cbCacheEntryInfo);
     ok(ret, "GetUrlCacheEntryInfo failed with error %d\n", GetLastError());
-    ok(lpCacheEntryInfo->CacheEntryType & DELETED_CACHE_ENTRY,
-        "CacheEntryType hasn't DELETED_CACHE_ENTRY set, (flags %08x)\n",
+    ok(lpCacheEntryInfo->CacheEntryType & 0x400000,
+        "CacheEntryType hasn't PENDING_DELETE_CACHE_ENTRY set, (flags %08x)\n",
         lpCacheEntryInfo->CacheEntryType);
     HeapFree(GetProcessHeap(), 0, lpCacheEntryInfo);
 
@@ -595,7 +586,6 @@ static void test_urlcacheA(void)
         /* By unlocking the already-deleted cache entry, the file associated
          * with it is deleted..
          */
-        todo_wine
         check_file_not_exists(filenameA);
         /* (just in case, delete file) */
         DeleteFileA(filenameA);
@@ -692,7 +682,6 @@ static void test_urlcacheA(void)
         ret = pDeleteUrlCacheEntryA(TEST_URL);
         ok(ret, "DeleteUrlCacheEntryA failed with error %d\n", GetLastError());
         /* When explicitly deleting the cache entry, the file is also deleted */
-        todo_wine
         check_file_not_exists(filenameA);
     }
     /* Test once again, setting the exempt delta via SetUrlCacheEntryInfo */
@@ -760,7 +749,6 @@ static void test_urlcacheA(void)
     {
         ret = pDeleteUrlCacheEntryA(TEST_URL);
         ok(ret, "DeleteUrlCacheEntryA failed with error %d\n", GetLastError());
-        todo_wine
         check_file_not_exists(filenameA);
     }
 }

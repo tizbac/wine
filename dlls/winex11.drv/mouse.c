@@ -488,15 +488,18 @@ BOOL clip_fullscreen_window( HWND hwnd, BOOL reset )
     struct x11drv_thread_data *thread_data;
     RECT rect;
     DWORD style;
+    BOOL fullscreen;
 
     if (hwnd == GetDesktopWindow()) return FALSE;
-    if (!(data = X11DRV_get_win_data( hwnd ))) return FALSE;
     style = GetWindowLongW( hwnd, GWL_STYLE );
     if (!(style & WS_VISIBLE)) return FALSE;
     if ((style & (WS_POPUP | WS_CHILD)) == WS_CHILD) return FALSE;
     /* maximized windows don't count as full screen */
     if ((style & WS_MAXIMIZE) && (style & WS_CAPTION) == WS_CAPTION) return FALSE;
-    if (!is_window_rect_fullscreen( &data->whole_rect )) return FALSE;
+    if (!(data = get_win_data( hwnd ))) return FALSE;
+    fullscreen = is_window_rect_fullscreen( &data->whole_rect );
+    release_win_data( data );
+    if (!fullscreen) return FALSE;
     if (!(thread_data = x11drv_thread_data())) return FALSE;
     if (GetTickCount() - thread_data->clip_reset < 1000) return FALSE;
     if (!reset && clipping_cursor && thread_data->clip_hwnd) return FALSE;  /* already clipping */
@@ -541,7 +544,7 @@ static void send_mouse_input( HWND hwnd, Window window, unsigned int state, INPU
         return;
     }
 
-    if (!(data = X11DRV_get_win_data( hwnd ))) return;
+    if (!(data = get_win_data( hwnd ))) return;
 
     if (window == data->whole_window)
     {
@@ -565,6 +568,7 @@ static void send_mouse_input( HWND hwnd, Window window, unsigned int state, INPU
         sync_window_cursor( data->whole_window );
         last_cursor_change = input->u.mi.time;
     }
+    release_win_data( data );
 
     if (hwnd != GetDesktopWindow())
     {
@@ -1305,13 +1309,16 @@ BOOL CDECL X11DRV_ClipCursor( LPCRECT clip )
 /***********************************************************************
  *           move_resize_window
  */
-void move_resize_window( Display *display, struct x11drv_win_data *data, int dir )
+void move_resize_window( HWND hwnd, int dir )
 {
+    Display *display = thread_display();
     DWORD pt;
     int x, y, rootX, rootY, button = 0;
     XEvent xev;
-    Window root, child;
+    Window win, root, child;
     unsigned int xstate;
+
+    if (!(win = X11DRV_get_whole_window( hwnd ))) return;
 
     pt = GetMessagePos();
     x = (short)LOWORD( pt );
@@ -1321,11 +1328,10 @@ void move_resize_window( Display *display, struct x11drv_win_data *data, int dir
     else if (GetKeyState( VK_MBUTTON ) & 0x8000) button = 2;
     else if (GetKeyState( VK_RBUTTON ) & 0x8000) button = 3;
 
-    TRACE( "hwnd %p/%lx, x %d, y %d, dir %d, button %d\n",
-           data->hwnd, data->whole_window, x, y, dir, button );
+    TRACE( "hwnd %p/%lx, x %d, y %d, dir %d, button %d\n", hwnd, win, x, y, dir, button );
 
     xev.xclient.type = ClientMessage;
-    xev.xclient.window = data->whole_window;
+    xev.xclient.window = win;
     xev.xclient.message_type = x11drv_atom(_NET_WM_MOVERESIZE);
     xev.xclient.serial = 0;
     xev.xclient.display = display;
@@ -1363,7 +1369,7 @@ void move_resize_window( Display *display, struct x11drv_win_data *data, int dir
             input.u.mi.dwFlags     = button_up_flags[button - 1] | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
             input.u.mi.time        = GetTickCount();
             input.u.mi.dwExtraInfo = 0;
-            __wine_send_input( data->hwnd, &input );
+            __wine_send_input( hwnd, &input );
         }
 
         while (PeekMessageW( &msg, 0, 0, 0, PM_REMOVE ))
@@ -1379,7 +1385,7 @@ void move_resize_window( Display *display, struct x11drv_win_data *data, int dir
         MsgWaitForMultipleObjects( 0, NULL, FALSE, 100, QS_ALLINPUT );
     }
 
-    TRACE( "hwnd %p/%lx done\n", data->hwnd, data->whole_window );
+    TRACE( "hwnd %p/%lx done\n", hwnd, win );
 }
 
 

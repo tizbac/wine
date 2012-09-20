@@ -65,6 +65,8 @@ static const classinfo wic_classes[] = {
     {&CLSID_WICLSDMetadataReader, LSDReader_CreateInstance},
     {&CLSID_WICIMDMetadataReader, IMDReader_CreateInstance},
     {&CLSID_WICGCEMetadataReader, GCEReader_CreateInstance},
+    {&CLSID_WICAPEMetadataReader, APEReader_CreateInstance},
+    {&CLSID_WICGifCommentMetadataReader, GifCommentReader_CreateInstance},
     {0}};
 
 typedef struct {

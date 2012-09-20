@@ -85,6 +85,15 @@ static const char whole_window_prop[] = "__wine_x11_whole_window";
 static const char clip_window_prop[]  = "__wine_x11_clip_window";
 static const char managed_prop[]      = "__wine_x11_managed";
 
+static CRITICAL_SECTION win_data_section;
+static CRITICAL_SECTION_DEBUG critsect_debug =
+{
+    0, 0, &win_data_section,
+    { &critsect_debug.ProcessLocksList, &critsect_debug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": win_data_section") }
+};
+static CRITICAL_SECTION win_data_section = { &critsect_debug, -1, 0, 0, 0, 0 };
+
 
 /***********************************************************************
  * http://standards.freedesktop.org/startup-notification-spec
@@ -575,10 +584,10 @@ failed:
  *
  * Set the icon wm hints
  */
-static void set_icon_hints( Display *display, struct x11drv_win_data *data,
-                            HICON icon_big, HICON icon_small )
+static void set_icon_hints( HWND hwnd, HICON icon_big, HICON icon_small )
 {
-    XWMHints *hints = data->wm_hints;
+    Display *display = thread_display();
+    struct x11drv_win_data *data;
     ICONINFO ii, ii_small;
     HDC hDC;
     unsigned int size;
@@ -586,19 +595,22 @@ static void set_icon_hints( Display *display, struct x11drv_win_data *data,
 
     if (!icon_big)
     {
-        icon_big = (HICON)SendMessageW( data->hwnd, WM_GETICON, ICON_BIG, 0 );
-        if (!icon_big) icon_big = (HICON)GetClassLongPtrW( data->hwnd, GCLP_HICON );
+        icon_big = (HICON)SendMessageW( hwnd, WM_GETICON, ICON_BIG, 0 );
+        if (!icon_big) icon_big = (HICON)GetClassLongPtrW( hwnd, GCLP_HICON );
         if (!icon_big) icon_big = LoadIconW( 0, (LPWSTR)IDI_WINLOGO );
     }
     if (!icon_small)
     {
-        icon_small = (HICON)SendMessageW( data->hwnd, WM_GETICON, ICON_SMALL, 0 );
-        if (!icon_small) icon_small = (HICON)GetClassLongPtrW( data->hwnd, GCLP_HICONSM );
+        icon_small = (HICON)SendMessageW( hwnd, WM_GETICON, ICON_SMALL, 0 );
+        if (!icon_small) icon_small = (HICON)GetClassLongPtrW( hwnd, GCLP_HICONSM );
     }
+
+    if (!(data = X11DRV_get_win_data( hwnd ))) return;
 
     if (data->icon_pixmap) XFreePixmap( gdi_display, data->icon_pixmap );
     if (data->icon_mask) XFreePixmap( gdi_display, data->icon_mask );
     data->icon_pixmap = data->icon_mask = 0;
+    data->wm_hints->flags &= ~(IconPixmapHint | IconMaskHint);
 
     if (!GetIconInfo(icon_big, &ii)) return;
 
@@ -633,9 +645,9 @@ static void set_icon_hints( Display *display, struct x11drv_win_data *data,
 
     if (create_icon_pixmaps( hDC, &ii, data ))
     {
-        hints->icon_pixmap = data->icon_pixmap;
-        hints->icon_mask = data->icon_mask;
-        hints->flags |= IconPixmapHint | IconMaskHint;
+        data->wm_hints->icon_pixmap = data->icon_pixmap;
+        data->wm_hints->icon_mask = data->icon_mask;
+        data->wm_hints->flags |= IconPixmapHint | IconMaskHint;
     }
     DeleteObject( ii.hbmColor );
     DeleteObject( ii.hbmMask );
@@ -757,8 +769,10 @@ static char *get_process_name(void)
  *
  * Set the window manager hints that don't change over the lifetime of a window.
  */
-static void set_initial_wm_hints( Display *display, struct x11drv_win_data *data )
+static void set_initial_wm_hints( HWND hwnd )
 {
+    Display *display = thread_display();
+    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
     long i;
     Atom protocols[3];
     Atom dndVersion = WINE_XDND_VERSION;
@@ -803,7 +817,7 @@ static void set_initial_wm_hints( Display *display, struct x11drv_win_data *data
     if (data->wm_hints)
     {
         data->wm_hints->flags = 0;
-        set_icon_hints( display, data, 0, 0 );
+        set_icon_hints( hwnd, 0, 0 );
     }
 }
 
@@ -836,15 +850,17 @@ static Window get_owner_whole_window( HWND owner, BOOL force_managed )
  *
  * Set the window manager hints for a newly-created window
  */
-static void set_wm_hints( Display *display, struct x11drv_win_data *data )
+static void set_wm_hints( HWND hwnd )
 {
+    Display *display = thread_display();
+    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
     Window group_leader = data->whole_window;
     Window owner_win = 0;
     Atom window_type;
     DWORD style, ex_style;
     HWND owner;
 
-    if (data->hwnd == GetDesktopWindow())
+    if (hwnd == GetDesktopWindow())
     {
         /* force some styles for the desktop to get the correct decorations */
         style = WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
@@ -853,9 +869,9 @@ static void set_wm_hints( Display *display, struct x11drv_win_data *data )
     }
     else
     {
-        style = GetWindowLongW( data->hwnd, GWL_STYLE );
-        ex_style = GetWindowLongW( data->hwnd, GWL_EXSTYLE );
-        owner = GetWindow( data->hwnd, GW_OWNER );
+        style = GetWindowLongW( hwnd, GWL_STYLE );
+        ex_style = GetWindowLongW( hwnd, GWL_EXSTYLE );
+        owner = GetWindow( hwnd, GW_OWNER );
         if ((owner_win = get_owner_whole_window( owner, data->managed ))) group_leader = owner_win;
     }
 
@@ -1035,13 +1051,16 @@ static void set_xembed_flags( Display *display, struct x11drv_win_data *data, un
 /***********************************************************************
  *     map_window
  */
-static void map_window( Display *display, struct x11drv_win_data *data, DWORD new_style )
+static void map_window( HWND hwnd, DWORD new_style )
 {
+    Display *display = thread_display();
+    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
+
     TRACE( "win %p/%lx\n", data->hwnd, data->whole_window );
 
     remove_startup_notification( display, data->whole_window );
 
-    wait_for_withdrawn_state( display, data, TRUE );
+    wait_for_withdrawn_state( hwnd, TRUE );
 
     if (!data->embedded)
     {
@@ -1059,13 +1078,16 @@ static void map_window( Display *display, struct x11drv_win_data *data, DWORD ne
 /***********************************************************************
  *     unmap_window
  */
-static void unmap_window( Display *display, struct x11drv_win_data *data )
+static void unmap_window( HWND hwnd )
 {
+    Display *display = thread_display();
+    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
+
     TRACE( "win %p/%lx\n", data->hwnd, data->whole_window );
 
     if (!data->embedded)
     {
-        wait_for_withdrawn_state( display, data, FALSE );
+        wait_for_withdrawn_state( hwnd, FALSE );
         if (data->managed) XWithdrawWindow( display, data->whole_window, DefaultScreen(display) );
         else XUnmapWindow( display, data->whole_window );
     }
@@ -1079,19 +1101,22 @@ static void unmap_window( Display *display, struct x11drv_win_data *data )
 /***********************************************************************
  *     make_window_embedded
  */
-void make_window_embedded( Display *display, struct x11drv_win_data *data )
+void make_window_embedded( HWND hwnd )
 {
+    Display *display = thread_display();
+    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
     BOOL was_mapped = data->mapped;
+
     /* the window cannot be mapped before being embedded */
-    if (data->mapped) unmap_window( display, data );
+    if (data->mapped) unmap_window( hwnd );
 
     data->embedded = TRUE;
     data->managed = TRUE;
-    SetPropA( data->hwnd, managed_prop, (HANDLE)1 );
+    SetPropA( hwnd, managed_prop, (HANDLE)1 );
     sync_window_style( display, data );
 
     if (was_mapped)
-        map_window( display, data, 0 );
+        map_window( hwnd, 0 );
     else
         set_xembed_flags( display, data, 0 );
 }
@@ -1227,9 +1252,10 @@ static void sync_window_position( Display *display, struct x11drv_win_data *data
  *
  * Move the window bits when a window is moved.
  */
-static void move_window_bits( struct x11drv_win_data *data, const RECT *old_rect, const RECT *new_rect,
+static void move_window_bits( HWND hwnd, const RECT *old_rect, const RECT *new_rect,
                               const RECT *old_client_rect )
 {
+    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
     RECT src_rect = *old_rect;
     RECT dst_rect = *new_rect;
     HDC hdc_src, hdc_dst;
@@ -1295,8 +1321,10 @@ static void move_window_bits( struct x11drv_win_data *data, const RECT *old_rect
  *
  * Create the whole X window for a given window
  */
-static Window create_whole_window( Display *display, struct x11drv_win_data *data )
+static Window create_whole_window( HWND hwnd )
 {
+    Display *display = thread_display();
+    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
     int cx, cy, mask;
     XSetWindowAttributes attr;
     WCHAR text[1024];
@@ -1336,8 +1364,8 @@ static Window create_whole_window( Display *display, struct x11drv_win_data *dat
                                         visual, mask, &attr );
     if (!data->whole_window) goto done;
 
-    set_initial_wm_hints( display, data );
-    set_wm_hints( display, data );
+    set_initial_wm_hints( hwnd );
+    set_wm_hints( hwnd );
 
     XSaveContext( display, data->whole_window, winContext, (char *)data->hwnd );
     SetPropA( data->hwnd, whole_window_prop, (HANDLE)data->whole_window );
@@ -1441,8 +1469,7 @@ void CDECL X11DRV_SetWindowStyle( HWND hwnd, INT offset, STYLESTRUCT *style )
 
     changed = style->styleNew ^ style->styleOld;
 
-    if (offset == GWL_STYLE && (changed & WS_DISABLED))
-        set_wm_hints( thread_display(), data );
+    if (offset == GWL_STYLE && (changed & WS_DISABLED)) set_wm_hints( hwnd );
 
     if (offset == GWL_EXSTYLE && (changed & WS_EX_LAYERED)) /* changing WS_EX_LAYERED resets attributes */
     {
@@ -1460,17 +1487,17 @@ void CDECL X11DRV_DestroyWindow( HWND hwnd )
     struct x11drv_thread_data *thread_data = x11drv_thread_data();
     struct x11drv_win_data *data;
 
-    if (!(data = X11DRV_get_win_data( hwnd ))) return;
+    if (!(data = get_win_data( hwnd ))) return;
 
-    destroy_gl_drawable( hwnd );
     destroy_whole_window( thread_data->display, data, FALSE );
-
     if (thread_data->last_focus == hwnd) thread_data->last_focus = 0;
     if (thread_data->last_xic_hwnd == hwnd) thread_data->last_xic_hwnd = 0;
     if (data->icon_pixmap) XFreePixmap( gdi_display, data->icon_pixmap );
     if (data->icon_mask) XFreePixmap( gdi_display, data->icon_mask );
-    XDeleteContext( thread_data->display, (XID)hwnd, win_data_context );
+    XDeleteContext( gdi_display, (XID)hwnd, win_data_context );
+    release_win_data( data );
     HeapFree( GetProcessHeap(), 0, data );
+    destroy_gl_drawable( hwnd );
 }
 
 
@@ -1481,12 +1508,15 @@ void X11DRV_DestroyNotify( HWND hwnd, XEvent *event )
 {
     Display *display = event->xdestroywindow.display;
     struct x11drv_win_data *data;
+    BOOL embedded;
 
-    if (!(data = X11DRV_get_win_data( hwnd ))) return;
-    if (!data->embedded) FIXME( "window %p/%lx destroyed from the outside\n", hwnd, data->whole_window );
+    if (!(data = get_win_data( hwnd ))) return;
+    embedded = data->embedded;
+    if (!embedded) FIXME( "window %p/%lx destroyed from the outside\n", hwnd, data->whole_window );
 
     destroy_whole_window( display, data, TRUE );
-    if (data->embedded) SendMessageW( hwnd, WM_CLOSE, 0, 0 );
+    release_win_data( data );
+    if (embedded) SendMessageW( hwnd, WM_CLOSE, 0, 0 );
 }
 
 
@@ -1497,24 +1527,26 @@ static struct x11drv_win_data *alloc_win_data( Display *display, HWND hwnd )
     if ((data = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*data))))
     {
         data->hwnd = hwnd;
-        XSaveContext( display, (XID)hwnd, win_data_context, (char *)data );
+        EnterCriticalSection( &win_data_section );
+        XSaveContext( gdi_display, (XID)hwnd, win_data_context, (char *)data );
     }
     return data;
 }
 
 
 /* initialize the desktop window id in the desktop manager process */
-static struct x11drv_win_data *create_desktop_win_data( Display *display, HWND hwnd )
+static BOOL create_desktop_win_data( Display *display, HWND hwnd )
 {
     struct x11drv_win_data *data;
 
-    if (!(data = alloc_win_data( display, hwnd ))) return NULL;
+    if (!(data = alloc_win_data( display, hwnd ))) return FALSE;
     data->whole_window = root_window;
     data->managed = TRUE;
     SetPropA( data->hwnd, managed_prop, (HANDLE)1 );
     SetPropA( data->hwnd, whole_window_prop, (HANDLE)root_window );
-    set_initial_wm_hints( display, data );
-    return data;
+    release_win_data( data );
+    set_initial_wm_hints( hwnd );
+    return TRUE;
 }
 
 /**********************************************************************
@@ -1589,19 +1621,49 @@ BOOL CDECL X11DRV_CreateWindow( HWND hwnd )
 
 
 /***********************************************************************
+ *		get_win_data
+ *
+ * Lock and return the X11 data structure associated with a window.
+ */
+struct x11drv_win_data *get_win_data( HWND hwnd )
+{
+    char *data;
+
+    if (!hwnd) return NULL;
+    EnterCriticalSection( &win_data_section );
+    if (!XFindContext( gdi_display, (XID)hwnd, win_data_context, &data ))
+        return (struct x11drv_win_data *)data;
+    LeaveCriticalSection( &win_data_section );
+    return NULL;
+}
+
+
+/***********************************************************************
+ *		release_win_data
+ *
+ * Release the data returned by get_win_data.
+ */
+void release_win_data( struct x11drv_win_data *data )
+{
+    if (data) LeaveCriticalSection( &win_data_section );
+}
+
+
+/***********************************************************************
  *		X11DRV_get_win_data
  *
  * Return the X11 data structure associated with a window.
  */
 struct x11drv_win_data *X11DRV_get_win_data( HWND hwnd )
 {
-    struct x11drv_thread_data *thread_data = x11drv_thread_data();
-    char *data;
+    struct x11drv_win_data *data = get_win_data( hwnd );
 
-    if (!thread_data) return NULL;
-    if (!hwnd) return NULL;
-    if (XFindContext( thread_data->display, (XID)hwnd, win_data_context, &data )) data = NULL;
-    return (struct x11drv_win_data *)data;
+    if (data)
+    {
+        release_win_data( data );
+        if (GetWindowThreadProcessId( hwnd, NULL ) != GetCurrentThreadId()) data = NULL;
+    }
+    return data;
 }
 
 
@@ -1622,15 +1684,18 @@ static struct x11drv_win_data *X11DRV_create_win_data( HWND hwnd, const RECT *wi
     /* don't create win data for HWND_MESSAGE windows */
     if (parent != GetDesktopWindow() && !GetAncestor( parent, GA_PARENT )) return NULL;
 
+    if (GetWindowThreadProcessId( hwnd, NULL ) != GetCurrentThreadId()) return NULL;
+
     display = thread_init_display();
     if (!(data = alloc_win_data( display, hwnd ))) return NULL;
 
     data->whole_rect = data->window_rect = *window_rect;
     data->client_rect = *client_rect;
+    release_win_data( data );
 
     if (parent == GetDesktopWindow())
     {
-        if (!create_whole_window( display, data ))
+        if (!create_whole_window( hwnd ))
         {
             HeapFree( GetProcessHeap(), 0, data );
             return NULL;
@@ -1757,14 +1822,17 @@ HWND create_foreign_window( Display *display, Window xwin )
  */
 Window X11DRV_get_whole_window( HWND hwnd )
 {
-    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
+    struct x11drv_win_data *data = get_win_data( hwnd );
+    Window ret;
 
     if (!data)
     {
         if (hwnd == GetDesktopWindow()) return root_window;
         return (Window)GetPropA( hwnd, whole_window_prop );
     }
-    return data->whole_window;
+    ret = data->whole_window;
+    release_win_data( data );
+    return ret;
 }
 
 
@@ -1775,15 +1843,18 @@ Window X11DRV_get_whole_window( HWND hwnd )
  */
 XIC X11DRV_get_ic( HWND hwnd )
 {
-    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
+    struct x11drv_win_data *data = get_win_data( hwnd );
     XIM xim;
+    XIC ret = 0;
 
-    if (!data) return 0;
-
-    x11drv_thread_data()->last_xic_hwnd = hwnd;
-    if (data->xic) return data->xic;
-    if (!(xim = x11drv_thread_data()->xim)) return 0;
-    return X11DRV_CreateIC( xim, data );
+    if (data)
+    {
+        x11drv_thread_data()->last_xic_hwnd = hwnd;
+        ret = data->xic;
+        if (!ret && (xim = x11drv_thread_data()->xim)) ret = X11DRV_CreateIC( xim, data );
+        release_win_data( data );
+    }
+    return ret;
 }
 
 
@@ -1913,38 +1984,8 @@ void CDECL X11DRV_SetParent( HWND hwnd, HWND parent, HWND old_parent )
     else  /* new top level window */
     {
         /* FIXME: we ignore errors since we can't really recover anyway */
-        create_whole_window( display, data );
+        create_whole_window( hwnd );
     }
-}
-
-
-/*****************************************************************
- *		SetFocus   (X11DRV.@)
- *
- * Set the X focus.
- */
-void CDECL X11DRV_SetFocus( HWND hwnd )
-{
-    Display *display = thread_display();
-    struct x11drv_win_data *data;
-    XWindowChanges changes;
-    DWORD timestamp;
-
-    if (!(hwnd = GetAncestor( hwnd, GA_ROOT ))) return;
-    if (!(data = X11DRV_get_win_data( hwnd ))) return;
-    if (data->managed || !data->whole_window) return;
-
-    if (EVENT_x11_time_to_win32_time(0))
-        /* ICCCM says don't use CurrentTime, so try to use last message time if possible */
-        /* FIXME: this is not entirely correct */
-        timestamp = GetMessageTime() - EVENT_x11_time_to_win32_time(0);
-    else
-        timestamp = CurrentTime;
-
-    /* Set X focus and install colormap */
-    changes.stack_mode = Above;
-    XConfigureWindow( display, data->whole_window, CWStackMode, &changes );
-    XSetInputFocus( display, data->whole_window, RevertToParent, timestamp );
 }
 
 
@@ -1982,7 +2023,7 @@ void CDECL X11DRV_WindowPosChanging( HWND hwnd, HWND insert_after, UINT swp_flag
     if (!data->managed && data->whole_window && is_window_managed( hwnd, swp_flags, window_rect ))
     {
         TRACE( "making win %p/%lx managed\n", hwnd, data->whole_window );
-        if (data->mapped) unmap_window( thread_display(), data );
+        if (data->mapped) unmap_window( hwnd );
         data->managed = TRUE;
         SetPropA( hwnd, managed_prop, (HANDLE)1 );
     }
@@ -2075,10 +2116,10 @@ void CDECL X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, UINT swp_flags
         {
             /* if we have an X window the bits will be moved by the X server */
             if (!data->whole_window && (x_offset != 0 || y_offset != 0))
-                move_window_bits( data, &old_whole_rect, &data->whole_rect, &old_client_rect );
+                move_window_bits( hwnd, &old_whole_rect, &data->whole_rect, &old_client_rect );
         }
         else
-            move_window_bits( data, &valid_rects[1], &valid_rects[0], &old_client_rect );
+            move_window_bits( hwnd, &valid_rects[1], &valid_rects[0], &old_client_rect );
     }
 
     XFlush( gdi_display );  /* make sure painting is done before we move the window */
@@ -2102,7 +2143,7 @@ void CDECL X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, UINT swp_flags
             (!event_type &&
              !is_window_rect_mapped( rectWindow ) && is_window_rect_mapped( &old_window_rect )))
         {
-            unmap_window( display, data );
+            unmap_window( hwnd );
             if (is_window_rect_fullscreen( &old_window_rect )) reset_clipping_window();
         }
     }
@@ -2116,12 +2157,11 @@ void CDECL X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, UINT swp_flags
     if ((new_style & WS_VISIBLE) &&
         ((new_style & WS_MINIMIZE) || is_window_rect_mapped( rectWindow )))
     {
-        if (!data->mapped || (swp_flags & (SWP_FRAMECHANGED|SWP_STATECHANGED)))
-            set_wm_hints( display, data );
+        if (!data->mapped || (swp_flags & (SWP_FRAMECHANGED|SWP_STATECHANGED))) set_wm_hints( hwnd );
 
         if (!data->mapped)
         {
-            map_window( display, data, new_style );
+            map_window( hwnd, new_style );
         }
         else if ((swp_flags & SWP_STATECHANGED) && (!data->iconic != !(new_style & WS_MINIMIZE)))
         {
@@ -2206,8 +2246,8 @@ void CDECL X11DRV_SetWindowIcon( HWND hwnd, UINT type, HICON icon )
 
     if (data->wm_hints)
     {
-        if (type == ICON_BIG) set_icon_hints( display, data, icon, 0 );
-        else set_icon_hints( display, data, 0, icon );
+        if (type == ICON_BIG) set_icon_hints( hwnd, icon, 0 );
+        else set_icon_hints( hwnd, 0, icon );
         XSetWMHints( display, data->whole_window, data->wm_hints );
     }
 }
@@ -2386,6 +2426,6 @@ LRESULT CDECL X11DRV_SysCommand( HWND hwnd, WPARAM wparam, LPARAM lparam )
         return -1;
     }
 
-    move_resize_window( display, data, dir );
+    move_resize_window( hwnd, dir );
     return 0;
 }

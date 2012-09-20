@@ -290,6 +290,22 @@ while not (x and y)
 wend
 call ok((x and y), "x or y is false after while")
 
+if false then
+' empty body
+end if
+
+if false then
+    x = false
+elseif true then
+' empty body
+end if
+
+if false then
+    x = false
+else
+' empty body
+end if
+
 while false
 wend
 
@@ -328,6 +344,13 @@ do until false
     exit do
     ok false, "exit do didn't work"
 loop
+
+x = false
+do
+    if x then exit do
+    x = true
+loop
+call ok(x, "x is false after do..loop?")
 
 x = false
 y = false
