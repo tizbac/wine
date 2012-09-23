@@ -2,6 +2,7 @@
  * IDirectMusicPort Implementation
  *
  * Copyright (C) 2003-2004 Rok Mandeljc
+ * Copyright (C) 2012 Christian Costa
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -38,31 +39,33 @@ static inline SynthPortImpl *impl_from_SynthPortImpl_IDirectMusicThru(IDirectMus
 }
 
 /* SynthPortImpl IDirectMusicPort IUnknown part follows: */
-static HRESULT WINAPI SynthPortImpl_IDirectMusicPort_QueryInterface(LPDIRECTMUSICPORT iface, REFIID riid, LPVOID *ppobj)
+static HRESULT WINAPI SynthPortImpl_IDirectMusicPort_QueryInterface(LPDIRECTMUSICPORT iface, REFIID riid, LPVOID *ret_iface)
 {
-	SynthPortImpl *This = impl_from_SynthPortImpl_IDirectMusicPort(iface);
+    SynthPortImpl *This = impl_from_SynthPortImpl_IDirectMusicPort(iface);
 
-	TRACE("(%p, %s, %p)\n", This, debugstr_dmguid(riid), ppobj);
+    TRACE("(%p/%p)->(%s, %p)\n", iface, This, debugstr_dmguid(riid), ret_iface);
 
-	if (IsEqualIID (riid, &IID_IUnknown) ||
-	    IsEqualGUID(riid, &IID_IDirectMusicPort) ||
-	    IsEqualGUID(riid, &IID_IDirectMusicPort8)) {
-		*ppobj = &This->IDirectMusicPort_iface;
-		IDirectMusicPort_AddRef((LPDIRECTMUSICPORT)*ppobj);
-		return S_OK;
-	} else if (IsEqualGUID(riid, &IID_IDirectMusicPortDownload) ||
-		   IsEqualGUID(riid, &IID_IDirectMusicPortDownload8)) {
-		*ppobj = &This->IDirectMusicPortDownload_iface;
-		IDirectMusicPortDownload_AddRef((LPDIRECTMUSICPORTDOWNLOAD)*ppobj);
-		return S_OK;
-	} else if (IsEqualGUID(riid, &IID_IDirectMusicThru) ||
-		   IsEqualGUID(riid, &IID_IDirectMusicThru8)) {
-		*ppobj = &This->IDirectMusicThru_iface;
-		IDirectMusicThru_AddRef((LPDIRECTMUSICTHRU)*ppobj);
-		return S_OK;
-	}
-	WARN("(%p, %s, %p): not found\n", This, debugstr_dmguid(riid), ppobj);
-	return E_NOINTERFACE;
+    if (IsEqualIID (riid, &IID_IUnknown) ||
+        IsEqualGUID(riid, &IID_IDirectMusicPort) ||
+        IsEqualGUID(riid, &IID_IDirectMusicPort8)) {
+        *ret_iface = &This->IDirectMusicPort_iface;
+        IDirectMusicPort_AddRef((LPDIRECTMUSICPORT)*ret_iface);
+        return S_OK;
+    } else if (IsEqualGUID(riid, &IID_IDirectMusicPortDownload) ||
+               IsEqualGUID(riid, &IID_IDirectMusicPortDownload8)) {
+        *ret_iface = &This->IDirectMusicPortDownload_iface;
+        IDirectMusicPortDownload_AddRef((LPDIRECTMUSICPORTDOWNLOAD)*ret_iface);
+        return S_OK;
+    } else if (IsEqualGUID(riid, &IID_IDirectMusicThru) ||
+               IsEqualGUID(riid, &IID_IDirectMusicThru8)) {
+        *ret_iface = &This->IDirectMusicThru_iface;
+        IDirectMusicThru_AddRef((LPDIRECTMUSICTHRU)*ret_iface);
+        return S_OK;
+    }
+
+    WARN("(%p, %s, %p): not found\n", This, debugstr_dmguid(riid), ret_iface);
+
+    return E_NOINTERFACE;
 }
 
 static ULONG WINAPI SynthPortImpl_IDirectMusicPort_AddRef(LPDIRECTMUSICPORT iface)
@@ -85,7 +88,14 @@ static ULONG WINAPI SynthPortImpl_IDirectMusicPort_Release(LPDIRECTMUSICPORT ifa
     TRACE("(%p)->(): new ref = %u\n", This, ref);
 
     if (!ref)
+    {
+        IDirectMusicSynth_Activate(This->synth, FALSE);
+        IDirectMusicSynth_Close(This->synth);
+        IDirectMusicSynth_Release(This->synth);
+        IDirectMusicSynthSink_Release(This->synth_sink);
+        IReferenceClock_Release(This->pLatencyClock);
         HeapFree(GetProcessHeap(), 0, This);
+    }
 
     DMUSIC_UnlockModule();
 
@@ -96,10 +106,28 @@ static ULONG WINAPI SynthPortImpl_IDirectMusicPort_Release(LPDIRECTMUSICPORT ifa
 static HRESULT WINAPI SynthPortImpl_IDirectMusicPort_PlayBuffer(LPDIRECTMUSICPORT iface, LPDIRECTMUSICBUFFER buffer)
 {
     SynthPortImpl *This = impl_from_SynthPortImpl_IDirectMusicPort(iface);
+    HRESULT hr;
+    REFERENCE_TIME time;
+    LPBYTE data;
+    DWORD size;
 
-    FIXME("(%p/%p)->(%p): stub\n", iface, This, buffer);
+    TRACE("(%p/%p)->(%p)\n", iface, This, buffer);
 
-    return S_OK;
+    if (!buffer)
+        return E_POINTER;
+
+    hr = IDirectMusicBuffer_GetStartTime(buffer, &time);
+
+    if (SUCCEEDED(hr))
+        hr = IDirectMusicBuffer_GetRawBufferPtr(buffer, &data);
+
+    if (SUCCEEDED(hr))
+        hr = IDirectMusicBuffer_GetUsedBytes(buffer, &size);
+
+    if (SUCCEEDED(hr))
+        hr = IDirectMusicSynth_PlayBuffer(This->synth, time, data, size);
+
+    return hr;
 }
 
 static HRESULT WINAPI SynthPortImpl_IDirectMusicPort_SetReadNotificationHandle(LPDIRECTMUSICPORT iface, HANDLE event)
@@ -120,16 +148,16 @@ static HRESULT WINAPI SynthPortImpl_IDirectMusicPort_Read(LPDIRECTMUSICPORT ifac
     return S_OK;
 }
 
-static HRESULT WINAPI SynthPortImpl_IDirectMusicPort_DownloadInstrument(LPDIRECTMUSICPORT iface, IDirectMusicInstrument* pInstrument, IDirectMusicDownloadedInstrument** ppDownloadedInstrument, DMUS_NOTERANGE* pNoteRanges, DWORD dwNumNoteRanges)
+static HRESULT WINAPI SynthPortImpl_IDirectMusicPort_DownloadInstrument(LPDIRECTMUSICPORT iface, IDirectMusicInstrument* instrument, IDirectMusicDownloadedInstrument** downloaded_instrument, DMUS_NOTERANGE* note_ranges, DWORD num_note_ranges)
 {
-	SynthPortImpl *This = impl_from_SynthPortImpl_IDirectMusicPort(iface);
+    SynthPortImpl *This = impl_from_SynthPortImpl_IDirectMusicPort(iface);
 
-	FIXME("(%p, %p, %p, %p, %d): stub\n", This, pInstrument, ppDownloadedInstrument, pNoteRanges, dwNumNoteRanges);
+    FIXME("(%p/%p)->(%p, %p, %p, %d): stub\n", iface, This, instrument, downloaded_instrument, note_ranges, num_note_ranges);
 
-	if (!pInstrument || !ppDownloadedInstrument || (dwNumNoteRanges && !pNoteRanges))
-		return E_POINTER;
+    if (!instrument || !downloaded_instrument || (num_note_ranges && !note_ranges))
+        return E_POINTER;
 
-	return DMUSIC_CreateDirectMusicDownloadedInstrumentImpl(&IID_IDirectMusicDownloadedInstrument, (LPVOID*)ppDownloadedInstrument, NULL);
+    return DMUSIC_CreateDirectMusicDownloadedInstrumentImpl(&IID_IDirectMusicDownloadedInstrument, (LPVOID*)downloaded_instrument, NULL);
 }
 
 static HRESULT WINAPI SynthPortImpl_IDirectMusicPort_UnloadInstrument(LPDIRECTMUSICPORT iface, IDirectMusicDownloadedInstrument *downloaded_instrument)
@@ -306,9 +334,11 @@ static HRESULT WINAPI SynthPortImpl_IDirectMusicPort_GetFormat(LPDIRECTMUSICPORT
 }
 
 static const IDirectMusicPortVtbl SynthPortImpl_DirectMusicPort_Vtbl = {
+    /**** IDirectMusicPort IUnknown part methods ***/
     SynthPortImpl_IDirectMusicPort_QueryInterface,
     SynthPortImpl_IDirectMusicPort_AddRef,
     SynthPortImpl_IDirectMusicPort_Release,
+    /**** IDirectMusicPort methods ***/
     SynthPortImpl_IDirectMusicPort_PlayBuffer,
     SynthPortImpl_IDirectMusicPort_SetReadNotificationHandle,
     SynthPortImpl_IDirectMusicPort_Read,
@@ -415,9 +445,11 @@ static HRESULT WINAPI SynthPortImpl_IDirectMusicPortDownload_Unload(LPDIRECTMUSI
 }
 
 static const IDirectMusicPortDownloadVtbl SynthPortImpl_DirectMusicPortDownload_Vtbl = {
+    /*** IDirectMusicPortDownload IUnknown part methods ***/
     SynthPortImpl_IDirectMusicPortDownload_QueryInterface,
     SynthPortImpl_IDirectMusicPortDownload_AddRef,
     SynthPortImpl_IDirectMusicPortDownload_Release,
+    /*** IDirectMusicPortDownload methods ***/
     SynthPortImpl_IDirectMusicPortDownload_GetBuffer,
     SynthPortImpl_IDirectMusicPortDownload_AllocateBuffer,
     SynthPortImpl_IDirectMusicPortDownload_GetDLId,
@@ -466,9 +498,11 @@ static HRESULT WINAPI SynthPortImpl_IDirectMusicThru_ThruChannel(LPDIRECTMUSICTH
 }
 
 static const IDirectMusicThruVtbl SynthPortImpl_DirectMusicThru_Vtbl = {
+    /*** IDirectMusicThru IUnknown part methods */
     SynthPortImpl_IDirectMusicThru_QueryInterface,
     SynthPortImpl_IDirectMusicThru_AddRef,
     SynthPortImpl_IDirectMusicThru_Release,
+    /*** IDirectMusicThru methods ***/
     SynthPortImpl_IDirectMusicThru_ThruChannel
 };
 
@@ -480,11 +514,11 @@ HRESULT DMUSIC_CreateSynthPortImpl(LPCGUID guid, LPVOID *object, LPUNKNOWN unkou
 
     TRACE("(%p,%p,%p,%p,%p%d)\n", guid, object, unkouter, port_params, port_caps, device);
 
+    *object = NULL;
+
     obj = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(SynthPortImpl));
-    if (!obj) {
-        *object = NULL;
+    if (!obj)
         return E_OUTOFMEMORY;
-    }
 
     obj->IDirectMusicPort_iface.lpVtbl = &SynthPortImpl_DirectMusicPort_Vtbl;
     obj->IDirectMusicPortDownload_iface.lpVtbl = &SynthPortImpl_DirectMusicPortDownload_Vtbl;
@@ -493,15 +527,31 @@ HRESULT DMUSIC_CreateSynthPortImpl(LPCGUID guid, LPVOID *object, LPUNKNOWN unkou
     obj->fActive = FALSE;
     obj->params = *port_params;
     obj->caps = *port_caps;
-    obj->pDirectSound = NULL;
-    obj->pLatencyClock = NULL;
+
     hr = DMUSIC_CreateReferenceClockImpl(&IID_IReferenceClock, (LPVOID*)&obj->pLatencyClock, NULL);
     if (hr != S_OK)
     {
         HeapFree(GetProcessHeap(), 0, obj);
-        *object = NULL;
         return hr;
     }
+
+    if (SUCCEEDED(hr))
+        hr = CoCreateInstance(&CLSID_DirectMusicSynth, NULL, CLSCTX_INPROC_SERVER, &IID_IDirectMusicSynth, (void**)&obj->synth);
+
+    if (SUCCEEDED(hr))
+        hr = CoCreateInstance(&CLSID_DirectMusicSynthSink, NULL, CLSCTX_INPROC_SERVER, &IID_IDirectMusicSynthSink, (void**)&obj->synth_sink);
+
+    if (SUCCEEDED(hr))
+        hr = IDirectMusicSynth_SetMasterClock(obj->synth, obj->pLatencyClock);
+
+    if (SUCCEEDED(hr))
+        hr = IDirectMusicSynthSink_SetMasterClock(obj->synth_sink, obj->pLatencyClock);
+
+    if (SUCCEEDED(hr))
+        hr = IDirectMusicSynth_SetSynthSink(obj->synth, obj->synth_sink);
+
+    if (SUCCEEDED(hr))
+        hr = IDirectMusicSynth_Open(obj->synth, port_params);
 
     if (0)
     {
@@ -530,7 +580,18 @@ HRESULT DMUSIC_CreateSynthPortImpl(LPCGUID guid, LPVOID *object, LPUNKNOWN unkou
         }
     }
 
-    return IDirectMusicPort_QueryInterface((LPDIRECTMUSICPORT)obj, guid, object);
+    if (SUCCEEDED(hr))
+        return IDirectMusicPort_QueryInterface((LPDIRECTMUSICPORT)obj, guid, object);
+
+    if (obj->synth)
+        IDirectMusicSynth_Release(obj->synth);
+    if (obj->synth_sink)
+        IDirectMusicSynthSink_Release(obj->synth_sink);
+    if (obj->pLatencyClock)
+        IReferenceClock_Release(obj->pLatencyClock);
+    HeapFree(GetProcessHeap(), 0, obj);
+
+    return hr;
 }
 
 HRESULT DMUSIC_CreateMidiOutPortImpl(LPCGUID guid, LPVOID *object, LPUNKNOWN unkouter, LPDMUS_PORTPARAMS port_params, LPDMUS_PORTCAPS port_caps, DWORD device)

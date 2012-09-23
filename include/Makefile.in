@@ -97,6 +97,7 @@ PUBLIC_IDL_H_SRCS = \
 	textstor.idl \
 	tlogstg.idl \
 	tom.idl \
+	uiautomationcore.idl \
 	unknwn.idl \
 	urlhist.idl \
 	urlmon.idl \
@@ -518,6 +519,7 @@ SRCDIR_INCLUDES = \
 	traffic.h \
 	twain.h \
 	udpmib.h \
+	uiautomation.h \
 	userenv.h \
 	usp10.h \
 	uuids.h \

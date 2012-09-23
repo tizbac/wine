@@ -2117,6 +2117,35 @@ static HRESULT d3d10_effect_object_apply(struct d3d10_effect_object *o)
     }
 }
 
+static void d3d10_effect_shader_variable_destroy(struct d3d10_effect_shader_variable *s,
+        D3D10_SHADER_VARIABLE_TYPE type)
+{
+    shader_free_signature(&s->input_signature);
+    shader_free_signature(&s->output_signature);
+
+    switch (type)
+    {
+        case D3D10_SVT_VERTEXSHADER:
+            if (s->shader.vs)
+                ID3D10VertexShader_Release(s->shader.vs);
+            break;
+
+        case D3D10_SVT_PIXELSHADER:
+            if (s->shader.ps)
+                ID3D10PixelShader_Release(s->shader.ps);
+            break;
+
+        case D3D10_SVT_GEOMETRYSHADER:
+            if (s->shader.gs)
+                ID3D10GeometryShader_Release(s->shader.gs);
+            break;
+
+        default:
+            FIXME("Unhandled shader type %s.\n", debug_d3d10_shader_variable_type(type));
+            break;
+    }
+}
+
 static void d3d10_effect_variable_destroy(struct d3d10_effect_variable *v)
 {
     unsigned int i;
@@ -2159,8 +2188,7 @@ static void d3d10_effect_variable_destroy(struct d3d10_effect_variable *v)
             case D3D10_SVT_VERTEXSHADER:
             case D3D10_SVT_PIXELSHADER:
             case D3D10_SVT_GEOMETRYSHADER:
-                shader_free_signature(&((struct d3d10_effect_shader_variable *)v->data)->input_signature);
-                shader_free_signature(&((struct d3d10_effect_shader_variable *)v->data)->output_signature);
+                d3d10_effect_shader_variable_destroy(v->data, v->type->basetype);
                 break;
 
             default:
@@ -5589,9 +5617,25 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_shader_variable_GetShaderDesc(
 static HRESULT STDMETHODCALLTYPE d3d10_effect_shader_variable_GetVertexShader(
         ID3D10EffectShaderVariable *iface, UINT index, ID3D10VertexShader **shader)
 {
-    FIXME("iface %p, index %u, shader %p stub!\n", iface, index, shader);
+    struct d3d10_effect_variable *v = impl_from_ID3D10EffectVariable((ID3D10EffectVariable *)iface);
+    struct d3d10_effect_shader_variable *s;
 
-    return E_NOTIMPL;
+    TRACE("iface %p, index %u, shader %p.\n", iface, index, shader);
+
+    if (v->type->element_count)
+        v = impl_from_ID3D10EffectVariable(iface->lpVtbl->GetElement(iface, index));
+
+    if (v->type->basetype != D3D10_SVT_VERTEXSHADER)
+    {
+        WARN("Shader is not a vertex shader.\n");
+        return E_FAIL;
+    }
+
+    s = v->data;
+    if ((*shader = s->shader.vs))
+        ID3D10VertexShader_AddRef(*shader);
+
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE d3d10_effect_shader_variable_GetGeometryShader(

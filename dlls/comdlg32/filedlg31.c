@@ -556,8 +556,9 @@ static LRESULT FD31_Validate( const FD31_DATA *lfs, LPCWSTR path, UINT control, 
     OPENFILENAMEW ofnsav;
     LPOPENFILENAMEW ofnW = lfs->ofnW;
     WCHAR filename[BUFFILE];
+    int copied_size = min( ofnW->lStructSize, sizeof(ofnsav) );
 
-    ofnsav = *ofnW; /* for later restoring */
+    memcpy( &ofnsav, ofnW, copied_size ); /* for later restoring */
 
     /* get current file name */
     if (path)
@@ -591,7 +592,7 @@ static LRESULT FD31_Validate( const FD31_DATA *lfs, LPCWSTR path, UINT control, 
                   0, lfs->lParam );
         if (lRet)
         {
-            *ofnW = ofnsav; /* restore old state */
+            memcpy( ofnW, &ofnsav, copied_size ); /* restore old state */
             return FALSE;
         }
     }
@@ -757,7 +758,6 @@ static void FD31_MapOfnStructA(const OPENFILENAMEA *ofnA, LPOPENFILENAMEW ofnW, 
 {
     UNICODE_STRING usBuffer;
 
-    ofnW->lStructSize = sizeof(OPENFILENAMEW);
     ofnW->hwndOwner = ofnA->hwndOwner;
     ofnW->hInstance = ofnA->hInstance;
     if (ofnA->lpstrFilter)
@@ -803,6 +803,12 @@ static void FD31_MapOfnStructA(const OPENFILENAMEA *ofnA, LPOPENFILENAMEW ofnW, 
         }
         else /* numbered resource */
             ofnW->lpTemplateName = (LPCWSTR) ofnA->lpTemplateName;
+    }
+    if (ofnW->lStructSize > OPENFILENAME_SIZE_VERSION_400W)
+    {
+        ofnW->pvReserved = ofnA->pvReserved;
+        ofnW->dwReserved = ofnA->dwReserved;
+        ofnW->FlagsEx    = ofnA->FlagsEx;
     }
 }
 
@@ -934,7 +940,8 @@ static PFD31_DATA FD31_AllocPrivate(LPARAM lParam, UINT dlgType, BOOL IsUnicode)
         if (lfs->ofnA->Flags & OFN_ENABLEHOOK)
             if (lfs->ofnA->lpfnHook)
                 lfs->hook = TRUE;
-        lfs->ofnW = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*lfs->ofnW));
+        lfs->ofnW = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, lfs->ofnA->lStructSize);
+        lfs->ofnW->lStructSize = lfs->ofnA->lStructSize;
         FD31_MapOfnStructA(lfs->ofnA, lfs->ofnW, lfs->open);
     }
 
@@ -1069,7 +1076,7 @@ static LONG FD31_WMInitDialog(HWND hWnd, WPARAM wParam, LPARAM lParam)
   return TRUE;
 }
 
-int FD31_GetFldrHeight(void)
+static int FD31_GetFldrHeight(void)
 {
   return fldrHeight;
 }

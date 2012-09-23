@@ -90,7 +90,8 @@ static void strcat_param(char* str, const char* param)
 }
 
 static char shell_call[2048]="";
-static int shell_execute(LPCSTR operation, LPCSTR file, LPCSTR parameters, LPCSTR directory)
+static int bad_shellexecute = 0;
+static INT_PTR shell_execute(LPCSTR operation, LPCSTR file, LPCSTR parameters, LPCSTR directory)
 {
     INT_PTR rc, rcEmpty = 0;
 
@@ -133,7 +134,7 @@ static int shell_execute(LPCSTR operation, LPCSTR file, LPCSTR parameters, LPCST
                 rc = SE_ERR_NOASSOC;
             }
         }
-        ok(wait_rc==WAIT_OBJECT_0 || rc <= 32, "WaitForSingleObject returned %d\n", wait_rc);
+        ok(wait_rc==WAIT_OBJECT_0 || rc <= 32, "%s WaitForSingleObject returned %d\n", shell_call, wait_rc);
     }
     /* The child process may have changed the result file, so let profile
      * functions know about it
@@ -143,14 +144,18 @@ static int shell_execute(LPCSTR operation, LPCSTR file, LPCSTR parameters, LPCST
         dump_child();
 
     if(!operation)
-        ok(rc == rcEmpty || broken(rc > 32 && rcEmpty == SE_ERR_NOASSOC) /* NT4 */,
-                "Got different return value with empty string: %lu %lu\n", rc, rcEmpty);
+    {
+        if (rc != rcEmpty && rcEmpty == SE_ERR_NOASSOC) /* NT4 */
+            bad_shellexecute = 1;
+        ok(rc == rcEmpty || broken(rc != rcEmpty && rcEmpty == SE_ERR_NOASSOC) /* NT4 */,
+           "%s Got different return value with empty string: %lu %lu\n", shell_call, rc, rcEmpty);
+    }
 
     return rc;
 }
 
-static int shell_execute_ex(DWORD mask, LPCSTR operation, LPCSTR file,
-                            LPCSTR parameters, LPCSTR directory)
+static INT_PTR shell_execute_ex(DWORD mask, LPCSTR operation, LPCSTR file,
+                                LPCSTR parameters, LPCSTR directory)
 {
     SHELLEXECUTEINFO sei;
     BOOL success;
@@ -901,11 +906,9 @@ static void test_lpFile_parsed(void)
 {
     /* basename tmpdir */
     const char* shorttmpdir;
-
     const char *testfile;
     char fileA[MAX_PATH];
-
-    int rc;
+    INT_PTR rc;
 
     GetTempPathA(sizeof(fileA), fileA);
     shorttmpdir = tmpdir + strlen(fileA);
@@ -919,7 +922,7 @@ static void test_lpFile_parsed(void)
     rc=shell_execute(NULL, fileA, NULL, NULL);
     todo_wine {
         ok(rc>32,
-            "expected success (33), got %s (%d), lpFile: %s\n",
+            "expected success (33), got %s (%lu), lpFile: %s\n",
             rc > 32 ? "success" : "failure", rc, fileA
             );
     }
@@ -929,7 +932,7 @@ static void test_lpFile_parsed(void)
     sprintf(fileA, testfile, tmpdir);
     rc=shell_execute(NULL, fileA, NULL, NULL);
     ok(rc>32 || broken(rc == 2) /* Win95/NT4 */,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
 
@@ -938,7 +941,7 @@ static void test_lpFile_parsed(void)
     sprintf(fileA, testfile, tmpdir);
     rc=shell_execute(NULL, fileA, NULL, NULL);
     ok(rc==2,
-        "expected failure (2), got %s (%d), lpFile: %s\n",
+        "expected failure (2), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
 
@@ -948,7 +951,7 @@ static void test_lpFile_parsed(void)
     rc=shell_execute(NULL, fileA, NULL, NULL);
     todo_wine {
         ok(rc>32 || broken(rc == 2) /* Win9x/2000 */,
-            "expected success (33), got %s (%d), lpFile: %s\n",
+            "expected success (33), got %s (%lu), lpFile: %s\n",
             rc > 32 ? "success" : "failure", rc, fileA
             );
     }
@@ -958,7 +961,7 @@ static void test_lpFile_parsed(void)
     sprintf(fileA, testfile, tmpdir);
     rc=shell_execute(NULL, fileA, NULL, NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
 
@@ -968,7 +971,7 @@ static void test_lpFile_parsed(void)
     rc=shell_execute(NULL, fileA, NULL, NULL);
     todo_wine {
         ok(rc==2,
-            "expected failure (2), got %s (%d), lpFile: %s\n",
+            "expected failure (2), got %s (%lu), lpFile: %s\n",
             rc > 32 ? "success" : "failure", rc, fileA
             );
     }
@@ -979,7 +982,7 @@ static void test_lpFile_parsed(void)
     rc=shell_execute(NULL, fileA, NULL, NULL);
     todo_wine {
         ok(rc==2,
-            "expected failure (2), got %s (%d), lpFile: %s\n",
+            "expected failure (2), got %s (%lu), lpFile: %s\n",
             rc > 32 ? "success" : "failure", rc, fileA
             );
     }
@@ -989,7 +992,7 @@ static void test_lpFile_parsed(void)
     sprintf(fileA, testfile, shorttmpdir);
     rc=shell_execute_ex(SEE_MASK_DOENVSUBST | SEE_MASK_FLAG_NO_UI, NULL, fileA, NULL, NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
 
@@ -998,7 +1001,7 @@ static void test_lpFile_parsed(void)
     sprintf(fileA, testfile, shorttmpdir);
     rc=shell_execute_ex(SEE_MASK_DOENVSUBST | SEE_MASK_FLAG_NO_UI, NULL, fileA, NULL, NULL);
     ok(rc>32 || broken(rc == 2) /* Win95/NT4 */,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
 
@@ -1007,15 +1010,14 @@ static void test_lpFile_parsed(void)
 static void test_argify(void)
 {
     char fileA[MAX_PATH];
-
-    int rc;
+    INT_PTR rc;
 
     sprintf(fileA, "%s\\test file.shlexec", tmpdir);
 
     /* %2 */
     rc=shell_execute("NoQuotesParam2", fileA, "a b", NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
     if (rc>32)
@@ -1028,7 +1030,7 @@ static void test_argify(void)
     /* '"a"""'   -> 'a"' */
     rc=shell_execute("NoQuotesParam2", fileA, "\"a:\"\"some string\"\"\"", NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
     if (rc>32)
@@ -1044,7 +1046,7 @@ static void test_argify(void)
      * '"a\""'   -> '"a\""' */
     rc=shell_execute("NoQuotesParam2", fileA, "\"a:\\\"some string\\\"\"", NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
     if (rc>32)
@@ -1059,7 +1061,7 @@ static void test_argify(void)
     /* \t isn't whitespace */
     rc=shell_execute("QuotedParam2", fileA, "a\tb c", NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
     if (rc>32)
@@ -1073,7 +1075,7 @@ static void test_argify(void)
     /* %* */
     rc=shell_execute("NoQuotesAllParams", fileA, "a b c d e f g h", NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
     if (rc>32)
@@ -1088,7 +1090,7 @@ static void test_argify(void)
     /* %* can sometimes contain only whitespaces and no args */
     rc=shell_execute("QuotedAllParams", fileA, "   ", NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
     if (rc>32)
@@ -1102,7 +1104,7 @@ static void test_argify(void)
     /* %~3 */
     rc=shell_execute("NoQuotesParams345etc", fileA, "a b c d e f g h", NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
     if (rc>32)
@@ -1117,7 +1119,7 @@ static void test_argify(void)
     /* %~3 is rest of command line starting with whitespaces after 2nd arg */
     rc=shell_execute("QuotedParams345etc", fileA, "a    ", NULL);
     ok(rc>32,
-        "expected success (33), got %s (%d), lpFile: %s\n",
+        "expected success (33), got %s (%lu), lpFile: %s\n",
         rc > 32 ? "success" : "failure", rc, fileA
         );
     if (rc>32)
@@ -1178,12 +1180,12 @@ static void test_filename(void)
         {
             ok(rc==test->rc ||
                broken(quotedfile && rc == 2), /* NT4 */
-               "%s failed: rc=%d err=%d\n", shell_call,
+               "%s failed: rc=%d err=%u\n", shell_call,
                rc, GetLastError());
         }
         else todo_wine
         {
-            ok(rc==test->rc, "%s failed: rc=%d err=%d\n", shell_call,
+            ok(rc==test->rc, "%s failed: rc=%d err=%u\n", shell_call,
                rc, GetLastError());
         }
         if (rc == 33)
@@ -1227,12 +1229,12 @@ static void test_filename(void)
             rc=33;
         if ((test->todo & 0x1)==0)
         {
-            ok(rc==test->rc, "%s failed: rc=%d err=%d\n", shell_call,
+            ok(rc==test->rc, "%s failed: rc=%d err=%u\n", shell_call,
                rc, GetLastError());
         }
         else todo_wine
         {
-            ok(rc==test->rc, "%s failed: rc=%d err=%d\n", shell_call,
+            ok(rc==test->rc, "%s failed: rc=%d err=%u\n", shell_call,
                rc, GetLastError());
         }
         if (rc==0)
@@ -1296,12 +1298,130 @@ static void test_filename(void)
          */
         sprintf(filename, "\"%s\\test file.shlexec\"", tmpdir);
         rc=shell_execute(NULL, filename, NULL, NULL);
-        ok(rc > 32, "%s failed: rc=%d err=%d\n", shell_call, rc,
+        ok(rc > 32, "%s failed: rc=%d err=%u\n", shell_call, rc,
            GetLastError());
         okChildInt("argcA", 5);
         okChildString("argvA3", "Open");
         sprintf(filename, "%s\\test file.shlexec", tmpdir);
         okChildPath("argvA4", filename);
+    }
+}
+
+typedef struct
+{
+    const char* urlprefix;
+    const char* basename;
+    int flags;
+    int todo;
+} fileurl_tests_t;
+
+#define URL_SUCCESS  0x1
+#define USE_COLON    0x2
+#define USE_BSLASH   0x4
+
+static fileurl_tests_t fileurl_tests[]=
+{
+    {"file:///", "%s\\nonexistent.shlexec", 0, 0x1},
+    {"file:/", "%s\\test file.shlexec", URL_SUCCESS, 0x1},
+    {"file://", "%s\\test file.shlexec", URL_SUCCESS, 0x1},
+    {"file:///", "%s\\test file.shlexec", URL_SUCCESS, 0x1},
+    {"File:///", "%s\\test file.shlexec", URL_SUCCESS, 0x1},
+    {"file:///", "%s\\test file.shlexec", URL_SUCCESS | USE_COLON, 0x1},
+    {"file:///", "%s\\test file.shlexec", URL_SUCCESS | USE_BSLASH, 0x1},
+    {"file:////", "%s\\test file.shlexec", URL_SUCCESS, 0x1},
+    {"file://///", "%s\\test file.shlexec", 0, 0x1},
+    {"file://localhost/", "%s\\test file.shlexec", URL_SUCCESS, 0x1},
+    {"file://localhost:80/", "%s\\test file.shlexec", 0, 0x1},
+    {"file://LocalHost/", "%s\\test file.shlexec", URL_SUCCESS, 0x1},
+    {"file://127.0.0.1/", "%s\\test file.shlexec", 0, 0x1},
+    {"file://::1/", "%s\\test file.shlexec", 0, 0x1},
+    {"file://notahost/", "%s\\test file.shlexec", 0, 0x1},
+    {"file://www.winehq.org/", "%s\\test file.shlexec", 0, 0x1},
+
+    {NULL, NULL, 0, 0}
+};
+
+static void test_fileurl(void)
+{
+    char filename[MAX_PATH], fileurl[MAX_PATH], longtmpdir[MAX_PATH];
+    char command[MAX_PATH];
+    const fileurl_tests_t* test;
+    char *s;
+    INT_PTR rc;
+
+    rc = (INT_PTR)ShellExecute(NULL, NULL, "file:///nosuchfile.shlexec", NULL, NULL, SW_SHOWNORMAL);
+    if (rc > 32)
+    {
+        win_skip("shell32 is too old (likely < 4.72). Skipping the file URL tests\n");
+        return;
+    }
+
+    get_long_path_name(tmpdir, longtmpdir, sizeof(longtmpdir)/sizeof(*longtmpdir));
+
+    test=fileurl_tests;
+    while (test->basename)
+    {
+        /* Build the file URL */
+        sprintf(filename, test->basename, longtmpdir);
+        strcpy(fileurl, test->urlprefix);
+        strcat(fileurl, filename);
+        s = fileurl + strlen(test->urlprefix);
+        while (*s)
+        {
+            if (!(test->flags & USE_COLON) && *s == ':')
+                *s = '|';
+            else if (!(test->flags & USE_BSLASH) && *s == '\\')
+                *s = '/';
+            s++;
+        }
+
+        /* Test it first with FindExecutable() */
+        rc = (INT_PTR)FindExecutableA(fileurl, NULL, command);
+        ok(rc == SE_ERR_FNF, "FindExecutable(%s) failed: bad rc=%lu\n", fileurl, rc);
+
+        /* Then ShellExecute() */
+        rc = shell_execute(NULL, fileurl, NULL, NULL);
+        if (bad_shellexecute)
+        {
+            win_skip("shell32 is too old (likely 4.72). Skipping the file URL tests\n");
+            break;
+        }
+        if (test->flags & URL_SUCCESS)
+        {
+            if ((test->todo & 0x1) == 0)
+                ok(rc > 32, "%s failed: bad rc=%lu\n", shell_call, rc);
+            else todo_wine
+                ok(rc > 32, "%s failed: bad rc=%lu\n", shell_call, rc);
+        }
+        else
+        {
+            if ((test->todo & 0x1) == 0)
+                ok(rc == SE_ERR_FNF || rc == SE_ERR_PNF ||
+                   broken(rc == SE_ERR_ACCESSDENIED) /* win2000 */,
+                   "%s failed: bad rc=%lu\n", shell_call, rc);
+            else todo_wine
+                ok(rc == SE_ERR_FNF || rc == SE_ERR_PNF ||
+                   broken(rc == SE_ERR_ACCESSDENIED) /* win2000 */,
+                   "%s failed: bad rc=%lu\n", shell_call, rc);
+        }
+        if (rc == 33)
+        {
+            if ((test->todo & 0x2) == 0)
+                okChildInt("argcA", 5);
+            else todo_wine
+                okChildInt("argcA", 5);
+
+            if ((test->todo & 0x4) == 0)
+                okChildString("argvA3", "Open");
+            else todo_wine
+                okChildString("argvA3", "Open");
+
+            if ((test->todo & 0x8) == 0)
+                okChildPath("argvA4", filename);
+            else todo_wine
+                okChildPath("argvA4", filename);
+        }
+        test++;
     }
 }
 
@@ -1464,11 +1584,11 @@ static void test_lnks(void)
     char filename[MAX_PATH];
     char params[MAX_PATH];
     const filename_tests_t* test;
-    int rc;
+    INT_PTR rc;
 
     sprintf(filename, "%s\\test_shortcut_shlexec.lnk", tmpdir);
     rc=shell_execute_ex(SEE_MASK_NOZONECHECKS, NULL, filename, NULL, NULL);
-    ok(rc > 32, "%s failed: rc=%d err=%d\n", shell_call, rc,
+    ok(rc > 32, "%s failed: rc=%lu err=%u\n", shell_call, rc,
        GetLastError());
     okChildInt("argcA", 5);
     okChildString("argvA3", "Open");
@@ -1478,7 +1598,7 @@ static void test_lnks(void)
 
     sprintf(filename, "%s\\test_shortcut_exe.lnk", tmpdir);
     rc=shell_execute_ex(SEE_MASK_NOZONECHECKS, NULL, filename, NULL, NULL);
-    ok(rc > 32, "%s failed: rc=%d err=%d\n", shell_call, rc,
+    ok(rc > 32, "%s failed: rc=%lu err=%u\n", shell_call, rc,
        GetLastError());
     okChildInt("argcA", 4);
     okChildString("argvA3", "Lnk");
@@ -1498,7 +1618,7 @@ static void test_lnks(void)
             c++;
         }
         rc=shell_execute_ex(SEE_MASK_NOZONECHECKS, NULL, filename, NULL, NULL);
-        ok(rc > 32, "%s failed: rc=%d err=%d\n", shell_call, rc,
+        ok(rc > 32, "%s failed: rc=%lu err=%u\n", shell_call, rc,
            GetLastError());
         okChildInt("argcA", 4);
         okChildString("argvA3", "Lnk");
@@ -1517,12 +1637,12 @@ static void test_lnks(void)
             rc=33;
         if ((test->todo & 0x1)==0)
         {
-            ok(rc==test->rc, "%s failed: rc=%d err=%d\n", shell_call,
+            ok(rc==test->rc, "%s failed: rc=%lu err=%u\n", shell_call,
                rc, GetLastError());
         }
         else todo_wine
         {
-            ok(rc==test->rc, "%s failed: rc=%d err=%d\n", shell_call,
+            ok(rc==test->rc, "%s failed: rc=%lu err=%u\n", shell_call,
                rc, GetLastError());
         }
         if (rc==0)
@@ -1562,14 +1682,14 @@ static void test_exes(void)
 {
     char filename[MAX_PATH];
     char params[1024];
-    int rc;
+    INT_PTR rc;
 
     sprintf(params, "shlexec \"%s\" Exec", child_file);
 
     /* We need NOZONECHECKS on Win2003 to block a dialog */
     rc=shell_execute_ex(SEE_MASK_NOZONECHECKS, NULL, argv0, params,
                         NULL);
-    ok(rc > 32, "%s returned %d\n", shell_call, rc);
+    ok(rc > 32, "%s returned %lu\n", shell_call, rc);
     okChildInt("argcA", 4);
     okChildString("argvA3", "Exec");
 
@@ -1580,7 +1700,7 @@ static void test_exes(void)
         {
             rc=shell_execute(NULL, filename, params, NULL);
             todo_wine {
-                ok(rc==SE_ERR_NOASSOC, "%s succeeded: rc=%d\n", shell_call, rc);
+                ok(rc==SE_ERR_NOASSOC, "%s succeeded: rc=%lu\n", shell_call, rc);
             }
         }
     }
@@ -1595,7 +1715,7 @@ static void test_exes_long(void)
     char filename[MAX_PATH];
     char params[2024];
     char longparam[MAX_PATH];
-    int rc;
+    INT_PTR rc;
 
     for (rc = 0; rc < MAX_PATH; rc++)
         longparam[rc]='a'+rc%26;
@@ -1607,7 +1727,7 @@ static void test_exes_long(void)
     /* We need NOZONECHECKS on Win2003 to block a dialog */
     rc=shell_execute_ex(SEE_MASK_NOZONECHECKS, NULL, argv0, params,
                         NULL);
-    ok(rc > 32, "%s returned %d\n", shell_call, rc);
+    ok(rc > 32, "%s returned %lu\n", shell_call, rc);
     okChildInt("argcA", 4);
     okChildString("argvA3", longparam);
 
@@ -1618,7 +1738,7 @@ static void test_exes_long(void)
         {
             rc=shell_execute(NULL, filename, params, NULL);
             todo_wine {
-                ok(rc==SE_ERR_NOASSOC, "%s succeeded: rc=%d\n", shell_call, rc);
+                ok(rc==SE_ERR_NOASSOC, "%s succeeded: rc=%lu\n", shell_call, rc);
             }
         }
     }
@@ -1682,7 +1802,7 @@ static DWORD WINAPI hooked_WaitForInputIdle(HANDLE process, DWORD timeout)
  * by changing the entry for WaitForInputIdle() in the shell32 import address
  * table.
  */
-static void hook_WaitForInputIdle(void *new_func)
+static void hook_WaitForInputIdle(DWORD (WINAPI *new_func)(HANDLE, DWORD))
 {
     char *base;
     PIMAGE_NT_HEADERS nt_headers;
@@ -1743,11 +1863,11 @@ static void test_dde(void)
     char filename[MAX_PATH], defApplication[MAX_PATH];
     const dde_tests_t* test;
     char params[1024];
-    int rc;
+    INT_PTR rc;
     HANDLE map;
     char *shared_block;
 
-    hook_WaitForInputIdle((void *) hooked_WaitForInputIdle);
+    hook_WaitForInputIdle(hooked_WaitForInputIdle);
 
     sprintf(filename, "%s\\test file.sde", tmpdir);
 
@@ -1787,12 +1907,12 @@ static void test_dde(void)
         CloseHandle(dde_ready_event);
         if ((test->todo & 0x1)==0)
         {
-            ok(32 < rc, "%s failed: rc=%d err=%d\n", shell_call,
+            ok(32 < rc, "%s failed: rc=%lu err=%u\n", shell_call,
                rc, GetLastError());
         }
         else todo_wine
         {
-            ok(32 < rc, "%s failed: rc=%d err=%d\n", shell_call,
+            ok(32 < rc, "%s failed: rc=%lu err=%u\n", shell_call,
                rc, GetLastError());
         }
         if (32 < rc)
@@ -1914,7 +2034,8 @@ static void test_dde_default_app(void)
     char params[1024];
     DWORD threadId;
     MSG msg;
-    int rc, which = 0;
+    INT_PTR rc;
+    int which = 0;
 
     post_quit_on_execute = FALSE;
     ddeInst = 0;
@@ -1971,12 +2092,12 @@ static void test_dde_default_app(void)
 
         if ((test->todo & 0x1)==0)
         {
-            ok(rc==test->rc[which], "%s failed: rc=%d err=%d\n", shell_call,
+            ok(rc==test->rc[which], "%s failed: rc=%lu err=%u\n", shell_call,
                rc, GetLastError());
         }
         else todo_wine
         {
-            ok(rc==test->rc[which], "%s failed: rc=%d err=%d\n", shell_call,
+            ok(rc==test->rc[which], "%s failed: rc=%lu err=%u\n", shell_call,
                rc, GetLastError());
         }
         if (rc == 33)
@@ -2066,7 +2187,7 @@ static void init_test(void)
                      FILE_ATTRIBUTE_NORMAL, NULL);
         if (hfile==INVALID_HANDLE_VALUE)
         {
-            trace("unable to create '%s': err=%d\n", filename, GetLastError());
+            trace("unable to create '%s': err=%u\n", filename, GetLastError());
             assert(0);
         }
         CloseHandle(hfile);
@@ -2191,11 +2312,11 @@ static void test_commandline(void)
     SetLastError(0xdeadbeef);
     args=CommandLineToArgvW(cmdline,NULL);
     lerror=GetLastError();
-    ok(args == NULL && lerror == ERROR_INVALID_PARAMETER, "expected NULL with ERROR_INVALID_PARAMETER got %p with %d\n",args,lerror);
+    ok(args == NULL && lerror == ERROR_INVALID_PARAMETER, "expected NULL with ERROR_INVALID_PARAMETER got %p with %u\n",args,lerror);
     SetLastError(0xdeadbeef);
     args=CommandLineToArgvW(NULL,NULL);
     lerror=GetLastError();
-    ok(args == NULL && lerror == ERROR_INVALID_PARAMETER, "expected NULL with ERROR_INVALID_PARAMETER got %p with %d\n",args,lerror);
+    ok(args == NULL && lerror == ERROR_INVALID_PARAMETER, "expected NULL with ERROR_INVALID_PARAMETER got %p with %u\n",args,lerror);
 
     wsprintfW(cmdline,fmt2,one,two,three,four);
     args=CommandLineToArgvW(cmdline,&numargs);
@@ -2248,7 +2369,7 @@ static void test_directory(void)
 {
     char path[MAX_PATH], newdir[MAX_PATH];
     char params[1024];
-    int rc;
+    INT_PTR rc;
 
     /* copy this executable to a new folder and cd to it */
     sprintf(newdir, "%s\\newfolder", tmpdir);
@@ -2262,11 +2383,11 @@ static void test_directory(void)
 
     rc=shell_execute_ex(SEE_MASK_NOZONECHECKS|SEE_MASK_FLAG_NO_UI,
                         NULL, path_find_file_name(argv0), params, NULL);
-    todo_wine ok(rc == SE_ERR_FNF, "%s returned %d\n", shell_call, rc);
+    todo_wine ok(rc == SE_ERR_FNF, "%s returned %lu\n", shell_call, rc);
 
     rc=shell_execute_ex(SEE_MASK_NOZONECHECKS|SEE_MASK_FLAG_NO_UI,
                         NULL, path_find_file_name(argv0), params, newdir);
-    ok(rc > 32, "%s returned %d\n", shell_call, rc);
+    ok(rc > 32, "%s returned %lu\n", shell_call, rc);
     okChildInt("argcA", 4);
     okChildString("argvA3", "Exec");
     todo_wine okChildPath("longPath", path);
@@ -2290,6 +2411,7 @@ START_TEST(shlexec)
     test_argify();
     test_lpFile_parsed();
     test_filename();
+    test_fileurl();
     test_find_executable();
     test_lnks();
     test_exes();

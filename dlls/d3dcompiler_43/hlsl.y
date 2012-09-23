@@ -175,12 +175,23 @@ static BOOL declare_variable(struct hlsl_ir_var *decl, BOOL local)
 
 static DWORD add_modifier(DWORD modifiers, DWORD mod, const struct YYLTYPE *loc);
 
-BOOL add_type_to_scope(struct hlsl_scope *scope, struct hlsl_type *def)
+static BOOL check_type_modifiers(DWORD modifiers, struct source_location *loc)
+{
+    if (modifiers & ~HLSL_TYPE_MODIFIERS_MASK)
+    {
+        hlsl_report_message(loc->file, loc->line, loc->col, HLSL_LEVEL_ERROR,
+                "modifier not allowed on typedefs");
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL add_type_to_scope(struct hlsl_scope *scope, struct hlsl_type *def)
 {
     if (get_type(scope, def->name, FALSE))
         return FALSE;
 
-    list_add_tail(&scope->types, &def->scope_entry);
+    wine_rb_put(&scope->types, def->name, &def->scope_entry);
     return TRUE;
 }
 
@@ -243,6 +254,143 @@ static void declare_predefined_types(struct hlsl_scope *scope)
     add_type_to_scope(scope, type);
     type = new_hlsl_type(d3dcompiler_strdup("VERTEXSHADER"), HLSL_CLASS_OBJECT, HLSL_TYPE_VERTEXSHADER, 1, 1);
     add_type_to_scope(scope, type);
+}
+
+static struct hlsl_ir_if *loop_condition(struct list *cond_list)
+{
+    struct hlsl_ir_if *out_cond;
+    struct hlsl_ir_expr *not_cond;
+    struct hlsl_ir_node *cond, *operands[3];
+    struct hlsl_ir_jump *jump;
+    unsigned int count = list_count(cond_list);
+
+    if (!count)
+        return NULL;
+    if (count != 1)
+        ERR("Got multiple expressions in a for condition.\n");
+
+    cond = LIST_ENTRY(list_head(cond_list), struct hlsl_ir_node, entry);
+    out_cond = d3dcompiler_alloc(sizeof(*out_cond));
+    if (!out_cond)
+    {
+        ERR("Out of memory.\n");
+        return NULL;
+    }
+    out_cond->node.type = HLSL_IR_IF;
+    operands[0] = cond;
+    operands[1] = operands[2] = NULL;
+    not_cond = new_expr(HLSL_IR_UNOP_LOGIC_NOT, operands, &cond->loc);
+    if (!not_cond)
+    {
+        ERR("Out of memory.\n");
+        d3dcompiler_free(out_cond);
+        return NULL;
+    }
+    out_cond->condition = &not_cond->node;
+    jump = d3dcompiler_alloc(sizeof(*jump));
+    if (!jump)
+    {
+        ERR("Out of memory.\n");
+        d3dcompiler_free(out_cond);
+        d3dcompiler_free(not_cond);
+        return NULL;
+    }
+    jump->node.type = HLSL_IR_JUMP;
+    jump->type = HLSL_IR_JUMP_BREAK;
+    out_cond->then_instrs = d3dcompiler_alloc(sizeof(*out_cond->then_instrs));
+    if (!out_cond->then_instrs)
+    {
+        ERR("Out of memory.\n");
+        d3dcompiler_free(out_cond);
+        d3dcompiler_free(not_cond);
+        d3dcompiler_free(jump);
+        return NULL;
+    }
+    list_init(out_cond->then_instrs);
+    list_add_head(out_cond->then_instrs, &jump->node.entry);
+
+    return out_cond;
+}
+
+enum loop_type
+{
+    LOOP_FOR,
+    LOOP_WHILE,
+    LOOP_DO_WHILE
+};
+
+static struct list *create_loop(enum loop_type type, struct list *init, struct list *cond,
+        struct list *iter, struct list *body, struct source_location *loc)
+{
+    struct list *list = NULL;
+    struct hlsl_ir_loop *loop = NULL;
+    struct hlsl_ir_if *cond_jump = NULL;
+
+    list = d3dcompiler_alloc(sizeof(*list));
+    if (!list)
+        goto oom;
+    list_init(list);
+
+    if (init)
+        list_move_head(list, init);
+
+    loop = d3dcompiler_alloc(sizeof(*loop));
+    if (!loop)
+        goto oom;
+    loop->node.type = HLSL_IR_LOOP;
+    loop->node.loc = *loc;
+    list_add_tail(list, &loop->node.entry);
+    loop->body = d3dcompiler_alloc(sizeof(*loop->body));
+    if (!loop->body)
+        goto oom;
+    list_init(loop->body);
+
+    cond_jump = loop_condition(cond);
+    if (!cond_jump)
+        goto oom;
+
+    if (type != LOOP_DO_WHILE)
+        list_add_tail(loop->body, &cond_jump->node.entry);
+
+    list_move_tail(loop->body, body);
+
+    if (iter)
+        list_move_tail(loop->body, iter);
+
+    if (type == LOOP_DO_WHILE)
+        list_add_tail(loop->body, &cond_jump->node.entry);
+
+    d3dcompiler_free(init);
+    d3dcompiler_free(cond);
+    d3dcompiler_free(iter);
+    d3dcompiler_free(body);
+    return list;
+
+oom:
+    ERR("Out of memory.\n");
+    if (loop)
+        d3dcompiler_free(loop->body);
+    d3dcompiler_free(loop);
+    d3dcompiler_free(cond_jump);
+    d3dcompiler_free(list);
+    free_instr_list(init);
+    free_instr_list(cond);
+    free_instr_list(iter);
+    free_instr_list(body);
+    return NULL;
+}
+
+static unsigned int initializer_size(struct list *initializer)
+{
+    unsigned int count = 0;
+    struct hlsl_ir_node *node;
+
+    LIST_FOR_EACH_ENTRY(node, initializer, struct hlsl_ir_node, entry)
+    {
+        count += components_count_type(node->data_type);
+    }
+    TRACE("Initializer size = %u\n", count);
+    return count;
 }
 
 static unsigned int components_count_expr_list(struct list *list)
@@ -354,10 +502,56 @@ static struct hlsl_ir_swizzle *get_swizzle(struct hlsl_ir_node *value, const cha
     return NULL;
 }
 
+static BOOL add_typedef(DWORD modifiers, struct hlsl_type *orig_type, struct list *list,
+        struct source_location *loc)
+{
+    BOOL ret;
+    struct hlsl_type *type;
+    struct parse_variable_def *v, *v_next;
+
+    if (!check_type_modifiers(modifiers, loc))
+    {
+        LIST_FOR_EACH_ENTRY_SAFE(v, v_next, list, struct parse_variable_def, entry)
+            d3dcompiler_free(v);
+        d3dcompiler_free(list);
+        return FALSE;
+    }
+
+    LIST_FOR_EACH_ENTRY_SAFE(v, v_next, list, struct parse_variable_def, entry)
+    {
+        if (v->array_size)
+            type = new_array_type(orig_type, v->array_size);
+        else
+            type = clone_hlsl_type(orig_type);
+        if (!type)
+        {
+            ERR("Out of memory\n");
+            return FALSE;
+        }
+        d3dcompiler_free((void *)type->name);
+        type->name = v->name;
+        type->modifiers |= modifiers;
+
+        if (type->type != HLSL_CLASS_MATRIX)
+            check_invalid_matrix_modifiers(type->modifiers, &v->loc);
+
+        ret = add_type_to_scope(hlsl_ctx.cur_scope, type);
+        if (!ret)
+        {
+            hlsl_report_message(v->loc.file, v->loc.line, v->loc.col, HLSL_LEVEL_ERROR,
+                    "redefinition of custom type '%s'", v->name);
+        }
+        d3dcompiler_free(v);
+    }
+    d3dcompiler_free(list);
+    return TRUE;
+}
+
 %}
 
 %locations
 %error-verbose
+%expect 1
 
 %union
 {
@@ -373,6 +567,7 @@ static struct hlsl_ir_swizzle *get_swizzle(struct hlsl_ir_node *value, const cha
     struct hlsl_ir_function_decl *function;
     struct parse_parameter parameter;
     struct parse_variable_def *variable_def;
+    struct parse_if_body if_body;
     enum parse_unary_op unary_op;
     enum parse_assign_op assign_op;
 }
@@ -485,6 +680,9 @@ static struct hlsl_ir_swizzle *get_swizzle(struct hlsl_ir_node *value, const cha
 %type <type> base_type
 %type <type> type
 %type <list> declaration_statement
+%type <list> declaration
+%type <list> type_specs
+%type <variable_def> type_spec
 %type <list> complex_initializer
 %type <list> initializer_expr_list
 %type <instr> initializer_expr
@@ -498,12 +696,15 @@ static struct hlsl_ir_swizzle *get_swizzle(struct hlsl_ir_node *value, const cha
 %type <list> statement_list
 %type <list> compound_statement
 %type <list> jump_statement
+%type <list> selection_statement
+%type <list> loop_statement
 %type <function> func_declaration
 %type <function> func_prototype
 %type <parameter> parameter
 %type <name> semantic
 %type <variable_def> variable_def
 %type <list> variables_def
+%type <if_body> if_body
 %type <instr> primary_expr
 %type <instr> postfix_expr
 %type <instr> unary_expr
@@ -795,25 +996,68 @@ base_type:                KW_VOID
 
 declaration_statement:    declaration
                             {
+                                $$ = $1;
+                            }
+                        | typedef
+                            {
+                                $$ = d3dcompiler_alloc(sizeof(*$$));
+                                if (!$$)
+                                {
+                                    ERR("Out of memory\n");
+                                    return -1;
+                                }
+                                list_init($$);
+                            }
+
+typedef:                  KW_TYPEDEF var_modifiers type type_specs ';'
+                            {
+                                struct source_location loc;
+
+                                set_location(&loc, &@1);
+                                if (!add_typedef($2, $3, $4, &loc))
+                                    return 1;
+                            }
+
+type_specs:               type_spec
+                            {
                                 $$ = d3dcompiler_alloc(sizeof(*$$));
                                 list_init($$);
+                                list_add_head($$, &$1->entry);
+                            }
+                        | type_specs ',' type_spec
+                            {
+                                $$ = $1;
+                                list_add_tail($$, &$3->entry);
+                            }
+
+type_spec:                any_identifier array
+                            {
+                                $$ = d3dcompiler_alloc(sizeof(*$$));
+                                set_location(&$$->loc, &@1);
+                                $$->name = $1;
+                                $$->array_size = $2;
                             }
 
 declaration:              var_modifiers type variables_def ';'
                             {
+                                struct hlsl_type *type;
                                 struct parse_variable_def *v, *v_next;
                                 struct hlsl_ir_var *var;
+                                struct hlsl_ir_node *assignment;
                                 BOOL ret, local = TRUE;
 
+                                $$ = d3dcompiler_alloc(sizeof(*$$));
+                                list_init($$);
                                 LIST_FOR_EACH_ENTRY_SAFE(v, v_next, $3, struct parse_variable_def, entry)
                                 {
                                     debug_dump_decl($2, $1, v->name, hlsl_ctx.line_no);
                                     var = d3dcompiler_alloc(sizeof(*var));
                                     var->node.type = HLSL_IR_VAR;
                                     if (v->array_size)
-                                        var->node.data_type = new_array_type($2, v->array_size);
+                                        type = new_array_type($2, v->array_size);
                                     else
-                                        var->node.data_type = $2;
+                                        type = $2;
+                                    var->node.data_type = type;
                                     var->node.loc = v->loc;
                                     var->name = v->name;
                                     var->modifiers = $1;
@@ -842,10 +1086,63 @@ declaration:              var_modifiers type variables_def ';'
 
                                     if (v->initializer)
                                     {
-                                        FIXME("Variable with an initializer.\n");
-                                        free_instr_list(v->initializer);
-                                    }
+                                        unsigned int size = initializer_size(v->initializer);
+                                        struct hlsl_ir_node *node;
 
+                                        TRACE("Variable with initializer\n");
+                                        if (type->type <= HLSL_CLASS_LAST_NUMERIC
+                                            && type->dimx * type->dimy != size
+                                            && size != 1)
+                                        {
+                                            if (size < type->dimx * type->dimy)
+                                            {
+                                                hlsl_report_message(v->loc.file,
+                                                        v->loc.line, v->loc.col, HLSL_LEVEL_ERROR,
+                                                        "'%s' initializer does not match", v->name);
+                                                free_instr_list(v->initializer);
+                                                d3dcompiler_free(v);
+                                                continue;
+                                            }
+                                        }
+
+                                        if ((type->type == HLSL_CLASS_STRUCT || type->type == HLSL_CLASS_ARRAY)
+                                            && components_count_type(type) != size)
+                                        {
+                                            hlsl_report_message(v->loc.file,
+                                                    v->loc.line, v->loc.col, HLSL_LEVEL_ERROR,
+                                                    "'%s' initializer does not match", v->name);
+                                            free_instr_list(v->initializer);
+                                            d3dcompiler_free(v);
+                                            continue;
+                                        }
+
+                                        if (type->type > HLSL_CLASS_LAST_NUMERIC)
+                                        {
+                                            FIXME("Initializers for non scalar/struct variables not supported yet\n");
+                                            free_instr_list(v->initializer);
+                                            d3dcompiler_free(v);
+                                            continue;
+                                        }
+                                        if (v->array_size > 0)
+                                        {
+                                            FIXME("Initializing arrays is not supported yet\n");
+                                            free_instr_list(v->initializer);
+                                            d3dcompiler_free(v);
+                                            continue;
+                                        }
+
+                                        if (list_count(v->initializer) > 1)
+                                        {
+                                            FIXME("Complex initializers are not supported yet.\n");
+                                            free_instr_list(v->initializer);
+                                            d3dcompiler_free(v);
+                                            continue;
+                                        }
+                                        node = LIST_ENTRY(list_head(v->initializer), struct hlsl_ir_node, entry);
+                                        assignment = make_assignment(&var->node, ASSIGN_OP_ASSIGN,
+                                                BWRITERSP_WRITEMASK_ALL, node);
+                                        list_add_tail($$, &assignment->entry);
+                                    }
                                     d3dcompiler_free(v);
                                 }
                                 d3dcompiler_free($3);
@@ -994,6 +1291,8 @@ statement:                declaration_statement
                         | expr_statement
                         | compound_statement
                         | jump_statement
+                        | selection_statement
+                        | loop_statement
 
                           /* FIXME: add rule for return with no value */
 jump_statement:           KW_RETURN expr ';'
@@ -1017,6 +1316,91 @@ jump_statement:           KW_RETURN expr ';'
                                 $$ = d3dcompiler_alloc(sizeof(*$$));
                                 list_init($$);
                                 list_add_tail($$, &jump->node.entry);
+                            }
+
+selection_statement:      KW_IF '(' expr ')' if_body
+                            {
+                                struct hlsl_ir_if *instr = d3dcompiler_alloc(sizeof(*instr));
+                                if (!instr)
+                                {
+                                    ERR("Out of memory\n");
+                                    return -1;
+                                }
+                                instr->node.type = HLSL_IR_IF;
+                                set_location(&instr->node.loc, &@1);
+                                instr->condition = $3;
+                                instr->then_instrs = $5.then_instrs;
+                                instr->else_instrs = $5.else_instrs;
+                                if ($3->data_type->dimx > 1 || $3->data_type->dimy > 1)
+                                {
+                                    hlsl_report_message(instr->node.loc.file, instr->node.loc.line,
+                                            instr->node.loc.col, HLSL_LEVEL_ERROR,
+                                            "if condition requires a scalar");
+                                }
+                                $$ = d3dcompiler_alloc(sizeof(*$$));
+                                list_init($$);
+                                list_add_head($$, &instr->node.entry);
+                            }
+
+if_body:                  statement
+                            {
+                                $$.then_instrs = $1;
+                                $$.else_instrs = NULL;
+                            }
+                        | statement KW_ELSE statement
+                            {
+                                $$.then_instrs = $1;
+                                $$.else_instrs = $3;
+                            }
+
+loop_statement:           KW_WHILE '(' expr ')' statement
+                            {
+                                struct source_location loc;
+                                struct list *cond = d3dcompiler_alloc(sizeof(*cond));
+
+                                if (!cond)
+                                {
+                                    ERR("Out of memory.\n");
+                                    return -1;
+                                }
+                                list_init(cond);
+                                list_add_head(cond, &$3->entry);
+                                set_location(&loc, &@1);
+                                $$ = create_loop(LOOP_WHILE, NULL, cond, NULL, $5, &loc);
+                            }
+                        | KW_DO statement KW_WHILE '(' expr ')' ';'
+                            {
+                                struct source_location loc;
+                                struct list *cond = d3dcompiler_alloc(sizeof(*cond));
+
+                                if (!cond)
+                                {
+                                    ERR("Out of memory.\n");
+                                    return -1;
+                                }
+                                list_init(cond);
+                                list_add_head(cond, &$5->entry);
+                                set_location(&loc, &@1);
+                                $$ = create_loop(LOOP_DO_WHILE, NULL, cond, NULL, $2, &loc);
+                            }
+                        | KW_FOR '(' scope_start expr_statement expr_statement expr_statement ')' statement
+                            {
+                                struct source_location loc;
+
+                                set_location(&loc, &@1);
+                                $$ = create_loop(LOOP_FOR, $4, $5, $6, $8, &loc);
+                                pop_scope(&hlsl_ctx);
+                            }
+                        | KW_FOR '(' scope_start declaration expr_statement expr_statement ')' statement
+                            {
+                                struct source_location loc;
+
+                                set_location(&loc, &@1);
+                                if (!$4)
+                                    hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_WARNING,
+                                            "no expressions in for loop initializer");
+                                $$ = create_loop(LOOP_FOR, $4, $5, $6, $8, &loc);
+                                pop_scope(&hlsl_ctx);
                             }
 
 expr_statement:           ';'
@@ -1263,6 +1647,38 @@ unary_expr:               postfix_expr
                                     set_location(&loc, &@1);
                                     $$ = &new_expr(ops[$1], operands, &loc)->node;
                                 }
+                            }
+                          /* var_modifiers just to avoid shift/reduce conflicts */
+                        | '(' var_modifiers type array ')' unary_expr
+                            {
+                                struct hlsl_ir_expr *expr;
+                                struct hlsl_type *src_type = $6->data_type;
+                                struct hlsl_type *dst_type;
+                                struct source_location loc;
+
+                                set_location(&loc, &@3);
+                                if ($2)
+                                {
+                                    hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_ERROR,
+                                            "unexpected modifier in a cast");
+                                    return 1;
+                                }
+
+                                if ($4)
+                                    dst_type = new_array_type($3, $4);
+                                else
+                                    dst_type = $3;
+
+                                if (!compatible_data_types(src_type, dst_type))
+                                {
+                                    hlsl_report_message(loc.file, loc.line, loc.col, HLSL_LEVEL_ERROR,
+                                            "can't cast from %s to %s",
+                                            debug_hlsl_type(src_type), debug_hlsl_type(dst_type));
+                                    return 1;
+                                }
+
+                                expr = new_cast($6, dst_type, &loc);
+                                $$ = expr ? &expr->node : NULL;
                             }
 
 unary_op:                 '+'
@@ -1618,6 +2034,7 @@ struct bwriter_shader *parse_hlsl(enum shader_type type, DWORD major, DWORD mino
         {
             free_declaration(var);
         }
+        wine_rb_destroy(&scope->types, NULL, NULL);
         d3dcompiler_free(scope);
     }
 

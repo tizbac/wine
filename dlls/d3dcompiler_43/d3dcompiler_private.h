@@ -662,7 +662,7 @@ enum hlsl_matrix_majority
 struct hlsl_type
 {
     struct list entry;
-    struct list scope_entry;
+    struct wine_rb_entry scope_entry;
     enum hlsl_type_class type;
     enum hlsl_base_type base_type;
     enum hlsl_sampler_dim sampler_dim;
@@ -706,6 +706,8 @@ enum hlsl_ir_node_type
     HLSL_IR_DEREF,
     HLSL_IR_EXPR,
     HLSL_IR_FUNCTION_DECL,
+    HLSL_IR_IF,
+    HLSL_IR_LOOP,
     HLSL_IR_JUMP,
     HLSL_IR_SWIZZLE,
 };
@@ -733,6 +735,10 @@ struct hlsl_ir_node
 #define HLSL_MODIFIER_IN             0x00000800
 #define HLSL_MODIFIER_OUT            0x00001000
 
+#define HLSL_TYPE_MODIFIERS_MASK     (HLSL_MODIFIER_PRECISE | HLSL_STORAGE_VOLATILE | \
+                                      HLSL_MODIFIER_CONST | HLSL_MODIFIER_ROW_MAJOR | \
+                                      HLSL_MODIFIER_COLUMN_MAJOR)
+
 #define HLSL_MODIFIERS_COMPARISON_MASK (HLSL_MODIFIER_ROW_MAJOR | HLSL_MODIFIER_COLUMN_MAJOR)
 
 struct hlsl_ir_var
@@ -752,6 +758,21 @@ struct hlsl_ir_function_decl
     const char *name;
     const char *semantic;
     struct list *parameters;
+    struct list *body;
+};
+
+struct hlsl_ir_if
+{
+    struct hlsl_ir_node node;
+    struct hlsl_ir_node *condition;
+    struct list *then_instrs;
+    struct list *else_instrs;
+};
+
+struct hlsl_ir_loop
+{
+    struct hlsl_ir_node node;
+    /* loop condition is stored in the body (as "if (!condition) break;") */
     struct list *body;
 };
 
@@ -915,7 +936,7 @@ struct hlsl_scope
 {
     struct list entry;
     struct list vars;
-    struct list types;
+    struct wine_rb_tree types;
     struct hlsl_scope *upper;
 };
 
@@ -937,6 +958,12 @@ struct parse_variable_def
     unsigned int array_size;
     char *semantic;
     struct list *initializer;
+};
+
+struct parse_if_body
+{
+    struct list *then_instrs;
+    struct list *else_instrs;
 };
 
 enum parse_unary_op
@@ -1043,6 +1070,18 @@ static inline struct hlsl_ir_constructor *constructor_from_node(const struct hls
     return CONTAINING_RECORD(node, struct hlsl_ir_constructor, node);
 }
 
+static inline struct hlsl_ir_if *if_from_node(const struct hlsl_ir_node *node)
+{
+    assert(node->type == HLSL_IR_IF);
+    return CONTAINING_RECORD(node, struct hlsl_ir_if, node);
+}
+
+static inline struct hlsl_ir_loop *loop_from_node(const struct hlsl_ir_node *node)
+{
+    assert(node->type == HLSL_IR_LOOP);
+    return CONTAINING_RECORD(node, struct hlsl_ir_loop, node);
+}
+
 BOOL add_declaration(struct hlsl_scope *scope, struct hlsl_ir_var *decl, BOOL local_var) DECLSPEC_HIDDEN;
 struct hlsl_ir_var *get_variable(struct hlsl_scope *scope, const char *name) DECLSPEC_HIDDEN;
 void free_declaration(struct hlsl_ir_var *decl) DECLSPEC_HIDDEN;
@@ -1055,8 +1094,11 @@ struct hlsl_type *clone_hlsl_type(struct hlsl_type *old) DECLSPEC_HIDDEN;
 struct hlsl_type *get_type(struct hlsl_scope *scope, const char *name, BOOL recursive) DECLSPEC_HIDDEN;
 BOOL find_function(const char *name) DECLSPEC_HIDDEN;
 unsigned int components_count_type(struct hlsl_type *type) DECLSPEC_HIDDEN;
+BOOL compatible_data_types(struct hlsl_type *s1, struct hlsl_type *s2) DECLSPEC_HIDDEN;
 struct hlsl_ir_expr *new_expr(enum hlsl_ir_expr_op op, struct hlsl_ir_node **operands,
         struct source_location *loc) DECLSPEC_HIDDEN;
+struct hlsl_ir_expr *new_cast(struct hlsl_ir_node *node, struct hlsl_type *type,
+	struct source_location *loc) DECLSPEC_HIDDEN;
 struct hlsl_ir_expr *hlsl_mul(struct hlsl_ir_node *op1, struct hlsl_ir_node *op2,
         struct source_location *loc) DECLSPEC_HIDDEN;
 struct hlsl_ir_expr *hlsl_div(struct hlsl_ir_node *op1, struct hlsl_ir_node *op2,

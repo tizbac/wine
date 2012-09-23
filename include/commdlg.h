@@ -95,6 +95,9 @@ typedef struct tagOFNA {
 	LPARAM		lCustData;
 	LPOFNHOOKPROC	lpfnHook;
 	LPCSTR		lpTemplateName;
+        void           *pvReserved;
+        DWORD           dwReserved;
+        DWORD           FlagsEx;
 } OPENFILENAMEA,*LPOPENFILENAMEA;
 
 typedef struct tagOFNW {
@@ -118,13 +121,16 @@ typedef struct tagOFNW {
 	LPARAM		lCustData;
 	LPOFNHOOKPROC	lpfnHook;
 	LPCWSTR		lpTemplateName;
+        void           *pvReserved;
+        DWORD           dwReserved;
+        DWORD           FlagsEx;
 } OPENFILENAMEW,*LPOPENFILENAMEW;
 
 DECL_WINELIB_TYPE_AW(OPENFILENAME)
 DECL_WINELIB_TYPE_AW(LPOPENFILENAME)
 
 #ifndef CDSIZEOF_STRUCT
-#define CDSIZEOF_STRUCT(type,field) ((int)&(((type *)0)->field) + sizeof(((type*)0)->field))
+#define CDSIZEOF_STRUCT(type,field) ((INT_PTR)&(((type *)0)->field) + sizeof(((type*)0)->field))
 #endif
 
 #define OPENFILENAME_SIZE_VERSION_400A CDSIZEOF_STRUCT(OPENFILENAMEA,lpTemplateName)

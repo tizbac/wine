@@ -83,7 +83,7 @@
 @ stdcall GetExtendedTcpTable( ptr ptr long long long long )
 @ stdcall GetExtendedUdpTable( ptr ptr long long long long )
 @ stdcall GetFriendlyIfIndex( long )
-#@ stub GetIcmpStatisticsEx
+@ stdcall GetIcmpStatisticsEx( ptr long )
 @ stdcall GetIcmpStatistics( ptr )
 @ stub GetIcmpStatsFromStack
 @ stdcall GetIfEntry( ptr )
@@ -112,7 +112,7 @@
 @ stub GetIpNetTableFromStack
 #@ stub GetIpPathEntry
 #@ stub GetIpPathTable
-#@ stub GetIpStatisticsEx
+@ stdcall GetIpStatisticsEx( ptr long )
 @ stdcall GetIpStatistics( ptr )
 @ stub GetIpStatsFromStack
 #@ stub GetMulticastIpAddressEntry
@@ -134,7 +134,7 @@
 #@ stub GetSessionCompartmentId
 @ stdcall GetTcp6Table( ptr ptr long )
 @ stdcall GetTcp6Table2( ptr ptr long )
-#@ stub GetTcpStatisticsEx
+@ stdcall GetTcpStatisticsEx( ptr long )
 @ stdcall GetTcpStatistics( ptr )
 @ stub GetTcpStatsFromStack
 @ stdcall GetTcpTable( ptr ptr long )
@@ -142,7 +142,7 @@
 @ stub GetTcpTableFromStack
 #@ stub GetTeredoPort
 #@ stub GetUdp6Table
-#@ stub GetUdpStatisticsEx
+@ stdcall GetUdpStatisticsEx( ptr long )
 @ stdcall GetUdpStatistics( ptr )
 @ stub GetUdpStatsFromStack
 @ stdcall GetUdpTable( ptr ptr long )

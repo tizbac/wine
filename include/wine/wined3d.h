@@ -2149,7 +2149,7 @@ HRESULT __cdecl wined3d_device_get_render_target(const struct wined3d_device *de
         UINT render_target_idx, struct wined3d_surface **render_target);
 DWORD __cdecl wined3d_device_get_sampler_state(const struct wined3d_device *device,
         UINT sampler_idx, enum wined3d_sampler_state state);
-HRESULT __cdecl wined3d_device_get_scissor_rect(const struct wined3d_device *device, RECT *rect);
+void __cdecl wined3d_device_get_scissor_rect(const struct wined3d_device *device, RECT *rect);
 BOOL __cdecl wined3d_device_get_software_vertex_processing(const struct wined3d_device *device);
 HRESULT __cdecl wined3d_device_get_stream_source(const struct wined3d_device *device,
         UINT stream_idx, struct wined3d_buffer **buffer, UINT *offset, UINT *stride);
@@ -2166,8 +2166,7 @@ HRESULT __cdecl wined3d_device_get_texture_stage_state(const struct wined3d_devi
         UINT stage, enum wined3d_texture_stage_state state, DWORD *value);
 void __cdecl wined3d_device_get_transform(const struct wined3d_device *device,
         enum wined3d_transform_state state, struct wined3d_matrix *matrix);
-HRESULT __cdecl wined3d_device_get_vertex_declaration(const struct wined3d_device *device,
-        struct wined3d_vertex_declaration **declaration);
+struct wined3d_vertex_declaration * __cdecl wined3d_device_get_vertex_declaration(const struct wined3d_device *device);
 struct wined3d_shader * __cdecl wined3d_device_get_vertex_shader(const struct wined3d_device *device);
 void __cdecl wined3d_device_get_viewport(const struct wined3d_device *device, struct wined3d_viewport *viewport);
 HRESULT __cdecl wined3d_device_get_vs_consts_b(const struct wined3d_device *device,
@@ -2227,7 +2226,7 @@ HRESULT __cdecl wined3d_device_set_render_target(struct wined3d_device *device,
         UINT render_target_idx, struct wined3d_surface *render_target, BOOL set_viewport);
 void __cdecl wined3d_device_set_sampler_state(struct wined3d_device *device,
         UINT sampler_idx, enum wined3d_sampler_state state, DWORD value);
-HRESULT __cdecl wined3d_device_set_scissor_rect(struct wined3d_device *device, const RECT *rect);
+void __cdecl wined3d_device_set_scissor_rect(struct wined3d_device *device, const RECT *rect);
 HRESULT __cdecl wined3d_device_set_software_vertex_processing(struct wined3d_device *device, BOOL software);
 HRESULT __cdecl wined3d_device_set_stream_source(struct wined3d_device *device,
         UINT stream_idx, struct wined3d_buffer *buffer, UINT offset, UINT stride);
@@ -2237,7 +2236,7 @@ HRESULT __cdecl wined3d_device_set_texture_stage_state(struct wined3d_device *de
         UINT stage, enum wined3d_texture_stage_state state, DWORD value);
 void __cdecl wined3d_device_set_transform(struct wined3d_device *device,
         enum wined3d_transform_state state, const struct wined3d_matrix *matrix);
-HRESULT __cdecl wined3d_device_set_vertex_declaration(struct wined3d_device *device,
+void __cdecl wined3d_device_set_vertex_declaration(struct wined3d_device *device,
         struct wined3d_vertex_declaration *declaration);
 HRESULT __cdecl wined3d_device_set_vertex_shader(struct wined3d_device *device, struct wined3d_shader *shader);
 void __cdecl wined3d_device_set_viewport(struct wined3d_device *device, const struct wined3d_viewport *viewport);

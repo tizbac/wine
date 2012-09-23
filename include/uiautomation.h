@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Alistair Leslie-Hughes
+ * Copyright 2012 Jacek Caban for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -15,20 +15,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
-#ifndef _SCRRUN_PRIVATE_H_
-#define _SCRRUN_PRIVATE_H
 
-extern HRESULT WINAPI FileSystem_CreateInstance(IClassFactory*,IUnknown*,REFIID,void**) DECLSPEC_HIDDEN;
-extern HRESULT WINAPI Dictionary_CreateInstance(IClassFactory*,IUnknown*,REFIID,void**) DECLSPEC_HIDDEN;
-
-typedef enum tid_t
-{
-    NULL_tid,
-    IDictionary_tid,
-    IFileSystem3_tid,
-    LAST_tid
-} tid_t;
-
-HRESULT get_typeinfo(tid_t tid, ITypeInfo **typeinfo) DECLSPEC_HIDDEN;
-
-#endif
+#include <uiautomationcore.h>
+/* #include <uiautomationclient.h> */
+/* #include <uiautomationcoreapi.h> */

@@ -1774,6 +1774,74 @@ static void widen_cap(const GpPointF *endpoint, const GpPointF *nextpoint,
         if (add_last_point)
             add_bevel_point(endpoint, nextpoint, pen, 0, last_point);
         break;
+    case LineCapSquare:
+    {
+        REAL segment_dy = nextpoint->Y-endpoint->Y;
+        REAL segment_dx = nextpoint->X-endpoint->X;
+        REAL segment_length = sqrtf(segment_dy*segment_dy + segment_dx*segment_dx);
+        REAL distance = pen->width/2.0;
+        REAL bevel_dx, bevel_dy;
+        REAL extend_dx, extend_dy;
+
+        extend_dx = -distance * segment_dx / segment_length;
+        extend_dy = -distance * segment_dy / segment_length;
+
+        bevel_dx = -distance * segment_dy / segment_length;
+        bevel_dy = distance * segment_dx / segment_length;
+
+        if (add_first_points)
+            *last_point = add_path_list_node(*last_point, endpoint->X + extend_dx + bevel_dx,
+                endpoint->Y + extend_dy + bevel_dy, PathPointTypeLine);
+
+        if (add_last_point)
+            *last_point = add_path_list_node(*last_point, endpoint->X + extend_dx - bevel_dx,
+                endpoint->Y + extend_dy - bevel_dy, PathPointTypeLine);
+
+        break;
+    }
+    case LineCapRound:
+    {
+        REAL segment_dy = nextpoint->Y-endpoint->Y;
+        REAL segment_dx = nextpoint->X-endpoint->X;
+        REAL segment_length = sqrtf(segment_dy*segment_dy + segment_dx*segment_dx);
+        REAL distance = pen->width/2.0;
+        REAL dx, dy, dx2, dy2;
+        const REAL control_point_distance = 0.5522847498307935; /* 4/3 * (sqrt(2) - 1) */
+
+        if (add_first_points)
+        {
+            dx = -distance * segment_dx / segment_length;
+            dy = -distance * segment_dy / segment_length;
+
+            dx2 = dx * control_point_distance;
+            dy2 = dy * control_point_distance;
+
+            /* first 90-degree arc */
+            *last_point = add_path_list_node(*last_point, endpoint->X + dy,
+                endpoint->Y - dx, PathPointTypeLine);
+
+            *last_point = add_path_list_node(*last_point, endpoint->X + dy + dx2,
+                endpoint->Y - dx + dy2, PathPointTypeBezier);
+
+            *last_point = add_path_list_node(*last_point, endpoint->X + dx + dy2,
+                endpoint->Y + dy - dx2, PathPointTypeBezier);
+
+            /* midpoint */
+            *last_point = add_path_list_node(*last_point, endpoint->X + dx,
+                endpoint->Y + dy, PathPointTypeBezier);
+
+            /* second 90-degree arc */
+            *last_point = add_path_list_node(*last_point, endpoint->X + dx - dy2,
+                endpoint->Y + dy + dx2, PathPointTypeBezier);
+
+            *last_point = add_path_list_node(*last_point, endpoint->X - dy + dx2,
+                endpoint->Y + dx + dy2, PathPointTypeBezier);
+
+            *last_point = add_path_list_node(*last_point, endpoint->X - dy,
+                endpoint->Y + dx, PathPointTypeBezier);
+        }
+        break;
+    }
     }
 }
 
@@ -1781,14 +1849,15 @@ static void widen_open_figure(GpPath *path, GpPen *pen, int start, int end,
     path_list_node_t **last_point)
 {
     int i;
+    path_list_node_t *prev_point;
 
     if (end <= start)
         return;
 
+    prev_point = *last_point;
+
     widen_cap(&path->pathdata.Points[start], &path->pathdata.Points[start+1],
         pen, pen->startcap, pen->customstart, FALSE, TRUE, last_point);
-
-    (*last_point)->type = PathPointTypeStart;
 
     for (i=start+1; i<end; i++)
         widen_joint(&path->pathdata.Points[i-1], &path->pathdata.Points[i],
@@ -1804,6 +1873,7 @@ static void widen_open_figure(GpPath *path, GpPen *pen, int start, int end,
     widen_cap(&path->pathdata.Points[start], &path->pathdata.Points[start+1],
         pen, pen->startcap, pen->customstart, TRUE, FALSE, last_point);
 
+    prev_point->next->type = PathPointTypeStart;
     (*last_point)->type |= PathPointTypeCloseSubpath;
 }
 
@@ -1878,10 +1948,10 @@ GpStatus WINGDIPAPI GdipWidenPath(GpPath *path, GpPen *pen, GpMatrix *matrix,
     {
         last_point = points;
 
-        if (pen->endcap != LineCapFlat)
+        if (pen->endcap > LineCapRound)
             FIXME("unimplemented end cap %x\n", pen->endcap);
 
-        if (pen->startcap != LineCapFlat)
+        if (pen->startcap > LineCapRound)
             FIXME("unimplemented start cap %x\n", pen->startcap);
 
         if (pen->dashcap != DashCapFlat)
