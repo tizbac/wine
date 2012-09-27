@@ -128,7 +128,7 @@ static BOOL X11DRV_CreateDC( PHYSDEV *pdev, LPCWSTR driver, LPCWSTR device,
 
     if (!physDev) return FALSE;
 
-    physDev->depth         = screen_depth;
+    physDev->depth         = default_visual.depth;
     physDev->color_shifts  = &X11DRV_PALETTE_default_shifts;
     SetRect( &physDev->dc_rect, 0, 0, virtual_screen_rect.right - virtual_screen_rect.left,
              virtual_screen_rect.bottom - virtual_screen_rect.top );
@@ -236,7 +236,7 @@ static INT X11DRV_GetDeviceCaps( PHYSDEV dev, INT cap )
         /* MSDN: Number of entries in the device's color table, if the device has
          * a color depth of no more than 8 bits per pixel.For devices with greater
          * color depths, -1 is returned. */
-        return (screen_depth > 8) ? -1 : (1 << screen_depth);
+        return (default_visual.depth > 8) ? -1 : (1 << default_visual.depth);
     case PDEVICESIZE:
         return sizeof(X11DRV_PDEVICE);
     case CURVECAPS:
@@ -334,6 +334,9 @@ static INT X11DRV_ExtEscape( PHYSDEV dev, INT escape, INT in_count, LPCVOID in_d
                     const struct x11drv_escape_set_drawable *data = in_data;
                     physDev->dc_rect = data->dc_rect;
                     physDev->drawable = data->drawable;
+                    XFreeGC( gdi_display, physDev->gc );
+                    physDev->gc = XCreateGC( gdi_display, physDev->drawable, 0, NULL );
+                    XSetGraphicsExposures( gdi_display, physDev->gc, False );
                     XSetSubwindowMode( gdi_display, physDev->gc, data->mode );
                     TRACE( "SET_DRAWABLE hdc %p drawable %lx dc_rect %s\n",
                            dev->hdc, physDev->drawable, wine_dbgstr_rect(&physDev->dc_rect) );

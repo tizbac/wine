@@ -243,9 +243,7 @@ extern Display *gdi_display DECLSPEC_HIDDEN;  /* display to use for all GDI func
 #define X11DRV_PALETTE_VIRTUAL  0x0002 /* no mapping needed - pixel == pixel color */
 
 #define X11DRV_PALETTE_PRIVATE  0x1000 /* private colormap, identity mapping */
-#define X11DRV_PALETTE_WHITESET 0x2000
 
-extern Colormap X11DRV_PALETTE_PaletteXColormap DECLSPEC_HIDDEN;
 extern UINT16 X11DRV_PALETTE_PaletteFlags DECLSPEC_HIDDEN;
 
 extern int *X11DRV_PALETTE_PaletteToXPixel DECLSPEC_HIDDEN;
@@ -260,7 +258,6 @@ extern BOOL X11DRV_IsSolidColor(COLORREF color) DECLSPEC_HIDDEN;
 extern COLORREF X11DRV_PALETTE_ToLogical(X11DRV_PDEVICE *physDev, int pixel) DECLSPEC_HIDDEN;
 extern int X11DRV_PALETTE_ToPhysical(X11DRV_PDEVICE *physDev, COLORREF color) DECLSPEC_HIDDEN;
 extern COLORREF X11DRV_PALETTE_GetColor( X11DRV_PDEVICE *physDev, COLORREF color ) DECLSPEC_HIDDEN;
-extern int X11DRV_PALETTE_LookupPixel(ColorShifts *shifts, COLORREF color) DECLSPEC_HIDDEN;
 extern void X11DRV_PALETTE_ComputeColorShifts(ColorShifts *shifts, unsigned long redMask, unsigned long greenMask, unsigned long blueMask) DECLSPEC_HIDDEN;
 
 /* GDI escapes */
@@ -347,14 +344,14 @@ static inline size_t get_property_size( int format, unsigned long count )
     return count * (format / 8);
 }
 
-extern Visual *visual DECLSPEC_HIDDEN;
+extern XVisualInfo default_visual DECLSPEC_HIDDEN;
+extern Colormap default_colormap DECLSPEC_HIDDEN;
 extern XPixmapFormatValues **pixmap_formats DECLSPEC_HIDDEN;
 extern Window root_window DECLSPEC_HIDDEN;
 extern int clipping_cursor DECLSPEC_HIDDEN;
 extern unsigned int screen_width DECLSPEC_HIDDEN;
 extern unsigned int screen_height DECLSPEC_HIDDEN;
 extern unsigned int screen_bpp DECLSPEC_HIDDEN;
-extern unsigned int screen_depth DECLSPEC_HIDDEN;
 extern RECT virtual_screen_rect DECLSPEC_HIDDEN;
 extern int use_xkb DECLSPEC_HIDDEN;
 extern int usexrandr DECLSPEC_HIDDEN;
@@ -557,7 +554,6 @@ struct x11drv_win_data
 
 extern struct x11drv_win_data *get_win_data( HWND hwnd ) DECLSPEC_HIDDEN;
 extern void release_win_data( struct x11drv_win_data *data ) DECLSPEC_HIDDEN;
-extern struct x11drv_win_data *X11DRV_get_win_data( HWND hwnd ) DECLSPEC_HIDDEN;
 extern Window X11DRV_get_whole_window( HWND hwnd ) DECLSPEC_HIDDEN;
 extern XIC X11DRV_get_ic( HWND hwnd ) DECLSPEC_HIDDEN;
 

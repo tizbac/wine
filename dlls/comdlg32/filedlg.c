@@ -1151,8 +1151,9 @@ static LRESULT FILEDLG95_OnWMSize(HWND hwnd, WPARAM wParam)
              * move to bottom */
             switch( ctrlid)
             {
-                /* file name box and file types combo change also width */
+                /* file name (edit or comboboxex) and file types combo change also width */
                 case edt1:
+                case cmb13:
                 case cmb1:
                     DeferWindowPos( hdwp, ctrl, NULL, rc.left, rc.top + chgy,
                             rc.right - rc.left + chgx, rc.bottom - rc.top,
@@ -1406,6 +1407,12 @@ INT_PTR CALLBACK FileOpenDlgProc95(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
   }
 }
 
+static inline BOOL filename_is_edit( const FileOpenDlgInfos *info )
+{
+    return (info->ofnInfos->lStructSize == OPENFILENAME_SIZE_VERSION_400W) &&
+        (info->ofnInfos->Flags & (OFN_ENABLEHOOK | OFN_ENABLETEMPLATE | OFN_ENABLETEMPLATEHANDLE));
+}
+
 /***********************************************************************
  *      FILEDLG95_InitControls
  *
@@ -1456,8 +1463,20 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
   }
   TRACE("Running on 2000+ %d, 98+ %d\n", win2000plus, win98plus);
 
+
+  /* Use either the edit or the comboboxex for the filename control */
+  if (filename_is_edit( fodInfos ))
+  {
+      DestroyWindow( GetDlgItem( hwnd, cmb13 ) );
+      fodInfos->DlgInfos.hwndFileName = GetDlgItem( hwnd, edt1 );
+  }
+  else
+  {
+      DestroyWindow( GetDlgItem( hwnd, edt1 ) );
+      fodInfos->DlgInfos.hwndFileName = GetDlgItem( hwnd, cmb13 );
+  }
+
   /* Get the hwnd of the controls */
-  fodInfos->DlgInfos.hwndFileName = GetDlgItem(hwnd,IDC_FILENAME);
   fodInfos->DlgInfos.hwndFileTypeCB = GetDlgItem(hwnd,IDC_FILETYPE);
   fodInfos->DlgInfos.hwndLookInCB = GetDlgItem(hwnd,IDC_LOOKIN);
 
@@ -1546,10 +1565,10 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
             TRACE("Value in Filename includes path, overriding InitialDir: %s, %s\n",
                     debugstr_w(fodInfos->filename), debugstr_w(fodInfos->initdir));
          }
-         SetDlgItemTextW(hwnd, IDC_FILENAME, fodInfos->filename);
+         SetWindowTextW( fodInfos->DlgInfos.hwndFileName, fodInfos->filename );
 
       } else {
-         SetDlgItemTextW(hwnd, IDC_FILENAME, fodInfos->filename);
+         SetWindowTextW( fodInfos->DlgInfos.hwndFileName, fodInfos->filename );
       }
   }
 
@@ -1623,7 +1642,7 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
             TRACE("Value in Filename includes path, overriding initdir: %s, %s\n",
                  debugstr_w(fodInfos->filename), debugstr_w(fodInfos->initdir));
          }
-         SetDlgItemTextW(hwnd, IDC_FILENAME, fodInfos->filename);
+         SetWindowTextW( fodInfos->DlgInfos.hwndFileName, fodInfos->filename );
       }
 
       /* 4. Win2000+: Recently used */
@@ -1707,7 +1726,7 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
           TRACE("No initial dir specified, using current dir of %s\n", debugstr_w(fodInfos->initdir));
       }
   }
-  SetFocus(GetDlgItem(hwnd, IDC_FILENAME));
+  SetFocus( fodInfos->DlgInfos.hwndFileName );
   TRACE("After manipulation, file = %s, dir = %s\n", debugstr_w(fodInfos->filename), debugstr_w(fodInfos->initdir));
 
   /* Must the open as read only check box be checked ?*/
@@ -1903,7 +1922,8 @@ static LRESULT FILEDLG95_OnWMCommand(HWND hwnd, WPARAM wParam)
     FILEDLG95_SHELL_BrowseToDesktop(hwnd);
     break;
 
-  case IDC_FILENAME:
+  case edt1:
+  case cmb13:
     break;
 
   }
@@ -2525,7 +2545,8 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
               IShellView_Refresh(fodInfos->Shell.FOIShellView);
 	  }
           COMDLG32_SHFree(pidlCurrent);
-          SendMessageW(fodInfos->DlgInfos.hwndFileName, EM_SETSEL, 0, -1);
+          if (filename_is_edit( fodInfos ))
+              SendMessageW(fodInfos->DlgInfos.hwndFileName, EM_SETSEL, 0, -1);
         }
       }
       ret = FALSE;
@@ -3688,8 +3709,9 @@ void FILEDLG95_FILENAME_FillFromSelection (HWND hwnd)
       }
       SetWindowTextW( fodInfos->DlgInfos.hwndFileName, lpstrAllFile );
        
-      /* Select the file name like Windows does */ 
-      SendMessageW(fodInfos->DlgInfos.hwndFileName, EM_SETSEL, 0, -1);
+      /* Select the file name like Windows does */
+      if (filename_is_edit( fodInfos ))
+          SendMessageW(fodInfos->DlgInfos.hwndFileName, EM_SETSEL, 0, -1);
     }
     HeapFree(GetProcessHeap(),0, lpstrAllFile );
 }
@@ -3740,10 +3762,10 @@ static int FILEDLG95_FILENAME_GetFileNames (HWND hwnd, LPWSTR * lpstrFileList, U
 
 	TRACE("\n");
 
-	/* get the filenames from the edit control */
-	nStrLen = SendMessageW(fodInfos->DlgInfos.hwndFileName, WM_GETTEXTLENGTH, 0, 0);
+	/* get the filenames from the filename control */
+	nStrLen = GetWindowTextLengthW( fodInfos->DlgInfos.hwndFileName );
 	lpstrEdit = MemAlloc( (nStrLen+1)*sizeof(WCHAR) );
-	GetDlgItemTextW(hwnd, IDC_FILENAME, lpstrEdit, nStrLen+1);
+	GetWindowTextW( fodInfos->DlgInfos.hwndFileName, lpstrEdit, nStrLen+1);
 
 	TRACE("nStrLen=%u str=%s\n", nStrLen, debugstr_w(lpstrEdit));
 

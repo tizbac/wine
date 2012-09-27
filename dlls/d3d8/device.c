@@ -1785,7 +1785,6 @@ static HRESULT WINAPI d3d8_device_GetTextureStageState(IDirect3DDevice8 *iface,
 {
     struct d3d8_device *device = impl_from_IDirect3DDevice8(iface);
     const struct tss_lookup *l;
-    HRESULT hr = D3D_OK;
 
     TRACE("iface %p, stage %u, state %#x, value %p.\n", iface, stage, Type, value);
 
@@ -1801,10 +1800,10 @@ static HRESULT WINAPI d3d8_device_GetTextureStageState(IDirect3DDevice8 *iface,
     if (l->sampler_state)
         *value = wined3d_device_get_sampler_state(device->wined3d_device, stage, l->state);
     else
-        hr = wined3d_device_get_texture_stage_state(device->wined3d_device, stage, l->state, value);
+        *value = wined3d_device_get_texture_stage_state(device->wined3d_device, stage, l->state);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d8_device_SetTextureStageState(IDirect3DDevice8 *iface,
@@ -1812,7 +1811,6 @@ static HRESULT WINAPI d3d8_device_SetTextureStageState(IDirect3DDevice8 *iface,
 {
     struct d3d8_device *device = impl_from_IDirect3DDevice8(iface);
     const struct tss_lookup *l;
-    HRESULT hr = D3D_OK;
 
     TRACE("iface %p, stage %u, state %#x, value %#x.\n", iface, stage, type, value);
 
@@ -1828,10 +1826,10 @@ static HRESULT WINAPI d3d8_device_SetTextureStageState(IDirect3DDevice8 *iface,
     if (l->sampler_state)
         wined3d_device_set_sampler_state(device->wined3d_device, stage, l->state, value);
     else
-        hr = wined3d_device_set_texture_stage_state(device->wined3d_device, stage, l->state, value);
+        wined3d_device_set_texture_stage_state(device->wined3d_device, stage, l->state, value);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d8_device_ValidateDevice(IDirect3DDevice8 *iface, DWORD *pass_count)
@@ -2110,7 +2108,6 @@ static HRESULT WINAPI d3d8_device_SetVertexShader(IDirect3DDevice8 *iface, DWORD
 {
     struct d3d8_device *device = impl_from_IDirect3DDevice8(iface);
     struct d3d8_vertex_shader *shader_impl;
-    HRESULT hr;
 
     TRACE("iface %p, shader %#x.\n", iface, shader);
 
@@ -2140,12 +2137,10 @@ static HRESULT WINAPI d3d8_device_SetVertexShader(IDirect3DDevice8 *iface, DWORD
 
     wined3d_device_set_vertex_declaration(device->wined3d_device,
             shader_impl->vertex_declaration->wined3d_vertex_declaration);
-    hr = wined3d_device_set_vertex_shader(device->wined3d_device, shader_impl->wined3d_shader);
+    wined3d_device_set_vertex_shader(device->wined3d_device, shader_impl->wined3d_shader);
     wined3d_mutex_unlock();
 
-    TRACE("Returning hr %#x\n", hr);
-
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d8_device_GetVertexShader(IDirect3DDevice8 *iface, DWORD *shader)
@@ -2177,7 +2172,6 @@ static HRESULT WINAPI d3d8_device_DeleteVertexShader(IDirect3DDevice8 *iface, DW
 {
     struct d3d8_device *device = impl_from_IDirect3DDevice8(iface);
     struct d3d8_vertex_shader *shader_impl;
-    struct wined3d_shader *cur;
 
     TRACE("iface %p, shader %#x.\n", iface, shader);
 
@@ -2190,12 +2184,9 @@ static HRESULT WINAPI d3d8_device_DeleteVertexShader(IDirect3DDevice8 *iface, DW
         return D3DERR_INVALIDCALL;
     }
 
-    if ((cur = wined3d_device_get_vertex_shader(device->wined3d_device)))
-    {
-        if (cur == shader_impl->wined3d_shader)
-            IDirect3DDevice8_SetVertexShader(iface, 0);
-        wined3d_shader_decref(cur);
-    }
+    if (shader_impl->wined3d_shader
+            && wined3d_device_get_vertex_shader(device->wined3d_device) == shader_impl->wined3d_shader)
+        IDirect3DDevice8_SetVertexShader(iface, 0);
 
     wined3d_mutex_unlock();
 
@@ -2429,7 +2420,6 @@ static HRESULT WINAPI d3d8_device_SetPixelShader(IDirect3DDevice8 *iface, DWORD 
 {
     struct d3d8_device *device = impl_from_IDirect3DDevice8(iface);
     struct d3d8_pixel_shader *shader_impl;
-    HRESULT hr;
 
     TRACE("iface %p, shader %#x.\n", iface, shader);
 
@@ -2437,9 +2427,9 @@ static HRESULT WINAPI d3d8_device_SetPixelShader(IDirect3DDevice8 *iface, DWORD 
 
     if (!shader)
     {
-        hr = wined3d_device_set_pixel_shader(device->wined3d_device, NULL);
+        wined3d_device_set_pixel_shader(device->wined3d_device, NULL);
         wined3d_mutex_unlock();
-        return hr;
+        return D3D_OK;
     }
 
     if (!(shader_impl = d3d8_get_object(&device->handle_table, shader - (VS_HIGHESTFIXEDFXF + 1), D3D8_HANDLE_PS)))
@@ -2450,10 +2440,10 @@ static HRESULT WINAPI d3d8_device_SetPixelShader(IDirect3DDevice8 *iface, DWORD 
     }
 
     TRACE("Setting shader %p.\n", shader_impl);
-    hr = wined3d_device_set_pixel_shader(device->wined3d_device, shader_impl->wined3d_shader);
+    wined3d_device_set_pixel_shader(device->wined3d_device, shader_impl->wined3d_shader);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d8_device_GetPixelShader(IDirect3DDevice8 *iface, DWORD *shader)
@@ -2471,7 +2461,6 @@ static HRESULT WINAPI d3d8_device_GetPixelShader(IDirect3DDevice8 *iface, DWORD 
     {
         struct d3d8_pixel_shader *d3d8_shader;
         d3d8_shader = wined3d_shader_get_parent(object);
-        wined3d_shader_decref(object);
         *shader = d3d8_shader->handle;
     }
     else
@@ -2489,7 +2478,6 @@ static HRESULT WINAPI d3d8_device_DeletePixelShader(IDirect3DDevice8 *iface, DWO
 {
     struct d3d8_device *device = impl_from_IDirect3DDevice8(iface);
     struct d3d8_pixel_shader *shader_impl;
-    struct wined3d_shader *cur;
 
     TRACE("iface %p, shader %#x.\n", iface, shader);
 
@@ -2502,12 +2490,8 @@ static HRESULT WINAPI d3d8_device_DeletePixelShader(IDirect3DDevice8 *iface, DWO
         return D3DERR_INVALIDCALL;
     }
 
-    if ((cur = wined3d_device_get_pixel_shader(device->wined3d_device)))
-    {
-        if (cur == shader_impl->wined3d_shader)
-            IDirect3DDevice8_SetPixelShader(iface, 0);
-        wined3d_shader_decref(cur);
-    }
+    if (wined3d_device_get_pixel_shader(device->wined3d_device) == shader_impl->wined3d_shader)
+        IDirect3DDevice8_SetPixelShader(iface, 0);
 
     wined3d_mutex_unlock();
 

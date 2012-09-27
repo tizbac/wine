@@ -1,6 +1,7 @@
-/* OLE DB Internal header
+/*
+ * Typelib for hnetcfg
  *
- * Copyright 2009 Huw Davies
+ * Copyright 2012 Hans Leidekker for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,5 +18,4 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-HRESULT create_oledb_convert(IUnknown *outer, void **obj) DECLSPEC_HIDDEN;
-HRESULT create_data_init(IUnknown *outer, void **obj) DECLSPEC_HIDDEN;
+#include "netfw.idl"

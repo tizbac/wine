@@ -1752,7 +1752,6 @@ static HRESULT WINAPI d3d9_device_GetTextureStageState(IDirect3DDevice9Ex *iface
         DWORD stage, D3DTEXTURESTAGESTATETYPE state, DWORD *value)
 {
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
-    HRESULT hr;
 
     TRACE("iface %p, stage %u, state %#x, value %p.\n", iface, stage, state, value);
 
@@ -1763,17 +1762,16 @@ static HRESULT WINAPI d3d9_device_GetTextureStageState(IDirect3DDevice9Ex *iface
     }
 
     wined3d_mutex_lock();
-    hr = wined3d_device_get_texture_stage_state(device->wined3d_device, stage, tss_lookup[state], value);
+    *value = wined3d_device_get_texture_stage_state(device->wined3d_device, stage, tss_lookup[state]);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d9_device_SetTextureStageState(IDirect3DDevice9Ex *iface,
         DWORD stage, D3DTEXTURESTAGESTATETYPE state, DWORD value)
 {
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
-    HRESULT hr;
 
     TRACE("iface %p, stage %u, state %#x, value %#x.\n", iface, stage, state, value);
 
@@ -1784,10 +1782,10 @@ static HRESULT WINAPI d3d9_device_SetTextureStageState(IDirect3DDevice9Ex *iface
     }
 
     wined3d_mutex_lock();
-    hr = wined3d_device_set_texture_stage_state(device->wined3d_device, stage, tss_lookup[state], value);
+    wined3d_device_set_texture_stage_state(device->wined3d_device, stage, tss_lookup[state], value);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d9_device_GetSamplerState(IDirect3DDevice9Ex *iface,
@@ -2266,16 +2264,15 @@ static HRESULT WINAPI d3d9_device_SetVertexShader(IDirect3DDevice9Ex *iface, IDi
 {
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
     struct d3d9_vertexshader *shader_obj = unsafe_impl_from_IDirect3DVertexShader9(shader);
-    HRESULT hr;
 
     TRACE("iface %p, shader %p.\n", iface, shader);
 
     wined3d_mutex_lock();
-    hr =  wined3d_device_set_vertex_shader(device->wined3d_device,
+    wined3d_device_set_vertex_shader(device->wined3d_device,
             shader_obj ? shader_obj->wined3d_shader : NULL);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d9_device_GetVertexShader(IDirect3DDevice9Ex *iface, IDirect3DVertexShader9 **shader)
@@ -2287,13 +2284,11 @@ static HRESULT WINAPI d3d9_device_GetVertexShader(IDirect3DDevice9Ex *iface, IDi
     TRACE("iface %p, shader %p.\n", iface, shader);
 
     wined3d_mutex_lock();
-    wined3d_shader = wined3d_device_get_vertex_shader(device->wined3d_device);
-    if (wined3d_shader)
+    if ((wined3d_shader = wined3d_device_get_vertex_shader(device->wined3d_device)))
     {
         shader_impl = wined3d_shader_get_parent(wined3d_shader);
         *shader = &shader_impl->IDirect3DVertexShader9_iface;
         IDirect3DVertexShader9_AddRef(*shader);
-        wined3d_shader_decref(wined3d_shader);
     }
     else
     {
@@ -2567,16 +2562,15 @@ static HRESULT WINAPI d3d9_device_SetPixelShader(IDirect3DDevice9Ex *iface, IDir
 {
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
     struct d3d9_pixelshader *shader_obj = unsafe_impl_from_IDirect3DPixelShader9(shader);
-    HRESULT hr;
 
     TRACE("iface %p, shader %p.\n", iface, shader);
 
     wined3d_mutex_lock();
-    hr = wined3d_device_set_pixel_shader(device->wined3d_device,
+    wined3d_device_set_pixel_shader(device->wined3d_device,
             shader_obj ? shader_obj->wined3d_shader : NULL);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d9_device_GetPixelShader(IDirect3DDevice9Ex *iface, IDirect3DPixelShader9 **shader)
@@ -2590,13 +2584,11 @@ static HRESULT WINAPI d3d9_device_GetPixelShader(IDirect3DDevice9Ex *iface, IDir
     if (!shader) return D3DERR_INVALIDCALL;
 
     wined3d_mutex_lock();
-    wined3d_shader = wined3d_device_get_pixel_shader(device->wined3d_device);
-    if (wined3d_shader)
+    if ((wined3d_shader = wined3d_device_get_pixel_shader(device->wined3d_device)))
     {
         shader_impl = wined3d_shader_get_parent(wined3d_shader);
         *shader = &shader_impl->IDirect3DPixelShader9_iface;
         IDirect3DPixelShader9_AddRef(*shader);
-        wined3d_shader_decref(wined3d_shader);
     }
     else
     {

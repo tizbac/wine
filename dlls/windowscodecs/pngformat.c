@@ -25,6 +25,7 @@
 #include <png.h>
 #endif
 
+#define NONAMELESSUNION
 #define COBJMACROS
 
 #include "windef.h"
@@ -129,9 +130,9 @@ static HRESULT LoadTextMetadata(IStream *stream, const GUID *preferred_vendor,
     value[value_len] = 0;
 
     result[0].id.vt = VT_LPSTR;
-    result[0].id.pszVal = name;
+    result[0].id.u.pszVal = name;
     result[0].value.vt = VT_LPSTR;
-    result[0].value.pszVal = value;
+    result[0].value.u.pszVal = value;
 
     *items = result;
     *item_count = 1;
@@ -624,7 +625,7 @@ static HRESULT WINAPI PngDecoder_GetColorContexts(IWICBitmapDecoder *iface,
     UINT cCount, IWICColorContext **ppIColorContexts, UINT *pcActualCount)
 {
     FIXME("(%p,%u,%p,%p)\n", iface, cCount, ppIColorContexts, pcActualCount);
-    return E_NOTIMPL;
+    return WINCODEC_ERR_UNSUPPORTEDOPERATION;
 }
 
 static HRESULT WINAPI PngDecoder_GetThumbnail(IWICBitmapDecoder *iface,
@@ -844,7 +845,7 @@ static HRESULT WINAPI PngDecoder_Frame_GetColorContexts(IWICBitmapFrameDecode *i
     UINT cCount, IWICColorContext **ppIColorContexts, UINT *pcActualCount)
 {
     FIXME("(%p,%u,%p,%p): stub\n", iface, cCount, ppIColorContexts, pcActualCount);
-    return E_NOTIMPL;
+    return WINCODEC_ERR_UNSUPPORTEDOPERATION;
 }
 
 static HRESULT WINAPI PngDecoder_Frame_GetThumbnail(IWICBitmapFrameDecode *iface,

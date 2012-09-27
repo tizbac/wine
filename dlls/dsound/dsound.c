@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -1083,35 +1084,29 @@ HRESULT DirectSoundDevice_AddBuffer(
  * Remove secondary buffer from buffer list.
  * Gets exclusive access to buffer for writing.
  */
-HRESULT DirectSoundDevice_RemoveBuffer(
-    DirectSoundDevice * device,
-    IDirectSoundBufferImpl * pDSB)
+void DirectSoundDevice_RemoveBuffer(DirectSoundDevice * device, IDirectSoundBufferImpl * pDSB)
 {
     int i;
-    HRESULT hr = DS_OK;
 
     TRACE("(%p, %p)\n", device, pDSB);
 
     RtlAcquireResourceExclusive(&(device->buffer_list_lock), TRUE);
 
-    for (i = 0; i < device->nrofbuffers; i++)
-        if (device->buffers[i] == pDSB)
-            break;
-
-    if (i < device->nrofbuffers) {
-        /* Put the last buffer of the list in the (now empty) position */
-        device->buffers[i] = device->buffers[device->nrofbuffers - 1];
-        device->nrofbuffers--;
-        device->buffers = HeapReAlloc(GetProcessHeap(),0,device->buffers,sizeof(LPDIRECTSOUNDBUFFER8)*device->nrofbuffers);
-        TRACE("buffer count is now %d\n", device->nrofbuffers);
-    }
-
-    if (device->nrofbuffers == 0) {
-        HeapFree(GetProcessHeap(),0,device->buffers);
+    if (device->nrofbuffers == 1) {
+        assert(device->buffers[0] == pDSB);
+        HeapFree(GetProcessHeap(), 0, device->buffers);
         device->buffers = NULL;
+    } else {
+        for (i = 0; i < device->nrofbuffers; i++) {
+            if (device->buffers[i] == pDSB) {
+                /* Put the last buffer of the list in the (now empty) position */
+                device->buffers[i] = device->buffers[device->nrofbuffers - 1];
+                break;
+            }
+        }
     }
+    device->nrofbuffers--;
+    TRACE("buffer count is now %d\n", device->nrofbuffers);
 
     RtlReleaseResource(&(device->buffer_list_lock));
-
-    return hr;
 }

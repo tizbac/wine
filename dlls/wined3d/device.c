@@ -2449,53 +2449,40 @@ struct wined3d_vertex_declaration * CDECL wined3d_device_get_vertex_declaration(
     return device->stateBlock->state.vertex_declaration;
 }
 
-HRESULT CDECL wined3d_device_set_vertex_shader(struct wined3d_device *device, struct wined3d_shader *shader)
+void CDECL wined3d_device_set_vertex_shader(struct wined3d_device *device, struct wined3d_shader *shader)
 {
     struct wined3d_shader *prev = device->updateStateBlock->state.vertex_shader;
 
     TRACE("device %p, shader %p.\n", device, shader);
-
-    device->updateStateBlock->state.vertex_shader = shader;
-    device->updateStateBlock->changed.vertexShader = TRUE;
-
-    if (device->isRecordingState)
-    {
-        if (shader)
-            wined3d_shader_incref(shader);
-        if (prev)
-            wined3d_shader_decref(prev);
-        TRACE("Recording... not performing anything.\n");
-        return WINED3D_OK;
-    }
-
-    if (shader == prev)
-    {
-        TRACE("Application is setting the old shader over, nothing to do.\n");
-        return WINED3D_OK;
-    }
 
     if (shader)
         wined3d_shader_incref(shader);
     if (prev)
         wined3d_shader_decref(prev);
 
-    device_invalidate_state(device, STATE_VSHADER);
+    device->updateStateBlock->state.vertex_shader = shader;
+    device->updateStateBlock->changed.vertexShader = TRUE;
 
-    return WINED3D_OK;
+    if (device->isRecordingState)
+    {
+        TRACE("Recording... not performing anything.\n");
+        return;
+    }
+
+    if (shader == prev)
+    {
+        TRACE("Application is setting the old shader over, nothing to do.\n");
+        return;
+    }
+
+    device_invalidate_state(device, STATE_VSHADER);
 }
 
 struct wined3d_shader * CDECL wined3d_device_get_vertex_shader(const struct wined3d_device *device)
 {
-    struct wined3d_shader *shader;
-
     TRACE("device %p.\n", device);
 
-    shader = device->stateBlock->state.vertex_shader;
-    if (shader)
-        wined3d_shader_incref(shader);
-
-    TRACE("Returning %p.\n", shader);
-    return shader;
+    return device->stateBlock->state.vertex_shader;
 }
 
 HRESULT CDECL wined3d_device_set_vs_consts_b(struct wined3d_device *device,
@@ -2844,53 +2831,40 @@ void device_update_tex_unit_map(struct wined3d_device *device)
         device_map_vsamplers(device, ps, gl_info);
 }
 
-HRESULT CDECL wined3d_device_set_pixel_shader(struct wined3d_device *device, struct wined3d_shader *shader)
+void CDECL wined3d_device_set_pixel_shader(struct wined3d_device *device, struct wined3d_shader *shader)
 {
     struct wined3d_shader *prev = device->updateStateBlock->state.pixel_shader;
 
     TRACE("device %p, shader %p.\n", device, shader);
-
-    device->updateStateBlock->state.pixel_shader = shader;
-    device->updateStateBlock->changed.pixelShader = TRUE;
-
-    if (device->isRecordingState)
-    {
-        if (shader)
-            wined3d_shader_incref(shader);
-        if (prev)
-            wined3d_shader_decref(prev);
-        TRACE("Recording... not performing anything.\n");
-        return WINED3D_OK;
-    }
-
-    if (shader == prev)
-    {
-        TRACE("Application is setting the old shader over, nothing to do.\n");
-        return WINED3D_OK;
-    }
 
     if (shader)
         wined3d_shader_incref(shader);
     if (prev)
         wined3d_shader_decref(prev);
 
-    device_invalidate_state(device, STATE_PIXELSHADER);
+    device->updateStateBlock->state.pixel_shader = shader;
+    device->updateStateBlock->changed.pixelShader = TRUE;
 
-    return WINED3D_OK;
+    if (device->isRecordingState)
+    {
+        TRACE("Recording... not performing anything.\n");
+        return;
+    }
+
+    if (shader == prev)
+    {
+        TRACE("Application is setting the old shader over, nothing to do.\n");
+        return;
+    }
+
+    device_invalidate_state(device, STATE_PIXELSHADER);
 }
 
 struct wined3d_shader * CDECL wined3d_device_get_pixel_shader(const struct wined3d_device *device)
 {
-    struct wined3d_shader *shader;
-
     TRACE("device %p.\n", device);
 
-    shader = device->stateBlock->state.pixel_shader;
-    if (shader)
-        wined3d_shader_incref(shader);
-
-    TRACE("Returning %p.\n", shader);
-    return shader;
+    return device->stateBlock->state.pixel_shader;
 }
 
 HRESULT CDECL wined3d_device_set_ps_consts_b(struct wined3d_device *device,
@@ -3369,7 +3343,7 @@ HRESULT CDECL wined3d_device_process_vertices(struct wined3d_device *device,
     return hr;
 }
 
-HRESULT CDECL wined3d_device_set_texture_stage_state(struct wined3d_device *device,
+void CDECL wined3d_device_set_texture_stage_state(struct wined3d_device *device,
         UINT stage, enum wined3d_texture_stage_state state, DWORD value)
 {
     const struct wined3d_gl_info *gl_info = &device->adapter->gl_info;
@@ -3381,14 +3355,14 @@ HRESULT CDECL wined3d_device_set_texture_stage_state(struct wined3d_device *devi
     if (state > WINED3D_HIGHEST_TEXTURE_STATE)
     {
         WARN("Invalid state %#x passed.\n", state);
-        return WINED3D_OK;
+        return;
     }
 
     if (stage >= gl_info->limits.texture_stages)
     {
         WARN("Attempting to set stage %u which is higher than the max stage %u, ignoring.\n",
                 stage, gl_info->limits.texture_stages - 1);
-        return WINED3D_OK;
+        return;
     }
 
     old_value = device->updateStateBlock->state.texture_states[stage][state];
@@ -3398,14 +3372,14 @@ HRESULT CDECL wined3d_device_set_texture_stage_state(struct wined3d_device *devi
     if (device->isRecordingState)
     {
         TRACE("Recording... not performing anything.\n");
-        return WINED3D_OK;
+        return;
     }
 
     /* Checked after the assignments to allow proper stateblock recording. */
     if (old_value == value)
     {
         TRACE("Application is setting the old value over, nothing to do.\n");
-        return WINED3D_OK;
+        return;
     }
 
     if (stage > device->stateBlock->state.lowest_disabled_stage
@@ -3415,7 +3389,7 @@ HRESULT CDECL wined3d_device_set_texture_stage_state(struct wined3d_device *devi
         /* Colorop change above lowest disabled stage? That won't change
          * anything in the GL setup. Changes in other states are important on
          * disabled stages too. */
-        return WINED3D_OK;
+        return;
     }
 
     if (state == WINED3D_TSS_COLOR_OP)
@@ -3459,26 +3433,21 @@ HRESULT CDECL wined3d_device_set_texture_stage_state(struct wined3d_device *devi
     }
 
     device_invalidate_state(device, STATE_TEXTURESTAGE(stage, state));
-
-    return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_device_get_texture_stage_state(const struct wined3d_device *device,
-        UINT stage, enum wined3d_texture_stage_state state, DWORD *value)
+DWORD CDECL wined3d_device_get_texture_stage_state(const struct wined3d_device *device,
+        UINT stage, enum wined3d_texture_stage_state state)
 {
-    TRACE("device %p, stage %u, state %s, value %p.\n",
-            device, stage, debug_d3dtexturestate(state), value);
+    TRACE("device %p, stage %u, state %s.\n",
+            device, stage, debug_d3dtexturestate(state));
 
     if (state > WINED3D_HIGHEST_TEXTURE_STATE)
     {
         WARN("Invalid state %#x passed.\n", state);
-        return WINED3D_OK;
+        return 0;
     }
 
-    *value = device->updateStateBlock->state.texture_states[stage][state];
-    TRACE("Returning %#x.\n", *value);
-
-    return WINED3D_OK;
+    return device->updateStateBlock->state.texture_states[stage][state];
 }
 
 HRESULT CDECL wined3d_device_set_texture(struct wined3d_device *device,

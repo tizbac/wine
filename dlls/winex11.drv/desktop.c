@@ -143,14 +143,14 @@ Window CDECL X11DRV_create_desktop( UINT width, UINT height )
                           PointerMotionMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask;
     win_attr.cursor = XCreateFontCursor( display, XC_top_left_arrow );
 
-    if (visual != DefaultVisual( display, DefaultScreen(display) ))
+    if (default_visual.visual != DefaultVisual( display, DefaultScreen(display) ))
         win_attr.colormap = XCreateColormap( display, DefaultRootWindow(display),
-                                             visual, AllocNone );
+                                             default_visual.visual, AllocNone );
     else
         win_attr.colormap = None;
 
     win = XCreateWindow( display, DefaultRootWindow(display),
-                         0, 0, width, height, 0, screen_depth, InputOutput, visual,
+                         0, 0, width, height, 0, default_visual.depth, InputOutput, default_visual.visual,
                          CWEventMask | CWCursor | CWColormap, &win_attr );
     if (win != None && width == screen_width && height == screen_height)
     {
@@ -177,7 +177,7 @@ static BOOL CALLBACK update_windows_on_desktop_resize( HWND hwnd, LPARAM lparam 
     struct desktop_resize_data *resize_data = (struct desktop_resize_data *)lparam;
     int mask = 0;
 
-    if (!(data = X11DRV_get_win_data( hwnd ))) return TRUE;
+    if (!(data = get_win_data( hwnd ))) return TRUE;
 
     /* update the full screen state */
     update_net_wm_states( data );
@@ -193,6 +193,7 @@ static BOOL CALLBACK update_windows_on_desktop_resize( HWND hwnd, LPARAM lparam 
         XReconfigureWMWindow( data->display, data->whole_window,
                               DefaultScreen(data->display), mask, &changes );
     }
+    release_win_data( data );
     if (hwnd == GetForegroundWindow()) clip_fullscreen_window( hwnd, TRUE );
     return TRUE;
 }

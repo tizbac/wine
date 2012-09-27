@@ -286,6 +286,8 @@ static void enable_xinput2(void)
                    class->number, class->min, class->max, class->resolution, class->mode,
                    XGetAtomName( data->display, class->label ));
             if (class->label == x11drv_atom( Rel_X ) || class->label == x11drv_atom( Rel_Y )) count++;
+            /* workaround for drivers that don't provide labels */
+            if (!class->label && class->number <= 1 && class->mode == XIModeRelative) count++;
         }
         if (count < 2) continue;
         TRACE( "Using %u (%s) as core pointer\n",
@@ -928,7 +930,7 @@ static Cursor create_xlib_monochrome_cursor( HDC hdc, const ICONINFOEXW *icon, i
     unsigned char *mask_bits = NULL;
     GC gc;
     XColor fg, bg;
-    XVisualInfo vis;
+    XVisualInfo vis = default_visual;
     Pixmap src_pixmap, bits_pixmap, mask_pixmap;
     struct gdi_image_bits bits;
     Cursor cursor = 0;
@@ -1016,7 +1018,7 @@ static Cursor create_xlib_color_cursor( HDC hdc, const ICONINFOEXW *icon, int wi
     BITMAPINFO *info = (BITMAPINFO *)buffer;
     XColor fg, bg;
     Cursor cursor = None;
-    XVisualInfo vis;
+    XVisualInfo vis = default_visual;
     Pixmap xor_pixmap, mask_pixmap;
     struct gdi_image_bits bits;
     unsigned int *color_bits = NULL, *ptr;
@@ -1526,14 +1528,16 @@ static void X11DRV_RawMotion( XGenericEventCookie *xev )
             if (XIMaskIsSet( event->valuators.mask, class->number ))
             {
                 double val = *values++;
-                if (class->label == x11drv_atom( Rel_X ))
+                if (class->label == x11drv_atom( Rel_X ) ||
+                    (!class->label && class->number == 0 && class->mode == XIModeRelative))
                 {
                     input.u.mi.dx = dx = val;
                     if (class->min < class->max)
                         input.u.mi.dx = val * (virtual_screen_rect.right - virtual_screen_rect.left)
                                             / (class->max - class->min);
                 }
-                else if (class->label == x11drv_atom( Rel_Y ))
+                else if (class->label == x11drv_atom( Rel_Y ) ||
+                         (!class->label && class->number == 1 && class->mode == XIModeRelative))
                 {
                     input.u.mi.dy = dy = val;
                     if (class->min < class->max)

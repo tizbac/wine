@@ -30,6 +30,9 @@ echo @tab@ on @space@
 
 @echo off
 echo off@tab@@space@
+@echo noecho1
+ @echo noecho2
+@@@@@echo echo3
 echo ------------ Testing 'echo' [OFF] ------------
 echo word
 echo 'singlequotedword'
@@ -67,6 +70,26 @@ type mixedEchoModes.cmd
 cmd /c mixedEchoModes.cmd
 del mixedEchoModes.cmd
 
+echo ------------ Testing parameterization ------------
+call :TestParm a b c
+call :TestParm "a b c"
+call :TestParm "a b"\c
+call :TestParm a=~`+,.{}!+b
+call :TestParm a;b
+call :TestParm "a;b"
+call :TestParm a^;b
+call :TestParm a[b]{c}(d)e
+call :TestParm a&echo second line
+call :TestParm a   b,,,c
+call :TestParm a==b;;c
+call :TestParm       a,,,  b
+goto :TestRem
+
+:TestParm
+echo '%1', '%2', '%3'
+goto :eof
+
+:TestRem
 echo ------------ Testing rem ------------
 rem Hello
 rem  Hello
@@ -110,6 +133,12 @@ echo foo11> foo
 type foo
 echo foo12> foo
 type foo
+echo foo13>"foo"
+type foo
+echo foo14>."\foo"
+type foo
+echo foo15>."\f"oo
+type foo
 del foo
 echo1>foo
 type foo
@@ -124,7 +153,7 @@ echo fooc 1>>foo
 type foo
 echo food1>>foo
 type foo
-echo food2>>foo
+echo food2>>"foo"
 type foo
 del foo
 echo food21>>foo
@@ -171,6 +200,15 @@ echo ^hell^o, world
 echo hell^o, world
 echo hell^^o, world
 echo hell^^^o, world
+echo hello^
+world
+echo hello^
+
+world
+echo hello^
+
+
+echo finished
 mkdir foobar
 echo baz> foobar\baz
 type foobar\baz
@@ -289,6 +327,8 @@ set VAR=
 echo ------------ Testing variable substitution ------------
 echo --- in FOR variables
 for %%i in ("A B" C) do echo %%i
+rem check works when prefix with @
+@for %%i in ("A B" C) do echo %%i
 rem quotes removal
 for %%i in ("A B" C) do echo '%%~i'
 rem fully qualified path
@@ -502,6 +542,12 @@ mkdir "bar bak"
 cd "bar bak"
 cd
 cd ..
+cd ".\bar bak"
+cd
+cd ..
+cd .\"bar bak"
+cd
+cd ..
 cd bar bak
 cd
 cd "bar bak@space@"@tab@@space@
@@ -522,7 +568,11 @@ type foobaz
 echo ---
 @echo off
 type foobaz@tab@
-echo ---
+echo ---1
+type ."\foobaz"
+echo ---2
+type ".\foobaz"
+echo ---3
 del foobaz
 
 echo ------------ Testing NUL ------------
@@ -644,7 +694,7 @@ echo --- basic wildcards
 for %%i in (ba*) do echo %%i
 echo --- for /d
 for /d %%i in (baz foo bar) do echo %%i 2>&1
-rem Confirm we dont match files:
+rem Confirm we don't match files:
 for /d %%i in (bazb*) do echo %%i 2>&1
 for /d %%i in (bazb2*) do echo %%i 2>&1
 rem Show we pass through non wildcards
@@ -1125,11 +1175,13 @@ if not exist foo (
 )
 echo --- multiple directories at once
 mkdir foobaz & cd foobaz
-mkdir foo bar\baz foobar
+mkdir foo bar\baz foobar "bazbaz" .\"zabzab"
 if exist foo (echo foo created) else echo foo not created!
 if exist bar (echo bar created) else echo bar not created!
 if exist foobar (echo foobar created) else echo foobar not created!
 if exist bar\baz (echo bar\baz created) else echo bar\baz not created!
+if exist bazbaz (echo bazbaz created) else echo bazbaz not created!
+if exist zabzab (echo zabzab created) else echo zabzab not created!
 cd .. & rd /s/q foobaz
 call :setError 0
 mkdir foo\*

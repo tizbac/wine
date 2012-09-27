@@ -1991,7 +1991,7 @@ HRESULT WINAPI D3DXComputeBoundingBox(CONST D3DXVECTOR3 *pfirstposition, DWORD n
  */
 HRESULT WINAPI D3DXComputeBoundingSphere(CONST D3DXVECTOR3* pfirstposition, DWORD numvertices, DWORD dwstride, D3DXVECTOR3 *pcenter, FLOAT *pradius)
 {
-    D3DXVECTOR3 temp, temp1;
+    D3DXVECTOR3 temp;
     FLOAT d;
     unsigned int i;
 
@@ -2000,16 +2000,12 @@ HRESULT WINAPI D3DXComputeBoundingSphere(CONST D3DXVECTOR3* pfirstposition, DWOR
     temp.x = 0.0f;
     temp.y = 0.0f;
     temp.z = 0.0f;
-    temp1 = temp;
     *pradius = 0.0f;
 
     for(i=0; i<numvertices; i++)
-    {
-        D3DXVec3Add(&temp1, &temp, (const D3DXVECTOR3*)((const char*)pfirstposition + dwstride * i));
-        temp = temp1;
-    }
+        D3DXVec3Add(&temp, &temp, (const D3DXVECTOR3*)((const char*)pfirstposition + dwstride * i));
 
-    D3DXVec3Scale(pcenter, &temp, 1.0f/((FLOAT)numvertices));
+    D3DXVec3Scale(pcenter, &temp, 1.0f / numvertices);
 
     for(i=0; i<numvertices; i++)
     {
@@ -3816,6 +3812,14 @@ cleanup:
     if (enumobj) IDirectXFileEnumObject_Release(enumobj);
     if (dxfile) IDirectXFile_Release(dxfile);
     return hr;
+}
+
+HRESULT WINAPI D3DXCleanMesh(D3DXCLEANTYPE clean_type, LPD3DXMESH mesh_in, const DWORD *adjacency_in,
+                             LPD3DXMESH *mesh_out, DWORD *adjacency_out, LPD3DXBUFFER *errors_and_warnings)
+{
+    FIXME("(%u, %p, %p, %p, %p, %p)\n", clean_type, mesh_in, adjacency_in, mesh_out, adjacency_out, errors_and_warnings);
+
+    return E_NOTIMPL;
 }
 
 HRESULT WINAPI D3DXFrameDestroy(LPD3DXFRAME frame, LPD3DXALLOCATEHIERARCHY alloc_hier)

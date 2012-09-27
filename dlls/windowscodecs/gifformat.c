@@ -582,6 +582,7 @@ typedef struct {
     LONG ref;
     BOOL initialized;
     GifFileType *gif;
+    UINT current_frame;
     CRITICAL_SECTION lock;
 } GifDecoder;
 
@@ -660,7 +661,7 @@ static ULONG WINAPI GifFrameDecode_Release(IWICBitmapFrameDecode *iface)
 
     if (ref == 0)
     {
-        IUnknown_Release((IUnknown*)This->parent);
+        IWICBitmapDecoder_Release(&This->parent->IWICBitmapDecoder_iface);
         HeapFree(GetProcessHeap(), 0, This);
     }
 
@@ -729,18 +730,16 @@ static HRESULT WINAPI GifFrameDecode_CopyPalette(IWICBitmapFrameDecode *iface,
     /* look for the transparent color extension */
     for (i = 0; i < This->frame->Extensions.ExtensionBlockCount; ++i) {
 	eb = This->frame->Extensions.ExtensionBlocks + i;
-	if (eb->Function == 0xF9 && eb->ByteCount == 4) {
-	    if ((eb->Bytes[0] & 1) == 1) {
-	        trans = (unsigned char)eb->Bytes[3];
+	if (eb->Function == GRAPHICS_EXT_FUNC_CODE && eb->ByteCount == 8) {
+	    if (eb->Bytes[3] & 1) {
+	        trans = (unsigned char)eb->Bytes[6];
 	        colors[trans] &= 0xffffff; /* set alpha to 0 */
 	        break;
 	    }
 	}
     }
 
-    IWICPalette_InitializeCustom(pIPalette, colors, cm->ColorCount);
-
-    return S_OK;
+    return IWICPalette_InitializeCustom(pIPalette, colors, cm->ColorCount);
 }
 
 static HRESULT copy_interlaced_pixels(const BYTE *srcbuffer,
@@ -1165,11 +1164,49 @@ static HRESULT WINAPI GifDecoder_GetDecoderInfo(IWICBitmapDecoder *iface,
     return hr;
 }
 
-static HRESULT WINAPI GifDecoder_CopyPalette(IWICBitmapDecoder *iface,
-    IWICPalette *pIPalette)
+static HRESULT WINAPI GifDecoder_CopyPalette(IWICBitmapDecoder *iface, IWICPalette *palette)
 {
-    TRACE("(%p,%p)\n", iface, pIPalette);
-    return WINCODEC_ERR_PALETTEUNAVAILABLE;
+    GifDecoder *This = impl_from_IWICBitmapDecoder(iface);
+    WICColor colors[256];
+    ColorMapObject *cm;
+    int i, trans;
+    ExtensionBlock *eb;
+
+    TRACE("(%p,%p)\n", iface, palette);
+
+    cm = This->gif->SColorMap;
+    if (!cm) return WINCODEC_ERR_FRAMEMISSING;
+
+    if (cm->ColorCount > 256)
+    {
+        ERR("GIF contains invalid number of colors: %d\n", cm->ColorCount);
+        return E_FAIL;
+    }
+
+    for (i = 0; i < cm->ColorCount; i++)
+    {
+        colors[i] = 0xff000000 | /* alpha */
+                    cm->Colors[i].Red << 16 |
+                    cm->Colors[i].Green << 8 |
+                    cm->Colors[i].Blue;
+    }
+
+    /* look for the transparent color extension */
+    for (i = 0; i < This->gif->SavedImages[This->current_frame].Extensions.ExtensionBlockCount; i++)
+    {
+        eb = This->gif->SavedImages[This->current_frame].Extensions.ExtensionBlocks + i;
+        if (eb->Function == GRAPHICS_EXT_FUNC_CODE && eb->ByteCount == 8)
+        {
+            if (eb->Bytes[3] & 1)
+            {
+                trans = (unsigned char)eb->Bytes[6];
+                colors[trans] &= 0xffffff; /* set alpha to 0 */
+                break;
+            }
+        }
+    }
+
+    return IWICPalette_InitializeCustom(palette, colors, cm->ColorCount);
 }
 
 static HRESULT WINAPI GifDecoder_GetMetadataQueryReader(IWICBitmapDecoder *iface,
@@ -1235,6 +1272,7 @@ static HRESULT WINAPI GifDecoder_GetFrame(IWICBitmapDecoder *iface,
     result->frame = &This->gif->SavedImages[index];
     IWICBitmapDecoder_AddRef(iface);
     result->parent = This;
+    This->current_frame = index;
 
     *ppIBitmapFrame = &result->IWICBitmapFrameDecode_iface;
 
@@ -1373,6 +1411,7 @@ HRESULT GifDecoder_CreateInstance(IUnknown *pUnkOuter, REFIID iid, void** ppv)
     This->ref = 1;
     This->initialized = FALSE;
     This->gif = NULL;
+    This->current_frame = 0;
     InitializeCriticalSection(&This->lock);
     This->lock.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": GifDecoder.lock");
 

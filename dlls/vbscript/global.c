@@ -17,6 +17,7 @@
  */
 
 #include <assert.h>
+#include <math.h>
 
 #include "vbscript.h"
 #include "vbscript_defs.h"
@@ -33,6 +34,9 @@ WINE_DEFAULT_DEBUG_CHANNEL(vbscript);
 /* Defined as extern in urlmon.idl, but not exported by uuid.lib */
 const GUID GUID_CUSTOM_CONFIRMOBJECTSAFETY =
     {0x10200490,0xfa38,0x11d0,{0xac,0x0e,0x00,0xa0,0xc9,0xf,0xff,0xc0}};
+
+static const WCHAR emptyW[] = {0};
+static const WCHAR vbscriptW[] = {'V','B','S','c','r','i','p','t',0};
 
 static IInternetHostSecurityManager *get_sec_mgr(script_ctx_t *ctx)
 {
@@ -98,6 +102,16 @@ static HRESULT return_int(VARIANT *res, int val)
     return S_OK;
 }
 
+static inline HRESULT return_double(VARIANT *res, double val)
+{
+    if(res) {
+        V_VT(res) = VT_R8;
+        V_R8(res) = val;
+    }
+
+    return S_OK;
+}
+
 static inline HRESULT return_null(VARIANT *res)
 {
     if(res)
@@ -114,8 +128,51 @@ static HRESULT to_int(VARIANT *v, int *ret)
     case VT_I4:
         *ret = V_I4(v);
         break;
+    case VT_R8: {
+        double n = round(V_R8(v));
+        if(!is_int32(n)) {
+            FIXME("%lf is out of int range\n", n);
+            return E_FAIL;
+        }
+        *ret = n;
+        break;
+    }
     default:
         FIXME("not supported %s\n", debugstr_variant(v));
+        return E_NOTIMPL;
+    }
+
+    return S_OK;
+}
+
+static HRESULT to_double(VARIANT *v, double *ret)
+{
+    switch(V_VT(v)) {
+    case VT_I2:
+        *ret = V_I2(v);
+        break;
+    case VT_I4:
+        *ret = V_I4(v);
+        break;
+    case VT_R4:
+        *ret = V_R4(v);
+        break;
+    case VT_R8:
+        *ret = V_R8(v);
+        break;
+    case VT_BSTR: {
+        VARIANT dst;
+        HRESULT hres;
+
+        V_VT(&dst) = VT_EMPTY;
+        hres = VariantChangeType(&dst, v, VARIANT_LOCALBOOL, VT_R8);
+        if(FAILED(hres))
+            return hres;
+        *ret = V_R8(&dst);
+        break;
+    }
+    default:
+        FIXME("arg %s not supported\n", debugstr_variant(v));
         return E_NOTIMPL;
     }
 
@@ -216,6 +273,60 @@ static IUnknown *create_object(script_ctx_t *ctx, const WCHAR *progid)
     }
 
     return obj;
+}
+
+static HRESULT show_msgbox(script_ctx_t *ctx, BSTR prompt, VARIANT *res)
+{
+    SCRIPTUICHANDLING uic_handling = SCRIPTUICHANDLING_ALLOW;
+    IActiveScriptSiteUIControl *ui_control;
+    IActiveScriptSiteWindow *acts_window;
+    const WCHAR *title;
+    HWND hwnd = NULL;
+    int ret;
+    HRESULT hres;
+
+    hres = IActiveScriptSite_QueryInterface(ctx->site, &IID_IActiveScriptSiteUIControl, (void**)&ui_control);
+    if(SUCCEEDED(hres)) {
+        hres = IActiveScriptSiteUIControl_GetUIBehavior(ui_control, SCRIPTUICITEM_MSGBOX, &uic_handling);
+        IActiveScriptSiteUIControl_Release(ui_control);
+        if(FAILED(hres))
+            uic_handling = SCRIPTUICHANDLING_ALLOW;
+    }
+
+    switch(uic_handling) {
+    case SCRIPTUICHANDLING_ALLOW:
+        break;
+    case SCRIPTUICHANDLING_NOUIDEFAULT:
+        return return_short(res, 0);
+    default:
+        FIXME("blocked\n");
+        return E_FAIL;
+    }
+
+    title = (ctx->safeopt & INTERFACE_USES_SECURITY_MANAGER) ? vbscriptW : emptyW;
+
+    hres = IActiveScriptSite_QueryInterface(ctx->site, &IID_IActiveScriptSiteWindow, (void**)&acts_window);
+    if(FAILED(hres)) {
+        FIXME("No IActiveScriptSiteWindow\n");
+        return hres;
+    }
+
+    hres = IActiveScriptSiteWindow_GetWindow(acts_window, &hwnd);
+    if(SUCCEEDED(hres)) {
+        hres = IActiveScriptSiteWindow_EnableModeless(acts_window, FALSE);
+        if(SUCCEEDED(hres)) {
+            ret = MessageBoxW(hwnd, prompt, title, MB_OK);
+            hres = IActiveScriptSiteWindow_EnableModeless(acts_window, TRUE);
+        }
+    }
+
+    IActiveScriptSiteWindow_Release(acts_window);
+    if(FAILED(hres)) {
+        FIXME("failed: %08x\n", hres);
+        return hres;
+    }
+
+    return return_short(res, ret);
 }
 
 static HRESULT Global_CCur(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
@@ -672,8 +783,34 @@ static HRESULT Global_Trim(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARI
 
 static HRESULT Global_Space(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    BSTR str;
+    int n, i;
+    HRESULT hres;
+
+    TRACE("%s\n", debugstr_variant(arg));
+
+    hres = to_int(arg, &n);
+    if(FAILED(hres))
+        return hres;
+
+    if(n < 0) {
+        FIXME("n = %d\n", n);
+        return E_NOTIMPL;
+    }
+
+    if(!res)
+        return S_OK;
+
+    str = SysAllocStringLen(NULL, n);
+    if(!str)
+        return E_OUTOFMEMORY;
+
+    for(i=0; i<n; i++)
+        str[i] = ' ';
+
+    V_VT(res) = VT_BSTR;
+    V_BSTR(res) = str;
+    return S_OK;
 }
 
 static HRESULT Global_String(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
@@ -906,8 +1043,23 @@ static HRESULT Global_InputBox(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, 
 
 static HRESULT Global_MsgBox(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    BSTR prompt;
+    HRESULT hres;
+
+    TRACE("\n");
+
+    if(args_cnt != 1) {
+        FIXME("unsupported arg_cnt %d\n", args_cnt);
+        return E_NOTIMPL;
+    }
+
+    hres = to_string(arg, &prompt);
+    if(FAILED(hres))
+        return hres;
+
+    hres = show_msgbox(This->desc->ctx, prompt, res);
+    SysFreeString(prompt);
+    return hres;
 }
 
 static HRESULT Global_CreateObject(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
@@ -1084,8 +1236,30 @@ static HRESULT Global_MonthName(vbdisp_t *This, VARIANT *arg, unsigned args_cnt,
 
 static HRESULT Global_Round(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    double n;
+    HRESULT hres;
+
+    TRACE("%s\n", debugstr_variant(arg));
+
+    if(!res)
+        return S_OK;
+
+    switch(V_VT(arg)) {
+    case VT_I2:
+    case VT_I4:
+    case VT_BOOL:
+        *res = *arg;
+        return S_OK;
+    case VT_R8:
+        n = V_R8(arg);
+        break;
+    default:
+        hres = to_double(arg, &n);
+        if(FAILED(hres))
+            return hres;
+    }
+
+    return return_double(res, round(n));
 }
 
 static HRESULT Global_Escape(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
