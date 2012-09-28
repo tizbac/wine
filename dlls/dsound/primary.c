@@ -42,6 +42,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(dsound);
 
 HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
 {
+    WAVEFORMATEXTENSIBLE *wfe2 = NULL;
     HRESULT hres;
     REFERENCE_TIME period;
     UINT32 frames;
@@ -65,11 +66,78 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
         device->volume = NULL;
     }
 
+    if (device->pad) {
+        device->playpos += device->pad;
+        device->playpos %= device->buflen;
+        device->pad = 0;
+    }
+
     hres = IMMDevice_Activate(device->mmdevice, &IID_IAudioClient,
             CLSCTX_INPROC_SERVER, NULL, (void **)&device->client);
     if(FAILED(hres)){
         WARN("Activate failed: %08x\n", hres);
         return hres;
+    }
+
+    if (device->priolevel != DSSCL_WRITEPRIMARY) {
+        WAVEFORMATEX *w;
+        hres = IAudioClient_GetMixFormat(device->client, &w);
+        if (SUCCEEDED(hres)) {
+            WAVEFORMATEXTENSIBLE *wfe = (WAVEFORMATEXTENSIBLE*)w;
+
+            if (w->nChannels > 2) {
+                FIXME("Limiting channels to 2 due to lack of multichannel support\n");
+                w->nChannels = 2;
+            }
+
+            if (!IsEqualGUID(&wfe->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {
+                WAVEFORMATEXTENSIBLE wfe3 = *wfe;
+
+                wfe->SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+                w->wBitsPerSample = 32;
+                wfe->Samples.wValidBitsPerSample = 0;
+
+                if (FAILED(IAudioClient_IsFormatSupported(device->client, AUDCLNT_SHAREMODE_SHARED, &wfe->Format, (WAVEFORMATEX**)&wfe2)))
+                    *wfe = wfe3;
+                else if (wfe2)
+                    *wfe = *wfe2;
+                CoTaskMemFree(wfe2);
+                wfe2 = NULL;
+            }
+            w->nBlockAlign = w->nChannels * w->wBitsPerSample / 8;
+            w->nAvgBytesPerSec = w->nBlockAlign * w->nSamplesPerSec;
+            memcpy(device->pwfx, wfe, sizeof(*wfe));
+            CoTaskMemFree(wfe);
+        }
+    } else if (device->primary_pwfx->wFormatTag == WAVE_FORMAT_PCM ||
+               device->primary_pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
+        WAVEFORMATEX *wi = device->primary_pwfx, *w = device->pwfx;
+        WAVEFORMATEXTENSIBLE *wfe = (void*)w;
+
+        wfe->Format = *wi;
+        w->wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+        w->cbSize = sizeof(*wfe) - sizeof(*w);
+        wfe->dwChannelMask = 0;
+        wfe->Samples.wValidBitsPerSample = 0;
+        if (wi->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
+            w->wBitsPerSample = 32;
+            wfe->SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+        } else
+            wfe->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+    } else {
+        DWORD cbSize = device->primary_pwfx->cbSize + sizeof(WAVEFORMATEX);
+        if (device->primary_pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+            cbSize = sizeof(WAVEFORMATEXTENSIBLE);
+
+        if (cbSize > sizeof(WAVEFORMATEXTENSIBLE))
+            device->pwfx = HeapReAlloc(GetProcessHeap(), 0, device->pwfx, cbSize);
+        memcpy(device->pwfx, device->primary_pwfx, cbSize);
+    }
+
+    IAudioClient_IsFormatSupported(device->client, AUDCLNT_SHAREMODE_SHARED, device->pwfx, (void*)&wfe2);
+    if (wfe2) {
+        memcpy(device->pwfx, wfe2, sizeof(WAVEFORMATEX) + wfe2->Format.cbSize);
+        CoTaskMemFree(wfe2);
     }
 
     hres = IAudioClient_Initialize(device->client,
@@ -80,6 +148,13 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
         device->client = NULL;
         WARN("Initialize failed: %08x\n", hres);
         return hres;
+    } else if (device->priolevel != DSSCL_WRITEPRIMARY) {
+        WAVEFORMATEXTENSIBLE *wfe = (WAVEFORMATEXTENSIBLE*)device->pwfx;
+        if (IsEqualGUID(&wfe->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT))
+            device->pwfx->wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
+        else
+            device->pwfx->wFormatTag = WAVE_FORMAT_PCM;
+        device->pwfx->cbSize = 0;
     }
     IAudioClient_SetEventHandle(device->client, device->sleepev);
 
@@ -121,15 +196,17 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
     IAudioClient_GetStreamLatency(device->client, &period);
     IAudioClient_GetBufferSize(device->client, &frames);
     device->fraglen = MulDiv(device->pwfx->nSamplesPerSec, period, 10000000) * device->pwfx->nBlockAlign;
-    device->prebuf = frames * device->pwfx->nBlockAlign / device->fraglen;
-    TRACE("period %Lu fraglen %u prebuf %u\n", period, device->fraglen, device->prebuf);
+    device->aclen = frames * device->pwfx->nBlockAlign;
+    TRACE("period %Lu fraglen %u buflen %u\n", period, device->fraglen, device->aclen);
 
     return S_OK;
 }
 
-static HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device)
+HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device)
 {
+	IDirectSoundBufferImpl** dsb = device->buffers;
 	LPBYTE newbuf;
+	DWORD i;
 
 	TRACE("(%p)\n", device);
 
@@ -138,14 +215,9 @@ static HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device)
 	if (!device->buflen)
 		device->buflen = ds_hel_buflen;
 	device->buflen -= device->buflen % device->pwfx->nBlockAlign;
-	while(device->buflen < device->fraglen * device->prebuf){
-		device->buflen += ds_hel_buflen;
-		device->buflen -= device->buflen % device->pwfx->nBlockAlign;
-	}
 
-	device->helfrags = device->buflen / device->fraglen;
-
-	device->mix_buffer_len = ((device->prebuf * device->fraglen) / (device->pwfx->wBitsPerSample / 8)) * sizeof(float);
+	HeapFree(GetProcessHeap(), 0, device->mix_buffer);
+	device->mix_buffer_len = (device->buflen / (device->pwfx->wBitsPerSample / 8)) * sizeof(float);
 	device->mix_buffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, device->mix_buffer_len);
 	if (!device->mix_buffer)
 		return DSERR_OUTOFMEMORY;
@@ -169,8 +241,8 @@ static HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device)
 
     device->buffer = newbuf;
 
-    TRACE("buflen: %u, fraglen: %u, helfrags: %u, mix_buffer_len: %u\n",
-            device->buflen, device->fraglen, device->helfrags, device->mix_buffer_len);
+    TRACE("buflen: %u, fraglen: %u, mix_buffer_len: %u\n",
+            device->buflen, device->fraglen, device->mix_buffer_len);
 
     if(device->pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
             (device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
@@ -182,8 +254,22 @@ static HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device)
 
 	FillMemory(device->buffer, device->buflen, (device->pwfx->wBitsPerSample == 8) ? 128 : 0);
 	FillMemory(device->mix_buffer, device->mix_buffer_len, 0);
-	device->playing_offs_bytes = device->in_mmdev_bytes = device->playpos = device->mixpos = 0;
-	return DS_OK;
+	device->playpos = 0;
+
+    if (device->pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
+	 (device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+	  IsEqualGUID(&((WAVEFORMATEXTENSIBLE*)device->pwfx)->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)))
+        device->normfunction = normfunctions[4];
+    else
+        device->normfunction = normfunctions[device->pwfx->wBitsPerSample/8 - 1];
+
+    for (i = 0; i < device->nrofbuffers; i++) {
+        RtlAcquireResourceExclusive(&dsb[i]->lock, TRUE);
+        DSOUND_RecalcFormat(dsb[i]);
+        RtlReleaseResource(&dsb[i]->lock);
+    }
+
+    return DS_OK;
 }
 
 
@@ -198,9 +284,6 @@ static void DSOUND_PrimaryClose(DirectSoundDevice *device)
         if(FAILED(hr))
             WARN("Stop failed: %08x\n", hr);
     }
-
-    /* clear the queue */
-    device->in_mmdev_bytes = 0;
 }
 
 HRESULT DSOUND_PrimaryCreate(DirectSoundDevice *device)
@@ -235,6 +318,7 @@ HRESULT DSOUND_PrimaryDestroy(DirectSoundDevice *device)
 	HeapFree(GetProcessHeap(), 0, device->primary);
 	device->primary = NULL;
 
+	HeapFree(GetProcessHeap(),0,device->primary_pwfx);
 	HeapFree(GetProcessHeap(),0,device->pwfx);
 	device->pwfx=NULL;
 
@@ -251,7 +335,7 @@ HRESULT DSOUND_PrimaryPlay(DirectSoundDevice *device)
     TRACE("(%p)\n", device);
 
     hr = IAudioClient_Start(device->client);
-    if(FAILED(hr)){
+    if(FAILED(hr) && hr != AUDCLNT_E_NOT_STOPPED){
         WARN("Start failed: %08x\n", hr);
         return hr;
     }
@@ -276,16 +360,19 @@ HRESULT DSOUND_PrimaryStop(DirectSoundDevice *device)
 
 HRESULT DSOUND_PrimaryGetPosition(DirectSoundDevice *device, LPDWORD playpos, LPDWORD writepos)
 {
+	UINT32 pad = 0;
 	TRACE("(%p,%p,%p)\n", device, playpos, writepos);
 
 	/* check if playpos was requested */
 	if (playpos)
-		*playpos = device->playing_offs_bytes;
+		*playpos = device->playpos;
+
+	IAudioClient_GetCurrentPadding(device->client, &pad);
 
 	/* check if writepos was requested */
 	if (writepos)
 		/* the writepos is the first non-queued position */
-		*writepos = (device->playing_offs_bytes + device->in_mmdev_bytes) % device->buflen;
+		*writepos = (device->playpos + pad * device->pwfx->nBlockAlign) % device->buflen;
 
 	TRACE("playpos = %d, writepos = %d (%p, time=%d)\n", playpos?*playpos:-1, writepos?*writepos:-1, device, GetTickCount());
 	return DS_OK;
@@ -324,8 +411,7 @@ LPWAVEFORMATEX DSOUND_CopyFormat(LPCWAVEFORMATEX wfex)
 
 HRESULT primarybuffer_SetFormat(DirectSoundDevice *device, LPCWAVEFORMATEX passed_fmt)
 {
-	HRESULT err = DSERR_BUFFERLOST;
-	int i;
+	HRESULT err = S_OK;
 	WAVEFORMATEX *old_fmt;
 	WAVEFORMATEXTENSIBLE *fmtex, *passed_fmtex = (WAVEFORMATEXTENSIBLE*)passed_fmt;
 	BOOL forced = (device->priolevel == DSSCL_WRITEPRIMARY);
@@ -363,169 +449,67 @@ HRESULT primarybuffer_SetFormat(DirectSoundDevice *device, LPCWAVEFORMATEX passe
 	RtlAcquireResourceExclusive(&(device->buffer_list_lock), TRUE);
 	EnterCriticalSection(&(device->mixlock));
 
-	old_fmt = device->pwfx;
-	device->pwfx = DSOUND_CopyFormat(passed_fmt);
-	fmtex = (WAVEFORMATEXTENSIBLE *)device->pwfx;
-	if (device->pwfx == NULL) {
-		device->pwfx = old_fmt;
-		old_fmt = NULL;
-		err = DSERR_OUTOFMEMORY;
-		goto done;
-	}
+	if (device->priolevel == DSSCL_WRITEPRIMARY) {
+		old_fmt = device->primary_pwfx;
+		device->primary_pwfx = DSOUND_CopyFormat(passed_fmt);
+		fmtex = (WAVEFORMATEXTENSIBLE *)device->primary_pwfx;
+		if (device->primary_pwfx == NULL) {
+			err = DSERR_OUTOFMEMORY;
+			goto out;
+		}
 
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE){
-		if(fmtex->Samples.wValidBitsPerSample == 0){
+		if (fmtex->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+		    fmtex->Samples.wValidBitsPerSample == 0) {
 			TRACE("Correcting 0 valid bits per sample\n");
 			fmtex->Samples.wValidBitsPerSample = fmtex->Format.wBitsPerSample;
 		}
-	}
 
-	DSOUND_PrimaryClose(device);
-
-	err = DSOUND_ReopenDevice(device, FALSE);
-	if(SUCCEEDED(err))
-		goto opened;
-
-	/* requested format failed, so try others */
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT){
-		device->pwfx->wFormatTag = WAVE_FORMAT_PCM;
-		device->pwfx->wBitsPerSample = 32;
-		device->pwfx->nAvgBytesPerSec = passed_fmt->nSamplesPerSec * device->pwfx->nBlockAlign;
-		device->pwfx->nBlockAlign = passed_fmt->nChannels * (device->pwfx->wBitsPerSample / 8);
-
-		err = DSOUND_ReopenDevice(device, FALSE);
-		if(SUCCEEDED(err))
-			goto opened;
-	}
-
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
-			 IsEqualGUID(&fmtex->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)){
-		fmtex->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
-		device->pwfx->wBitsPerSample = 32;
-		device->pwfx->nAvgBytesPerSec = passed_fmt->nSamplesPerSec * device->pwfx->nBlockAlign;
-		device->pwfx->nBlockAlign = passed_fmt->nChannels * (device->pwfx->wBitsPerSample / 8);
-
-		err = DSOUND_ReopenDevice(device, FALSE);
-		if(SUCCEEDED(err))
-			goto opened;
-	}
-
-	device->pwfx->wBitsPerSample = 32;
-	device->pwfx->nAvgBytesPerSec = passed_fmt->nSamplesPerSec * device->pwfx->nBlockAlign;
-	device->pwfx->nBlockAlign = passed_fmt->nChannels * (device->pwfx->wBitsPerSample / 8);
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
-		fmtex->Samples.wValidBitsPerSample = device->pwfx->wBitsPerSample;
-	err = DSOUND_ReopenDevice(device, FALSE);
-	if(SUCCEEDED(err))
-		goto opened;
-
-	device->pwfx->wBitsPerSample = 16;
-	device->pwfx->nAvgBytesPerSec = passed_fmt->nSamplesPerSec * device->pwfx->nBlockAlign;
-	device->pwfx->nBlockAlign = passed_fmt->nChannels * (device->pwfx->wBitsPerSample / 8);
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
-		fmtex->Samples.wValidBitsPerSample = device->pwfx->wBitsPerSample;
-	err = DSOUND_ReopenDevice(device, FALSE);
-	if(SUCCEEDED(err))
-		goto opened;
-
-	device->pwfx->wBitsPerSample = 8;
-	device->pwfx->nAvgBytesPerSec = passed_fmt->nSamplesPerSec * device->pwfx->nBlockAlign;
-	device->pwfx->nBlockAlign = passed_fmt->nChannels * (device->pwfx->wBitsPerSample / 8);
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
-		fmtex->Samples.wValidBitsPerSample = device->pwfx->wBitsPerSample;
-	err = DSOUND_ReopenDevice(device, FALSE);
-	if(SUCCEEDED(err))
-		goto opened;
-
-	device->pwfx->nChannels = (passed_fmt->nChannels == 2) ? 1 : 2;
-	device->pwfx->wBitsPerSample = passed_fmt->wBitsPerSample;
-	device->pwfx->nAvgBytesPerSec = passed_fmt->nSamplesPerSec * device->pwfx->nBlockAlign;
-	device->pwfx->nBlockAlign = passed_fmt->nChannels * (device->pwfx->wBitsPerSample / 8);
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
-		fmtex->Samples.wValidBitsPerSample = device->pwfx->wBitsPerSample;
-	err = DSOUND_ReopenDevice(device, FALSE);
-	if(SUCCEEDED(err))
-		goto opened;
-
-	device->pwfx->wBitsPerSample = 32;
-	device->pwfx->nAvgBytesPerSec = passed_fmt->nSamplesPerSec * device->pwfx->nBlockAlign;
-	device->pwfx->nBlockAlign = passed_fmt->nChannels * (device->pwfx->wBitsPerSample / 8);
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
-		fmtex->Samples.wValidBitsPerSample = device->pwfx->wBitsPerSample;
-	err = DSOUND_ReopenDevice(device, FALSE);
-	if(SUCCEEDED(err))
-		goto opened;
-
-	device->pwfx->wBitsPerSample = 16;
-	device->pwfx->nAvgBytesPerSec = passed_fmt->nSamplesPerSec * device->pwfx->nBlockAlign;
-	device->pwfx->nBlockAlign = passed_fmt->nChannels * (device->pwfx->wBitsPerSample / 8);
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
-		fmtex->Samples.wValidBitsPerSample = device->pwfx->wBitsPerSample;
-	err = DSOUND_ReopenDevice(device, FALSE);
-	if(SUCCEEDED(err))
-		goto opened;
-
-	device->pwfx->wBitsPerSample = 8;
-	device->pwfx->nAvgBytesPerSec = passed_fmt->nSamplesPerSec * device->pwfx->nBlockAlign;
-	device->pwfx->nBlockAlign = passed_fmt->nChannels * (device->pwfx->wBitsPerSample / 8);
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
-		fmtex->Samples.wValidBitsPerSample = device->pwfx->wBitsPerSample;
-	err = DSOUND_ReopenDevice(device, FALSE);
-	if(SUCCEEDED(err))
-		goto opened;
-
-	WARN("No formats could be opened\n");
-	goto done;
-
-opened:
-	err = DSOUND_PrimaryOpen(device);
-	if (err != DS_OK) {
-		WARN("DSOUND_PrimaryOpen failed\n");
-		goto done;
-	}
-
-	if (passed_fmt->nSamplesPerSec/100 != device->pwfx->nSamplesPerSec/100 && forced && device->buffer)
-	{
 		DSOUND_PrimaryClose(device);
-		device->pwfx->nSamplesPerSec = passed_fmt->nSamplesPerSec;
-		err = DSOUND_ReopenDevice(device, TRUE);
-		if (FAILED(err))
-			WARN("DSOUND_ReopenDevice(2) failed: %08x\n", err);
-		else if (FAILED((err = DSOUND_PrimaryOpen(device))))
-			WARN("DSOUND_PrimaryOpen(2) failed: %08x\n", err);
-	}
 
-
-	if(device->pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
-			(device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
-			 IsEqualGUID(&((WAVEFORMATEXTENSIBLE*)device->pwfx)->SubFormat,
-				 &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)))
-		device->normfunction = normfunctions[4];
-	else
-		device->normfunction = normfunctions[device->pwfx->wBitsPerSample/8 - 1];
-
-	if (old_fmt->nSamplesPerSec != device->pwfx->nSamplesPerSec ||
-			old_fmt->wBitsPerSample != device->pwfx->wBitsPerSample ||
-			old_fmt->nChannels != device->pwfx->nChannels) {
-		IDirectSoundBufferImpl** dsb = device->buffers;
-		for (i = 0; i < device->nrofbuffers; i++, dsb++) {
-			/* **** */
-			RtlAcquireResourceExclusive(&(*dsb)->lock, TRUE);
-
-			(*dsb)->freqAdjust = (*dsb)->freq / (float)device->pwfx->nSamplesPerSec;
-			DSOUND_RecalcFormat((*dsb));
-
-			RtlReleaseResource(&(*dsb)->lock);
-			/* **** */
+		err = DSOUND_ReopenDevice(device, forced);
+		if (FAILED(err)) {
+			ERR("No formats could be opened\n");
+			goto done;
 		}
-	}
+
+		err = DSOUND_PrimaryOpen(device);
+		if (err != DS_OK) {
+			ERR("DSOUND_PrimaryOpen failed\n");
+			goto done;
+		}
 
 done:
+		if (err != DS_OK)
+			device->primary_pwfx = old_fmt;
+		else
+			HeapFree(GetProcessHeap(), 0, old_fmt);
+	} else if (passed_fmt->wFormatTag == WAVE_FORMAT_PCM ||
+		   passed_fmt->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
+		/* Fill in "real" values to primary_pwfx */
+		WAVEFORMATEX *fmt = device->primary_pwfx;
+
+		*fmt = *device->pwfx;
+		fmtex = (void*)device->pwfx;
+
+		if (IsEqualGUID(&fmtex->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) &&
+		    passed_fmt->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
+			fmt->wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
+		} else {
+			fmt->wFormatTag = WAVE_FORMAT_PCM;
+			fmt->wBitsPerSample = 16;
+		}
+		fmt->nBlockAlign = fmt->nChannels * fmt->wBitsPerSample / 8;
+		fmt->nAvgBytesPerSec = fmt->nBlockAlign * fmt->nSamplesPerSec;
+	} else {
+		device->primary_pwfx = HeapReAlloc(GetProcessHeap(), 0, device->primary_pwfx, sizeof(*fmtex));
+		memcpy(device->primary_pwfx, device->pwfx, sizeof(*fmtex));
+	}
+
+out:
 	LeaveCriticalSection(&(device->mixlock));
 	RtlReleaseResource(&(device->buffer_list_lock));
 	/* **** */
 
-	HeapFree(GetProcessHeap(), 0, old_fmt);
 	return err;
 }
 
@@ -820,11 +804,11 @@ static HRESULT WINAPI PrimaryBufferImpl_GetFormat(IDirectSoundBuffer *iface, WAV
     DirectSoundDevice *device = This->device;
     TRACE("(%p,%p,%d,%p)\n", iface, lpwf, wfsize, wfwritten);
 
-    size = sizeof(WAVEFORMATEX) + device->pwfx->cbSize;
+    size = sizeof(WAVEFORMATEX) + device->primary_pwfx->cbSize;
 
     if (lpwf) {	/* NULL is valid */
         if (wfsize >= size) {
-            CopyMemory(lpwf,device->pwfx,size);
+            CopyMemory(lpwf,device->primary_pwfx,size);
             if (wfwritten)
                 *wfwritten = size;
         } else {
@@ -835,7 +819,7 @@ static HRESULT WINAPI PrimaryBufferImpl_GetFormat(IDirectSoundBuffer *iface, WAV
         }
     } else {
         if (wfwritten)
-            *wfwritten = sizeof(WAVEFORMATEX) + device->pwfx->cbSize;
+            *wfwritten = sizeof(WAVEFORMATEX) + device->primary_pwfx->cbSize;
         else {
             WARN("invalid parameter: wfwritten == NULL\n");
             return DSERR_INVALIDPARAM;
