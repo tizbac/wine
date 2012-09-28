@@ -667,7 +667,7 @@ static void DSOUND_WaveQueue(DirectSoundDevice *device, BOOL force)
  */
 static void DSOUND_PerformMix(DirectSoundDevice *device)
 {
-	UINT32 pad, to_mix_frags, to_mix_bytes;
+	UINT32 pad, to_mix_bytes;
 	HRESULT hr;
 
 	TRACE("(%p)\n", device);
@@ -682,15 +682,13 @@ static void DSOUND_PerformMix(DirectSoundDevice *device)
 		return;
 	}
 
-	to_mix_frags = device->prebuf - (pad * device->pwfx->nBlockAlign + device->fraglen - 1) / device->fraglen;
+	to_mix_bytes = device->prebuf * device->fraglen - pad * device->pwfx->nBlockAlign;
 
-	if(to_mix_frags == 0){
+	if(!to_mix_bytes){
 		/* nothing to do! */
 		LeaveCriticalSection(&device->mixlock);
 		return;
 	}
-
-	to_mix_bytes = to_mix_frags * device->fraglen;
 
 	if(device->in_mmdev_bytes > 0){
 		DWORD delta_bytes = min(to_mix_bytes, device->in_mmdev_bytes);
