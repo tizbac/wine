@@ -848,22 +848,22 @@ static void DSOUND_PerformMix(DirectSoundDevice *device)
 	/* **** */
 }
 
-void CALLBACK DSOUND_timer(UINT timerID, UINT msg, DWORD_PTR dwUser,
-                           DWORD_PTR dw1, DWORD_PTR dw2)
+DWORD CALLBACK DSOUND_mixthread(void *p)
 {
-	DirectSoundDevice * device = (DirectSoundDevice*)dwUser;
-	DWORD start_time =  GetTickCount();
-	DWORD end_time;
-	TRACE("(%d,%d,0x%lx,0x%lx,0x%lx)\n",timerID,msg,dwUser,dw1,dw2);
-	TRACE("entering at %d\n", start_time);
+	DirectSoundDevice *dev = p;
+	TRACE("(%p)\n", dev);
 
-	RtlAcquireResourceShared(&(device->buffer_list_lock), TRUE);
+	while (dev->ref) {
 
-	if (device->ref)
-		DSOUND_PerformMix(device);
+		/* ALSA is retarded, add a timeout.. */
+		if (WaitForSingleObject(dev->sleepev, 25) == WAIT_TIMEOUT)
+			WARN("wait timed out!\n");
+		if (!dev->ref)
+			break;
 
-	RtlReleaseResource(&(device->buffer_list_lock));
-
-	end_time = GetTickCount();
-	TRACE("completed processing at %d, duration = %d\n", end_time, end_time - start_time);
+		RtlAcquireResourceShared(&(dev->buffer_list_lock), TRUE);
+		DSOUND_PerformMix(dev);
+		RtlReleaseResource(&(dev->buffer_list_lock));
+	}
+	return 0;
 }
