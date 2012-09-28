@@ -1666,7 +1666,6 @@ static HRESULT WINAPI d3d9_device_GetTexture(IDirect3DDevice9Ex *iface, DWORD st
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
     struct wined3d_texture *wined3d_texture = NULL;
     struct d3d9_texture *texture_impl;
-    HRESULT hr;
 
     TRACE("iface %p, stage %u, texture %p.\n", iface, stage, texture);
 
@@ -1674,23 +1673,19 @@ static HRESULT WINAPI d3d9_device_GetTexture(IDirect3DDevice9Ex *iface, DWORD st
         return D3DERR_INVALIDCALL;
 
     wined3d_mutex_lock();
-    hr = wined3d_device_get_texture(device->wined3d_device, stage, &wined3d_texture);
-    if (SUCCEEDED(hr) && wined3d_texture)
+    if ((wined3d_texture = wined3d_device_get_texture(device->wined3d_device, stage)))
     {
         texture_impl = wined3d_texture_get_parent(wined3d_texture);
         *texture = &texture_impl->IDirect3DBaseTexture9_iface;
         IDirect3DBaseTexture9_AddRef(*texture);
-        wined3d_texture_decref(wined3d_texture);
     }
     else
     {
-        if (FAILED(hr))
-            WARN("Call to get texture (%u) failed (%p).\n", stage, wined3d_texture);
         *texture = NULL;
     }
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d9_device_SetTexture(IDirect3DDevice9Ex *iface, DWORD stage, IDirect3DBaseTexture9 *texture)
@@ -1889,15 +1884,14 @@ static HRESULT WINAPI d3d9_device_GetScissorRect(IDirect3DDevice9Ex *iface, RECT
 static HRESULT WINAPI d3d9_device_SetSoftwareVertexProcessing(IDirect3DDevice9Ex *iface, BOOL software)
 {
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
-    HRESULT hr;
 
     TRACE("iface %p, software %#x.\n", iface, software);
 
     wined3d_mutex_lock();
-    hr = wined3d_device_set_software_vertex_processing(device->wined3d_device, software);
+    wined3d_device_set_software_vertex_processing(device->wined3d_device, software);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static BOOL WINAPI d3d9_device_GetSoftwareVertexProcessing(IDirect3DDevice9Ex *iface)

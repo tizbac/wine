@@ -109,6 +109,10 @@ struct d3d10_effect_state_object_variable
         D3D10_BLEND_DESC blend;
         D3D10_SAMPLER_DESC sampler;
     } desc;
+    union
+    {
+        ID3D10BlendState *blend;
+    } object;
 };
 
 /* ID3D10EffectType */
@@ -151,7 +155,6 @@ struct d3d10_effect_variable
     struct d3d10_effect_variable *buffer;
     struct d3d10_effect_type *type;
 
-    void *data;
     char *name;
     char *semantic;
     DWORD buffer_offset;
@@ -162,6 +165,12 @@ struct d3d10_effect_variable
     struct d3d10_effect_variable *elements;
     struct d3d10_effect_variable *members;
     struct d3d10_effect_variable *annotations;
+
+    union
+    {
+        struct d3d10_effect_state_object_variable state;
+        struct d3d10_effect_shader_variable shader;
+    } u;
 };
 
 /* ID3D10EffectPass */

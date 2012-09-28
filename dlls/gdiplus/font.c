@@ -205,6 +205,7 @@ GpStatus WINGDIPAPI GdipCreateFontFromLogfontW(HDC hdc,
 {
     HFONT hfont, oldfont;
     OUTLINETEXTMETRICW otm;
+    WCHAR facename[LF_FACESIZE];
     GpStatus stat;
     int ret;
 
@@ -217,6 +218,7 @@ GpStatus WINGDIPAPI GdipCreateFontFromLogfontW(HDC hdc,
     oldfont = SelectObject(hdc, hfont);
     otm.otmSize = sizeof(otm);
     ret = GetOutlineTextMetricsW(hdc, otm.otmSize, &otm);
+    GetTextFaceW(hdc, LF_FACESIZE, facename);
     SelectObject(hdc, oldfont);
     DeleteObject(hfont);
 
@@ -229,7 +231,7 @@ GpStatus WINGDIPAPI GdipCreateFontFromLogfontW(HDC hdc,
     (*font)->emSize = otm.otmTextMetrics.tmAscent;
     (*font)->otm = otm;
 
-    stat = GdipCreateFontFamilyFromName(logfont->lfFaceName, NULL, &(*font)->family);
+    stat = GdipCreateFontFamilyFromName(facename, NULL, &(*font)->family);
     if (stat != Ok)
     {
         GdipFree(*font);
@@ -624,6 +626,7 @@ static INT CALLBACK is_font_installed_proc(const LOGFONTW *elf,
 
 struct font_metrics
 {
+    WCHAR facename[LF_FACESIZE];
     UINT16 em_height, ascent, descent, line_spacing; /* in font units */
     int dpi;
 };
@@ -638,6 +641,8 @@ static BOOL get_font_metrics(HDC hdc, struct font_metrics *fm)
 
     otm.otmSize = sizeof(otm);
     if (!GetOutlineTextMetricsW(hdc, otm.otmSize, &otm)) return FALSE;
+
+    GetTextFaceW(hdc, LF_FACESIZE, fm->facename);
 
     fm->em_height = otm.otmEMSquare;
     fm->dpi = GetDeviceCaps(hdc, LOGPIXELSY);
@@ -739,7 +744,7 @@ GpStatus WINGDIPAPI GdipCreateFontFamilyFromName(GDIPCONST WCHAR *name,
     ffamily = GdipAlloc(sizeof (GpFontFamily));
     if (!ffamily) return OutOfMemory;
 
-    lstrcpynW(ffamily->FamilyName, name, LF_FACESIZE);
+    lstrcpyW(ffamily->FamilyName, fm.facename);
     ffamily->em_height = fm.em_height;
     ffamily->ascent = fm.ascent;
     ffamily->descent = fm.descent;

@@ -173,6 +173,8 @@ static const char *vt2a(VARIANT *v)
         return "VT_I4";
     case VT_R8:
         return "VT_R8";
+    case VT_DATE:
+        return "VT_DATE";
     case VT_BSTR:
         return "VT_BSTR";
     case VT_DISPATCH:
@@ -202,10 +204,10 @@ static BOOL is_lang_english(void)
         pGetThreadUILanguage = (void*)GetProcAddress(hkernel32, "GetThreadUILanguage");
         pGetUserDefaultUILanguage = (void*)GetProcAddress(hkernel32, "GetUserDefaultUILanguage");
     }
-    if (pGetThreadUILanguage)
-        return PRIMARYLANGID(pGetThreadUILanguage()) == LANG_ENGLISH;
-    if (pGetUserDefaultUILanguage)
-        return PRIMARYLANGID(pGetUserDefaultUILanguage()) == LANG_ENGLISH;
+    if (pGetThreadUILanguage && PRIMARYLANGID(pGetThreadUILanguage()) != LANG_ENGLISH)
+        return FALSE;
+    if (pGetUserDefaultUILanguage && PRIMARYLANGID(pGetUserDefaultUILanguage()) != LANG_ENGLISH)
+        return FALSE;
 
     return PRIMARYLANGID(GetUserDefaultLangID()) == LANG_ENGLISH;
 }
@@ -1906,7 +1908,7 @@ START_TEST(run)
 
     is_english = is_lang_english();
     if(!is_english)
-        skip("Skipping some tests in non-English UIs\n");
+        skip("Skipping some tests in non-English locale\n");
 
     argc = winetest_get_mainargs(&argv);
 

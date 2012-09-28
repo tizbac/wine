@@ -1878,7 +1878,7 @@ static HRESULT WINAPI fnIMLangFontLink_GetStrCodePages(
         DWORD cp;
         HRESULT ret;
 
-        ret = fnIMLangFontLink_GetCharCodePages(iface, pszSrc[i], &cp);
+        ret = IMLangFontLink_GetCharCodePages(iface, pszSrc[i], &cp);
         if (ret != S_OK) return E_FAIL;
 
         if (!cps) cps = cp;
@@ -1920,76 +1920,23 @@ static HRESULT WINAPI fnIMLangFontLink_CodePageToCodePages(
 
 static HRESULT WINAPI fnIMLangFontLink_CodePagesToCodePage(
         IMLangFontLink* iface,
-        DWORD dwCodePages,
-        UINT uDefaultCodePage,
-        UINT* puCodePage)
+        DWORD codepages,
+        UINT def_codepage,
+        UINT* codepage)
 {
-    MLang_impl *This = impl_from_IMLangFontLink( iface );
-    DWORD mask = 0x00000000;
-    UINT i;
-    CHARSETINFO cs;
-    BOOL rc; 
-
-    TRACE("(%p) scanning  0x%x  default page %u\n",This, dwCodePages,
-            uDefaultCodePage);
-
-    *puCodePage = 0x00000000;
-
-    rc = TranslateCharsetInfo((DWORD*)(DWORD_PTR)uDefaultCodePage, &cs,
-                              TCI_SRCCODEPAGE);
-
-    if (rc && (dwCodePages & cs.fs.fsCsb[0]))
-    {
-        TRACE("Found Default Codepage\n");
-        *puCodePage = uDefaultCodePage;
-        return S_OK;
-    }
-
-    
-    for (i = 0; i < 32; i++)
-    {
-
-        mask = 1 << i;
-        if (dwCodePages & mask)
-        {
-            DWORD Csb[2];
-            Csb[0] = mask;
-            Csb[1] = 0x0;
-            rc = TranslateCharsetInfo(Csb, &cs, TCI_SRCFONTSIG);
-            if (!rc)
-                continue;
-
-            TRACE("Falling back to least significant found CodePage %u\n",
-                    cs.ciACP);
-            *puCodePage = cs.ciACP;
-            return S_OK;
-        }
-    }
-
-    TRACE("no codepage found\n");
-    return E_FAIL;
+    MLang_impl *This = impl_from_IMLangFontLink(iface);
+    return IMLangFontLink2_CodePagesToCodePage(&This->IMLangFontLink2_iface, codepages,
+        def_codepage, codepage);
 }
 
 static HRESULT WINAPI fnIMLangFontLink_GetFontCodePages(
         IMLangFontLink* iface,
-        HDC hDC,
-        HFONT hFont,
-        DWORD* pdwCodePages)
+        HDC hdc,
+        HFONT hfont,
+        DWORD* codepages)
 {
-    HFONT old_font;
-    FONTSIGNATURE fontsig;
-    MLang_impl *This = impl_from_IMLangFontLink( iface );
-
-    TRACE("(%p)\n",This);
-
-    old_font = SelectObject(hDC,hFont);
-    GetTextCharsetInfo(hDC,&fontsig, 0);
-    SelectObject(hDC,old_font);
-
-    *pdwCodePages = fontsig.fsCsb[0];
-    TRACE("CodePages is 0x%x\n",fontsig.fsCsb[0]);
-
-    return S_OK;
+    MLang_impl *This = impl_from_IMLangFontLink(iface);
+    return IMLangFontLink2_GetFontCodePages(&This->IMLangFontLink2_iface, hdc, hfont, codepages);
 }
 
 static HRESULT WINAPI fnIMLangFontLink_MapFont(
@@ -2166,15 +2113,16 @@ static HRESULT WINAPI fnIMultiLanguage_ConvertStringToUnicode(
 
 static HRESULT WINAPI fnIMultiLanguage_ConvertStringFromUnicode(
     IMultiLanguage* iface,
-    DWORD* pdwMode,
-    DWORD dwEncoding,
-    WCHAR* pSrcStr,
-    UINT* pcSrcSize,
-    CHAR* pDstStr,
-    UINT* pcDstSize)
+    DWORD* mode,
+    DWORD encoding,
+    WCHAR* src,
+    UINT* src_size,
+    CHAR* dest,
+    UINT* dest_size)
 {
-    return ConvertINetUnicodeToMultiByte(pdwMode, dwEncoding,
-        pSrcStr, (LPINT)pcSrcSize, pDstStr, (LPINT)pcDstSize);
+    MLang_impl *This = impl_from_IMultiLanguage(iface);
+    return IMultiLanguage3_ConvertStringFromUnicode(&This->IMultiLanguage3_iface,
+        mode, encoding, src, src_size, dest, dest_size);
 }
 
 static HRESULT WINAPI fnIMultiLanguage_ConvertStringReset(
@@ -2195,25 +2143,11 @@ static HRESULT WINAPI fnIMultiLanguage_GetRfc1766FromLcid(
 
 static HRESULT WINAPI fnIMultiLanguage_GetLcidFromRfc1766(
     IMultiLanguage* iface,
-    LCID* pLocale,
-    BSTR bstrRfc1766)
+    LCID* locale,
+    BSTR rfc1766)
 {
-    HRESULT hr;
-    IEnumRfc1766 *rfc1766;
-
-    TRACE("%p %p %s\n", iface, pLocale, debugstr_w(bstrRfc1766));
-
-    if (!pLocale || !bstrRfc1766)
-        return E_INVALIDARG;
-
-    hr = IMultiLanguage_EnumRfc1766(iface, &rfc1766);
-    if (FAILED(hr))
-        return hr;
-
-    hr = lcid_from_rfc1766(rfc1766, pLocale, bstrRfc1766);
-
-    IEnumRfc1766_Release(rfc1766);
-    return hr;
+    MLang_impl *This = impl_from_IMultiLanguage(iface);
+    return IMultiLanguage3_GetLcidFromRfc1766(&This->IMultiLanguage3_iface, locale, rfc1766);
 }
 
 /******************************************************************************/
@@ -3285,18 +3219,67 @@ static HRESULT WINAPI fnIMLangFontLink2_CodePageToCodePages(IMLangFontLink2* Thi
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI fnIMLangFontLink2_CodePagesToCodePage(IMLangFontLink2* This,
-        DWORD dwCodePages, UINT uDefaultCodePage, UINT *puCodePage)
+static HRESULT WINAPI fnIMLangFontLink2_CodePagesToCodePage(IMLangFontLink2* iface,
+        DWORD codepages, UINT def_codepage, UINT *codepage)
 {
-    FIXME("(%p)->%i %i %p\n",This, dwCodePages, uDefaultCodePage, puCodePage);
-    return E_NOTIMPL;
+    MLang_impl *This = impl_from_IMLangFontLink2(iface);
+    DWORD mask = 0;
+    CHARSETINFO cs;
+    BOOL rc;
+    UINT i;
+
+    TRACE("(%p)->(0x%x %u %p)\n", This, codepages, def_codepage, codepage);
+
+    *codepage = 0;
+
+    rc = TranslateCharsetInfo((DWORD*)(DWORD_PTR)def_codepage, &cs, TCI_SRCCODEPAGE);
+    if (rc && (codepages & cs.fs.fsCsb[0]))
+    {
+        TRACE("Found Default Codepage\n");
+        *codepage = def_codepage;
+        return S_OK;
+    }
+
+    for (i = 0; i < 32; i++)
+    {
+        mask = 1 << i;
+        if (codepages & mask)
+        {
+            DWORD Csb[2];
+            Csb[0] = mask;
+            Csb[1] = 0x0;
+            rc = TranslateCharsetInfo(Csb, &cs, TCI_SRCFONTSIG);
+            if (!rc)
+                continue;
+
+            TRACE("Falling back to least significant found CodePage %u\n",
+                    cs.ciACP);
+            *codepage = cs.ciACP;
+            return S_OK;
+        }
+    }
+
+    TRACE("no codepage found\n");
+    return E_FAIL;
 }
 
-static HRESULT WINAPI fnIMLangFontLink2_GetFontCodePages(IMLangFontLink2* This,
-        HDC hDC, HFONT hFont, DWORD *pdwCodePages)
+static HRESULT WINAPI fnIMLangFontLink2_GetFontCodePages(IMLangFontLink2 *iface,
+        HDC hdc, HFONT hfont, DWORD *codepages)
 {
-    FIXME("(%p)->%p %p %p\n",This, hDC, hFont, pdwCodePages);
-    return E_NOTIMPL;
+    MLang_impl *This = impl_from_IMLangFontLink2(iface);
+    FONTSIGNATURE fontsig;
+    HFONT old_font;
+
+    TRACE("(%p)->(%p %p %p)\n", This, hdc, hfont, codepages);
+
+    old_font = SelectObject(hdc, hfont);
+    GetTextCharsetInfo(hdc, &fontsig, 0);
+    SelectObject(hdc, old_font);
+
+    *codepages = fontsig.fsCsb[0];
+    TRACE("ret 0x%x\n", fontsig.fsCsb[0]);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI fnIMLangFontLink2_ReleaseFont(IMLangFontLink2* This,

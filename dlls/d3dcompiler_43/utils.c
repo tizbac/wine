@@ -1556,6 +1556,23 @@ struct hlsl_ir_deref *new_var_deref(struct hlsl_ir_var *var)
     return deref;
 }
 
+struct hlsl_ir_deref *new_record_deref(struct hlsl_ir_node *record, struct hlsl_struct_field *field)
+{
+    struct hlsl_ir_deref *deref = d3dcompiler_alloc(sizeof(*deref));
+
+    if (!deref)
+    {
+        ERR("Out of memory.\n");
+        return NULL;
+    }
+    deref->node.type = HLSL_IR_DEREF;
+    deref->node.data_type = field->type;
+    deref->type = HLSL_IR_DEREF_RECORD;
+    deref->v.record.record = record;
+    deref->v.record.field = field;
+    return deref;
+}
+
 static enum hlsl_ir_expr_op op_from_assignment(enum parse_assign_op op)
 {
     static const enum hlsl_ir_expr_op ops[] =
@@ -1912,7 +1929,7 @@ static void debug_dump_ir_deref(const struct hlsl_ir_deref *deref)
             break;
         case HLSL_IR_DEREF_RECORD:
             debug_dump_instr(deref->v.record.record);
-            TRACE(".%s", debugstr_a(deref->v.record.field));
+            TRACE(".%s", debugstr_a(deref->v.record.field->name));
             break;
     }
 }
@@ -2222,6 +2239,7 @@ void free_instr_list(struct list *list)
         return;
     LIST_FOR_EACH_ENTRY_SAFE(node, next_node, list, struct hlsl_ir_node, entry)
         free_instr(node);
+    d3dcompiler_free(list);
 }
 
 static void free_ir_constant(struct hlsl_ir_constant *constant)
@@ -2260,7 +2278,6 @@ static void free_ir_deref(struct hlsl_ir_deref *deref)
             break;
         case HLSL_IR_DEREF_RECORD:
             free_instr(deref->v.record.record);
-            d3dcompiler_free((void *)deref->v.record.field);
             break;
     }
     d3dcompiler_free(deref);
@@ -2352,13 +2369,9 @@ void free_instr(struct hlsl_ir_node *node)
 
 void free_function(struct hlsl_ir_function_decl *func)
 {
-    struct hlsl_ir_var *param, *next_param;
-
     d3dcompiler_free((void *)func->name);
     d3dcompiler_free((void *)func->semantic);
-    LIST_FOR_EACH_ENTRY_SAFE(param, next_param, func->parameters, struct hlsl_ir_var, node.entry)
-        d3dcompiler_free(param);
     d3dcompiler_free(func->parameters);
     free_instr_list(func->body);
-    d3dcompiler_free(func->body);
+    d3dcompiler_free(func);
 }

@@ -104,6 +104,7 @@ PUBLIC_IDL_H_SRCS = \
 	urlmon.idl \
 	vmr9.idl \
 	wbemcli.idl \
+	wbemprov.idl \
 	wia_lh.idl \
 	wia_xp.idl \
 	wincodec.idl \
@@ -521,6 +522,7 @@ SRCDIR_INCLUDES = \
 	twain.h \
 	udpmib.h \
 	uiautomation.h \
+	uiautomationcoreapi.h \
 	userenv.h \
 	usp10.h \
 	uuids.h \
