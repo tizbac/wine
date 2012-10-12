@@ -91,10 +91,18 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
             }
 
             if (!IsEqualGUID(&wfe->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {
+                WAVEFORMATEXTENSIBLE wfe3 = *wfe;
+
                 wfe->SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
                 w->wBitsPerSample = 32;
                 wfe->Samples.wValidBitsPerSample = 0;
 
+                if (FAILED(IAudioClient_IsFormatSupported(device->client, AUDCLNT_SHAREMODE_SHARED, &wfe->Format, (WAVEFORMATEX**)&wfe2)))
+                    *wfe = wfe3;
+                else if (wfe2)
+                    *wfe = *wfe2;
+                CoTaskMemFree(wfe2);
+                wfe2 = NULL;
             }
             w->nBlockAlign = w->nChannels * w->wBitsPerSample / 8;
             w->nAvgBytesPerSec = w->nBlockAlign * w->nSamplesPerSec;

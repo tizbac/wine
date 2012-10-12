@@ -305,21 +305,36 @@ static HRESULT WINAPI IDirectSound8Impl_SetCooperativeLevel(IDirectSound8 *iface
         DWORD level)
 {
     IDirectSoundImpl *This = impl_from_IDirectSound8(iface);
+    DirectSoundDevice *device = This->device;
+    DWORD oldlevel;
+    HRESULT hr = S_OK;
 
     TRACE("(%p,%p,%s)\n", This, hwnd, dumpCooperativeLevel(level));
 
-    if (!This->device) {
+    if (!device) {
         WARN("not initialized\n");
         return DSERR_UNINITIALIZED;
     }
 
-    if (level == DSSCL_PRIORITY || level == DSSCL_EXCLUSIVE) {
+    if (level==DSSCL_PRIORITY || level==DSSCL_EXCLUSIVE) {
         WARN("level=%s not fully supported\n",
-                level == DSSCL_PRIORITY ? "DSSCL_PRIORITY" : "DSSCL_EXCLUSIVE");
+             level==DSSCL_PRIORITY ? "DSSCL_PRIORITY" : "DSSCL_EXCLUSIVE");
     }
 
-    This->device->priolevel = level;
-    return DS_OK;
+    RtlAcquireResourceExclusive(&device->buffer_list_lock, TRUE);
+    EnterCriticalSection(&device->mixlock);
+    oldlevel = device->priolevel;
+    device->priolevel = level;
+    if ((level == DSSCL_WRITEPRIMARY) != (oldlevel == DSSCL_WRITEPRIMARY)) {
+        hr = DSOUND_ReopenDevice(device, 0);
+        if (FAILED(hr))
+            device->priolevel = oldlevel;
+        else
+            DSOUND_PrimaryOpen(device);
+    }
+    LeaveCriticalSection(&device->mixlock);
+    RtlReleaseResource(&device->buffer_list_lock);
+    return hr;
 }
 
 static HRESULT WINAPI IDirectSound8Impl_Compact(IDirectSound8 *iface)
