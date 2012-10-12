@@ -431,6 +431,21 @@ static void send_parent_notify( HWND hwnd, UINT msg )
 
 
 /*******************************************************************
+ *		update_window_state
+ *
+ * Trigger an update of the window's driver state and surface.
+ */
+static void update_window_state( HWND hwnd )
+{
+    RECT window_rect, client_rect;
+
+    WIN_GetRectangles( hwnd, COORDS_PARENT, &window_rect, &client_rect );
+    set_window_pos( hwnd, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE |
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW, &window_rect, &client_rect, NULL );
+}
+
+
+/*******************************************************************
  *		get_server_window_text
  *
  * Retrieve the window text from the server.
@@ -487,6 +502,73 @@ BOOL is_desktop_window( HWND hwnd )
 
 
 /*******************************************************************
+ * Dummy window surface for windows that shouldn't get painted.
+ */
+
+static void dummy_surface_lock( struct window_surface *window_surface )
+{
+    /* nothing to do */
+}
+
+static void dummy_surface_unlock( struct window_surface *window_surface )
+{
+    /* nothing to do */
+}
+
+static void *dummy_surface_get_bitmap_info( struct window_surface *window_surface, BITMAPINFO *info )
+{
+    static DWORD dummy_data;
+
+    info->bmiHeader.biSize          = sizeof( info->bmiHeader );
+    info->bmiHeader.biWidth         = dummy_surface.rect.right;
+    info->bmiHeader.biHeight        = dummy_surface.rect.bottom;
+    info->bmiHeader.biPlanes        = 1;
+    info->bmiHeader.biBitCount      = 32;
+    info->bmiHeader.biCompression   = BI_RGB;
+    info->bmiHeader.biSizeImage     = 0;
+    info->bmiHeader.biXPelsPerMeter = 0;
+    info->bmiHeader.biYPelsPerMeter = 0;
+    info->bmiHeader.biClrUsed       = 0;
+    info->bmiHeader.biClrImportant  = 0;
+    return &dummy_data;
+}
+
+static RECT *dummy_surface_get_bounds( struct window_surface *window_surface )
+{
+    static RECT dummy_bounds;
+    return &dummy_bounds;
+}
+
+static void dummy_surface_set_region( struct window_surface *window_surface, HRGN region )
+{
+    /* nothing to do */
+}
+
+static void dummy_surface_flush( struct window_surface *window_surface )
+{
+    /* nothing to do */
+}
+
+static void dummy_surface_destroy( struct window_surface *window_surface )
+{
+    /* nothing to do */
+}
+
+static const struct window_surface_funcs dummy_surface_funcs =
+{
+    dummy_surface_lock,
+    dummy_surface_unlock,
+    dummy_surface_get_bitmap_info,
+    dummy_surface_get_bounds,
+    dummy_surface_set_region,
+    dummy_surface_flush,
+    dummy_surface_destroy
+};
+
+struct window_surface dummy_surface = { &dummy_surface_funcs, { NULL, NULL }, 1, { 0, 0, 1, 1 } };
+
+
+/*******************************************************************
  *           register_window_surface
  *
  * Register a window surface in the global list, possibly replacing another one.
@@ -495,8 +577,8 @@ void register_window_surface( struct window_surface *old, struct window_surface 
 {
     if (old == new) return;
     EnterCriticalSection( &surfaces_section );
-    if (old) list_remove( &old->entry );
-    if (new) list_add_tail( &window_surfaces, &new->entry );
+    if (old && old != &dummy_surface) list_remove( &old->entry );
+    if (new && new != &dummy_surface) list_add_tail( &window_surfaces, &new->entry );
     LeaveCriticalSection( &surfaces_section );
 }
 
@@ -657,7 +739,7 @@ HWND WIN_SetOwner( HWND hwnd, HWND owner )
  */
 ULONG WIN_SetStyle( HWND hwnd, ULONG set_bits, ULONG clear_bits )
 {
-    BOOL ok, needs_show = FALSE;
+    BOOL ok, made_visible = FALSE;
     STYLESTRUCT style;
     WND *win = WIN_GetPtr( hwnd );
 
@@ -695,23 +777,16 @@ ULONG WIN_SetStyle( HWND hwnd, ULONG set_bits, ULONG clear_bits )
         /* Some apps try to make their window visible through WM_SETREDRAW.
          * Only do that if the window was never explicitly hidden,
          * because Steam messes with WM_SETREDRAW after hiding its windows. */
-        needs_show = !(win->flags & WIN_HIDDEN) && (style.styleNew & WS_VISIBLE);
+        made_visible = !(win->flags & WIN_HIDDEN) && (style.styleNew & WS_VISIBLE);
         invalidate_dce( win, NULL );
     }
     WIN_ReleasePtr( win );
 
     if (!ok) return 0;
 
-    if (needs_show)
-    {
-        RECT window_rect, client_rect;
-        WIN_GetRectangles( hwnd, COORDS_PARENT, &window_rect, &client_rect );
-        set_window_pos( hwnd, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE |
-                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW,
-                        &window_rect, &client_rect, NULL );
-    }
-
     USER_Driver->pSetWindowStyle( hwnd, GWL_STYLE, &style );
+    if (made_visible) update_window_state( hwnd );
+
     return style.styleOld;
 }
 
@@ -2211,7 +2286,7 @@ static LONG_PTR WIN_GetWindowLong( HWND hwnd, INT offset, UINT size, BOOL unicod
 LONG_PTR WIN_SetWindowLong( HWND hwnd, INT offset, UINT size, LONG_PTR newval, BOOL unicode )
 {
     STYLESTRUCT style;
-    BOOL ok, needs_show = FALSE;
+    BOOL ok, made_visible = FALSE;
     LONG_PTR retval = 0;
     WND *wndPtr;
 
@@ -2411,28 +2486,22 @@ LONG_PTR WIN_SetWindowLong( HWND hwnd, INT offset, UINT size, LONG_PTR newval, B
     }
     SERVER_END_REQ;
 
-    if (offset == GWL_STYLE && ((style.styleOld ^ style.styleNew) & WS_VISIBLE))
+    if ((offset == GWL_STYLE && ((style.styleOld ^ style.styleNew) & WS_VISIBLE)) ||
+        (offset == GWL_EXSTYLE && ((style.styleOld ^ style.styleNew) & WS_EX_LAYERED)))
     {
-        needs_show = !(wndPtr->flags & WIN_HIDDEN) && (style.styleNew & WS_VISIBLE);
+        made_visible = !(wndPtr->flags & WIN_HIDDEN) && (wndPtr->dwStyle & WS_VISIBLE);
         invalidate_dce( wndPtr, NULL );
     }
     WIN_ReleasePtr( wndPtr );
 
     if (!ok) return 0;
 
-    if (needs_show)
-    {
-        RECT window_rect, client_rect;
-        WIN_GetRectangles( hwnd, COORDS_PARENT, &window_rect, &client_rect );
-        set_window_pos( hwnd, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE |
-                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW,
-                        &window_rect, &client_rect, NULL );
-    }
     if (offset == GWL_STYLE || offset == GWL_EXSTYLE)
     {
         style.styleOld = retval;
         style.styleNew = newval;
         USER_Driver->pSetWindowStyle( hwnd, offset, &style );
+        if (made_visible) update_window_state( hwnd );
         SendMessageW( hwnd, WM_STYLECHANGED, offset, (LPARAM)&style );
     }
 
@@ -3530,6 +3599,27 @@ BOOL WINAPI SwitchDesktop( HDESK hDesktop)
     return TRUE;
 }
 
+
+/***********************************************************************
+ *           __wine_set_pixel_format
+ */
+BOOL CDECL __wine_set_pixel_format( HWND hwnd, int format )
+{
+    WND *win = WIN_GetPtr( hwnd );
+
+    if (!win || win == WND_DESKTOP || win == WND_OTHER_PROCESS)
+    {
+        WARN( "setting format %d on win %p not supported\n", format, hwnd );
+        return FALSE;
+    }
+    win->pixel_format = format;
+    WIN_ReleasePtr( win );
+
+    update_window_state( hwnd );
+    return TRUE;
+}
+
+
 /*****************************************************************************
  *              SetLayeredWindowAttributes (USER32.@)
  */
@@ -3586,7 +3676,6 @@ BOOL WINAPI UpdateLayeredWindowIndirect( HWND hwnd, const UPDATELAYEREDWINDOWINF
     DWORD flags = SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW;
     RECT window_rect, client_rect;
     SIZE offset;
-    BYTE alpha = 0xff;
 
     if (!info ||
         info->cbSize != sizeof(*info) ||
@@ -3631,39 +3720,10 @@ BOOL WINAPI UpdateLayeredWindowIndirect( HWND hwnd, const UPDATELAYEREDWINDOWINF
 
     TRACE( "window %p win %s client %s\n", hwnd,
            wine_dbgstr_rect(&window_rect), wine_dbgstr_rect(&client_rect) );
+
+    if (!USER_Driver->pUpdateLayeredWindow( hwnd, info, &window_rect )) return FALSE;
+
     set_window_pos( hwnd, 0, flags, &window_rect, &client_rect, NULL );
-
-    if (info->hdcSrc)
-    {
-        HDC hdc = GetWindowDC( hwnd );
-
-        if (hdc)
-        {
-            int x = 0, y = 0;
-            RECT rect;
-
-            GetWindowRect( hwnd, &rect );
-            OffsetRect( &rect, -rect.left, -rect.top);
-            if (info->pptSrc)
-            {
-                x = info->pptSrc->x;
-                y = info->pptSrc->y;
-            }
-
-            if (!info->prcDirty || (info->prcDirty && IntersectRect(&rect, &rect, info->prcDirty)))
-            {
-                TRACE( "copying window %p pos %d,%d\n", hwnd, x, y );
-                BitBlt( hdc, rect.left, rect.top, rect.right, rect.bottom,
-                        info->hdcSrc, rect.left + x, rect.top + y, SRCCOPY );
-            }
-            ReleaseDC( hwnd, hdc );
-        }
-    }
-
-    if (info->pblend && !(info->dwFlags & ULW_OPAQUE)) alpha = info->pblend->SourceConstantAlpha;
-    TRACE( "setting window %p alpha %u\n", hwnd, alpha );
-    USER_Driver->pSetLayeredWindowAttributes( hwnd, info->crKey, alpha,
-                                              info->dwFlags & (LWA_ALPHA | LWA_COLORKEY) );
     return TRUE;
 }
 

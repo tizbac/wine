@@ -377,6 +377,9 @@
 /* Define to 1 if you have the <libxslt/transform.h> header file. */
 #undef HAVE_LIBXSLT_TRANSFORM_H
 
+/* Define if you have the X Shm extension */
+#undef HAVE_LIBXXSHM
+
 /* Define to 1 if you have the <link.h> header file. */
 #undef HAVE_LINK_H
 
@@ -391,6 +394,9 @@
 
 /* Define to 1 if you have the <linux/compiler.h> header file. */
 #undef HAVE_LINUX_COMPILER_H
+
+/* Define to 1 if you have the <linux/filter.h> header file. */
+#undef HAVE_LINUX_FILTER_H
 
 /* Define if Linux-style gethostbyname_r and gethostbyaddr_r are available */
 #undef HAVE_LINUX_GETHOSTBYNAME_R_6
@@ -1108,6 +1114,9 @@
 
 /* Define to 1 if you have the <X11/extensions/Xrender.h> header file. */
 #undef HAVE_X11_EXTENSIONS_XRENDER_H
+
+/* Define to 1 if you have the <X11/extensions/XShm.h> header file. */
+#undef HAVE_X11_EXTENSIONS_XSHM_H
 
 /* Define to 1 if you have the <X11/Xcursor/Xcursor.h> header file. */
 #undef HAVE_X11_XCURSOR_XCURSOR_H

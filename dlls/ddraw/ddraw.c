@@ -754,8 +754,8 @@ static HRESULT ddraw_create_swapchain(struct ddraw *ddraw, HWND window, BOOL win
 static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd, DWORD cooplevel)
 {
     struct ddraw *This = impl_from_IDirectDraw7(iface);
+    struct wined3d_surface *rt = NULL, *ds = NULL;
     struct wined3d_stateblock *stateblock;
-    struct wined3d_surface *rt, *ds;
     BOOL restore_state = FALSE;
     HWND window;
     HRESULT hr;
@@ -924,22 +924,15 @@ static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd,
                 return hr;
             }
 
-            if (FAILED(hr = wined3d_stateblock_capture(stateblock)))
-            {
-                ERR("Failed to capture stateblock, hr %#x.\n", hr);
-                wined3d_stateblock_decref(stateblock);
-                wined3d_mutex_unlock();
-                return hr;
-            }
-
-            wined3d_device_get_render_target(This->wined3d_device, 0, &rt);
+            wined3d_stateblock_capture(stateblock);
+            rt = wined3d_device_get_render_target(This->wined3d_device, 0);
             if (rt == This->wined3d_frontbuffer)
-            {
-                wined3d_surface_decref(rt);
                 rt = NULL;
-            }
+            else if (rt)
+                wined3d_surface_incref(rt);
 
-            wined3d_device_get_depth_stencil(This->wined3d_device, &ds);
+            if ((ds = wined3d_device_get_depth_stencil(This->wined3d_device)))
+                wined3d_surface_incref(ds);
         }
 
         ddraw_destroy_swapchain(This);
@@ -962,14 +955,8 @@ static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd,
             wined3d_surface_decref(rt);
         }
 
-        hr = wined3d_stateblock_apply(stateblock);
+        wined3d_stateblock_apply(stateblock);
         wined3d_stateblock_decref(stateblock);
-        if (FAILED(hr))
-        {
-            ERR("Failed to apply stateblock, hr %#x.\n", hr);
-            wined3d_mutex_unlock();
-            return hr;
-        }
     }
 
     /* Unhandled flags */
@@ -2422,14 +2409,12 @@ static HRESULT WINAPI ddraw7_GetSurfaceFromDC(IDirectDraw7 *iface, HDC hdc,
     struct ddraw *ddraw = impl_from_IDirectDraw7(iface);
     struct wined3d_surface *wined3d_surface;
     struct ddraw_surface *surface_impl;
-    HRESULT hr;
 
     TRACE("iface %p, dc %p, surface %p.\n", iface, hdc, Surface);
 
     if (!Surface) return E_INVALIDARG;
 
-    hr = wined3d_device_get_surface_from_dc(ddraw->wined3d_device, hdc, &wined3d_surface);
-    if (FAILED(hr))
+    if (!(wined3d_surface = wined3d_device_get_surface_from_dc(ddraw->wined3d_device, hdc)))
     {
         TRACE("No surface found for dc %p.\n", hdc);
         *Surface = NULL;
@@ -2902,13 +2887,7 @@ static HRESULT CreateSurface(struct ddraw *ddraw, DDSURFACEDESC2 *DDSD,
     {
         struct wined3d_swapchain_desc swapchain_desc;
 
-        hr = wined3d_swapchain_get_desc(ddraw->wined3d_swapchain, &swapchain_desc);
-        if (FAILED(hr))
-        {
-            ERR("Failed to get present parameters.\n");
-            return hr;
-        }
-
+        wined3d_swapchain_get_desc(ddraw->wined3d_swapchain, &swapchain_desc);
         swapchain_desc.backbuffer_width = mode.width;
         swapchain_desc.backbuffer_height = mode.height;
         swapchain_desc.backbuffer_format = mode.format_id;

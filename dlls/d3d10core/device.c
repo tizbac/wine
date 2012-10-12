@@ -318,15 +318,26 @@ static void STDMETHODCALLTYPE d3d10_device_OMSetRenderTargets(ID3D10Device *ifac
 static void STDMETHODCALLTYPE d3d10_device_OMSetBlendState(ID3D10Device *iface,
         ID3D10BlendState *blend_state, const FLOAT blend_factor[4], UINT sample_mask)
 {
-    FIXME("iface %p, blend_state %p, blend_factor [%f %f %f %f], sample_mask 0x%08x stub!\n",
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+
+    TRACE("iface %p, blend_state %p, blend_factor [%f %f %f %f], sample_mask 0x%08x.\n",
             iface, blend_state, blend_factor[0], blend_factor[1], blend_factor[2], blend_factor[3], sample_mask);
+
+    device->blend_state = unsafe_impl_from_ID3D10BlendState(blend_state);
+    memcpy(device->blend_factor, blend_factor, 4 * sizeof(*blend_factor));
+    device->sample_mask = sample_mask;
 }
 
 static void STDMETHODCALLTYPE d3d10_device_OMSetDepthStencilState(ID3D10Device *iface,
         ID3D10DepthStencilState *depth_stencil_state, UINT stencil_ref)
 {
-    FIXME("iface %p, depth_stencil_state %p, stencil_ref %u stub!\n",
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+
+    TRACE("iface %p, depth_stencil_state %p, stencil_ref %u.\n",
             iface, depth_stencil_state, stencil_ref);
+
+    device->depth_stencil_state = unsafe_impl_from_ID3D10DepthStencilState(depth_stencil_state);
+    device->stencil_ref = stencil_ref;
 }
 
 static void STDMETHODCALLTYPE d3d10_device_SOSetTargets(ID3D10Device *iface,
@@ -342,7 +353,11 @@ static void STDMETHODCALLTYPE d3d10_device_DrawAuto(ID3D10Device *iface)
 
 static void STDMETHODCALLTYPE d3d10_device_RSSetState(ID3D10Device *iface, ID3D10RasterizerState *rasterizer_state)
 {
-    FIXME("iface %p, rasterizer_state %p stub!\n", iface, rasterizer_state);
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+
+    TRACE("iface %p, rasterizer_state %p.\n", iface, rasterizer_state);
+
+    device->rasterizer_state = unsafe_impl_from_ID3D10RasterizerState(rasterizer_state);
 }
 
 static void STDMETHODCALLTYPE d3d10_device_RSSetViewports(ID3D10Device *iface,
@@ -556,15 +571,29 @@ static void STDMETHODCALLTYPE d3d10_device_OMGetRenderTargets(ID3D10Device *ifac
 static void STDMETHODCALLTYPE d3d10_device_OMGetBlendState(ID3D10Device *iface,
         ID3D10BlendState **blend_state, FLOAT blend_factor[4], UINT *sample_mask)
 {
-    FIXME("iface %p, blend_state %p, blend_factor %p, sample_mask %p stub!\n",
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+
+    TRACE("iface %p, blend_state %p, blend_factor %p, sample_mask %p.\n",
             iface, blend_state, blend_factor, sample_mask);
+
+    if ((*blend_state = device->blend_state ? &device->blend_state->ID3D10BlendState_iface : NULL))
+        ID3D10BlendState_AddRef(*blend_state);
+    memcpy(blend_factor, device->blend_factor, 4 * sizeof(*blend_factor));
+    *sample_mask = device->sample_mask;
 }
 
 static void STDMETHODCALLTYPE d3d10_device_OMGetDepthStencilState(ID3D10Device *iface,
         ID3D10DepthStencilState **depth_stencil_state, UINT *stencil_ref)
 {
-    FIXME("iface %p, depth_stencil_state %p, stencil_ref %p stub!\n",
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+
+    TRACE("iface %p, depth_stencil_state %p, stencil_ref %p.\n",
             iface, depth_stencil_state, stencil_ref);
+
+    if ((*depth_stencil_state = device->depth_stencil_state
+            ? &device->depth_stencil_state->ID3D10DepthStencilState_iface : NULL))
+        ID3D10DepthStencilState_AddRef(*depth_stencil_state);
+    *stencil_ref = device->stencil_ref;
 }
 
 static void STDMETHODCALLTYPE d3d10_device_SOGetTargets(ID3D10Device *iface,
@@ -576,7 +605,12 @@ static void STDMETHODCALLTYPE d3d10_device_SOGetTargets(ID3D10Device *iface,
 
 static void STDMETHODCALLTYPE d3d10_device_RSGetState(ID3D10Device *iface, ID3D10RasterizerState **rasterizer_state)
 {
-    FIXME("iface %p, rasterizer_state %p stub!\n", iface, rasterizer_state);
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+
+    TRACE("iface %p, rasterizer_state %p.\n", iface, rasterizer_state);
+
+    if ((*rasterizer_state = device->rasterizer_state ? &device->rasterizer_state->ID3D10RasterizerState_iface : NULL))
+        ID3D10RasterizerState_AddRef(*rasterizer_state);
 }
 
 static void STDMETHODCALLTYPE d3d10_device_RSGetViewports(ID3D10Device *iface,

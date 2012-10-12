@@ -38,6 +38,18 @@ Call ok(getVT(vbFriday) = "VT_I2", "getVT(vbFriday) = " & getVT(vbFriday))
 Call ok(vbSaturday = 7, "vbSaturday = " & vbSaturday)
 Call ok(getVT(vbSaturday) = "VT_I2", "getVT(vbSaturday) = " & getVT(vbSaturday))
 
+Sub TestCStr(arg, exval)
+    dim x
+    x = CStr(arg)
+    Call ok(getVT(x) = "VT_BSTR*", "getVT(x) = " & getVT(x))
+    Call ok(x = exval, "CStr(" & arg & ") = " & x)
+End Sub
+
+TestCStr "test", "test"
+TestCStr 3, "3"
+if isEnglishLang then TestCStr 3.5, "3.5"
+if isEnglishLang then TestCStr true, "True"
+
 Call ok(isObject(new EmptyClass), "isObject(new EmptyClass) is not true?")
 Set x = new EmptyClass
 Call ok(isObject(x), "isObject(x) is not true?")
@@ -205,10 +217,66 @@ TestStrReverse "", ""
 TestStrReverse 123, "321"
 if isEnglishLang then TestStrReverse true, "eurT"
 
+Sub TestLeft(str, len, ex)
+    Call ok(Left(str, len) = ex, "Left(" & str & ", " & len & ") = " & Left(str, len))
+End Sub
+
+TestLeft "test", 2, "te"
+TestLeft "test", 5, "test"
+TestLeft "test", 0, ""
+TestLeft 123, 2, "12"
+if isEnglishLang then TestLeft true, 2, "Tr"
+
+Sub TestRight(str, len, ex)
+    Call ok(Right(str, len) = ex, "Right(" & str & ", " & len & ") = " & Right(str, len))
+End Sub
+
+TestRight "test", 2, "st"
+TestRight "test", 5, "test"
+TestRight "test", 0, ""
+TestRight 123, 2, "23"
+if isEnglishLang then TestRight true, 2, "ue"
+
+Sub TestTrim(str, exstr)
+    Call ok(Trim(str) = exstr, "Trim(" & str & ") = " & Trim(str))
+End Sub
+
+TestTrim "   test    ", "test"
+TestTrim "test    ", "test"
+TestTrim "   test", "test"
+TestTrim "test", "test"
+TestTrim "", ""
+TestTrim 123, "123"
+if isEnglishLang then TestTrim true, "True"
+
+Sub TestLTrim(str, exstr)
+    Call ok(LTrim(str) = exstr, "LTrim(" & str & ") = " & LTrim(str))
+End Sub
+
+TestLTrim "   test    ", "test    "
+TestLTrim "test    ", "test    "
+TestLTrim "   test", "test"
+TestLTrim "test", "test"
+TestLTrim "", ""
+TestLTrim 123, "123"
+if isEnglishLang then TestLTrim true, "True"
+
 Sub TestRound(val, exval, vt)
     Call ok(Round(val) = exval, "Round(" & val & ") = " & Round(val))
     Call ok(getVT(Round(val)) = vt, "getVT(Round(" & val & ")) = " & getVT(Round(val)))
 End Sub
+
+Sub TestRTrim(str, exstr)
+    Call ok(RTrim(str) = exstr, "RTrim(" & str & ") = " & RTrim(str))
+End Sub
+
+TestRTrim "   test    ", "   test"
+TestRTrim "test    ", "test"
+TestRTrim "   test", "   test"
+TestRTrim "test", "test"
+TestRTrim "", ""
+TestRTrim 123, "123"
+if isEnglishLang then TestRTrim true, "True"
 
 TestRound 3, 3, "VT_I2"
 TestRound 3.3, 3, "VT_R8"
@@ -242,5 +310,33 @@ if isEnglishLang then
 end if
 
 Call ok(getVT(Now()) = "VT_DATE", "getVT(Now()) = " & getVT(Now()))
+
+Call ok(vbOKOnly = 0, "vbOKOnly = " & vbOKOnly)
+Call ok(getVT(vbOKOnly) = "VT_I2", "getVT(vbOKOnly) = " & getVT(vbOKOnly))
+Call ok(vbOKCancel = 1, "vbOKCancel = " & vbOKCancel)
+Call ok(getVT(vbOKCancel) = "VT_I2", "getVT(vbOKCancel) = " & getVT(vbOKCancel))
+Call ok(vbAbortRetryIgnore = 2, "vbAbortRetryIgnore = " & vbAbortRetryIgnore)
+Call ok(getVT(vbAbortRetryIgnore) = "VT_I2", "getVT(vbAbortRetryIgnore) = " & getVT(vbAbortRetryIgnore))
+Call ok(vbYesNoCancel = 3, "vbYesNoCancel = " & vbYesNoCancel)
+Call ok(getVT(vbYesNoCancel) = "VT_I2", "getVT(vbYesNoCancel) = " & getVT(vbYesNoCancel))
+Call ok(vbYesNo = 4, "vbYesNo = " & vbYesNo)
+Call ok(getVT(vbYesNo) = "VT_I2", "getVT(vbYesNo) = " & getVT(vbYesNo))
+Call ok(vbRetryCancel = 5, "vbRetryCancel = " & vbRetryCancel)
+Call ok(getVT(vbRetryCancel) = "VT_I2", "getVT(vbRetryCancel) = " & getVT(vbRetryCancel))
+
+Call ok(vbOK = 1, "vbOK = " & vbOK)
+Call ok(getVT(vbOK) = "VT_I2", "getVT(vbOK) = " & getVT(vbOK))
+Call ok(vbCancel = 2, "vbCancel = " & vbCancel)
+Call ok(getVT(vbCancel) = "VT_I2", "getVT(vbCancel) = " & getVT(vbCancel))
+Call ok(vbAbort = 3, "vbAbort = " & vbAbort)
+Call ok(getVT(vbAbort) = "VT_I2", "getVT(vbAbort) = " & getVT(vbAbort))
+Call ok(vbRetry = 4, "vbRetry = " & vbRetry)
+Call ok(getVT(vbRetry) = "VT_I2", "getVT(vbRetry) = " & getVT(vbRetry))
+Call ok(vbIgnore = 5, "vbIgnore = " & vbIgnore)
+Call ok(getVT(vbIgnore) = "VT_I2", "getVT(vbIgnore) = " & getVT(vbIgnore))
+Call ok(vbYes = 6, "vbYes = " & vbYes)
+Call ok(getVT(vbYes) = "VT_I2", "getVT(vbYes) = " & getVT(vbYes))
+Call ok(vbNo = 7, "vbNo = " & vbNo)
+Call ok(getVT(vbNo) = "VT_I2", "getVT(vbNo) = " & getVT(vbNo))
 
 Call reportSuccess()

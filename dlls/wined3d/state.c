@@ -275,6 +275,7 @@ static void state_zfunc(struct wined3d_context *context, const struct wined3d_st
          * D24S8, even if the app selects D32 or D16. There seem to be
          * some other precision problems which have to be debugged to
          * make NOTEQUAL and EQUAL work properly. */
+        //gl_info->gl_ops.gl.p_glPolygonOffset(1.0,3.0);
         if (!once)
         {
             once = TRUE;

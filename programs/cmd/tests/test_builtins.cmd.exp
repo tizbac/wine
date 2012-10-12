@@ -495,6 +495,16 @@ bar@space@
 PASSED
 xxx - Should be xxx
 Expected second line
+--- for /R
+Plain directory enumeration
+Plain directory enumeration from provided root
+File enumeration
+File enumeration from provided root
+Mixed enumeration
+Mixed enumeration from provided root
+With duplicates enumeration
+Strip missing wildcards, keep unwildcarded names
+for /R passed
 --- for /L
 1
 3
@@ -630,7 +640,7 @@ c
 ------ eol option
 @todo_wine@ad
 @todo_wine@z@y
-@todo_wine@a|d
+a|d
 @todo_wine@no output
 @todo_wine@no output
 ------ delims option
@@ -639,7 +649,7 @@ c
 @todo_wine@a d
 @todo_wine@a
 @todo_wine@C r
-@todo_wine@foo bar baz
+foo bar baz
 @todo_wine@c:\
 ------ skip option
 @todo_wine@c
@@ -843,12 +853,60 @@ ErrLev: 0
 --- setlocal with corresponding endlocal
 globalval
 localval
+@pwd@\foobar\foobar2
 globalval
+@pwd@\foobar
 globalval
+@pwd@\foobar
 --- setlocal with no corresponding endlocal
 globalval
 localval
-@todo_wine@globalval
+@pwd@\foobar\foobar2
+globalval
+@pwd@\foobar
+--- setlocal within same batch program
+Var1 ok 1
+Var2 ok 2
+Var3 ok 3
+Directory is ok 1
+Var1 ok 1
+Var2 ok 2
+Var3 ok 3
+Directory is ok 2
+Var1 ok 1
+Var2 ok 2
+Var3 ok 3
+Directory is ok 3
+--- Mismatched set and end locals
+--- Extra setlocal in called batch
+value2
+2set1endvalue1
+@pwd@\foobar\foodir3
+Finished:
+value2
+@pwd@\foobar\foodir2
+value1
+@pwd@\foobar
+--- Extra endlocal in called batch
+value2
+value2
+@pwd@\foobar\foodir2
+value2
+@pwd@\foobar\foodir2
+Finished:
+value2
+@pwd@\foobar\foodir2
+value1
+@pwd@\foobar
+--- endlocal in called function rather than batch pgm is ineffective
+2
+2
+1
+2
+1
+2
+1
+1
 ------------ Testing Errorlevel ------------
 9009
 1

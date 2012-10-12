@@ -548,14 +548,14 @@
 @ cdecl -arch=win64 ??0?$basic_fstream@DU?$char_traits@D@std@@@std@@QEAA@XZ(ptr long) basic_fstream_char_ctor
 @ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@PAU_iobuf@@@Z(ptr ptr long) basic_fstream_short_ctor_file
 @ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@PEAU_iobuf@@@Z(ptr ptr long) basic_fstream_short_ctor_file
-@ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@PBDHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name_wchar
-@ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@PEBDHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name_wchar
+@ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@PBDHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name
+@ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@PEBDHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name
 @ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@XZ(ptr long) basic_fstream_short_ctor
 @ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@XZ(ptr long) basic_fstream_short_ctor
 @ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PAU_iobuf@@@Z(ptr ptr long) basic_fstream_wchar_ctor_file
 @ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@PEAU_iobuf@@@Z(ptr ptr long) basic_fstream_wchar_ctor_file
-@ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PBDHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name_wchar
-@ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@PEBDHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name_wchar
+@ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PBDHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name
+@ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@PEBDHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name
 @ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@XZ(ptr long) basic_fstream_wchar_ctor
 @ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@XZ(ptr long) basic_fstream_wchar_ctor
 @ thiscall -arch=win32 ??0?$basic_ifstream@DU?$char_traits@D@std@@@std@@QAE@PAU_iobuf@@@Z(ptr ptr long) basic_ifstream_char_ctor_file
@@ -694,7 +694,7 @@
 @ cdecl -arch=win64 ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAA@_KD@Z(ptr long long) MSVCP_basic_string_char_ctor_ch
 @ thiscall -arch=win32 ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@PBDIABV?$allocator@D@1@@Z(ptr str long ptr) MSVCP_basic_string_char_ctor_cstr_len_alloc
 @ cdecl -arch=win64 ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAA@_KDAEBV?$allocator@D@1@@Z(ptr long long ptr) MSVCP_basic_string_char_ctor_ch_alloc
-@ stub -arch=win32 ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@Vconst_iterator@01@0@Z
+@ thiscall -arch=win32 ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@Vconst_iterator@01@0@Z(ptr ptr ptr) basic_string_char_ctor_iter
 @ thiscall -arch=win32 ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@XZ(ptr) MSVCP_basic_string_char_ctor
 @ cdecl -arch=win64 ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAA@XZ(ptr) MSVCP_basic_string_char_ctor
 @ thiscall -arch=win32 ??0?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE@ABV01@@Z(ptr ptr) MSVCP_basic_string_wchar_copy_ctor
@@ -719,7 +719,7 @@
 @ cdecl -arch=win64 ??0?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAA@_KG@Z(ptr long long) MSVCP_basic_string_wchar_ctor_ch
 @ thiscall -arch=win32 ??0?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE@PBGIABV?$allocator@G@1@@Z(ptr wstr long ptr) MSVCP_basic_string_wchar_ctor_cstr_len_alloc
 @ cdecl -arch=win64 ??0?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAA@_KGAEBV?$allocator@G@1@@Z(ptr long long ptr) MSVCP_basic_string_wchar_ctor_ch_alloc
-@ stub -arch=win32 ??0?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE@Vconst_iterator@01@0@Z
+@ thiscall -arch=win32 ??0?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE@Vconst_iterator@01@0@Z(ptr ptr ptr) basic_string_wchar_ctor_iter
 @ thiscall -arch=win32 ??0?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE@XZ(ptr) MSVCP_basic_string_wchar_ctor
 @ cdecl -arch=win64 ??0?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAA@XZ(ptr) MSVCP_basic_string_wchar_ctor
 @ thiscall -arch=win32 ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@ABV01@@Z(ptr ptr) MSVCP_basic_string_wchar_copy_ctor
@@ -743,7 +743,7 @@
 @ thiscall -arch=win32 ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@PB_WI@Z(ptr wstr long) MSVCP_basic_string_wchar_ctor_cstr_len
 @ cdecl -arch=win64 ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAA@PEB_W_K@Z(ptr wstr long) MSVCP_basic_string_wchar_ctor_cstr_len
 @ thiscall -arch=win32 ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@PB_WIABV?$allocator@_W@1@@Z(ptr wstr long ptr) MSVCP_basic_string_wchar_ctor_cstr_len_alloc
-@ stub -arch=win32 ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@Vconst_iterator@01@0@Z
+@ thiscall -arch=win32 ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@Vconst_iterator@01@0@Z(ptr ptr ptr) basic_string_wchar_ctor_iter
 @ thiscall -arch=win32 ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@XZ(ptr) MSVCP_basic_string_wchar_ctor
 @ cdecl -arch=win64 ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAA@_K_WAEBV?$allocator@_W@1@@Z(ptr long long ptr) MSVCP_basic_string_wchar_ctor_ch_alloc
 @ thiscall -arch=win32 ??0?$basic_stringbuf@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@ABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@1@H@Z(ptr ptr long) basic_stringbuf_char_ctor_str
@@ -950,8 +950,8 @@
 @ stub -arch=win64 ??0?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@QEAA@AEBV_Locinfo@1@_K@Z
 @ stub -arch=win32 ??0?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@QAE@I@Z
 @ stub -arch=win64 ??0?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@QEAA@_K@Z
-@ stub -arch=win32 ??0Init@ios_base@std@@QAE@XZ
-@ stub -arch=win64 ??0Init@ios_base@std@@QEAA@XZ
+@ thiscall -arch=win32 ??0Init@ios_base@std@@QAE@XZ(ptr) ios_base_Init_ctor
+@ cdecl -arch=win64 ??0Init@ios_base@std@@QEAA@XZ(ptr) ios_base_Init_ctor
 @ thiscall -arch=win32 ??0_Locimp@locale@std@@AAE@ABV012@@Z(ptr ptr) locale__Locimp_copy_ctor
 @ cdecl -arch=win64 ??0_Locimp@locale@std@@AEAA@AEBV012@@Z(ptr ptr) locale__Locimp_copy_ctor
 @ thiscall -arch=win32 ??0_Locinfo@std@@QAE@HPBD@Z(ptr long str) _Locinfo_ctor_cat_cstr
@@ -970,8 +970,8 @@
 @ cdecl -arch=win64 ??0_Timevec@std@@QEAA@PEAX@Z(ptr ptr) _Timevec_ctor_timeptr
 @ stub -arch=win32 ??0_UShinit@std@@QAE@XZ
 @ stub -arch=win64 ??0_UShinit@std@@QEAA@XZ
-@ stub -arch=win32 ??0_Winit@std@@QAE@XZ
-@ stub -arch=win64 ??0_Winit@std@@QEAA@XZ
+@ thiscall -arch=win32 ??0_Winit@std@@QAE@XZ(ptr) _Winit_ctor
+@ cdecl -arch=win64 ??0_Winit@std@@QEAA@XZ(ptr) _Winit_ctor
 @ thiscall -arch=win32 ??0codecvt_base@std@@QAE@I@Z(ptr long) codecvt_base_ctor_refs
 @ cdecl -arch=win64 ??0codecvt_base@std@@QEAA@_K@Z(ptr long) codecvt_base_ctor_refs
 @ thiscall -arch=win32 ??0ctype_base@std@@QAE@I@Z(ptr long) ctype_base_ctor_refs
@@ -1175,8 +1175,8 @@
 @ stub -arch=win64 ??1?$time_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@MEAA@XZ
 @ stub -arch=win32 ??1?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@MAE@XZ
 @ stub -arch=win64 ??1?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@MEAA@XZ
-@ stub -arch=win32 ??1Init@ios_base@std@@QAE@XZ
-@ stub -arch=win64 ??1Init@ios_base@std@@QEAA@XZ
+@ thiscall -arch=win32 ??1Init@ios_base@std@@QAE@XZ(ptr) ios_base_Init_dtor
+@ cdecl -arch=win64 ??1Init@ios_base@std@@QEAA@XZ(ptr) ios_base_Init_dtor
 @ thiscall -arch=win32 ??1_Locinfo@std@@QAE@XZ(ptr) _Locinfo_dtor
 @ cdecl -arch=win64 ??1_Locinfo@std@@QEAA@XZ(ptr) _Locinfo_dtor
 @ thiscall -arch=win32 ??1_Lockit@std@@QAE@XZ(ptr) _Lockit_dtor
@@ -1187,8 +1187,8 @@
 @ cdecl -arch=win64 ??1_Timevec@std@@QEAA@XZ(ptr) _Timevec_dtor
 @ stub -arch=win32 ??1_UShinit@std@@QAE@XZ
 @ stub -arch=win64 ??1_UShinit@std@@QEAA@XZ
-@ stub -arch=win32 ??1_Winit@std@@QAE@XZ
-@ stub -arch=win64 ??1_Winit@std@@QEAA@XZ
+@ thiscall -arch=win32 ??1_Winit@std@@QAE@XZ(ptr) _Winit_dtor
+@ cdecl -arch=win64 ??1_Winit@std@@QEAA@XZ(ptr) _Winit_dtor
 @ thiscall -arch=win32 ??1codecvt_base@std@@UAE@XZ(ptr) codecvt_base_dtor
 @ cdecl -arch=win64 ??1codecvt_base@std@@UEAA@XZ(ptr) codecvt_base_dtor
 @ thiscall -arch=win32 ??1ctype_base@std@@UAE@XZ(ptr) ctype_base_dtor
@@ -1305,8 +1305,8 @@
 @ cdecl -arch=win64 ??4?$numeric_limits@_N@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) std_Num_base_op_assign
 @ thiscall -arch=win32 ??4?$numeric_limits@_W@std@@QAEAAV01@ABV01@@Z(ptr ptr) std_Num_base_op_assign
 @ cdecl -arch=win64 ??4?$numeric_limits@_W@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) std_Num_base_op_assign
-@ stub -arch=win32 ??4Init@ios_base@std@@QAEAAV012@ABV012@@Z
-@ stub -arch=win64 ??4Init@ios_base@std@@QEAAAEAV012@AEBV012@@Z
+@ thiscall -arch=win32 ??4Init@ios_base@std@@QAEAAV012@ABV012@@Z(ptr ptr) ios_base_Init_op_assign
+@ cdecl -arch=win64 ??4Init@ios_base@std@@QEAAAEAV012@AEBV012@@Z(ptr ptr) ios_base_Init_op_assign
 @ thiscall -arch=win32 ??4_Num_base@std@@QAEAAU01@ABU01@@Z(ptr ptr) std_Num_base_op_assign
 @ cdecl -arch=win64 ??4_Num_base@std@@QEAAAEAU01@AEBU01@@Z(ptr ptr) std_Num_base_op_assign
 @ thiscall -arch=win32 ??4_Num_float_base@std@@QAEAAU01@ABU01@@Z(ptr ptr) std_Num_base_op_assign
@@ -1319,8 +1319,8 @@
 @ cdecl -arch=win64 ??4_Timevec@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) _Timevec_op_assign
 @ stub -arch=win32 ??4_UShinit@std@@QAEAAV01@ABV01@@Z
 @ stub -arch=win64 ??4_UShinit@std@@QEAAAEAV01@AEBV01@@Z
-@ stub -arch=win32 ??4_Winit@std@@QAEAAV01@ABV01@@Z
-@ stub -arch=win64 ??4_Winit@std@@QEAAAEAV01@AEBV01@@Z
+@ thiscall -arch=win32 ??4_Winit@std@@QAEAAV01@ABV01@@Z(ptr ptr) _Winit_op_assign
+@ cdecl -arch=win64 ??4_Winit@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) _Winit_op_assign
 @ thiscall -arch=win32 ??4ios_base@std@@QAEAAV01@ABV01@@Z(ptr ptr) ios_base_assign
 @ cdecl -arch=win64 ??4ios_base@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) ios_base_assign
 @ thiscall -arch=win32 ??4locale@std@@QAEAAV01@ABV01@@Z(ptr ptr) locale_operator_assign
@@ -2264,15 +2264,15 @@
 @ stub -arch=win64 ?_Init@?$time_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@IEAAXAEBV_Locinfo@2@@Z
 @ stub -arch=win32 ?_Init@?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@IAEXABV_Locinfo@2@@Z
 @ stub -arch=win64 ?_Init@?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@IEAAXAEBV_Locinfo@2@@Z
-@ thiscall -arch=win32 ?_Init@ios_base@std@@IAEXXZ(ptr) ios_base_Init
-@ cdecl -arch=win64 ?_Init@ios_base@std@@IEAAXXZ(ptr) ios_base_Init
+@ thiscall -arch=win32 ?_Init@ios_base@std@@IAEXXZ(ptr) ios_base__Init
+@ cdecl -arch=win64 ?_Init@ios_base@std@@IEAAXXZ(ptr) ios_base__Init
 @ cdecl -arch=win32 ?_Init@locale@std@@CAPAV_Locimp@12@XZ() locale__Init
 @ cdecl -arch=win64 ?_Init@locale@std@@CAPEAV_Locimp@12@XZ() locale__Init
 @ thiscall -arch=win32 ?_Init@strstreambuf@std@@IAEXHPAD0H@Z(ptr long ptr ptr long) strstreambuf__Init
 @ cdecl -arch=win64 ?_Init@strstreambuf@std@@IEAAX_JPEAD1H@Z(ptr long ptr ptr long) strstreambuf__Init
-# extern ?_Init_cnt@Init@ios_base@std@@0HA
+@ extern ?_Init_cnt@Init@ios_base@std@@0HA ios_base_Init__Init_cnt
 # extern ?_Init_cnt@_UShinit@std@@0HA
-# extern ?_Init_cnt@_Winit@std@@0HA
+@ extern ?_Init_cnt@_Winit@std@@0HA _Winit__Init_cnt
 @ thiscall -arch=win32 ?_Initcvt@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IAEXPAV?$codecvt@DDH@2@@Z(ptr ptr) basic_filebuf_char__Initcvt
 @ cdecl -arch=win64 ?_Initcvt@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IEAAXPEAV?$codecvt@DDH@2@@Z(ptr ptr) basic_filebuf_char__Initcvt
 @ thiscall -arch=win32 ?_Initcvt@?$basic_filebuf@GU?$char_traits@G@std@@@std@@IAEXPAV?$codecvt@GDH@2@@Z(ptr ptr) basic_filebuf_wchar__Initcvt
@@ -2333,9 +2333,9 @@
 @ cdecl -arch=win64 ?_Osfx@?$basic_ostream@GU?$char_traits@G@std@@@std@@QEAAXXZ(ptr) basic_ostream_wchar__Osfx
 @ thiscall -arch=win32 ?_Osfx@?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QAEXXZ(ptr) basic_ostream_wchar__Osfx
 @ cdecl -arch=win64 ?_Osfx@?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QEAAXXZ(ptr) basic_ostream_wchar__Osfx
-@ stub -arch=win32 ?_Pdif@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@KAIVconst_iterator@12@0@Z
-@ stub -arch=win32 ?_Pdif@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@KAIVconst_iterator@12@0@Z
-@ stub -arch=win32 ?_Pdif@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@KAIVconst_iterator@12@0@Z
+@ cdecl -arch=win32 ?_Pdif@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@KAIVconst_iterator@12@0@Z(ptr ptr) basic_string_char__Pdif
+@ cdecl -arch=win32 ?_Pdif@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@KAIVconst_iterator@12@0@Z(ptr ptr) basic_string_wchar__Pdif
+@ cdecl -arch=win32 ?_Pdif@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@KAIVconst_iterator@12@0@Z(ptr ptr) basic_string_wchar__Pdif
 @ thiscall -arch=win32 ?_Pninc@?$basic_streambuf@DU?$char_traits@D@std@@@std@@IAEPADXZ(ptr) basic_streambuf_char__Pninc
 @ cdecl -arch=win64 ?_Pninc@?$basic_streambuf@DU?$char_traits@D@std@@@std@@IEAAPEADXZ(ptr) basic_streambuf_char__Pninc
 @ thiscall -arch=win32 ?_Pninc@?$basic_streambuf@GU?$char_traits@G@std@@@std@@IAEPAGXZ(ptr) basic_streambuf_wchar__Pninc
@@ -2520,7 +2520,7 @@
 @ cdecl -arch=win64 ?assign@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAAAEAV12@PEBD_K@Z(ptr str long) MSVCP_basic_string_char_assign_cstr_len
 @ thiscall -arch=win32 ?assign@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEAAV12@PBDI@Z(ptr str long) MSVCP_basic_string_char_assign_cstr_len
 @ cdecl -arch=win64 ?assign@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAAAEAV12@_KD@Z(ptr long long) MSVCP_basic_string_char_assignn
-@ stub -arch=win32 ?assign@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEAAV12@Vconst_iterator@12@0@Z
+@ thiscall -arch=win32 ?assign@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEAAV12@Vconst_iterator@12@0@Z(ptr ptr ptr) MSVCP_basic_string_char_assign_iter
 @ thiscall -arch=win32 ?assign@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEAAV12@ABV12@@Z(ptr ptr) MSVCP_basic_string_wchar_assign
 @ cdecl -arch=win64 ?assign@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAAAEAV12@AEBV12@@Z(ptr ptr) MSVCP_basic_string_wchar_assign
 @ thiscall -arch=win32 ?assign@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEAAV12@ABV12@II@Z(ptr ptr long long) MSVCP_basic_string_wchar_assign_substr
@@ -2533,7 +2533,7 @@
 @ cdecl -arch=win64 ?assign@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAAAEAV12@PEBG_K@Z(ptr wstr long) MSVCP_basic_string_wchar_assign_cstr_len
 @ thiscall -arch=win32 ?assign@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEAAV12@PBGI@Z(ptr wstr long) MSVCP_basic_string_wchar_assign_cstr_len
 @ cdecl -arch=win64 ?assign@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAAAEAV12@_KG@Z(ptr long long) MSVCP_basic_string_wchar_assignn
-@ stub -arch=win32 ?assign@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEAAV12@Vconst_iterator@12@0@Z
+@ thiscall -arch=win32 ?assign@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEAAV12@Vconst_iterator@12@0@Z(ptr ptr ptr) MSVCP_basic_string_wchar_assign_iter
 @ thiscall -arch=win32 ?assign@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEAAV12@ABV12@@Z(ptr ptr) MSVCP_basic_string_wchar_assign
 @ cdecl -arch=win64 ?assign@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAAAEAV12@AEBV12@@Z(ptr ptr) MSVCP_basic_string_wchar_assign
 @ thiscall -arch=win32 ?assign@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEAAV12@ABV12@II@Z(ptr ptr long long) MSVCP_basic_string_wchar_assign_substr
@@ -2546,7 +2546,7 @@
 @ cdecl -arch=win64 ?assign@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAAAEAV12@PEB_W_K@Z(ptr wstr long) MSVCP_basic_string_wchar_assign_cstr_len
 @ thiscall -arch=win32 ?assign@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEAAV12@PB_WI@Z(ptr wstr long) MSVCP_basic_string_wchar_assign_cstr_len
 @ cdecl -arch=win64 ?assign@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAAAEAV12@_K_W@Z(ptr long long) MSVCP_basic_string_wchar_assignn
-@ stub -arch=win32 ?assign@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEAAV12@Vconst_iterator@12@0@Z
+@ thiscall -arch=win32 ?assign@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEAAV12@Vconst_iterator@12@0@Z(ptr ptr ptr) MSVCP_basic_string_wchar_assign_iter
 @ cdecl -arch=win32 ?assign@?$char_traits@D@std@@SAPADPADID@Z(ptr long long) MSVCP_char_traits_char_assignn
 @ cdecl -arch=win64 ?assign@?$char_traits@D@std@@SAPEADPEAD_KD@Z(ptr long long) MSVCP_char_traits_char_assignn
 @ cdecl -arch=win32 ?assign@?$char_traits@D@std@@SAXAADABD@Z(ptr ptr) MSVCP_char_traits_char_assign
@@ -3291,16 +3291,16 @@
 @ cdecl -arch=win64 ?eq_int_type@?$char_traits@G@std@@SA_NAEBG0@Z(ptr ptr) MSVCP_char_traits_short_eq_int_type
 @ cdecl -arch=win32 ?eq_int_type@?$char_traits@_W@std@@SA_NABG0@Z(ptr ptr) MSVCP_char_traits_wchar_eq_int_tpe
 @ cdecl -arch=win64 ?eq_int_type@?$char_traits@_W@std@@SA_NAEBG0@Z(ptr ptr) MSVCP_char_traits_wchar_eq_int_tpe
-@ stub -arch=win32 ?erase@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE?AViterator@12@V312@0@Z
-@ stub -arch=win32 ?erase@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE?AViterator@12@V312@@Z
+@ thiscall -arch=win32 ?erase@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE?AViterator@12@V312@0@Z(ptr ptr ptr ptr) basic_string_char_erase_iter_range
+@ thiscall -arch=win32 ?erase@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE?AViterator@12@V312@@Z(ptr ptr ptr) basic_string_char_erase_iter
 @ thiscall -arch=win32 ?erase@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEAAV12@II@Z(ptr long long) MSVCP_basic_string_char_erase
 @ cdecl -arch=win64 ?erase@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAAAEAV12@_K0@Z(ptr long long) MSVCP_basic_string_char_erase
-@ stub -arch=win32 ?erase@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AViterator@12@V312@0@Z
-@ stub -arch=win32 ?erase@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AViterator@12@V312@@Z
+@ thiscall -arch=win32 ?erase@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AViterator@12@V312@0@Z(ptr ptr ptr ptr) basic_string_wchar_erase_iter_range
+@ thiscall -arch=win32 ?erase@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AViterator@12@V312@@Z(ptr ptr ptr) basic_string_wchar_erase_iter
 @ thiscall -arch=win32 ?erase@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEAAV12@II@Z(ptr long long) MSVCP_basic_string_wchar_erase
 @ cdecl -arch=win64 ?erase@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAAAEAV12@_K0@Z(ptr long long) MSVCP_basic_string_wchar_erase
-@ stub -arch=win32 ?erase@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AViterator@12@V312@0@Z
-@ stub -arch=win32 ?erase@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AViterator@12@V312@@Z
+@ thiscall -arch=win32 ?erase@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AViterator@12@V312@0@Z(ptr ptr ptr ptr) basic_string_wchar_erase_iter_range
+@ thiscall -arch=win32 ?erase@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AViterator@12@V312@@Z(ptr ptr ptr) basic_string_wchar_erase_iter
 @ thiscall -arch=win32 ?erase@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEAAV12@II@Z(ptr long long) MSVCP_basic_string_wchar_erase
 @ cdecl -arch=win64 ?erase@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAAAEAV12@_K0@Z(ptr long long) MSVCP_basic_string_wchar_erase
 @ thiscall -arch=win32 ?exceptions@ios_base@std@@QAEXH@Z(ptr long) ios_base_exceptions_set
@@ -3819,8 +3819,8 @@
 @ cdecl -arch=win64 ?init@?$basic_ios@GU?$char_traits@G@std@@@std@@IEAAXPEAV?$basic_streambuf@GU?$char_traits@G@std@@@2@_N@Z(ptr ptr long) basic_ios_wchar_init
 @ thiscall -arch=win32 ?init@?$basic_ios@_WU?$char_traits@_W@std@@@std@@IAEXPAV?$basic_streambuf@_WU?$char_traits@_W@std@@@2@_N@Z(ptr ptr long) basic_ios_wchar_init
 @ cdecl -arch=win64 ?init@?$basic_ios@_WU?$char_traits@_W@std@@@std@@IEAAXPEAV?$basic_streambuf@_WU?$char_traits@_W@std@@@2@_N@Z(ptr ptr long) basic_ios_wchar_init
-@ stub -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE?AViterator@12@V312@@Z
-@ stub -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE?AViterator@12@V312@D@Z
+@ thiscall -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE?AViterator@12@V312@@Z(ptr ptr ptr) basic_string_char_insert_iter_null
+@ thiscall -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE?AViterator@12@V312@D@Z(ptr ptr ptr long) basic_string_char_insert_iter_ch
 @ thiscall -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEAAV12@IABV12@@Z(ptr long ptr) basic_string_char_insert
 @ cdecl -arch=win64 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAAAEAV12@_K0D@Z(ptr long long long) basic_string_char_insert_chn
 @ thiscall -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEAAV12@IABV12@II@Z(ptr long ptr long long) basic_string_char_insert_substr
@@ -3831,11 +3831,11 @@
 @ cdecl -arch=win64 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAAAEAV12@_KPEBD0@Z(ptr long ptr long) basic_string_char_insert_cstr_len
 @ thiscall -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEAAV12@IPBDI@Z(ptr long ptr long) basic_string_char_insert_cstr_len
 @ cdecl -arch=win64 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAAAEAV12@_KPEBD@Z(ptr long str) basic_string_char_insert_cstr
-@ stub -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXViterator@12@ID@Z
-@ stub -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXViterator@12@PBD1@Z
-@ stub -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXViterator@12@Vconst_iterator@12@1@Z
-@ stub -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AViterator@12@V312@@Z
-@ stub -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AViterator@12@V312@G@Z
+@ thiscall -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXViterator@12@ID@Z(ptr ptr long long) basic_string_char_insert_iter_chn
+@ thiscall -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXViterator@12@PBD1@Z(ptr ptr ptr ptr) basic_string_wchar_insert_iter_ptr_ptr
+@ thiscall -arch=win32 ?insert@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXViterator@12@Vconst_iterator@12@1@Z(ptr ptr ptr ptr) basic_string_wchar_insert_iter_beg_end
+@ thiscall -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AViterator@12@V312@@Z(ptr ptr ptr) basic_string_wchar_insert_iter_null
+@ thiscall -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AViterator@12@V312@G@Z(ptr ptr ptr long) basic_string_wchar_insert_iter_ch
 @ thiscall -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEAAV12@IABV12@@Z(ptr long ptr) basic_string_wchar_insert
 @ cdecl -arch=win64 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAAAEAV12@_K0G@Z(ptr long long long) basic_string_wchar_insert_chn
 @ thiscall -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEAAV12@IABV12@II@Z(ptr long ptr long long) basic_string_wchar_insert_substr
@@ -3846,11 +3846,11 @@
 @ cdecl -arch=win64 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAAAEAV12@_KPEBG0@Z(ptr long ptr long) basic_string_wchar_insert_cstr_len
 @ thiscall -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEAAV12@IPBGI@Z(ptr long ptr long) basic_string_wchar_insert_cstr_len
 @ cdecl -arch=win64 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAAAEAV12@_KPEBG@Z(ptr long wstr) basic_string_wchar_insert_cstr
-@ stub -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEXViterator@12@IG@Z
-@ stub -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEXViterator@12@PBG1@Z
-@ stub -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEXViterator@12@Vconst_iterator@12@1@Z
-@ stub -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AViterator@12@V312@@Z
-@ stub -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AViterator@12@V312@_W@Z
+@ thiscall -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEXViterator@12@IG@Z(ptr ptr long long) basic_string_wchar_insert_iter_chn
+@ thiscall -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEXViterator@12@PBG1@Z(ptr ptr ptr ptr) basic_string_wchar_insert_iter_ptr_ptr
+@ thiscall -arch=win32 ?insert@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAEXViterator@12@Vconst_iterator@12@1@Z(ptr ptr ptr ptr) basic_string_wchar_insert_iter_beg_end
+@ thiscall -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AViterator@12@V312@@Z(ptr ptr ptr) basic_string_wchar_insert_iter_null
+@ thiscall -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AViterator@12@V312@_W@Z(ptr ptr ptr long) basic_string_wchar_insert_iter_ch
 @ thiscall -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEAAV12@IABV12@@Z(ptr long ptr) basic_string_wchar_insert
 @ cdecl -arch=win64 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAAAEAV12@_K0_W@Z(ptr long long long) basic_string_wchar_insert_chn
 @ thiscall -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEAAV12@IABV12@II@Z(ptr long ptr long long) basic_string_wchar_insert_substr
@@ -3861,9 +3861,9 @@
 @ cdecl -arch=win64 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAAAEAV12@_KPEB_W0@Z(ptr long ptr long) basic_string_wchar_insert_cstr_len
 @ thiscall -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEAAV12@IPB_WI@Z(ptr long ptr long) basic_string_wchar_insert_cstr_len
 @ cdecl -arch=win64 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAAAEAV12@_KPEB_W@Z(ptr long wstr) basic_string_wchar_insert_cstr
-@ stub -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEXViterator@12@I_W@Z
-@ stub -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEXViterator@12@PB_W1@Z
-@ stub -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEXViterator@12@Vconst_iterator@12@1@Z
+@ thiscall -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEXViterator@12@I_W@Z(ptr ptr long long) basic_string_wchar_insert_iter_chn
+@ thiscall -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEXViterator@12@PB_W1@Z(ptr ptr ptr ptr) basic_string_wchar_insert_iter_ptr_ptr
+@ thiscall -arch=win32 ?insert@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEXViterator@12@Vconst_iterator@12@1@Z(ptr ptr ptr ptr) basic_string_wchar_insert_iter_beg_end
 # extern ?intl@?$moneypunct@D$00@std@@2_NB
 # extern ?intl@?$moneypunct@D$0A@@std@@2_NB
 # extern ?intl@?$moneypunct@G$00@std@@2_NB

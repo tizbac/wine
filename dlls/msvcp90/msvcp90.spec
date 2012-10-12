@@ -570,22 +570,22 @@
 @ cdecl -arch=win64 ??0?$basic_fstream@DU?$char_traits@D@std@@@std@@QEAA@XZ(ptr long) basic_fstream_char_ctor
 @ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@PAU_iobuf@@@Z(ptr ptr long) basic_fstream_short_ctor_file
 @ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@PEAU_iobuf@@@Z(ptr ptr long) basic_fstream_short_ctor_file
-@ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@PBDHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name_wchar
-@ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@PEBDHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name_wchar
+@ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@PBDHH@Z(ptr str long long long) basic_fstream_short_ctor_name
+@ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@PEBDHH@Z(ptr str long long long) basic_fstream_short_ctor_name
 @ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@PBGHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name_wchar
 @ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@PEBGHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name_wchar
-@ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@PB_WHH@Z(ptr str long long long) basic_fstream_short_ctor_name
-@ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@PEB_WHH@Z(ptr str long long long) basic_fstream_short_ctor_name
+@ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@PB_WHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name_wchar
+@ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@PEB_WHH@Z(ptr wstr long long long) basic_fstream_short_ctor_name_wchar
 @ thiscall -arch=win32 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QAE@XZ(ptr long) basic_fstream_short_ctor
 @ cdecl -arch=win64 ??0?$basic_fstream@GU?$char_traits@G@std@@@std@@QEAA@XZ(ptr long) basic_fstream_short_ctor
 @ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PAU_iobuf@@@Z(ptr ptr long) basic_fstream_wchar_ctor_file
 @ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@PEAU_iobuf@@@Z(ptr ptr long) basic_fstream_wchar_ctor_file
-@ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PBDHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name_wchar
-@ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@PEBDHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name_wchar
+@ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PBDHH@Z(ptr str long long long) basic_fstream_wchar_ctor_name
+@ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@PEBDHH@Z(ptr str long long long) basic_fstream_wchar_ctor_name
 @ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PBGHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name_wchar
 @ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@PEBGHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name_wchar
-@ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PB_WHH@Z(ptr str long long long) basic_fstream_wchar_ctor_name
-@ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@PEB_WHH@Z(ptr str long long long) basic_fstream_wchar_ctor_name
+@ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PB_WHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name_wchar
+@ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@PEB_WHH@Z(ptr wstr long long long) basic_fstream_wchar_ctor_name_wchar
 @ thiscall -arch=win32 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@XZ(ptr long) basic_fstream_wchar_ctor
 @ cdecl -arch=win64 ??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QEAA@XZ(ptr long) basic_fstream_wchar_ctor
 @ thiscall -arch=win32 ??0?$basic_ifstream@DU?$char_traits@D@std@@@std@@QAE@PAU_iobuf@@@Z(ptr ptr long) basic_ifstream_char_ctor_file
@@ -1064,8 +1064,8 @@
 @ stub -arch=win64 ??0?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@QEAA@AEBV_Locinfo@1@_K@Z
 @ stub -arch=win32 ??0?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@QAE@I@Z
 @ stub -arch=win64 ??0?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@QEAA@_K@Z
-@ stub -arch=win32 ??0Init@ios_base@std@@QAE@XZ
-@ stub -arch=win64 ??0Init@ios_base@std@@QEAA@XZ
+@ thiscall -arch=win32 ??0Init@ios_base@std@@QAE@XZ(ptr) ios_base_Init_ctor
+@ cdecl -arch=win64 ??0Init@ios_base@std@@QEAA@XZ(ptr) ios_base_Init_ctor
 @ stub -arch=win32 ??0_Init_locks@std@@QAE@XZ
 @ stub -arch=win64 ??0_Init_locks@std@@QEAA@XZ
 @ thiscall -arch=win32 ??0_Locimp@locale@std@@AAE@ABV012@@Z(ptr ptr) locale__Locimp_copy_ctor
@@ -1090,8 +1090,8 @@
 @ cdecl -arch=win64 ??0_Timevec@std@@QEAA@PEAX@Z(ptr ptr) _Timevec_ctor_timeptr
 @ stub -arch=win32 ??0_UShinit@std@@QAE@XZ
 @ stub -arch=win64 ??0_UShinit@std@@QEAA@XZ
-@ stub -arch=win32 ??0_Winit@std@@QAE@XZ
-@ stub -arch=win64 ??0_Winit@std@@QEAA@XZ
+@ thiscall -arch=win32 ??0_Winit@std@@QAE@XZ(ptr) _Winit_ctor
+@ cdecl -arch=win64 ??0_Winit@std@@QEAA@XZ(ptr) _Winit_ctor
 @ thiscall -arch=win32 ??0codecvt_base@std@@QAE@I@Z(ptr long) codecvt_base_ctor_refs
 @ cdecl -arch=win64 ??0codecvt_base@std@@QEAA@_K@Z(ptr long) codecvt_base_ctor_refs
 @ thiscall -arch=win32 ??0ctype_base@std@@QAE@I@Z(ptr long) ctype_base_ctor_refs
@@ -1308,8 +1308,8 @@
 @ stub -arch=win64 ??1?$time_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@MEAA@XZ
 @ stub -arch=win32 ??1?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@MAE@XZ
 @ stub -arch=win64 ??1?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@MEAA@XZ
-@ stub -arch=win32 ??1Init@ios_base@std@@QAE@XZ
-@ stub -arch=win64 ??1Init@ios_base@std@@QEAA@XZ
+@ thiscall -arch=win32 ??1Init@ios_base@std@@QAE@XZ(ptr) ios_base_Init_dtor
+@ cdecl -arch=win64 ??1Init@ios_base@std@@QEAA@XZ(ptr) ios_base_Init_dtor
 @ stub -arch=win32 ??1_Init_locks@std@@QAE@XZ
 @ stub -arch=win64 ??1_Init_locks@std@@QEAA@XZ
 @ thiscall -arch=win32 ??1_Locimp@locale@std@@MAE@XZ(ptr) locale__Locimp_dtor
@@ -1324,8 +1324,8 @@
 @ cdecl -arch=win64 ??1_Timevec@std@@QEAA@XZ(ptr) _Timevec_dtor
 @ stub -arch=win32 ??1_UShinit@std@@QAE@XZ
 @ stub -arch=win64 ??1_UShinit@std@@QEAA@XZ
-@ stub -arch=win32 ??1_Winit@std@@QAE@XZ
-@ stub -arch=win64 ??1_Winit@std@@QEAA@XZ
+@ thiscall -arch=win32 ??1_Winit@std@@QAE@XZ(ptr) _Winit_dtor
+@ cdecl -arch=win64 ??1_Winit@std@@QEAA@XZ(ptr) _Winit_dtor
 @ thiscall -arch=win32 ??1codecvt_base@std@@UAE@XZ(ptr) codecvt_base_dtor
 @ cdecl -arch=win64 ??1codecvt_base@std@@UEAA@XZ(ptr) codecvt_base_dtor
 @ thiscall -arch=win32 ??1ctype_base@std@@UAE@XZ(ptr) ctype_base_dtor
@@ -1448,8 +1448,8 @@
 @ cdecl -arch=win64 ??4?$numeric_limits@_N@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) std_Num_base_op_assign
 @ thiscall -arch=win32 ??4?$numeric_limits@_W@std@@QAEAAV01@ABV01@@Z(ptr ptr) std_Num_base_op_assign
 @ cdecl -arch=win64 ??4?$numeric_limits@_W@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) std_Num_base_op_assign
-@ stub -arch=win32 ??4Init@ios_base@std@@QAEAAV012@ABV012@@Z
-@ stub -arch=win64 ??4Init@ios_base@std@@QEAAAEAV012@AEBV012@@Z
+@ thiscall -arch=win32 ??4Init@ios_base@std@@QAEAAV012@ABV012@@Z(ptr ptr) ios_base_Init_op_assign
+@ cdecl -arch=win64 ??4Init@ios_base@std@@QEAAAEAV012@AEBV012@@Z(ptr ptr) ios_base_Init_op_assign
 @ stub -arch=win32 ??4_Container_base_secure@std@@QAEAAV01@ABV01@@Z
 @ stub -arch=win64 ??4_Container_base_secure@std@@QEAAAEAV01@AEBV01@@Z
 @ stub -arch=win32 ??4_Init_locks@std@@QAEAAV01@ABV01@@Z
@@ -1466,8 +1466,8 @@
 @ cdecl -arch=win64 ??4_Timevec@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) _Timevec_op_assign
 @ stub -arch=win32 ??4_UShinit@std@@QAEAAV01@ABV01@@Z
 @ stub -arch=win64 ??4_UShinit@std@@QEAAAEAV01@AEBV01@@Z
-@ stub -arch=win32 ??4_Winit@std@@QAEAAV01@ABV01@@Z
-@ stub -arch=win64 ??4_Winit@std@@QEAAAEAV01@AEBV01@@Z
+@ thiscall -arch=win32 ??4_Winit@std@@QAEAAV01@ABV01@@Z(ptr ptr) _Winit_op_assign
+@ cdecl -arch=win64 ??4_Winit@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) _Winit_op_assign
 @ thiscall -arch=win32 ??4ios_base@std@@QAEAAV01@ABV01@@Z(ptr ptr) ios_base_assign
 @ cdecl -arch=win64 ??4ios_base@std@@QEAAAEAV01@AEBV01@@Z(ptr ptr) ios_base_assign
 @ thiscall -arch=win32 ??4locale@std@@QAEAAV01@ABV01@@Z(ptr ptr) locale_operator_assign
@@ -2524,21 +2524,21 @@
 @ stub -arch=win64 ?_Init@?$time_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@IEAAXAEBV_Locinfo@2@@Z
 @ stub -arch=win32 ?_Init@?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@IAEXABV_Locinfo@2@@Z
 @ stub -arch=win64 ?_Init@?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@IEAAXAEBV_Locinfo@2@@Z
-@ thiscall -arch=win32 ?_Init@ios_base@std@@IAEXXZ(ptr) ios_base_Init
-@ cdecl -arch=win64 ?_Init@ios_base@std@@IEAAXXZ(ptr) ios_base_Init
+@ thiscall -arch=win32 ?_Init@ios_base@std@@IAEXXZ(ptr) ios_base__Init
+@ cdecl -arch=win64 ?_Init@ios_base@std@@IEAAXXZ(ptr) ios_base__Init
 @ cdecl -arch=win32 ?_Init@locale@std@@CAPAV_Locimp@12@XZ() locale__Init
 @ cdecl -arch=win64 ?_Init@locale@std@@CAPEAV_Locimp@12@XZ() locale__Init
 @ thiscall -arch=win32 ?_Init@strstreambuf@std@@IAEXHPAD0H@Z(ptr long ptr ptr long) strstreambuf__Init
 @ cdecl -arch=win64 ?_Init@strstreambuf@std@@IEAAX_JPEAD1H@Z(ptr long ptr ptr long) strstreambuf__Init
-# extern ?_Init_cnt@Init@ios_base@std@@0HA
+@ extern ?_Init_cnt@Init@ios_base@std@@0HA ios_base_Init__Init_cnt
 # extern ?_Init_cnt@_UShinit@std@@0HA
-# extern ?_Init_cnt@_Winit@std@@0HA
-@ stub -arch=win32 ?_Init_cnt_func@Init@ios_base@std@@CAAAHXZ
-@ stub -arch=win64 ?_Init_cnt_func@Init@ios_base@std@@CAAEAHXZ
-@ stub -arch=win32 ?_Init_ctor@Init@ios_base@std@@CAXPAV123@@Z
-@ stub -arch=win64 ?_Init_ctor@Init@ios_base@std@@CAXPEAV123@@Z
-@ stub -arch=win32 ?_Init_dtor@Init@ios_base@std@@CAXPAV123@@Z
-@ stub -arch=win64 ?_Init_dtor@Init@ios_base@std@@CAXPEAV123@@Z
+@ extern ?_Init_cnt@_Winit@std@@0HA _Winit__Init_cnt
+@ cdecl -arch=win32 ?_Init_cnt_func@Init@ios_base@std@@CAAAHXZ() ios_base_Init__Init_cnt_func
+@ cdecl -arch=win64 ?_Init_cnt_func@Init@ios_base@std@@CAAEAHXZ() ios_base_Init__Init_cnt_func
+@ cdecl -arch=win32 ?_Init_ctor@Init@ios_base@std@@CAXPAV123@@Z(ptr) ios_base_Init__Init_ctor
+@ cdecl -arch=win64 ?_Init_ctor@Init@ios_base@std@@CAXPEAV123@@Z(ptr) ios_base_Init__Init_ctor
+@ cdecl -arch=win32 ?_Init_dtor@Init@ios_base@std@@CAXPAV123@@Z(ptr) ios_base_Init__Init_dtor
+@ cdecl -arch=win64 ?_Init_dtor@Init@ios_base@std@@CAXPEAV123@@Z(ptr) ios_base_Init__Init_dtor
 @ stub -arch=win32 ?_Init_locks_ctor@_Init_locks@std@@CAXPAV12@@Z
 @ stub -arch=win64 ?_Init_locks_ctor@_Init_locks@std@@CAXPEAV12@@Z
 @ stub -arch=win32 ?_Init_locks_dtor@_Init_locks@std@@CAXPAV12@@Z
@@ -5819,5 +5819,3 @@
 @ cdecl -arch=win64 ?facet_Register@facet@locale@std@@CAXPEAV123@@Z(ptr) locale_facet_register
 @ thiscall -arch=win32 ?_Register@facet@locale@std@@QAEXXZ(ptr) locale_facet__Register
 @ cdecl -arch=win64 ?_Register@facet@locale@std@@QEAAXXZ(ptr) locale_facet__Register
-@ stdcall basic_string_char_replace_helper(ptr long long ptr long)
-@ stdcall basic_string_wchar_replace_helper(ptr long long ptr long)

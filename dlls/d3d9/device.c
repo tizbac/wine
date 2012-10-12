@@ -422,16 +422,15 @@ static HRESULT WINAPI d3d9_device_GetCreationParameters(IDirect3DDevice9Ex *ifac
         D3DDEVICE_CREATION_PARAMETERS *parameters)
 {
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
-    HRESULT hr;
 
     TRACE("iface %p, parameters %p.\n", iface, parameters);
 
     wined3d_mutex_lock();
-    hr = wined3d_device_get_creation_parameters(device->wined3d_device,
+    wined3d_device_get_creation_parameters(device->wined3d_device,
             (struct wined3d_device_creation_parameters *)parameters);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d9_device_SetCursorProperties(IDirect3DDevice9Ex *iface,
@@ -629,7 +628,6 @@ static HRESULT WINAPI d3d9_device_GetBackBuffer(IDirect3DDevice9Ex *iface, UINT 
         surface_impl = wined3d_surface_get_parent(wined3d_surface);
         *backbuffer = &surface_impl->IDirect3DSurface9_iface;
         IDirect3DSurface9_AddRef(*backbuffer);
-        wined3d_surface_decref(wined3d_surface);
     }
     wined3d_mutex_unlock();
 
@@ -1190,7 +1188,7 @@ static HRESULT WINAPI d3d9_device_GetRenderTarget(IDirect3DDevice9Ex *iface, DWO
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
     struct wined3d_surface *wined3d_surface;
     struct d3d9_surface *surface_impl;
-    HRESULT hr;
+    HRESULT hr = D3D_OK;
 
     TRACE("iface %p, idx %u, surface %p.\n", iface, idx, surface);
 
@@ -1204,18 +1202,15 @@ static HRESULT WINAPI d3d9_device_GetRenderTarget(IDirect3DDevice9Ex *iface, DWO
     }
 
     wined3d_mutex_lock();
-    hr = wined3d_device_get_render_target(device->wined3d_device, idx, &wined3d_surface);
-    if (SUCCEEDED(hr))
+    if ((wined3d_surface = wined3d_device_get_render_target(device->wined3d_device, idx)))
     {
         surface_impl = wined3d_surface_get_parent(wined3d_surface);
         *surface = &surface_impl->IDirect3DSurface9_iface;
         IDirect3DSurface9_AddRef(*surface);
-        wined3d_surface_decref(wined3d_surface);
     }
     else
     {
-        if (hr != WINED3DERR_NOTFOUND)
-            WARN("Failed to get render target %u, hr %#x.\n", idx, hr);
+        hr = WINED3DERR_NOTFOUND;
         *surface = NULL;
     }
     wined3d_mutex_unlock();
@@ -1227,15 +1222,14 @@ static HRESULT WINAPI d3d9_device_SetDepthStencilSurface(IDirect3DDevice9Ex *ifa
 {
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
     struct d3d9_surface *ds_impl = unsafe_impl_from_IDirect3DSurface9(depth_stencil);
-    HRESULT hr;
 
     TRACE("iface %p, depth_stencil %p.\n", iface, depth_stencil);
 
     wined3d_mutex_lock();
-    hr = wined3d_device_set_depth_stencil(device->wined3d_device, ds_impl ? ds_impl->wined3d_surface : NULL);
+    wined3d_device_set_depth_stencil(device->wined3d_device, ds_impl ? ds_impl->wined3d_surface : NULL);
     wined3d_mutex_unlock();
 
-    return hr;
+    return D3D_OK;
 }
 
 static HRESULT WINAPI d3d9_device_GetDepthStencilSurface(IDirect3DDevice9Ex *iface, IDirect3DSurface9 **depth_stencil)
@@ -1243,7 +1237,7 @@ static HRESULT WINAPI d3d9_device_GetDepthStencilSurface(IDirect3DDevice9Ex *ifa
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
     struct wined3d_surface *wined3d_surface;
     struct d3d9_surface *surface_impl;
-    HRESULT hr;
+    HRESULT hr = D3D_OK;
 
     TRACE("iface %p, depth_stencil %p.\n", iface, depth_stencil);
 
@@ -1251,18 +1245,15 @@ static HRESULT WINAPI d3d9_device_GetDepthStencilSurface(IDirect3DDevice9Ex *ifa
         return D3DERR_INVALIDCALL;
 
     wined3d_mutex_lock();
-    hr = wined3d_device_get_depth_stencil(device->wined3d_device, &wined3d_surface);
-    if (SUCCEEDED(hr))
+    if ((wined3d_surface = wined3d_device_get_depth_stencil(device->wined3d_device)))
     {
         surface_impl = wined3d_surface_get_parent(wined3d_surface);
         *depth_stencil = &surface_impl->IDirect3DSurface9_iface;
         IDirect3DSurface9_AddRef(*depth_stencil);
-        wined3d_surface_decref(wined3d_surface);
     }
     else
     {
-        if (hr != WINED3DERR_NOTFOUND)
-                WARN("Call to IWineD3DDevice_GetDepthStencilSurface failed with 0x%08x\n", hr);
+        hr = WINED3DERR_NOTFOUND;
         *depth_stencil = NULL;
     }
     wined3d_mutex_unlock();

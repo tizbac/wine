@@ -320,7 +320,7 @@ enum loop_type
 };
 
 static struct list *create_loop(enum loop_type type, struct list *init, struct list *cond,
-        struct list *iter, struct list *body, struct source_location *loc)
+        struct hlsl_ir_node *iter, struct list *body, struct source_location *loc)
 {
     struct list *list = NULL;
     struct hlsl_ir_loop *loop = NULL;
@@ -355,14 +355,13 @@ static struct list *create_loop(enum loop_type type, struct list *init, struct l
     list_move_tail(loop->body, body);
 
     if (iter)
-        list_move_tail(loop->body, iter);
+        list_add_tail(loop->body, &iter->entry);
 
     if (type == LOOP_DO_WHILE)
         list_add_tail(loop->body, &cond_jump->node.entry);
 
     d3dcompiler_free(init);
     d3dcompiler_free(cond);
-    d3dcompiler_free(iter);
     d3dcompiler_free(body);
     return list;
 
@@ -375,7 +374,7 @@ oom:
     d3dcompiler_free(list);
     free_instr_list(init);
     free_instr_list(cond);
-    free_instr_list(iter);
+    free_instr(iter);
     free_instr_list(body);
     return NULL;
 }
@@ -606,7 +605,7 @@ static struct list *declare_vars(struct hlsl_type *basic_type, DWORD modifiers, 
             local = FALSE;
         }
 
-        if (var->modifiers & HLSL_MODIFIER_CONST && !v->initializer)
+        if (var->modifiers & HLSL_MODIFIER_CONST && !(var->modifiers & HLSL_STORAGE_UNIFORM) && !v->initializer)
         {
             hlsl_report_message(v->loc.file, v->loc.line, v->loc.col,
                     HLSL_LEVEL_ERROR, "const variable without initializer");
@@ -809,6 +808,29 @@ static BOOL add_typedef(DWORD modifiers, struct hlsl_type *orig_type, struct lis
     return TRUE;
 }
 
+static const struct hlsl_ir_function_decl *get_overloaded_func(struct wine_rb_tree *funcs, char *name,
+        struct list *params, BOOL exact_signature)
+{
+    struct hlsl_ir_function *func;
+    struct wine_rb_entry *entry;
+
+    entry = wine_rb_get(funcs, name);
+    if (entry)
+    {
+        func = WINE_RB_ENTRY_VALUE(entry, struct hlsl_ir_function, entry);
+
+        entry = wine_rb_get(&func->overloads, params);
+        if (!entry)
+        {
+            if (!exact_signature)
+                FIXME("No exact match, search for a compatible overloaded function (if any).\n");
+            return NULL;
+        }
+        return WINE_RB_ENTRY_VALUE(entry, struct hlsl_ir_function_decl, entry);
+    }
+    return NULL;
+}
+
 %}
 
 %locations
@@ -826,7 +848,7 @@ static BOOL add_typedef(DWORD modifiers, struct hlsl_type *orig_type, struct lis
     struct hlsl_ir_var *var;
     struct hlsl_ir_node *instr;
     struct list *list;
-    struct hlsl_ir_function_decl *function;
+    struct parse_function function;
     struct parse_parameter parameter;
     struct parse_variable_def *variable_def;
     struct parse_if_body if_body;
@@ -992,6 +1014,7 @@ static BOOL add_typedef(DWORD modifiers, struct hlsl_type *orig_type, struct lis
 %type <list> expr_statement
 %type <unary_op> unary_op
 %type <assign_op> assign_op
+%type <modifiers> input_mods
 %type <modifiers> input_mod
 %%
 
@@ -1000,8 +1023,40 @@ hlsl_prog:                /* empty */
                             }
                         | hlsl_prog func_declaration
                             {
-                                FIXME("Check that the function doesn't conflict with an already declared one.\n");
-                                list_add_tail(&hlsl_ctx.functions, &$2->node.entry);
+                                const struct hlsl_ir_function_decl *decl;
+
+                                decl = get_overloaded_func(&hlsl_ctx.functions, $2.name, $2.decl->parameters, TRUE);
+                                if (decl && !decl->func->intrinsic)
+                                {
+                                    if (decl->body && $2.decl->body)
+                                    {
+                                        hlsl_report_message($2.decl->node.loc.file, $2.decl->node.loc.line,
+                                                $2.decl->node.loc.col, HLSL_LEVEL_ERROR,
+                                                "redefinition of function %s", debugstr_a($2.name));
+                                        return 1;
+                                    }
+                                    else if (!compare_hlsl_types(decl->node.data_type, $2.decl->node.data_type))
+                                    {
+                                        hlsl_report_message($2.decl->node.loc.file, $2.decl->node.loc.line,
+                                                $2.decl->node.loc.col, HLSL_LEVEL_ERROR,
+                                                "redefining function %s with a different return type",
+                                                debugstr_a($2.name));
+                                        hlsl_report_message(decl->node.loc.file, decl->node.loc.line, decl->node.loc.col, HLSL_LEVEL_NOTE,
+                                                "%s previously declared here",
+                                                debugstr_a($2.name));
+                                        return 1;
+                                    }
+                                }
+
+                                if ($2.decl->node.data_type->base_type == HLSL_TYPE_VOID && $2.decl->semantic)
+                                {
+                                    hlsl_report_message($2.decl->node.loc.file, $2.decl->node.loc.line,
+                                            $2.decl->node.loc.col, HLSL_LEVEL_ERROR,
+                                            "void function with a semantic");
+                                }
+
+                                TRACE("Adding function '%s' to the function list.\n", $2.name);
+                                add_function_decl(&hlsl_ctx.functions, $2.name, $2.decl, FALSE);
                             }
                         | hlsl_prog declaration_statement
                             {
@@ -1125,14 +1180,14 @@ field:                    var_modifiers type variables_def ';'
 
 func_declaration:         func_prototype compound_statement
                             {
-                                TRACE("Function %s parsed.\n", $1->name);
+                                TRACE("Function %s parsed.\n", $1.name);
                                 $$ = $1;
-                                $$->body = $2;
+                                $$.decl->body = $2;
                                 pop_scope(&hlsl_ctx);
                             }
                         | func_prototype ';'
                             {
-                                TRACE("Function prototype for %s.\n", $1->name);
+                                TRACE("Function prototype for %s.\n", $1.name);
                                 $$ = $1;
                                 pop_scope(&hlsl_ctx);
                             }
@@ -1151,13 +1206,15 @@ func_prototype:           var_modifiers type var_identifier '(' parameters ')' s
                                             HLSL_LEVEL_ERROR, "void function with a semantic");
                                 }
 
-                                $$ = new_func_decl($3, $2, $5);
-                                if (!$$)
+                                $$.decl = new_func_decl($2, $5);
+                                if (!$$.decl)
                                 {
                                     ERR("Out of memory.\n");
                                     return -1;
                                 }
-                                $$->semantic = $7;
+                                $$.name = $3;
+                                $$.decl->semantic = $7;
+                                set_location(&$$.decl->node.loc, &@3);
                             }
 
 compound_statement:       '{' '}'
@@ -1226,20 +1283,31 @@ param_list:               parameter
                                 }
                             }
 
-parameter:                input_mod var_modifiers type any_identifier semantic
+parameter:                input_mods var_modifiers type any_identifier semantic
                             {
-                                $$.modifiers = $1;
+                                $$.modifiers = $1 ? $1 : HLSL_MODIFIER_IN;
                                 $$.modifiers |= $2;
                                 $$.type = $3;
                                 $$.name = $4;
                                 $$.semantic = $5;
                             }
 
-input_mod:                /* Empty */
+input_mods:               /* Empty */
                             {
-                                $$ = HLSL_MODIFIER_IN;
+                                $$ = 0;
                             }
-                        | KW_IN
+                        | input_mods input_mod
+                            {
+                                if ($1 & $2)
+                                {
+                                    hlsl_report_message(hlsl_ctx.source_file, @2.first_line, @2.first_column,
+                                            HLSL_LEVEL_ERROR, "duplicate input-output modifiers");
+                                    return 1;
+                                }
+                                $$ = $1 | $2;
+                            }
+
+input_mod:                KW_IN
                             {
                                 $$ = HLSL_MODIFIER_IN;
                             }
@@ -1651,7 +1719,7 @@ loop_statement:           KW_WHILE '(' expr ')' statement
                                 set_location(&loc, &@1);
                                 $$ = create_loop(LOOP_DO_WHILE, NULL, cond, NULL, $2, &loc);
                             }
-                        | KW_FOR '(' scope_start expr_statement expr_statement expr_statement ')' statement
+                        | KW_FOR '(' scope_start expr_statement expr_statement expr ')' statement
                             {
                                 struct source_location loc;
 
@@ -1659,7 +1727,7 @@ loop_statement:           KW_WHILE '(' expr ')' statement
                                 $$ = create_loop(LOOP_FOR, $4, $5, $6, $8, &loc);
                                 pop_scope(&hlsl_ctx);
                             }
-                        | KW_FOR '(' scope_start declaration expr_statement expr_statement ')' statement
+                        | KW_FOR '(' scope_start declaration expr_statement expr ')' statement
                             {
                                 struct source_location loc;
 
@@ -2319,10 +2387,22 @@ static DWORD add_modifier(DWORD modifiers, DWORD mod, const struct YYLTYPE *loc)
     return modifiers | mod;
 }
 
+static void dump_function_decl(struct wine_rb_entry *entry, void *context)
+{
+    struct hlsl_ir_function_decl *func = WINE_RB_ENTRY_VALUE(entry, struct hlsl_ir_function_decl, entry);
+    if (func->body)
+        debug_dump_ir_function_decl(func);
+}
+
+static void dump_function(struct wine_rb_entry *entry, void *context)
+{
+    struct hlsl_ir_function *func = WINE_RB_ENTRY_VALUE(entry, struct hlsl_ir_function, entry);
+    wine_rb_for_each_entry(&func->overloads, dump_function_decl, NULL);
+}
+
 struct bwriter_shader *parse_hlsl(enum shader_type type, DWORD major, DWORD minor,
         const char *entrypoint, char **messages)
 {
-    struct hlsl_ir_function_decl *function, *next_function;
     struct hlsl_scope *scope, *next_scope;
     struct hlsl_type *hlsl_type, *next_type;
     struct hlsl_ir_var *var, *next_var;
@@ -2340,7 +2420,7 @@ struct bwriter_shader *parse_hlsl(enum shader_type type, DWORD major, DWORD mino
     hlsl_ctx.matrix_majority = HLSL_COLUMN_MAJOR;
     list_init(&hlsl_ctx.scopes);
     list_init(&hlsl_ctx.types);
-    list_init(&hlsl_ctx.functions);
+    init_functions_tree(&hlsl_ctx.functions);
 
     push_scope(&hlsl_ctx);
     hlsl_ctx.globals = hlsl_ctx.cur_scope;
@@ -2350,14 +2430,8 @@ struct bwriter_shader *parse_hlsl(enum shader_type type, DWORD major, DWORD mino
 
     if (TRACE_ON(hlsl_parser))
     {
-        struct hlsl_ir_function_decl *func;
-
         TRACE("IR dump.\n");
-        LIST_FOR_EACH_ENTRY(func, &hlsl_ctx.functions, struct hlsl_ir_function_decl, node.entry)
-        {
-            if (func->body)
-                debug_dump_ir_function(func);
-        }
+        wine_rb_for_each_entry(&hlsl_ctx.functions, dump_function, NULL);
     }
 
     TRACE("Compilation status = %d\n", hlsl_ctx.status);
@@ -2379,8 +2453,7 @@ struct bwriter_shader *parse_hlsl(enum shader_type type, DWORD major, DWORD mino
     d3dcompiler_free(hlsl_ctx.source_files);
 
     TRACE("Freeing functions IR.\n");
-    LIST_FOR_EACH_ENTRY_SAFE(function, next_function, &hlsl_ctx.functions, struct hlsl_ir_function_decl, node.entry)
-        free_function(function);
+    wine_rb_destroy(&hlsl_ctx.functions, free_function_rb, NULL);
 
     TRACE("Freeing variables.\n");
     LIST_FOR_EACH_ENTRY_SAFE(scope, next_scope, &hlsl_ctx.scopes, struct hlsl_scope, entry)

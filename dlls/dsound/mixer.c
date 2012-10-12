@@ -629,11 +629,6 @@ static void DSOUND_PerformMix(DirectSoundDevice *device)
 
 	maxq = device->aclen - pad;
 	if(!maxq){
-		/* nothing to do! */
-		LeaveCriticalSection(&device->mixlock);
-		return;
-	}
-
 	if (device->priolevel != DSSCL_WRITEPRIMARY) {
 		BOOL all_stopped = FALSE;
 		DWORD playpos, writepos;

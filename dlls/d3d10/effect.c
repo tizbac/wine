@@ -1339,6 +1339,30 @@ static HRESULT parse_fx10_object(struct d3d10_effect_object *o, const char **ptr
 
     switch (o->type)
     {
+        case D3D10_EOT_RASTERIZER_STATE:
+        {
+            ID3D10EffectRasterizerVariable *rv = variable->lpVtbl->AsRasterizer(variable);
+            if (FAILED(hr = rv->lpVtbl->GetRasterizerState(rv, variable_idx, &o->object.rs)))
+                return hr;
+            break;
+        }
+
+        case D3D10_EOT_DEPTH_STENCIL_STATE:
+        {
+            ID3D10EffectDepthStencilVariable *dv = variable->lpVtbl->AsDepthStencil(variable);
+            if (FAILED(hr = dv->lpVtbl->GetDepthStencilState(dv, variable_idx, &o->object.ds)))
+                return hr;
+            break;
+        }
+
+        case D3D10_EOT_BLEND_STATE:
+        {
+            ID3D10EffectBlendVariable *bv = variable->lpVtbl->AsBlend(variable);
+            if (FAILED(hr = bv->lpVtbl->GetBlendState(bv, variable_idx, &o->object.bs)))
+                return hr;
+            break;
+        }
+
         case D3D10_EOT_VERTEXSHADER:
         {
             ID3D10EffectShaderVariable *sv = variable->lpVtbl->AsShader(variable);
@@ -1369,9 +1393,6 @@ static HRESULT parse_fx10_object(struct d3d10_effect_object *o, const char **ptr
             break;
         }
 
-        case D3D10_EOT_RASTERIZER_STATE:
-        case D3D10_EOT_DEPTH_STENCIL_STATE:
-        case D3D10_EOT_BLEND_STATE:
         case D3D10_EOT_STENCIL_REF:
         case D3D10_EOT_BLEND_FACTOR:
         case D3D10_EOT_SAMPLE_MASK:
@@ -1568,15 +1589,28 @@ static HRESULT create_state_object(struct d3d10_effect_variable *v)
 
     switch (v->type->basetype)
     {
+        case D3D10_SVT_DEPTHSTENCIL:
+            if (FAILED(hr = ID3D10Device_CreateDepthStencilState(device,
+                    &v->u.state.desc.depth_stencil, &v->u.state.object.depth_stencil)))
+                return hr;
+            break;
+
         case D3D10_SVT_BLEND:
             if (FAILED(hr = ID3D10Device_CreateBlendState(device,
                     &v->u.state.desc.blend, &v->u.state.object.blend)))
                 return hr;
             break;
 
-        case D3D10_SVT_DEPTHSTENCIL:
         case D3D10_SVT_RASTERIZER:
+            if (FAILED(hr = ID3D10Device_CreateRasterizerState(device,
+                    &v->u.state.desc.rasterizer, &v->u.state.object.rasterizer)))
+                return hr;
+            break;
+
         case D3D10_SVT_SAMPLER:
+            if (FAILED(hr = ID3D10Device_CreateSamplerState(device,
+                    &v->u.state.desc.sampler, &v->u.state.object.sampler)))
+                return hr;
             break;
 
         default:
@@ -2149,6 +2183,18 @@ static HRESULT d3d10_effect_object_apply(struct d3d10_effect_object *o)
 
     switch(o->type)
     {
+        case D3D10_EOT_RASTERIZER_STATE:
+            ID3D10Device_RSSetState(device, o->object.rs);
+            return S_OK;
+
+        case D3D10_EOT_DEPTH_STENCIL_STATE:
+            ID3D10Device_OMSetDepthStencilState(device, o->object.ds, o->pass->stencil_ref);
+            return S_OK;
+
+        case D3D10_EOT_BLEND_STATE:
+            ID3D10Device_OMSetBlendState(device, o->object.bs, o->pass->blend_factor, o->pass->sample_mask);
+            return S_OK;
+
         case D3D10_EOT_VERTEXSHADER:
             ID3D10Device_VSSetShader(device, o->object.vs);
             return S_OK;
@@ -2159,6 +2205,11 @@ static HRESULT d3d10_effect_object_apply(struct d3d10_effect_object *o)
 
         case D3D10_EOT_GEOMETRYSHADER:
             ID3D10Device_GSSetShader(device, o->object.gs);
+            return S_OK;
+
+        case D3D10_EOT_STENCIL_REF:
+        case D3D10_EOT_BLEND_FACTOR:
+        case D3D10_EOT_SAMPLE_MASK:
             return S_OK;
 
         default:
@@ -2248,6 +2299,21 @@ static void d3d10_effect_object_destroy(struct d3d10_effect_object *o)
 {
     switch (o->type)
     {
+        case D3D10_EOT_RASTERIZER_STATE:
+            if (o->object.rs)
+                ID3D10RasterizerState_Release(o->object.rs);
+            break;
+
+        case D3D10_EOT_DEPTH_STENCIL_STATE:
+            if (o->object.ds)
+                ID3D10DepthStencilState_Release(o->object.ds);
+            break;
+
+        case D3D10_EOT_BLEND_STATE:
+            if (o->object.bs)
+                ID3D10BlendState_Release(o->object.bs);
+            break;
+
         case D3D10_EOT_VERTEXSHADER:
             if (o->object.vs)
                 ID3D10VertexShader_Release(o->object.vs);
@@ -6247,9 +6313,25 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_depth_stencil_variable_GetRawValue
 static HRESULT STDMETHODCALLTYPE d3d10_effect_depth_stencil_variable_GetDepthStencilState(ID3D10EffectDepthStencilVariable *iface,
         UINT index, ID3D10DepthStencilState **depth_stencil_state)
 {
-    FIXME("iface %p, index %u, depth_stencil_state %p stub!\n", iface, index, depth_stencil_state);
+    struct d3d10_effect_variable *v = impl_from_ID3D10EffectVariable((ID3D10EffectVariable *)iface);
 
-    return E_NOTIMPL;
+    TRACE("iface %p, index %u, depth_stencil_state %p.\n", iface, index, depth_stencil_state);
+
+    if (v->type->element_count)
+        v = impl_from_ID3D10EffectVariable(iface->lpVtbl->GetElement(iface, index));
+    else if (index)
+        return E_FAIL;
+
+    if (v->type->basetype != D3D10_SVT_DEPTHSTENCIL)
+    {
+        WARN("Variable is not a depth stencil state.\n");
+        return E_FAIL;
+    }
+
+    if ((*depth_stencil_state = v->u.state.object.depth_stencil))
+        ID3D10DepthStencilState_AddRef(*depth_stencil_state);
+
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE d3d10_effect_depth_stencil_variable_GetBackingStore(ID3D10EffectDepthStencilVariable *iface,
@@ -6465,9 +6547,25 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_rasterizer_variable_GetRawValue(ID
 static HRESULT STDMETHODCALLTYPE d3d10_effect_rasterizer_variable_GetRasterizerState(ID3D10EffectRasterizerVariable *iface,
         UINT index, ID3D10RasterizerState **rasterizer_state)
 {
-    FIXME("iface %p, index %u, rasterizer_state %p stub!\n", iface, index, rasterizer_state);
+    struct d3d10_effect_variable *v = impl_from_ID3D10EffectVariable((ID3D10EffectVariable *)iface);
 
-    return E_NOTIMPL;
+    TRACE("iface %p, index %u, rasterizer_state %p.\n", iface, index, rasterizer_state);
+
+    if (v->type->element_count)
+        v = impl_from_ID3D10EffectVariable(iface->lpVtbl->GetElement(iface, index));
+    else if (index)
+        return E_FAIL;
+
+    if (v->type->basetype != D3D10_SVT_RASTERIZER)
+    {
+        WARN("Variable is not a rasterizer state.\n");
+        return E_FAIL;
+    }
+
+    if ((*rasterizer_state = v->u.state.object.rasterizer))
+        ID3D10RasterizerState_AddRef(*rasterizer_state);
+
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE d3d10_effect_rasterizer_variable_GetBackingStore(ID3D10EffectRasterizerVariable *iface,
@@ -6683,9 +6781,25 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_sampler_variable_GetRawValue(ID3D1
 static HRESULT STDMETHODCALLTYPE d3d10_effect_sampler_variable_GetSampler(ID3D10EffectSamplerVariable *iface,
         UINT index, ID3D10SamplerState **sampler)
 {
-    FIXME("iface %p, index %u, sampler %p stub!\n", iface, index, sampler);
+    struct d3d10_effect_variable *v = impl_from_ID3D10EffectVariable((ID3D10EffectVariable *)iface);
 
-    return E_NOTIMPL;
+    TRACE("iface %p, index %u, sampler %p.\n", iface, index, sampler);
+
+    if (v->type->element_count)
+        v = impl_from_ID3D10EffectVariable(iface->lpVtbl->GetElement(iface, index));
+    else if (index)
+        return E_FAIL;
+
+    if (v->type->basetype != D3D10_SVT_SAMPLER)
+    {
+        WARN("Variable is not a sampler state.\n");
+        return E_FAIL;
+    }
+
+    if ((*sampler = v->u.state.object.sampler))
+        ID3D10SamplerState_AddRef(*sampler);
+
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE d3d10_effect_sampler_variable_GetBackingStore(ID3D10EffectSamplerVariable *iface,

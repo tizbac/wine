@@ -374,8 +374,9 @@ enum wined3d_shader_dst_modifier
 };
 
 /* Undocumented opcode control to identify projective texture lookups in ps 2.0 and later */
-#define WINED3DSI_TEXLD_PROJECT 1
-#define WINED3DSI_TEXLD_BIAS    2
+#define WINED3DSI_TEXLD_PROJECT     0x1
+#define WINED3DSI_TEXLD_BIAS        0x2
+#define WINED3DSI_INDEXED_DYNAMIC   0x4
 
 enum wined3d_shader_rel_op
 {
@@ -408,6 +409,7 @@ enum wined3d_shader_rel_op
 #define MAX_REG_OUTPUT 32
 #define MAX_CONST_I 16
 #define MAX_CONST_B 16
+#define WINED3D_MAX_CBS 15
 
 /* FIXME: This needs to go up to 2048 for
  * Shader model 3 according to msdn (and for software shaders) */
@@ -439,6 +441,7 @@ enum WINED3D_SHADER_INSTRUCTION_HANDLER
     WINED3DSIH_CRS,
     WINED3DSIH_CUT,
     WINED3DSIH_DCL,
+    WINED3DSIH_DCL_CONSTANT_BUFFER,
     WINED3DSIH_DCL_INPUT_PRIMITIVE,
     WINED3DSIH_DCL_OUTPUT_TOPOLOGY,
     WINED3DSIH_DCL_VERTICES_OUT,
@@ -569,6 +572,7 @@ struct wined3d_shader_reg_maps
     WORD boolean_constants;                 /* MAX_CONST_B, 16 */
     WORD local_int_consts;                  /* MAX_CONST_I, 16 */
     WORD local_bool_consts;                 /* MAX_CONST_B, 16 */
+    UINT cb_sizes[WINED3D_MAX_CBS];
 
     enum wined3d_sampler_texture_type sampler_type[max(MAX_FRAGMENT_SAMPLERS, MAX_VERTEX_SAMPLERS)];
     BYTE bumpmat;                           /* MAX_TEXTURES, 8 */
@@ -670,6 +674,7 @@ struct wined3d_shader_instruction
     {
         struct wined3d_shader_semantic semantic;
         enum wined3d_primitive_type primitive_type;
+        struct wined3d_shader_src_param src;
         UINT count;
     } declaration;
 };
@@ -1409,6 +1414,7 @@ enum wined3d_pci_device
     CARD_NVIDIA_GEFORCE_GTX570      = 0x1081,
     CARD_NVIDIA_GEFORCE_GTX580      = 0x1080,
     CARD_NVIDIA_GEFORCE_GT630M      = 0x0de9,
+    CARD_NVIDIA_GEFORCE_GT650M      = 0x0fd1,
     CARD_NVIDIA_GEFORCE_GTX670      = 0x1189,
     CARD_NVIDIA_GEFORCE_GTX680      = 0x1180,
 
@@ -2547,17 +2553,12 @@ struct wined3d_shader_lconst
 
 struct wined3d_shader_limits
 {
-    unsigned int temporary;
-    unsigned int texcoord;
     unsigned int sampler;
     unsigned int constant_int;
     unsigned int constant_float;
     unsigned int constant_bool;
-    unsigned int address;
     unsigned int packed_output;
     unsigned int packed_input;
-    unsigned int attributes;
-    unsigned int label;
 };
 
 #ifdef __GNUC__

@@ -158,18 +158,21 @@ void free_heap_bits( struct gdi_image_bits *bits )
 }
 
 DWORD convert_bits( const BITMAPINFO *src_info, struct bitblt_coords *src,
-                    BITMAPINFO *dst_info, struct gdi_image_bits *bits, BOOL add_alpha )
+                    BITMAPINFO *dst_info, struct gdi_image_bits *bits )
 {
     void *ptr;
     DWORD err;
+    BOOL top_down = dst_info->bmiHeader.biHeight < 0;
 
     dst_info->bmiHeader.biWidth = src->visrect.right - src->visrect.left;
+    dst_info->bmiHeader.biHeight = src->visrect.bottom - src->visrect.top;
     dst_info->bmiHeader.biSizeImage = get_dib_image_size( dst_info );
+    if (top_down) dst_info->bmiHeader.biHeight = -dst_info->bmiHeader.biHeight;
 
     if (!(ptr = HeapAlloc( GetProcessHeap(), 0, dst_info->bmiHeader.biSizeImage )))
         return ERROR_OUTOFMEMORY;
 
-    err = convert_bitmapinfo( src_info, bits->ptr, src, dst_info, ptr, add_alpha );
+    err = convert_bitmapinfo( src_info, bits->ptr, src, dst_info, ptr );
     if (bits->free) bits->free( bits );
     bits->ptr = ptr;
     bits->is_copy = TRUE;
@@ -284,7 +287,7 @@ BOOL nulldrv_StretchBlt( PHYSDEV dst_dev, struct bitblt_coords *dst,
                 get_mono_dc_colors( src_dev->hdc, dst_info, 2 );
         }
 
-        if (!(err = convert_bits( src_info, src, dst_info, &bits, FALSE )))
+        if (!(err = convert_bits( src_info, src, dst_info, &bits )))
         {
             /* get rid of the fake destination table */
             dst_info->bmiHeader.biClrUsed = dst_colors;
@@ -327,7 +330,7 @@ BOOL nulldrv_AlphaBlend( PHYSDEV dst_dev, struct bitblt_coords *dst,
     err = dst_dev->funcs->pBlendImage( dst_dev, dst_info, &bits, src, dst, func );
     if (err == ERROR_BAD_FORMAT)
     {
-        err = convert_bits( src_info, src, dst_info, &bits, TRUE );
+        err = convert_bits( src_info, src, dst_info, &bits );
         if (!err) err = dst_dev->funcs->pBlendImage( dst_dev, dst_info, &bits, src, dst, func );
     }
 
@@ -354,6 +357,7 @@ DWORD nulldrv_BlendImage( PHYSDEV dev, BITMAPINFO *info, const struct gdi_image_
     BITMAPINFO *dst_info = (BITMAPINFO *)buffer;
     struct gdi_image_bits dst_bits;
     struct bitblt_coords orig_dst;
+    DWORD *masks = (DWORD *)info->bmiColors;
     DC *dc = get_nulldrv_dc( dev );
     DWORD err;
 
@@ -361,7 +365,7 @@ DWORD nulldrv_BlendImage( PHYSDEV dev, BITMAPINFO *info, const struct gdi_image_
     if (info->bmiHeader.biBitCount != 32) goto update_format;
     if (info->bmiHeader.biCompression == BI_BITFIELDS)
     {
-        DWORD *masks = (DWORD *)info->bmiColors;
+        if (blend.AlphaFormat & AC_SRC_ALPHA) return ERROR_INVALID_PARAMETER;
         if (masks[0] != 0xff0000 || masks[1] != 0x00ff00 || masks[2] != 0x0000ff)
             goto update_format;
     }
@@ -387,8 +391,11 @@ update_format:
 
     info->bmiHeader.biPlanes      = 1;
     info->bmiHeader.biBitCount    = 32;
-    info->bmiHeader.biCompression = BI_RGB;
+    info->bmiHeader.biCompression = BI_BITFIELDS;
     info->bmiHeader.biClrUsed     = 0;
+    masks[0] = 0xff0000;
+    masks[1] = 0x00ff00;
+    masks[2] = 0x0000ff;
     return ERROR_BAD_FORMAT;
 }
 

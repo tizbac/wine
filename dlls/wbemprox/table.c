@@ -99,7 +99,7 @@ HRESULT get_value( const struct table *table, UINT row, UINT column, LONGLONG *v
 
     if (table->columns[column].type & CIM_FLAG_ARRAY)
     {
-        *val = (LONGLONG)(INT_PTR)*(const void **)ptr;
+        *val = (INT_PTR)*(const void **)ptr;
         return S_OK;
     }
     switch (table->columns[column].type & COL_TYPE_MASK)
@@ -109,7 +109,7 @@ HRESULT get_value( const struct table *table, UINT row, UINT column, LONGLONG *v
         break;
     case CIM_DATETIME:
     case CIM_STRING:
-        *val = (LONGLONG)(INT_PTR)*(const WCHAR **)ptr;
+        *val = (INT_PTR)*(const WCHAR **)ptr;
         break;
     case CIM_SINT16:
         *val = *(const INT16 *)ptr;
@@ -308,13 +308,20 @@ void free_table( struct table *table )
     clear_table( table );
     if (table->flags & TABLE_FLAG_DYNAMIC)
     {
+        TRACE("destroying %p\n", table);
         heap_free( (WCHAR *)table->name );
         free_columns( (struct column *)table->columns, table->num_cols );
+        list_remove( &table->entry );
         heap_free( table );
     }
 }
 
-struct table *get_table( const WCHAR *name )
+void release_table( struct table *table )
+{
+    if (!InterlockedDecrement( &table->refs )) free_table( table );
+}
+
+struct table *grab_table( const WCHAR *name )
 {
     struct table *table;
 
@@ -323,6 +330,8 @@ struct table *get_table( const WCHAR *name )
         if (!strcmpiW( table->name, name ))
         {
             if (table->fill && !table->data) table->fill( table );
+            InterlockedIncrement( &table->refs );
+            TRACE("returning %p\n", table);
             return table;
         }
     }
@@ -335,13 +344,15 @@ struct table *create_table( const WCHAR *name, UINT num_cols, const struct colum
     struct table *table;
 
     if (!(table = heap_alloc( sizeof(*table) ))) return NULL;
-    table->name     = name;
+    table->name     = heap_strdupW( name );
     table->num_cols = num_cols;
     table->columns  = columns;
     table->num_rows = num_rows;
     table->data     = data;
     table->fill     = fill;
     table->flags    = TABLE_FLAG_DYNAMIC;
+    table->refs     = 0;
+    list_init( &table->entry );
     return table;
 }
 
@@ -358,41 +369,56 @@ BOOL add_table( struct table *table )
         }
     }
     list_add_tail( table_list, &table->entry );
+    TRACE("added %p\n", table);
     return TRUE;
 }
 
-const WCHAR *get_method_name( const WCHAR *class, UINT index )
+BSTR get_method_name( const WCHAR *class, UINT index )
 {
     struct table *table;
     UINT i, count = 0;
+    BSTR ret;
 
-    if (!(table = get_table( class ))) return NULL;
+    if (!(table = grab_table( class ))) return NULL;
 
     for (i = 0; i < table->num_cols; i++)
     {
         if (table->columns[i].type & COL_FLAG_METHOD)
         {
-            if (index == count) return table->columns[i].name;
+            if (index == count)
+            {
+                ret = SysAllocString( table->columns[i].name );
+                release_table( table );
+                return ret;
+            }
             count++;
         }
     }
+    release_table( table );
     return NULL;
 }
 
-const WCHAR *get_property_name( const WCHAR *class, UINT index )
+BSTR get_property_name( const WCHAR *class, UINT index )
 {
     struct table *table;
     UINT i, count = 0;
+    BSTR ret;
 
-    if (!(table = get_table( class ))) return NULL;
+    if (!(table = grab_table( class ))) return NULL;
 
     for (i = 0; i < table->num_cols; i++)
     {
         if (!(table->columns[i].type & COL_FLAG_METHOD))
         {
-            if (index == count) return table->columns[i].name;
+            if (index == count)
+            {
+                ret = SysAllocString( table->columns[i].name );
+                release_table( table );
+                return ret;
+            }
             count++;
         }
     }
+    release_table( table );
     return NULL;
 }

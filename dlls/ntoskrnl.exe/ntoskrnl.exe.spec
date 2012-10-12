@@ -122,7 +122,7 @@
 @ stdcall ExAllocatePoolWithTag(long long long)
 @ stub ExAllocatePoolWithTagPriority
 @ stub ExConvertExclusiveToSharedLite
-@ stub ExCreateCallback
+@ stdcall ExCreateCallback(ptr ptr long long)
 @ stub ExDeleteNPagedLookasideList
 @ stub ExDeletePagedLookasideList
 @ stub ExDeleteResourceLite
@@ -303,7 +303,7 @@
 @ stub InbvSetTextColor
 @ stub InbvSolidColorFill
 @ stub InitSafeBootMode
-@ stub IoAcquireCancelSpinLock
+@ stdcall IoAcquireCancelSpinLock(ptr)
 @ stub IoAcquireRemoveLockEx
 @ stub IoAcquireVpbSpinLock
 @ stub IoAdapterObjectType
@@ -432,7 +432,7 @@
 @ stub IoRegisterLastChanceShutdownNotification
 @ stub IoRegisterPlugPlayNotification
 @ stdcall IoRegisterShutdownNotification(ptr)
-@ stub IoReleaseCancelSpinLock
+@ stdcall IoReleaseCancelSpinLock(ptr)
 @ stub IoReleaseRemoveLockAndWaitEx
 @ stub IoReleaseRemoveLockEx
 @ stub IoReleaseVpbSpinLock
@@ -690,7 +690,7 @@
 @ stub MmLockPagableSectionByHandle
 @ stdcall MmMapIoSpace(long long long long)
 @ stub MmMapLockedPages
-@ stub MmMapLockedPagesSpecifyCache
+@ stdcall MmMapLockedPagesSpecifyCache(ptr long long ptr long long)
 @ stub MmMapLockedPagesWithReservedMapping
 @ stub MmMapMemoryDumpMdl
 @ stub MmMapUserAddressesToPage
@@ -702,7 +702,7 @@
 @ stub MmMarkPhysicalMemoryAsGood
 @ stdcall MmPageEntireDriver(ptr)
 @ stub MmPrefetchPages
-@ stub MmProbeAndLockPages
+@ stdcall MmProbeAndLockPages(ptr long long)
 @ stub MmProbeAndLockProcessPages
 @ stub MmProbeAndLockSelectedPages
 @ stub MmProtectMdlSystemAddress
@@ -717,7 +717,7 @@
 @ stub MmSystemRangeStart
 @ stub MmTrimAllSystemPagableMemory
 @ stub MmUnlockPagableImageSection
-@ stub MmUnlockPages
+@ stdcall MmUnlockPages(ptr)
 @ stdcall MmUnmapIoSpace(ptr long)
 @ stub MmUnmapLockedPages
 @ stub MmUnmapReservedMapping
@@ -885,7 +885,7 @@
 @ stub PsGetThreadTeb
 @ stub PsGetThreadWin32Thread
 @ stdcall PsGetVersion(ptr ptr ptr ptr)
-@ stub PsImpersonateClient
+@ stdcall PsImpersonateClient(ptr ptr long long long)
 @ stub PsInitialSystemProcess
 @ stub PsIsProcessBeingDebugged
 @ stub PsIsSystemThread

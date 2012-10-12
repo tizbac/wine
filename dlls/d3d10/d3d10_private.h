@@ -74,6 +74,9 @@ struct d3d10_effect_object
     enum d3d10_effect_object_type type;
     union
     {
+        ID3D10RasterizerState *rs;
+        ID3D10DepthStencilState *ds;
+        ID3D10BlendState *bs;
         ID3D10VertexShader *vs;
         ID3D10PixelShader *ps;
         ID3D10GeometryShader *gs;
@@ -111,7 +114,10 @@ struct d3d10_effect_state_object_variable
     } desc;
     union
     {
+        ID3D10RasterizerState *rasterizer;
+        ID3D10DepthStencilState *depth_stencil;
         ID3D10BlendState *blend;
+        ID3D10SamplerState *sampler;
     } object;
 };
 

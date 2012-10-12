@@ -3530,6 +3530,7 @@ static void test_GdipMeasureString(void)
 
         expectf(0.0, bounds.X);
         expectf(0.0, bounds.Y);
+todo_wine
         expectf_(height, bounds.Height, height / 100.0);
         expectf_(bounds.Height / base_cy, bounds.Width / base_cx, 0.1);
         expect(7, chars);
@@ -3546,6 +3547,7 @@ static void test_GdipMeasureString(void)
         expect(Ok, status);
         expectf(50.0, bounds.X);
         expectf(50.0, bounds.Y);
+todo_wine
         expectf_(height, bounds.Height, height / 100.0);
         expectf_(bounds.Height / base_cy, bounds.Width / base_cx, 0.1);
         expect(7, chars);
@@ -3613,6 +3615,7 @@ static void test_GdipMeasureString(void)
 
             expectf(0.0, bounds.X);
             expectf(0.0, bounds.Y);
+todo_wine
             expectf_(height, bounds.Height, height / 85.0);
             expectf_(bounds.Height / base_cy, bounds.Width / base_cx, 0.1);
             expect(7, chars);
@@ -3629,6 +3632,7 @@ static void test_GdipMeasureString(void)
             expect(Ok, status);
             expectf(50.0, bounds.X);
             expectf(50.0, bounds.Y);
+todo_wine
             expectf_(height, bounds.Height, height / 85.0);
             expectf_(bounds.Height / base_cy, bounds.Width / base_cx, 0.1);
             expect(7, chars);
@@ -3640,6 +3644,7 @@ static void test_GdipMeasureString(void)
                 height *= td[i].page_scale;
             /*trace("%u: unit %u, %.1fx%.1f dpi, scale %.1f, height %f, pixels %f\n",
                   i, td[i].unit, td[i].res_x, td[i].res_y, td[i].page_scale, bounds.Height, height);*/
+todo_wine
             expectf_(100.0, height, 1.1);
 
             status = GdipDeleteGraphics(graphics);
@@ -3725,11 +3730,11 @@ static void test_font_height_scaling(void)
     GpFont *font;
     GpStatus status;
     RectF bounds, rect;
-    REAL height, dpi;
+    REAL height, dpi, scale;
     PointF ptf;
     GpUnit gfx_unit, font_unit;
 
-    status = GdipCreateStringFormat(0, LANG_NEUTRAL, &format);
+    status = GdipCreateStringFormat(StringFormatFlagsNoWrap, LANG_NEUTRAL, &format);
     expect(Ok, status);
     status = GdipSetStringFormatMeasurableCharacterRanges(format, 1, &range);
     expect(Ok, status);
@@ -3743,6 +3748,54 @@ static void test_font_height_scaling(void)
     status = GdipCreateFromHDC(hdc, &graphics);
 
     status = GdipGetDpiY(graphics, &dpi);
+    expect(Ok, status);
+
+    /* First check if tested functionality works:
+     * under XP if font and graphics units differ then GdipTransformPoints
+     * followed by GdipSetPageUnit to change the graphics units breaks region
+     * scaling in GdipMeasureCharacterRanges called later.
+     */
+    status = GdipSetPageUnit(graphics, UnitDocument);
+    expect(Ok, status);
+
+    ptf.X = 0.0;
+    ptf.Y = 0.0;
+    status = GdipTransformPoints(graphics, CoordinateSpaceWorld, CoordinateSpaceDevice, &ptf, 1);
+    expect(Ok, status);
+
+    status = GdipSetPageUnit(graphics, UnitInch);
+    expect(Ok, status);
+
+    status = GdipCreateFont(family, 720.0, FontStyleRegular, UnitPoint, &font);
+    expect(Ok, status);
+
+    set_rect_empty(&rect);
+    set_rect_empty(&bounds);
+    status = GdipMeasureString(graphics, string, -1, font, &rect, format, &bounds, NULL, NULL);
+    expect(Ok, status);
+    trace("test bounds: %f,%f,%f,%f\n", bounds.X, bounds.Y, bounds.Width, bounds.Height);
+
+    set_rect_empty(&rect);
+    rect.Width = 32000.0;
+    rect.Height = 32000.0;
+    status = GdipMeasureCharacterRanges(graphics, string, -1, font, &rect, format, 1, &region);
+    expect(Ok, status);
+
+    set_rect_empty(&rect);
+    status = GdipGetRegionBounds(region, graphics, &rect);
+    expect(Ok, status);
+    trace("test region: %f,%f,%f,%f\n", rect.X, rect.Y, rect.Width, rect.Height);
+
+    GdipDeleteFont(font);
+
+    scale = rect.Height / bounds.Height;
+    if (fabs(scale - 1.0) > 0.1)
+    {
+        win_skip("GdipGetRegionBounds is broken, scale %f (should be near 1.0)\n", scale);
+        return;
+    }
+
+    status = GdipScaleWorldTransform(graphics, 0.01, 0.01, MatrixOrderAppend);
     expect(Ok, status);
 
     /* UnitPixel = 2, UnitPoint = 3, UnitInch = 4, UnitDocument = 5, UnitMillimeter = 6 */
@@ -3768,10 +3821,16 @@ static void test_font_height_scaling(void)
         {
             static const WCHAR doubleW[2] = { 'W','W' };
             RectF bounds_1, bounds_2;
-            REAL margin;
+            REAL margin, margin_y, font_height;
             int match;
 
             status = GdipSetPageUnit(graphics, gfx_unit);
+            expect(Ok, status);
+
+            margin_y = units_to_pixels(height / 8.0, font_unit, dpi);
+            margin_y = pixels_to_units(margin_y, gfx_unit, dpi);
+
+            status = GdipGetFontHeight(font, graphics, &font_height);
             expect(Ok, status);
 
             set_rect_empty(&rect);
@@ -3779,18 +3838,23 @@ static void test_font_height_scaling(void)
             status = GdipMeasureString(graphics, string, -1, font, &rect, format, &bounds, NULL, NULL);
             expect(Ok, status);
             /*trace("bounds: %f,%f,%f,%f\n", bounds.X, bounds.Y, bounds.Width, bounds.Height);*/
+todo_wine
+            expectf_(font_height + margin_y, bounds.Height, 0.005);
 
             ptf.X = 0;
             ptf.Y = bounds.Height;
             status = GdipTransformPoints(graphics, CoordinateSpaceDevice, CoordinateSpaceWorld, &ptf, 1);
             expect(Ok, status);
             match = fabs(100.0 - ptf.Y) <= 1.0;
-            ok(match || broken(!match) /* before win7 */, "Expected 100.0, got %f\n", ptf.Y);
+todo_wine
+            ok(match, "Expected 100.0, got %f\n", ptf.Y);
 
             /* verify the result */
             ptf.Y = units_to_pixels(bounds.Height, gfx_unit, dpi);
-            match = fabs(100.0 - ptf.Y) <= 1.1;
-            ok(match || broken(!match) /* before win7 */, "Expected 100.0, got %f\n", ptf.Y);
+            ptf.Y /= 100.0;
+            match = fabs(100.0 - ptf.Y) <= 1.0;
+todo_wine
+            ok(match, "Expected 100.0, got %f\n", ptf.Y);
 
             /* bounds.width of 1 glyph: [margin]+[width]+[margin] */
             set_rect_empty(&rect);
@@ -3808,48 +3872,24 @@ static void test_font_height_scaling(void)
             /*trace("margin %f\n", margin);*/
             ok(margin > 0.0, "wrong margin %f\n", margin);
 
-            status = GdipGetFontHeight(font, graphics, &height);
-            expect(Ok, status);
-
             set_rect_empty(&rect);
-            rect.Width = 32000.0;
-            rect.Height = 32000.0;
+            rect.Width = 320000.0;
+            rect.Height = 320000.0;
             status = GdipMeasureCharacterRanges(graphics, string, -1, font, &rect, format, 1, &region);
             expect(Ok, status);
             set_rect_empty(&rect);
             status = GdipGetRegionBounds(region, graphics, &rect);
             expect(Ok, status);
             /*trace("region: %f,%f,%f,%f\n", rect.X, rect.Y, rect.Width, rect.Height);*/
-            /* FIXME: Wine uses integer gdi32 regions and rounding breaks things */
-            if (margin < 1.0)
-            todo_wine ok(rect.X > 0.0, "wrong rect.X %f\n", rect.X);
-            else
             ok(rect.X > 0.0, "wrong rect.X %f\n", rect.X);
             expectf(0.0, rect.Y);
-            /* before Win7 GdipMeasureCharacterRanges behaviour is completely broken */
-            /* FIXME: Wine uses integer gdi32 regions and rounding breaks things */
-            if (margin < 1.0)
-            {
-            match = fabs(margin - rect.X) < 0.25;
-            ok(match || broken(!match) /* before win7 */, "Expected %f, got %f\n", margin, rect.X);
-            }
-            else
-            {
-            match = fabs(margin - rect.X) <= 0.5;
-            ok(match || broken(!match) /* before win7 */, "Expected %f, got %f\n", margin, rect.X);
-            }
-            if (!match)
-            {
-                win_skip("GdipMeasureCharacterRanges ignores units before Win7\n");
-                continue;
-            }
-            /* FIXME: Wine uses integer gdi32 regions and rounding breaks things */
-            if (height < 1.0)
-            expectf_(height, rect.Height, height / 15.0);
-            else
+            match = fabs(1.0 - margin / rect.X) <= 0.05;
+            ok(match, "Expected %f, got %f\n", margin, rect.X);
+            match = fabs(1.0 - font_height / rect.Height) <= 0.1;
 todo_wine
-            expectf_(height, rect.Height, height / 15.0);
-            expectf_(bounds.Width, rect.Width + margin * 2.0, bounds.Width / 15.0);
+            ok(match, "Expected %f, got %f\n", font_height, rect.Height);
+            match = fabs(1.0 - bounds.Width / (rect.Width + margin * 2.0)) <= 0.05;
+            ok(match, "Expected %f, got %f\n", bounds.Width, rect.Width + margin * 2.0);
         }
 
         GdipDeleteFont(font);

@@ -1828,94 +1828,33 @@ static ULONG WINAPI fnIMLangFontLink_Release(
 
 static HRESULT WINAPI fnIMLangFontLink_GetCharCodePages(
         IMLangFontLink* iface,
-        WCHAR chSrc,
-        DWORD* pdwCodePages)
+        WCHAR ch_src,
+        DWORD* codepages)
 {
-    int i;
-    CHAR buf;
-    BOOL used_dc;
-    DWORD codePages;
-
-    *pdwCodePages = 0;
-
-    for (i = 0; i < sizeof(mlang_data)/sizeof(mlang_data[0]); i++)
-    {
-        WideCharToMultiByte(mlang_data[i].family_codepage, WC_NO_BEST_FIT_CHARS,
-            &chSrc, 1, &buf, 1, NULL, &used_dc);
-
-        /* If default char is not used, current codepage include the given symbol */
-        if (!used_dc)
-        {
-            IMLangFontLink_CodePageToCodePages(iface,
-                mlang_data[i].family_codepage, &codePages);
-            *pdwCodePages |= codePages;
-        }
-    }
-    return S_OK;
+    MLang_impl *This = impl_from_IMLangFontLink( iface );
+    return IMLangFontLink2_GetCharCodePages(&This->IMLangFontLink2_iface, ch_src, codepages);
 }
 
 static HRESULT WINAPI fnIMLangFontLink_GetStrCodePages(
         IMLangFontLink* iface,
-        const WCHAR* pszSrc,
-        LONG cchSrc,
-        DWORD dwPriorityCodePages,
-        DWORD* pdwCodePages,
-        LONG* pcchCodePages)
+        const WCHAR* src,
+        LONG src_len,
+        DWORD priority_cp,
+        DWORD* codepages,
+        LONG* ret_len)
 {
-    LONG i;
-    DWORD cps = 0;
-
-    TRACE("(%p)->%s %d %x %p %p\n", iface, debugstr_wn(pszSrc, cchSrc), cchSrc, dwPriorityCodePages, pdwCodePages, pcchCodePages);
-
-    if (pdwCodePages) *pdwCodePages = 0;
-    if (pcchCodePages) *pcchCodePages = 0;
-
-    if (!pszSrc || !cchSrc || cchSrc < 0)
-        return E_INVALIDARG;
-
-    for (i = 0; i < cchSrc; i++)
-    {
-        DWORD cp;
-        HRESULT ret;
-
-        ret = IMLangFontLink_GetCharCodePages(iface, pszSrc[i], &cp);
-        if (ret != S_OK) return E_FAIL;
-
-        if (!cps) cps = cp;
-        else cps &= cp;
-
-        /* FIXME: not tested */
-        if (dwPriorityCodePages & cps) break;
-    }
-
-    if (pdwCodePages) *pdwCodePages = cps;
-    if (pcchCodePages) *pcchCodePages = min( i + 1, cchSrc );
-    return S_OK;
+    MLang_impl *This = impl_from_IMLangFontLink( iface );
+    return IMLangFontLink2_GetStrCodePages(&This->IMLangFontLink2_iface, src, src_len, priority_cp,
+        codepages, ret_len);
 }
 
 static HRESULT WINAPI fnIMLangFontLink_CodePageToCodePages(
         IMLangFontLink* iface,
-        UINT uCodePage,
-        DWORD* pdwCodePages)
+        UINT codepage,
+        DWORD* codepages)
 {
     MLang_impl *This = impl_from_IMLangFontLink( iface );
-    CHARSETINFO cs;
-    BOOL rc; 
-
-    TRACE("(%p) Seeking %u\n",This, uCodePage);
-
-    rc = TranslateCharsetInfo((DWORD*)(DWORD_PTR)uCodePage, &cs, TCI_SRCCODEPAGE);
-
-    if (rc)
-    {
-        *pdwCodePages = cs.fs.fsCsb[0];
-        TRACE("resulting CodePages 0x%x\n",*pdwCodePages);
-        return S_OK;
-    }
-
-    TRACE("CodePage Not Found\n");
-    *pdwCodePages = 0;
-    return E_FAIL;
+    return IMLangFontLink2_CodePageToCodePages(&This->IMLangFontLink2_iface, codepage, codepages);
 }
 
 static HRESULT WINAPI fnIMLangFontLink_CodePagesToCodePage(
@@ -2465,7 +2404,7 @@ static inline MLang_impl *impl_from_IMultiLanguage3( IMultiLanguage3 *iface )
     return CONTAINING_RECORD( iface, MLang_impl, IMultiLanguage3_iface );
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_QueryInterface(
+static HRESULT WINAPI fnIMultiLanguage3_QueryInterface(
     IMultiLanguage3* iface,
     REFIID riid,
     void** obj)
@@ -2508,13 +2447,13 @@ static HRESULT WINAPI fnIMultiLanguage2_QueryInterface(
     return S_OK;
 }
 
-static ULONG WINAPI fnIMultiLanguage2_AddRef( IMultiLanguage3* iface )
+static ULONG WINAPI fnIMultiLanguage3_AddRef( IMultiLanguage3* iface )
 {
     MLang_impl *This = impl_from_IMultiLanguage3( iface );
     return InterlockedIncrement(&This->ref);
 }
 
-static ULONG WINAPI fnIMultiLanguage2_Release( IMultiLanguage3* iface )
+static ULONG WINAPI fnIMultiLanguage3_Release( IMultiLanguage3* iface )
 {
     MLang_impl *This = impl_from_IMultiLanguage3( iface );
     ULONG ref = InterlockedDecrement(&This->ref);
@@ -2529,7 +2468,7 @@ static ULONG WINAPI fnIMultiLanguage2_Release( IMultiLanguage3* iface )
     return ref;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_GetNumberOfCodePageInfo(
+static HRESULT WINAPI fnIMultiLanguage3_GetNumberOfCodePageInfo(
     IMultiLanguage3* iface,
     UINT* pcCodePage)
 {
@@ -2582,7 +2521,7 @@ static void fill_cp_info(const struct mlang_data *ml_data, UINT index, MIMECPINF
           mime_cp_info->bGDICharset);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_GetCodePageInfo(
+static HRESULT WINAPI fnIMultiLanguage3_GetCodePageInfo(
     IMultiLanguage3* iface,
     UINT uiCodePage,
     LANGID LangId,
@@ -2608,7 +2547,7 @@ static HRESULT WINAPI fnIMultiLanguage2_GetCodePageInfo(
     return S_FALSE;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_GetFamilyCodePage(
+static HRESULT WINAPI fnIMultiLanguage3_GetFamilyCodePage(
     IMultiLanguage3* iface,
     UINT uiCodePage,
     UINT* puiFamilyCodePage)
@@ -2616,7 +2555,7 @@ static HRESULT WINAPI fnIMultiLanguage2_GetFamilyCodePage(
     return GetFamilyCodePage(uiCodePage, puiFamilyCodePage);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_EnumCodePages(
+static HRESULT WINAPI fnIMultiLanguage3_EnumCodePages(
     IMultiLanguage3* iface,
     DWORD grfFlags,
     LANGID LangId,
@@ -2629,7 +2568,7 @@ static HRESULT WINAPI fnIMultiLanguage2_EnumCodePages(
     return EnumCodePage_create( This, grfFlags, LangId, ppEnumCodePage );
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_GetCharsetInfo(
+static HRESULT WINAPI fnIMultiLanguage3_GetCharsetInfo(
     IMultiLanguage3* iface,
     BSTR Charset,
     PMIMECSETINFO pCharsetInfo)
@@ -2683,7 +2622,7 @@ static HRESULT WINAPI fnIMultiLanguage2_GetCharsetInfo(
     return E_FAIL;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_IsConvertible(
+static HRESULT WINAPI fnIMultiLanguage3_IsConvertible(
     IMultiLanguage3* iface,
     DWORD dwSrcEncoding,
     DWORD dwDstEncoding)
@@ -2691,7 +2630,7 @@ static HRESULT WINAPI fnIMultiLanguage2_IsConvertible(
     return IsConvertINetStringAvailable(dwSrcEncoding, dwDstEncoding);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_ConvertString(
+static HRESULT WINAPI fnIMultiLanguage3_ConvertString(
     IMultiLanguage3* iface,
     DWORD* pdwMode,
     DWORD dwSrcEncoding,
@@ -2705,7 +2644,7 @@ static HRESULT WINAPI fnIMultiLanguage2_ConvertString(
         (LPCSTR)pSrcStr, (LPINT)pcSrcSize, (LPSTR)pDstStr, (LPINT)pcDstSize);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_ConvertStringToUnicode(
+static HRESULT WINAPI fnIMultiLanguage3_ConvertStringToUnicode(
     IMultiLanguage3* iface,
     DWORD* pdwMode,
     DWORD dwEncoding,
@@ -2718,7 +2657,7 @@ static HRESULT WINAPI fnIMultiLanguage2_ConvertStringToUnicode(
         pSrcStr, (LPINT)pcSrcSize, pDstStr, (LPINT)pcDstSize);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_ConvertStringFromUnicode(
+static HRESULT WINAPI fnIMultiLanguage3_ConvertStringFromUnicode(
     IMultiLanguage3* iface,
     DWORD* pdwMode,
     DWORD dwEncoding,
@@ -2731,14 +2670,14 @@ static HRESULT WINAPI fnIMultiLanguage2_ConvertStringFromUnicode(
         pSrcStr, (LPINT)pcSrcSize, pDstStr, (LPINT)pcDstSize);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_ConvertStringReset(
+static HRESULT WINAPI fnIMultiLanguage3_ConvertStringReset(
     IMultiLanguage3* iface)
 {
     FIXME("\n");
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_GetRfc1766FromLcid(
+static HRESULT WINAPI fnIMultiLanguage3_GetRfc1766FromLcid(
     IMultiLanguage3* iface,
     LCID lcid,
     BSTR* pbstrRfc1766)
@@ -2757,7 +2696,7 @@ static HRESULT WINAPI fnIMultiLanguage2_GetRfc1766FromLcid(
     return E_FAIL;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_GetLcidFromRfc1766(
+static HRESULT WINAPI fnIMultiLanguage3_GetLcidFromRfc1766(
     IMultiLanguage3* iface,
     LCID* pLocale,
     BSTR bstrRfc1766)
@@ -2780,7 +2719,7 @@ static HRESULT WINAPI fnIMultiLanguage2_GetLcidFromRfc1766(
     return hr;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_EnumRfc1766(
+static HRESULT WINAPI fnIMultiLanguage3_EnumRfc1766(
     IMultiLanguage3* iface,
     LANGID LangId,
     IEnumRfc1766** ppEnumRfc1766)
@@ -2792,7 +2731,7 @@ static HRESULT WINAPI fnIMultiLanguage2_EnumRfc1766(
     return EnumRfc1766_create(LangId, ppEnumRfc1766);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_GetRfc1766Info(
+static HRESULT WINAPI fnIMultiLanguage3_GetRfc1766Info(
     IMultiLanguage3* iface,
     LCID Locale,
     LANGID LangId,
@@ -2839,7 +2778,7 @@ static HRESULT WINAPI fnIMultiLanguage2_GetRfc1766Info(
     return E_INVALIDARG;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_CreateConvertCharset(
+static HRESULT WINAPI fnIMultiLanguage3_CreateConvertCharset(
     IMultiLanguage3* iface,
     UINT src_cp,
     UINT dst_cp,
@@ -2856,7 +2795,7 @@ static HRESULT WINAPI fnIMultiLanguage2_CreateConvertCharset(
     return IMLangConvertCharset_Initialize(*convert_charset, src_cp, dst_cp, prop);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_ConvertStringInIStream(
+static HRESULT WINAPI fnIMultiLanguage3_ConvertStringInIStream(
     IMultiLanguage3* iface,
     DWORD* pdwMode,
     DWORD dwFlag,
@@ -2904,7 +2843,7 @@ exit:
     return hr;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_ConvertStringToUnicodeEx(
+static HRESULT WINAPI fnIMultiLanguage3_ConvertStringToUnicodeEx(
     IMultiLanguage3* iface,
     DWORD* pdwMode,
     DWORD dwEncoding,
@@ -2941,7 +2880,7 @@ static HRESULT WINAPI fnIMultiLanguage2_ConvertStringToUnicodeEx(
  *
  * TODO: handle dwFlag and lpFallBack
 */
-static HRESULT WINAPI fnIMultiLanguage2_ConvertStringFromUnicodeEx(
+static HRESULT WINAPI fnIMultiLanguage3_ConvertStringFromUnicodeEx(
     IMultiLanguage3* This,
     DWORD* pdwMode,
     DWORD dwEncoding,
@@ -2957,7 +2896,7 @@ static HRESULT WINAPI fnIMultiLanguage2_ConvertStringFromUnicodeEx(
         pSrcStr, (LPINT)pcSrcSize, pDstStr, (LPINT)pcDstSize);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_DetectCodepageInIStream(
+static HRESULT WINAPI fnIMultiLanguage3_DetectCodepageInIStream(
     IMultiLanguage3* iface,
     DWORD dwFlag,
     DWORD dwPrefWinCodePage,
@@ -2969,7 +2908,7 @@ static HRESULT WINAPI fnIMultiLanguage2_DetectCodepageInIStream(
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_DetectInputCodepage(
+static HRESULT WINAPI fnIMultiLanguage3_DetectInputCodepage(
     IMultiLanguage3* iface,
     DWORD dwFlag,
     DWORD dwPrefWinCodePage,
@@ -2982,7 +2921,7 @@ static HRESULT WINAPI fnIMultiLanguage2_DetectInputCodepage(
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_ValidateCodePage(
+static HRESULT WINAPI fnIMultiLanguage3_ValidateCodePage(
     IMultiLanguage3* iface,
     UINT uiCodePage,
     HWND hwnd)
@@ -2990,7 +2929,7 @@ static HRESULT WINAPI fnIMultiLanguage2_ValidateCodePage(
     return IMultiLanguage3_ValidateCodePageEx(iface,uiCodePage,hwnd,0);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_GetCodePageDescription(
+static HRESULT WINAPI fnIMultiLanguage3_GetCodePageDescription(
     IMultiLanguage3* iface,
     UINT uiCodePage,
     LCID lcid,
@@ -3018,7 +2957,7 @@ static HRESULT WINAPI fnIMultiLanguage2_GetCodePageDescription(
     return S_FALSE;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_IsCodePageInstallable(
+static HRESULT WINAPI fnIMultiLanguage3_IsCodePageInstallable(
     IMultiLanguage3* iface,
     UINT uiCodePage)
 {
@@ -3028,7 +2967,7 @@ static HRESULT WINAPI fnIMultiLanguage2_IsCodePageInstallable(
     return IMultiLanguage3_ValidateCodePageEx(iface, uiCodePage, NULL, CPIOD_PEEK);
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_SetMimeDBSource(
+static HRESULT WINAPI fnIMultiLanguage3_SetMimeDBSource(
     IMultiLanguage3* iface,
     MIMECONTF dwSource)
 {
@@ -3036,7 +2975,7 @@ static HRESULT WINAPI fnIMultiLanguage2_SetMimeDBSource(
     return S_OK;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_GetNumberOfScripts(
+static HRESULT WINAPI fnIMultiLanguage3_GetNumberOfScripts(
     IMultiLanguage3* iface,
     UINT* pnScripts)
 {
@@ -3050,7 +2989,7 @@ static HRESULT WINAPI fnIMultiLanguage2_GetNumberOfScripts(
     return S_OK;
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_EnumScripts(
+static HRESULT WINAPI fnIMultiLanguage3_EnumScripts(
     IMultiLanguage3* iface,
     DWORD dwFlags,
     LANGID LangId,
@@ -3063,7 +3002,7 @@ static HRESULT WINAPI fnIMultiLanguage2_EnumScripts(
     return EnumScript_create( This, dwFlags, LangId, ppEnumScript );
 }
 
-static HRESULT WINAPI fnIMultiLanguage2_ValidateCodePageEx(
+static HRESULT WINAPI fnIMultiLanguage3_ValidateCodePageEx(
     IMultiLanguage3* iface,
     UINT uiCodePage,
     HWND hwnd,
@@ -3134,36 +3073,36 @@ static HRESULT WINAPI fnIMultiLanguage3_DetectOutboundCodePageInIStream(
 
 static const IMultiLanguage3Vtbl IMultiLanguage3_vtbl =
 {
-    fnIMultiLanguage2_QueryInterface,
-    fnIMultiLanguage2_AddRef,
-    fnIMultiLanguage2_Release,
-    fnIMultiLanguage2_GetNumberOfCodePageInfo,
-    fnIMultiLanguage2_GetCodePageInfo,
-    fnIMultiLanguage2_GetFamilyCodePage,
-    fnIMultiLanguage2_EnumCodePages,
-    fnIMultiLanguage2_GetCharsetInfo,
-    fnIMultiLanguage2_IsConvertible,
-    fnIMultiLanguage2_ConvertString,
-    fnIMultiLanguage2_ConvertStringToUnicode,
-    fnIMultiLanguage2_ConvertStringFromUnicode,
-    fnIMultiLanguage2_ConvertStringReset,
-    fnIMultiLanguage2_GetRfc1766FromLcid,
-    fnIMultiLanguage2_GetLcidFromRfc1766,
-    fnIMultiLanguage2_EnumRfc1766,
-    fnIMultiLanguage2_GetRfc1766Info,
-    fnIMultiLanguage2_CreateConvertCharset,
-    fnIMultiLanguage2_ConvertStringInIStream,
-    fnIMultiLanguage2_ConvertStringToUnicodeEx,
-    fnIMultiLanguage2_ConvertStringFromUnicodeEx,
-    fnIMultiLanguage2_DetectCodepageInIStream,
-    fnIMultiLanguage2_DetectInputCodepage,
-    fnIMultiLanguage2_ValidateCodePage,
-    fnIMultiLanguage2_GetCodePageDescription,
-    fnIMultiLanguage2_IsCodePageInstallable,
-    fnIMultiLanguage2_SetMimeDBSource,
-    fnIMultiLanguage2_GetNumberOfScripts,
-    fnIMultiLanguage2_EnumScripts,
-    fnIMultiLanguage2_ValidateCodePageEx,
+    fnIMultiLanguage3_QueryInterface,
+    fnIMultiLanguage3_AddRef,
+    fnIMultiLanguage3_Release,
+    fnIMultiLanguage3_GetNumberOfCodePageInfo,
+    fnIMultiLanguage3_GetCodePageInfo,
+    fnIMultiLanguage3_GetFamilyCodePage,
+    fnIMultiLanguage3_EnumCodePages,
+    fnIMultiLanguage3_GetCharsetInfo,
+    fnIMultiLanguage3_IsConvertible,
+    fnIMultiLanguage3_ConvertString,
+    fnIMultiLanguage3_ConvertStringToUnicode,
+    fnIMultiLanguage3_ConvertStringFromUnicode,
+    fnIMultiLanguage3_ConvertStringReset,
+    fnIMultiLanguage3_GetRfc1766FromLcid,
+    fnIMultiLanguage3_GetLcidFromRfc1766,
+    fnIMultiLanguage3_EnumRfc1766,
+    fnIMultiLanguage3_GetRfc1766Info,
+    fnIMultiLanguage3_CreateConvertCharset,
+    fnIMultiLanguage3_ConvertStringInIStream,
+    fnIMultiLanguage3_ConvertStringToUnicodeEx,
+    fnIMultiLanguage3_ConvertStringFromUnicodeEx,
+    fnIMultiLanguage3_DetectCodepageInIStream,
+    fnIMultiLanguage3_DetectInputCodepage,
+    fnIMultiLanguage3_ValidateCodePage,
+    fnIMultiLanguage3_GetCodePageDescription,
+    fnIMultiLanguage3_IsCodePageInstallable,
+    fnIMultiLanguage3_SetMimeDBSource,
+    fnIMultiLanguage3_GetNumberOfScripts,
+    fnIMultiLanguage3_EnumScripts,
+    fnIMultiLanguage3_ValidateCodePageEx,
     fnIMultiLanguage3_DetectOutboundCodePage,
     fnIMultiLanguage3_DetectOutboundCodePageInIStream
 };
@@ -3196,27 +3135,95 @@ static ULONG WINAPI fnIMLangFontLink2_Release( IMLangFontLink2* iface )
     return IMultiLanguage3_Release( &This->IMultiLanguage3_iface );
 }
 
-static HRESULT WINAPI fnIMLangFontLink2_GetCharCodePages( IMLangFontLink2* This,
-        WCHAR chSrc, DWORD *pdwCodePages)
+static HRESULT WINAPI fnIMLangFontLink2_GetCharCodePages( IMLangFontLink2* iface,
+        WCHAR ch_src, DWORD *ret_codepages)
 {
-    FIXME("(%p)->%s %p\n",This, debugstr_wn(&chSrc,1),pdwCodePages);
-    return E_NOTIMPL;
+    MLang_impl *This = impl_from_IMLangFontLink2(iface);
+    int i;
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_wn(&ch_src, 1), ret_codepages);
+
+    *ret_codepages = 0;
+
+    for (i = 0; i < sizeof(mlang_data)/sizeof(mlang_data[0]); i++)
+    {
+        BOOL used_dc;
+        CHAR buf;
+
+        WideCharToMultiByte(mlang_data[i].family_codepage, WC_NO_BEST_FIT_CHARS,
+            &ch_src, 1, &buf, 1, NULL, &used_dc);
+
+        /* If default char is not used, current codepage include the given symbol */
+        if (!used_dc)
+        {
+            DWORD codepages;
+
+            IMLangFontLink2_CodePageToCodePages(iface,
+                mlang_data[i].family_codepage, &codepages);
+            *ret_codepages |= codepages;
+        }
+    }
+    return S_OK;
 }
 
-static HRESULT WINAPI fnIMLangFontLink2_GetStrCodePages( IMLangFontLink2* This,
-        const WCHAR *pszSrc, LONG cchSrc, DWORD dwPriorityCodePages,
-        DWORD *pdwCodePages, LONG *pcchCodePages)
+static HRESULT WINAPI fnIMLangFontLink2_GetStrCodePages( IMLangFontLink2* iface,
+        const WCHAR *src, LONG src_len, DWORD priority_cp,
+        DWORD *codepages, LONG *ret_len)
 {
-    return fnIMLangFontLink_GetStrCodePages((IMLangFontLink *)This,
-            pszSrc, cchSrc, dwPriorityCodePages, pdwCodePages, pcchCodePages);
+    MLang_impl *This = impl_from_IMLangFontLink2(iface);
+    LONG i;
+    DWORD cps = 0;
+
+    TRACE("(%p)->(%s:%d %x %p %p)\n", This, debugstr_wn(src, src_len), src_len, priority_cp,
+        codepages, ret_len);
+
+    if (codepages) *codepages = 0;
+    if (ret_len) *ret_len = 0;
+
+    if (!src || !src_len || src_len < 0)
+        return E_INVALIDARG;
+
+    for (i = 0; i < src_len; i++)
+    {
+        DWORD cp;
+        HRESULT ret;
+
+        ret = IMLangFontLink2_GetCharCodePages(iface, src[i], &cp);
+        if (ret != S_OK) return E_FAIL;
+
+        if (!cps) cps = cp;
+        else cps &= cp;
+
+        /* FIXME: not tested */
+        if (priority_cp & cps) break;
+    }
+
+    if (codepages) *codepages = cps;
+    if (ret_len) *ret_len = min( i + 1, src_len );
+    return S_OK;
 }
 
-static HRESULT WINAPI fnIMLangFontLink2_CodePageToCodePages(IMLangFontLink2* This,
-        UINT uCodePage,
-        DWORD *pdwCodePages)
+static HRESULT WINAPI fnIMLangFontLink2_CodePageToCodePages(IMLangFontLink2* iface,
+        UINT codepage,
+        DWORD *codepages)
 {
-    FIXME("(%p)->%i %p\n",This, uCodePage, pdwCodePages);
-    return E_NOTIMPL;
+    MLang_impl *This = impl_from_IMLangFontLink2(iface);
+    CHARSETINFO cs;
+    BOOL rc;
+
+    TRACE("(%p)->(%u %p)\n", This, codepage, codepages);
+
+    rc = TranslateCharsetInfo((DWORD*)(DWORD_PTR)codepage, &cs, TCI_SRCCODEPAGE);
+    if (rc)
+    {
+        *codepages = cs.fs.fsCsb[0];
+        TRACE("resulting codepages 0x%x\n", *codepages);
+        return S_OK;
+    }
+
+    TRACE("codepage not found\n");
+    *codepages = 0;
+    return E_FAIL;
 }
 
 static HRESULT WINAPI fnIMLangFontLink2_CodePagesToCodePage(IMLangFontLink2* iface,

@@ -812,12 +812,11 @@ static DWORD get_image_dib_info( dib_info *dib, BITMAPINFO *info,
 {
     info->bmiHeader.biSize          = sizeof(info->bmiHeader);
     info->bmiHeader.biPlanes        = 1;
-    info->bmiHeader.biCompression   = BI_RGB;
     info->bmiHeader.biXPelsPerMeter = 0;
     info->bmiHeader.biYPelsPerMeter = 0;
     info->bmiHeader.biClrImportant  = 0;
     info->bmiHeader.biWidth         = dib->width;
-    info->bmiHeader.biHeight        = dib->rect.bottom - dib->rect.top;
+    info->bmiHeader.biHeight        = dib->height - dib->rect.top;
     info->bmiHeader.biBitCount      = dib->bit_count;
     info->bmiHeader.biSizeImage     = info->bmiHeader.biHeight * abs( dib->stride );
     if (dib->stride > 0) info->bmiHeader.biHeight = -info->bmiHeader.biHeight;
@@ -1002,6 +1001,7 @@ DWORD dibdrv_BlendImage( PHYSDEV dev, BITMAPINFO *info, const struct gdi_image_b
 {
     dibdrv_physdev *pdev = get_dibdrv_pdev( dev );
     dib_info src_dib;
+    DWORD *masks = (DWORD *)info->bmiColors;
 
     TRACE( "%p %p\n", dev, info );
 
@@ -1009,7 +1009,7 @@ DWORD dibdrv_BlendImage( PHYSDEV dev, BITMAPINFO *info, const struct gdi_image_b
     if (info->bmiHeader.biBitCount != 32) goto update_format;
     if (info->bmiHeader.biCompression == BI_BITFIELDS)
     {
-        DWORD *masks = (DWORD *)info->bmiColors;
+        if (blend.AlphaFormat & AC_SRC_ALPHA) return ERROR_INVALID_PARAMETER;
         if (masks[0] != 0xff0000 || masks[1] != 0x00ff00 || masks[2] != 0x0000ff)
             goto update_format;
     }
@@ -1028,8 +1028,11 @@ update_format:
 
     info->bmiHeader.biPlanes      = 1;
     info->bmiHeader.biBitCount    = 32;
-    info->bmiHeader.biCompression = BI_RGB;
+    info->bmiHeader.biCompression = BI_BITFIELDS;
     info->bmiHeader.biClrUsed     = 0;
+    masks[0] = 0xff0000;
+    masks[1] = 0x00ff00;
+    masks[2] = 0x0000ff;
     return ERROR_BAD_FORMAT;
 }
 

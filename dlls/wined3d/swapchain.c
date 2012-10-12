@@ -130,18 +130,16 @@ void * CDECL wined3d_swapchain_get_parent(const struct wined3d_swapchain *swapch
     return swapchain->parent;
 }
 
-HRESULT CDECL wined3d_swapchain_set_window(struct wined3d_swapchain *swapchain, HWND window)
+void CDECL wined3d_swapchain_set_window(struct wined3d_swapchain *swapchain, HWND window)
 {
     if (!window)
         window = swapchain->device_window;
     if (window == swapchain->win_handle)
-        return WINED3D_OK;
+        return;
 
     TRACE("Setting swapchain %p window from %p to %p.\n",
             swapchain, swapchain->win_handle, window);
     swapchain->win_handle = window;
-
-    return WINED3D_OK;
 }
 
 HRESULT CDECL wined3d_swapchain_present(struct wined3d_swapchain *swapchain,
@@ -190,11 +188,11 @@ HRESULT CDECL wined3d_swapchain_get_front_buffer_data(const struct wined3d_swapc
     return wined3d_surface_blt(dst_surface, &dst_rect, src_surface, &src_rect, 0, NULL, WINED3D_TEXF_POINT);
 }
 
-HRESULT CDECL wined3d_swapchain_get_back_buffer(const struct wined3d_swapchain *swapchain,
-        UINT back_buffer_idx, enum wined3d_backbuffer_type type, struct wined3d_surface **back_buffer)
+struct wined3d_surface * CDECL wined3d_swapchain_get_back_buffer(const struct wined3d_swapchain *swapchain,
+        UINT back_buffer_idx, enum wined3d_backbuffer_type type)
 {
-    TRACE("swapchain %p, back_buffer_idx %u, type %#x, back_buffer %p.\n",
-            swapchain, back_buffer_idx, type, back_buffer);
+    TRACE("swapchain %p, back_buffer_idx %u, type %#x.\n",
+            swapchain, back_buffer_idx, type);
 
     /* Return invalid if there is no backbuffer array, otherwise it will
      * crash when ddraw is used (there swapchain->back_buffers is always
@@ -206,17 +204,12 @@ HRESULT CDECL wined3d_swapchain_get_back_buffer(const struct wined3d_swapchain *
         WARN("Invalid back buffer index.\n");
         /* Native d3d9 doesn't set NULL here, just as wine's d3d9. But set it
          * here in wined3d to avoid problems in other libs. */
-        *back_buffer = NULL;
-        return WINED3DERR_INVALIDCALL;
+        return NULL;
     }
 
-    *back_buffer = swapchain->back_buffers[back_buffer_idx];
-    if (*back_buffer)
-        wined3d_surface_incref(*back_buffer);
+    TRACE("Returning back buffer %p.\n", swapchain->back_buffers[back_buffer_idx]);
 
-    TRACE("Returning back buffer %p.\n", *back_buffer);
-
-    return WINED3D_OK;
+    return swapchain->back_buffers[back_buffer_idx];
 }
 
 HRESULT CDECL wined3d_swapchain_get_raster_status(const struct wined3d_swapchain *swapchain,
@@ -251,14 +244,12 @@ struct wined3d_device * CDECL wined3d_swapchain_get_device(const struct wined3d_
     return swapchain->device;
 }
 
-HRESULT CDECL wined3d_swapchain_get_desc(const struct wined3d_swapchain *swapchain,
+void CDECL wined3d_swapchain_get_desc(const struct wined3d_swapchain *swapchain,
         struct wined3d_swapchain_desc *desc)
 {
     TRACE("swapchain %p, desc %p.\n", swapchain, desc);
 
     *desc = swapchain->desc;
-
-    return WINED3D_OK;
 }
 
 HRESULT CDECL wined3d_swapchain_set_gamma_ramp(const struct wined3d_swapchain *swapchain,

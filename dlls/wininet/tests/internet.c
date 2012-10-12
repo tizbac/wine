@@ -19,6 +19,7 @@
  */
 
 #include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include "windef.h"
 #include "winbase.h"
@@ -368,6 +369,7 @@ static void test_complicated_cookie(void)
   BOOL ret;
 
   CHAR buffer[1024];
+  CHAR user[256];
 
   ret = InternetSetCookie("http://www.example.com/bar",NULL,"A=B; domain=.example.com");
   ok(ret == TRUE,"InternetSetCookie failed\n");
@@ -471,6 +473,38 @@ static void test_complicated_cookie(void)
   ok(strstr(buffer,"K=L")!=NULL,"K=L missing\n");
   ok(strstr(buffer,"M=N")==NULL,"M=N present\n");
   ok(strstr(buffer,"O=P")==NULL,"O=P present\n");
+
+  /* test persistent cookies */
+  ret = InternetSetCookie("http://testing.example.com", NULL, "A=B; expires=Fri, 01-Jan-2038 00:00:00 GMT");
+  ok(ret, "InternetSetCookie failed with error %d\n", GetLastError());
+
+  len = sizeof(user);
+  ret = GetUserName(user, &len);
+  ok(ret, "GetUserName failed with error %d\n", GetLastError());
+  for(; len>0; len--)
+      user[len-1] = tolower(user[len-1]);
+
+  sprintf(buffer, "Cookie:%s@testing.example.com/", user);
+  ret = GetUrlCacheEntryInfo(buffer, NULL, &len);
+  ok(!ret, "GetUrlCacheEntryInfo succeeded\n");
+  ok(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "GetLastError() = %d\n", GetLastError());
+
+  /* remove persistent cookie */
+  ret = InternetSetCookie("http://testing.example.com", NULL, "A=B");
+  ok(ret, "InternetSetCookie failed with error %d\n", GetLastError());
+
+  ret = GetUrlCacheEntryInfo(buffer, NULL, &len);
+  ok(!ret, "GetUrlCacheEntryInfo succeeded\n");
+  ok(GetLastError() == ERROR_FILE_NOT_FOUND, "GetLastError() = %d\n", GetLastError());
+
+  /* try setting cookie for different domain */
+  ret = InternetSetCookie("http://www.aaa.example.com/bar",NULL,"E=F; domain=different.com");
+  ok(!ret, "InternetSetCookie succeeded\n");
+  ok(GetLastError() == ERROR_INVALID_PARAMETER, "GetLastError() = %d\n", GetLastError());
+  ret = InternetSetCookie("http://www.aaa.example.com.pl/bar",NULL,"E=F; domain=example.com.pl");
+  ok(ret, "InternetSetCookie failed with error: %d\n", GetLastError());
+  ret = InternetSetCookie("http://www.aaa.example.com.pl/bar",NULL,"E=F; domain=com.pl");
+  todo_wine ok(!ret, "InternetSetCookie succeeded\n");
 }
 
 static void test_cookie_url(void)
@@ -803,6 +837,8 @@ static void test_IsDomainLegalCookieDomainW(void)
     static const WCHAR dot_com[]        = {'.','c','o','m',0};
     static const WCHAR gmail_com[]      = {'g','m','a','i','l','.','c','o','m',0};
     static const WCHAR dot_gmail_com[]  = {'.','g','m','a','i','l','.','c','o','m',0};
+    static const WCHAR www_gmail_com[]  = {'w','w','w','.','g','m','a','i','l','.','c','o','m',0};
+    static const WCHAR www_mail_gmail_com[] = {'w','w','w','.','m','a','i','l','.','g','m','a','i','l','.','c','o','m',0};
     static const WCHAR mail_gmail_com[] = {'m','a','i','l','.','g','m','a','i','l','.','c','o','m',0};
     static const WCHAR gmail_co_uk[]    = {'g','m','a','i','l','.','c','o','.','u','k',0};
     static const WCHAR co_uk[]          = {'c','o','.','u','k',0};
@@ -899,6 +935,12 @@ static void test_IsDomainLegalCookieDomainW(void)
     ret = pIsDomainLegalCookieDomainW(gmail_com, gmail_com);
     ok(ret, "IsDomainLegalCookieDomainW failed\n");
 
+    ret = pIsDomainLegalCookieDomainW(gmail_com, www_gmail_com);
+    ok(ret, "IsDomainLegalCookieDomainW failed\n");
+
+    ret = pIsDomainLegalCookieDomainW(gmail_com, www_mail_gmail_com);
+    ok(ret, "IsDomainLegalCookieDomainW failed\n");
+
     SetLastError(0xdeadbeef);
     ret = pIsDomainLegalCookieDomainW(gmail_co_uk, co_uk);
     error = GetLastError();
@@ -914,6 +956,9 @@ static void test_IsDomainLegalCookieDomainW(void)
 
     ret = pIsDomainLegalCookieDomainW(gmail_co_uk, dot_co_uk);
     ok(!ret, "IsDomainLegalCookieDomainW succeeded\n");
+
+    ret = pIsDomainLegalCookieDomainW(co_uk, gmail_co_uk);
+    todo_wine ok(!ret, "IsDomainLegalCookieDomainW succeeded\n");
 
     ret = pIsDomainLegalCookieDomainW(gmail_co_uk, gmail_co_uk);
     ok(ret, "IsDomainLegalCookieDomainW failed\n");

@@ -611,7 +611,7 @@ static void wined3d_state_record_lights(struct wined3d_state *dst_state, const s
     }
 }
 
-HRESULT CDECL wined3d_stateblock_capture(struct wined3d_stateblock *stateblock)
+void CDECL wined3d_stateblock_capture(struct wined3d_stateblock *stateblock)
 {
     const struct wined3d_state *src_state = &stateblock->device->stateBlock->state;
     unsigned int i;
@@ -897,8 +897,6 @@ HRESULT CDECL wined3d_stateblock_capture(struct wined3d_stateblock *stateblock)
     wined3d_state_record_lights(&stateblock->state, src_state);
 
     TRACE("Capture done.\n");
-
-    return WINED3D_OK;
 }
 
 static void apply_lights(struct wined3d_device *device, const struct wined3d_state *state)
@@ -919,7 +917,7 @@ static void apply_lights(struct wined3d_device *device, const struct wined3d_sta
     }
 }
 
-HRESULT CDECL wined3d_stateblock_apply(const struct wined3d_stateblock *stateblock)
+void CDECL wined3d_stateblock_apply(const struct wined3d_stateblock *stateblock)
 {
     struct wined3d_device *device = stateblock->device;
     unsigned int i;
@@ -1074,8 +1072,6 @@ HRESULT CDECL wined3d_stateblock_apply(const struct wined3d_stateblock *stateblo
     }
 
     TRACE("Applied stateblock %p.\n", stateblock);
-
-    return WINED3D_OK;
 }
 
 void stateblock_init_default_state(struct wined3d_stateblock *stateblock)
@@ -1095,7 +1091,6 @@ void stateblock_init_default_state(struct wined3d_stateblock *stateblock)
     unsigned int i;
     struct wined3d_swapchain *swapchain;
     struct wined3d_surface *backbuffer;
-    HRESULT hr;
 
     TRACE("stateblock %p.\n", stateblock);
 
@@ -1298,13 +1293,11 @@ void stateblock_init_default_state(struct wined3d_stateblock *stateblock)
     /* check the return values, because the GetBackBuffer call isn't valid for ddraw */
     if ((swapchain = wined3d_device_get_swapchain(device, 0)))
     {
-        hr = wined3d_swapchain_get_back_buffer(swapchain, 0, WINED3D_BACKBUFFER_TYPE_MONO, &backbuffer);
-        if (SUCCEEDED(hr) && backbuffer)
+        if ((backbuffer = wined3d_swapchain_get_back_buffer(swapchain, 0, WINED3D_BACKBUFFER_TYPE_MONO)))
         {
             struct wined3d_resource_desc desc;
 
             wined3d_resource_get_desc(&backbuffer->resource, &desc);
-            wined3d_surface_decref(backbuffer);
 
             /* Set the default scissor rect values */
             state->scissor_rect.left = 0;

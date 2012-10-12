@@ -275,14 +275,37 @@ static void D3DXMatrixTest(void)
     U(expectedmat).m[1][0] = 519.760010f; U(expectedmat).m[1][1] = -352.440002f; U(expectedmat).m[1][2] = -277.679993f; U(expectedmat).m[1][3] = 0.0f;
     U(expectedmat).m[2][0] = 363.119995f; U(expectedmat).m[2][1] = -121.040001f; U(expectedmat).m[2][2] = -117.479996f; U(expectedmat).m[2][3] = 0.0f;
     U(expectedmat).m[3][0] = -1239.0f; U(expectedmat).m[3][1] = 667.0f; U(expectedmat).m[3][2] = 567.0f; U(expectedmat).m[3][3] = 1.0f;
-    D3DXMatrixAffineTransformation(&gotmat,3.56f,&at,&q,&axis);
+    D3DXMatrixAffineTransformation(&gotmat, 3.56f, &at, &q, &axis);
     expect_mat(&expectedmat, &gotmat);
-/* Test the NULL case */
-    U(expectedmat).m[0][0] = -459.239990f; U(expectedmat).m[0][1] = -576.719971f; U(expectedmat).m[0][2] = -263.440002f; U(expectedmat).m[0][3] = 0.0f;
-    U(expectedmat).m[1][0] = 519.760010f; U(expectedmat).m[1][1] = -352.440002f; U(expectedmat).m[1][2] = -277.679993f; U(expectedmat).m[1][3] = 0.0f;
-    U(expectedmat).m[2][0] = 363.119995f; U(expectedmat).m[2][1] = -121.040001f; U(expectedmat).m[2][2] = -117.479996f; U(expectedmat).m[2][3] = 0.0f;
+
+    /* Test the NULL case */
     U(expectedmat).m[3][0] = 1.0f; U(expectedmat).m[3][1] = -3.0f; U(expectedmat).m[3][2] = 7.0f; U(expectedmat).m[3][3] = 1.0f;
-    D3DXMatrixAffineTransformation(&gotmat,3.56f,NULL,&q,&axis);
+    D3DXMatrixAffineTransformation(&gotmat, 3.56f, NULL, &q, &axis);
+    expect_mat(&expectedmat, &gotmat);
+
+    U(expectedmat).m[3][0] = -1240.0f; U(expectedmat).m[3][1] = 670.0f; U(expectedmat).m[3][2] = 560.0f; U(expectedmat).m[3][3] = 1.0f;
+    D3DXMatrixAffineTransformation(&gotmat, 3.56f, &at, &q, NULL);
+    expect_mat(&expectedmat, &gotmat);
+
+    U(expectedmat).m[3][0] = 0.0f; U(expectedmat).m[3][1] = 0.0f; U(expectedmat).m[3][2] = 0.0f; U(expectedmat).m[3][3] = 1.0f;
+    D3DXMatrixAffineTransformation(&gotmat, 3.56f, NULL, &q, NULL);
+    expect_mat(&expectedmat, &gotmat);
+
+    U(expectedmat).m[0][0] = 3.56f; U(expectedmat).m[0][1] = 0.0f; U(expectedmat).m[0][2] = 0.0f; U(expectedmat).m[0][3] = 0.0f;
+    U(expectedmat).m[1][0] = 0.0f; U(expectedmat).m[1][1] = 3.56f; U(expectedmat).m[1][2] = 0.0f; U(expectedmat).m[1][3] = 0.0f;
+    U(expectedmat).m[2][0] = 0.0f; U(expectedmat).m[2][1] = 0.0f; U(expectedmat).m[2][2] = 3.56f; U(expectedmat).m[2][3] = 0.0f;
+    U(expectedmat).m[3][0] = 1.0f; U(expectedmat).m[3][1] = -3.0f; U(expectedmat).m[3][2] = 7.0f; U(expectedmat).m[3][3] = 1.0f;
+    D3DXMatrixAffineTransformation(&gotmat, 3.56f, NULL, NULL, &axis);
+    expect_mat(&expectedmat, &gotmat);
+
+    D3DXMatrixAffineTransformation(&gotmat, 3.56f, &at, NULL, &axis);
+    expect_mat(&expectedmat, &gotmat);
+
+    U(expectedmat).m[3][0] = 0.0f; U(expectedmat).m[3][1] = 0.0f; U(expectedmat).m[3][2] = 0.0f; U(expectedmat).m[3][3] = 1.0f;
+    D3DXMatrixAffineTransformation(&gotmat, 3.56f, &at, NULL, NULL);
+    expect_mat(&expectedmat, &gotmat);
+
+    D3DXMatrixAffineTransformation(&gotmat, 3.56f, NULL, NULL, NULL);
     expect_mat(&expectedmat, &gotmat);
 
 /*____________D3DXMatrixfDeterminant_____________*/
@@ -2383,7 +2406,7 @@ static void test_D3DXSHAdd(void)
      * All values will work, test from 0-7 [D3DXSH_MINORDER = 2, D3DXSH_MAXORDER = 6]
      * Exceptions will show up when out, in1 or in2 are NULL
      */
-    for (k = 0; k < 8; ++k)
+    for (k = 0; k <= D3DXSH_MAXORDER + 1; k++)
     {
         UINT count = k * k;
 
@@ -2395,25 +2418,25 @@ static void test_D3DXSHAdd(void)
             ok(relative_error(in1[i] + in2[i], out[i]) < admitted_error,
                     "%u-%u: D3DXSHAdd() failed, got %f, expected %f\n", k, i, out[i], in1[i] + in2[i]);
         }
-        ok(out[count] == 0.0f, "%u-%u: D3DXSHAdd() failed, got %f, expected 0.0\n", k, k * k, out[count]);
+        ok(relative_error(out[count], 0.0f) < admitted_error, "%u-%u: D3DXSHAdd() failed, got %f, expected 0.0\n", k, k * k, out[count]);
     }
 }
 
 static void test_D3DXSHDot(void)
 {
     unsigned int i;
-    FLOAT a[64], b[64], got;
+    FLOAT a[49], b[49], got;
     CONST FLOAT expected[] =
-    { 0.5f, 0.5f, 25.0f, 262.5f, 1428.0f, 5362.0f, 15873.0f, 39812.0f, 88400.0f, };
+    { 0.5f, 0.5f, 25.0f, 262.5f, 1428.0f, 5362.0f, 15873.0f, 39812.0f, };
 
-    for (i = 0; i < 64; i++)
+    for (i = 0; i < 49; i++)
     {
-        a[i] = (FLOAT)i + 1.0f;
-        b[i] = (FLOAT)i + 0.5f;
+        a[i] = i + 1.0f;
+        b[i] = i + 0.5f;
     }
 
     /* D3DXSHDot computes by using order * order elements */
-    for (i = 0; i < 9; i++)
+    for (i = 0; i <= D3DXSH_MAXORDER + 1; i++)
     {
         got = D3DXSHDot(i, a, b);
         ok(relative_error(got, expected[i]) < admitted_error, "order %d: expected %f, received %f\n", i, expected[i], got);
@@ -2426,7 +2449,7 @@ static void test_D3DXSHEvalDirection(void)
 {
     unsigned int i, order;
     D3DXVECTOR3 d;
-    FLOAT a[100], expected[100], *received_ptr;
+    FLOAT a[49], expected[49], *received_ptr;
     CONST FLOAT table[36] =
     { 0.282095f, -0.977205f, 1.465808f, -0.488603f, 2.185097f, -6.555291f,
       8.200181f, -3.277646f, -1.638823f, 1.180087f, 17.343668f, -40.220032f,
@@ -2437,15 +2460,15 @@ static void test_D3DXSHEvalDirection(void)
 
     d.x = 1.0; d.y = 2.0f; d.z = 3.0f;
 
-    for(order = 0; order < 10; order++)
+    for (order = 0; order <= D3DXSH_MAXORDER + 1; order++)
     {
-        for(i = 0; i < 100; i++)
+        for (i = 0; i < 49; i++)
             a[i] = 1.5f + i;
 
         received_ptr = D3DXSHEvalDirection(a, order, &d);
         ok(received_ptr == a, "Expected %p, received %p\n", a, received_ptr);
 
-        for(i = 0; i < 100; i++)
+        for (i = 0; i < 49; i++)
         {
             /* if the order is < D3DXSH_MINORDER or order > D3DXSH_MAXORDER or the index of the element is greater than order * order - 1, D3DXSHEvalDirection does not modify the output */
             if ( (order < D3DXSH_MINORDER) || (order > D3DXSH_MAXORDER) || (i >= order * order) )
@@ -2622,7 +2645,7 @@ static void test_D3DXSHMultiply3(void)
 {
     unsigned int i;
     FLOAT a[20], b[20], c[20];
-    /* D3DXSHMultiply only modifies the first 9 elements of the array */
+    /* D3DXSHMultiply3 only modifies the first 9 elements of the array */
     const FLOAT expected[20] =
     { 7.813913f, 2.256058f, 5.9484005f, 4.970894f, 2.899858f, 3.598946f,
       1.726572f, 5.573538f, 0.622063f, 9.0f, 10.0f, 11.0f, 12.0f, 13.0f,
@@ -2630,14 +2653,63 @@ static void test_D3DXSHMultiply3(void)
 
     for (i = 0; i < 20; i++)
     {
-        a[i] = 1.0f + (FLOAT)i/100.0f;
-        b[i] = 3.0f - (FLOAT)i/100.0f;
-        c[i] = (FLOAT)i;
+        a[i] = 1.0f + i / 100.0f;
+        b[i] = 3.0f - i / 100.0f;
+        c[i] = i;
     }
 
     D3DXSHMultiply3(c, a, b);
     for (i = 0; i < 20; i++)
         ok(relative_error(c[i], expected[i]) < admitted_error, "Expected[%d] = %f, received = %f\n", i, expected[i], c[i]);
+}
+
+static void test_D3DXSHMultiply4(void)
+{
+    unsigned int i;
+    FLOAT a[20], b[20], c[20];
+    /* D3DXSHMultiply4 only modifies the first 16 elements of the array */
+    const FLOAT expected[] =
+    { /* c, a, b */
+        14.182599f, 2.615703f, 12.828601f, 9.820596f, 3.039696f, 4.530442f,
+        5.820584f, 12.249846f, 2.194346f, 3.900152f, 5.416609f, 5.601813f,
+        0.959982f, 7.037550f, 3.625230f, 0.463601f, 16.0f, 17.0f, 18.0f, 19.0f,
+      /* c, c, b */
+        -211441.265625f, -2529.157715f, -10023.393555f, -441.277191f, -163.994385f,
+        -526.305115f, 29636.187500f, -3931.830811f, -13577.111328f, -3978.973877f,
+        -10330.341797f, -13779.787109f, -16685.109375f, -44981.375000f, -73269.742188f,
+        -95237.335938f, 16.0f, 17.0f, 18.0f, 19.0f,
+      /* c, c, c */
+        0.236682f, -0.717649f, -0.180500f, -0.077124f, 0.144831f, 0.573286f,
+        -0.337959f, 0.055694f, -0.442100f, 0.147702f, -0.055157f, 0.084337f,
+        0.179877f, 0.009099f, 0.232200f, 0.074142f, 1.6f, 1.7f, 1.8f, 1.9f, };
+
+    for (i = 0; i < 20; i++)
+    {
+        a[i] = 1.0f + i / 100.0f;
+        b[i] = 3.0f - i / 100.0f;
+        c[i] = i;
+    }
+
+    D3DXSHMultiply4(c, a, b);
+    for (i = 0; i < 20; i++)
+        ok(relative_error(c[i], expected[i]) < admitted_error, "Expected[%d] = %f, received = %f\n", i, expected[i], c[i]);
+
+    for (i = 0; i < 20; i++)
+    {
+        b[i] = 3.0f - i / 100.0f;
+        c[i] = i;
+    }
+
+    D3DXSHMultiply4(c, c, b);
+    for (i = 0; i < 20; i++)
+        ok(relative_error(c[i], expected[20 + i]) < admitted_error, "Expected[%d] = %f, received = %f\n", i, expected[20 + i], c[i]);
+
+    for (i = 0; i < 20; i++)
+        c[i] = 0.1f * i;
+
+    D3DXSHMultiply4(c, c, c);
+    for (i = 0; i < 20; i++)
+        ok(relative_error(c[i], expected[40 + i]) < admitted_error, "Expected[%d] = %f, received = %f\n", i, expected[40 + i], c[i]);
 }
 
 static void test_D3DXSHRotate(void)
@@ -2709,7 +2781,7 @@ static void test_D3DXSHRotate(void)
 static void test_D3DXSHRotateZ(void)
 {
     unsigned int i, j, order, square;
-    FLOAT angle[] = { D3DX_PI / 3.0f, -D3DX_PI / 3.0f, 4.0f * D3DX_PI / 3.0f, }, expected, in[100], out[100], *received_ptr, table[] =
+    FLOAT angle[] = { D3DX_PI / 3.0f, -D3DX_PI / 3.0f, 4.0f * D3DX_PI / 3.0f, }, expected, in[49], out[49], *received_ptr, table[] =
     { /* Angle =  D3DX_PI / 3.0f */
       1.01f, 4.477762f, 3.010000f, 0.264289f, 5.297888f, 9.941864f, 7.010000f, -1.199813f,
       -8.843789f, -10.010002f, 7.494040f, 18.138016f, 13.010000, -3.395966f, -17.039942f,
@@ -2729,27 +2801,27 @@ static void test_D3DXSHRotateZ(void)
       -27.968143f, 24.009993f, 2.226105f, 18.180552f, -43.824543f, 28.010008f, 14.082489f,
       -42.726471f, 31.010000f, 9.984427f, -41.628399f, 34.009987f, 5.886366f, -40.530327, };
 
-    for (i = 0; i < 100; i++)
+    for (i = 0; i < 49; i++)
         in[i] = i + 1.01f;
 
     for (j = 0; j < 3; j++)
     {
-        for (order = 0; order < 10; order++)
+        for (order = 0; order <= D3DXSH_MAXORDER + 1; order++)
         {
-            for (i = 0; i < 100; i++)
+            for (i = 0; i < 49; i++)
                 out[i] = ( i + 1.0f ) * ( i + 1.0f );
 
             received_ptr = D3DXSHRotateZ(out, order, angle[j], in);
             ok(received_ptr == out, "angle %f, order %u, Expected %p, received %p\n", angle[j], order, out, received_ptr);
 
-            for (i = 0; i < 100; i++)
+            for (i = 0; i < 49; i++)
             {
                 /* order = 0 or order = 1 behaves like order = D3DXSH_MINORDER */
                 square = ( order <= D3DXSH_MINORDER ) ? D3DXSH_MINORDER * D3DXSH_MINORDER : order * order;
-                expected = table[36 * j + i];
                 if ( i >= square || ( (order >= D3DXSH_MAXORDER) && ( i >= D3DXSH_MAXORDER * D3DXSH_MAXORDER ) ) )
                     expected = ( i + 1.0f ) * ( i + 1.0f );
-
+                else
+                    expected = table[36 * j + i];
                 ok(relative_error(out[i], expected) < admitted_error, "angle %f, order %u index %u, Expected %f, received %f\n", angle[j], order, i, expected, out[i]);
             }
         }
@@ -2759,20 +2831,20 @@ static void test_D3DXSHRotateZ(void)
 static void test_D3DXSHScale(void)
 {
     unsigned int i, order;
-    FLOAT a[100], b[100], expected, *received_array;
+    FLOAT a[49], b[49], expected, *received_array;
 
-    for (i = 0; i < 100; i++)
+    for (i = 0; i < 49; i++)
     {
         a[i] = i;
         b[i] = i;
     }
 
-    for (order = 0; order < 10; order++)
+    for (order = 0; order <= D3DXSH_MAXORDER + 1; order++)
     {
         received_array = D3DXSHScale(b, order, a, 5.0f);
         ok(received_array == b, "Expected %p, received %p\n", b, received_array);
 
-        for (i = 0; i < 100; i++)
+        for (i = 0; i < 49; i++)
         {
             if (i < order * order)
                 expected = 5.0f * a[i];
@@ -2806,6 +2878,7 @@ START_TEST(math)
     test_D3DXSHEvalDirectionalLight();
     test_D3DXSHMultiply2();
     test_D3DXSHMultiply3();
+    test_D3DXSHMultiply4();
     test_D3DXSHRotate();
     test_D3DXSHRotateZ();
     test_D3DXSHScale();

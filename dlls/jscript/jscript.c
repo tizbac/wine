@@ -72,7 +72,8 @@ void script_release(script_ctx_t *ctx)
     if(ctx->cc)
         release_cc(ctx->cc);
     jsheap_free(&ctx->tmp_heap);
-    SysFreeString(ctx->last_match);
+    if(ctx->last_match)
+        jsstr_release(ctx->last_match);
 
     ctx->jscaller->ctx = NULL;
     IServiceProvider_Release(&ctx->jscaller->IServiceProvider_iface);
@@ -724,6 +725,8 @@ static HRESULT WINAPI JScriptParse_InitNew(IActiveScriptParse *iface)
         return hres;
     }
 
+    ctx->last_match = jsstr_empty();
+
     ctx = InterlockedCompareExchangePointer((void**)&This->ctx, ctx, NULL);
     if(ctx) {
         script_release(ctx);
@@ -763,7 +766,7 @@ static HRESULT WINAPI JScriptParse_ParseScriptText(IActiveScriptParse *iface,
     if(This->thread_id != GetCurrentThreadId() || This->ctx->state == SCRIPTSTATE_CLOSED)
         return E_UNEXPECTED;
 
-    hres = compile_script(This->ctx, pstrCode, pstrDelimiter, FALSE, This->is_encode, &code);
+    hres = compile_script(This->ctx, pstrCode, NULL, pstrDelimiter, FALSE, This->is_encode, &code);
     if(FAILED(hres))
         return hres;
 
@@ -830,7 +833,7 @@ static HRESULT WINAPI JScriptParseProcedure_ParseProcedureText(IActiveScriptPars
     if(This->thread_id != GetCurrentThreadId() || This->ctx->state == SCRIPTSTATE_CLOSED)
         return E_UNEXPECTED;
 
-    hres = compile_script(This->ctx, pstrCode, pstrDelimiter, FALSE, This->is_encode, &code);
+    hres = compile_script(This->ctx, pstrCode, pstrFormalParams, pstrDelimiter, FALSE, This->is_encode, &code);
     if(FAILED(hres)) {
         WARN("Parse failed %08x\n", hres);
         return hres;

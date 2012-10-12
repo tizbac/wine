@@ -3524,8 +3524,6 @@ HRESULT CDECL wined3d_device_set_texture(struct wined3d_device *device,
     {
         LONG bind_count = InterlockedDecrement(&prev->resource.bind_count);
 
-        wined3d_texture_decref(prev);
-
         if (!texture && stage < gl_info->limits.texture_stages)
         {
             device_invalidate_state(device, STATE_TEXTURESTAGE(stage, WINED3D_TSS_COLOR_OP));
@@ -3549,6 +3547,8 @@ HRESULT CDECL wined3d_device_set_texture(struct wined3d_device *device,
                 }
             }
         }
+
+        wined3d_texture_decref(prev);
     }
 
     device_invalidate_state(device, STATE_SAMPLER(stage));
@@ -3583,7 +3583,9 @@ HRESULT CDECL wined3d_device_get_back_buffer(const struct wined3d_device *device
     if (!(swapchain = wined3d_device_get_swapchain(device, swapchain_idx)))
         return WINED3DERR_INVALIDCALL;
 
-    return wined3d_swapchain_get_back_buffer(swapchain, backbuffer_idx, backbuffer_type, backbuffer);
+    if (!(*backbuffer = wined3d_swapchain_get_back_buffer(swapchain, backbuffer_idx, backbuffer_type)))
+        return WINED3DERR_INVALIDCALL;
+    return WINED3D_OK;
 }
 
 HRESULT CDECL wined3d_device_get_device_caps(const struct wined3d_device *device, WINED3DCAPS *caps)
@@ -4479,43 +4481,25 @@ void CDECL wined3d_device_clear_rendertarget_view(struct wined3d_device *device,
     if (FAILED(hr)) ERR("Color fill failed, hr %#x.\n", hr);
 }
 
-HRESULT CDECL wined3d_device_get_render_target(const struct wined3d_device *device,
-        UINT render_target_idx, struct wined3d_surface **render_target)
+struct wined3d_surface * CDECL wined3d_device_get_render_target(const struct wined3d_device *device,
+        UINT render_target_idx)
 {
-    TRACE("device %p, render_target_idx %u, render_target %p.\n",
-            device, render_target_idx, render_target);
+    TRACE("device %p, render_target_idx %u.\n", device, render_target_idx);
 
     if (render_target_idx >= device->adapter->gl_info.limits.buffers)
     {
         WARN("Only %u render targets are supported.\n", device->adapter->gl_info.limits.buffers);
-        return WINED3DERR_INVALIDCALL;
+        return NULL;
     }
 
-    *render_target = device->fb.render_targets[render_target_idx];
-    TRACE("Returning render target %p.\n", *render_target);
-
-    if (!*render_target)
-        return WINED3DERR_NOTFOUND;
-
-    wined3d_surface_incref(*render_target);
-
-    return WINED3D_OK;
+    return device->fb.render_targets[render_target_idx];
 }
 
-HRESULT CDECL wined3d_device_get_depth_stencil(const struct wined3d_device *device,
-        struct wined3d_surface **depth_stencil)
+struct wined3d_surface * CDECL wined3d_device_get_depth_stencil(const struct wined3d_device *device)
 {
-    TRACE("device %p, depth_stencil %p.\n", device, depth_stencil);
+    TRACE("device %p.\n", device);
 
-    *depth_stencil = device->fb.depth_stencil;
-    TRACE("Returning depth/stencil surface %p.\n", *depth_stencil);
-
-    if (!*depth_stencil)
-        return WINED3DERR_NOTFOUND;
-
-    wined3d_surface_incref(*depth_stencil);
-
-    return WINED3D_OK;
+    return device->fb.depth_stencil;
 }
 
 HRESULT CDECL wined3d_device_set_render_target(struct wined3d_device *device,
@@ -4586,7 +4570,7 @@ HRESULT CDECL wined3d_device_set_render_target(struct wined3d_device *device,
     return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_device_set_depth_stencil(struct wined3d_device *device, struct wined3d_surface *depth_stencil)
+void CDECL wined3d_device_set_depth_stencil(struct wined3d_device *device, struct wined3d_surface *depth_stencil)
 {
     struct wined3d_surface *prev = device->fb.depth_stencil;
 
@@ -4596,7 +4580,7 @@ HRESULT CDECL wined3d_device_set_depth_stencil(struct wined3d_device *device, st
     if (prev == depth_stencil)
     {
         TRACE("Trying to do a NOP SetRenderTarget operation.\n");
-        return WINED3D_OK;
+        return;
     }
 
     if (prev)
@@ -4635,7 +4619,7 @@ HRESULT CDECL wined3d_device_set_depth_stencil(struct wined3d_device *device, st
 
     device_invalidate_state(device, STATE_FRAMEBUFFER);
 
-    return WINED3D_OK;
+    return;
 }
 
 HRESULT CDECL wined3d_device_set_cursor_properties(struct wined3d_device *device,
@@ -5281,13 +5265,12 @@ HRESULT CDECL wined3d_device_set_dialog_box_mode(struct wined3d_device *device, 
 }
 
 
-HRESULT CDECL wined3d_device_get_creation_parameters(const struct wined3d_device *device,
+void CDECL wined3d_device_get_creation_parameters(const struct wined3d_device *device,
         struct wined3d_device_creation_parameters *parameters)
 {
     TRACE("device %p, parameters %p.\n", device, parameters);
 
     *parameters = device->create_parms;
-    return WINED3D_OK;
 }
 
 void CDECL wined3d_device_set_gamma_ramp(const struct wined3d_device *device,
@@ -5436,15 +5419,14 @@ void device_resource_released(struct wined3d_device *device, struct wined3d_reso
     TRACE("Resource released.\n");
 }
 
-HRESULT CDECL wined3d_device_get_surface_from_dc(const struct wined3d_device *device,
-        HDC dc, struct wined3d_surface **surface)
+struct wined3d_surface * CDECL wined3d_device_get_surface_from_dc(const struct wined3d_device *device, HDC dc)
 {
     struct wined3d_resource *resource;
 
-    TRACE("device %p, dc %p, surface %p.\n", device, dc, surface);
+    TRACE("device %p, dc %p.\n", device, dc);
 
     if (!dc)
-        return WINED3DERR_INVALIDCALL;
+        return NULL;
 
     LIST_FOR_EACH_ENTRY(resource, &device->resources, struct wined3d_resource, resource_list_entry)
     {
@@ -5455,13 +5437,12 @@ HRESULT CDECL wined3d_device_get_surface_from_dc(const struct wined3d_device *de
             if (s->hDC == dc)
             {
                 TRACE("Found surface %p for dc %p.\n", s, dc);
-                *surface = s;
-                return WINED3D_OK;
+                return s;
             }
         }
     }
 
-    return WINED3DERR_INVALIDCALL;
+    return NULL;
 }
 
 HRESULT device_init(struct wined3d_device *device, struct wined3d *wined3d,

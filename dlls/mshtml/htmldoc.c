@@ -1033,24 +1033,12 @@ static HRESULT WINAPI HTMLDocument_createElement(IHTMLDocument2 *iface, BSTR eTa
                                                  IHTMLElement **newElem)
 {
     HTMLDocument *This = impl_from_IHTMLDocument2(iface);
-    HTMLDocumentNode *doc_node;
-    nsIDOMHTMLElement *nselem;
     HTMLElement *elem;
     HRESULT hres;
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_w(eTag), newElem);
 
-    /* Use owner doc if called on document fragment */
-    doc_node = This->doc_node;
-    if(!doc_node->nsdoc)
-        doc_node = doc_node->node.doc;
-
-    hres = create_nselem(doc_node, eTag, &nselem);
-    if(FAILED(hres))
-        return hres;
-
-    hres = HTMLElement_Create(doc_node, (nsIDOMNode*)nselem, TRUE, &elem);
-    nsIDOMHTMLElement_Release(nselem);
+    hres = create_element(This->doc_node, eTag, &elem);
     if(FAILED(hres))
         return hres;
 
@@ -1454,11 +1442,55 @@ static HRESULT WINAPI HTMLDocument_createStyleSheet(IHTMLDocument2 *iface, BSTR 
                                             LONG lIndex, IHTMLStyleSheet **ppnewStyleSheet)
 {
     HTMLDocument *This = impl_from_IHTMLDocument2(iface);
+    nsIDOMHTMLHeadElement *head_elem;
+    IHTMLStyleElement *style_elem;
+    HTMLElement *elem;
+    nsresult nsres;
+    HRESULT hres;
 
-    FIXME("(%p)->(%s %d %p) semi-stub\n", This, debugstr_w(bstrHref), lIndex, ppnewStyleSheet);
+    static const WCHAR styleW[] = {'s','t','y','l','e',0};
 
-    *ppnewStyleSheet = HTMLStyleSheet_Create(NULL);
-    return S_OK;
+    TRACE("(%p)->(%s %d %p)\n", This, debugstr_w(bstrHref), lIndex, ppnewStyleSheet);
+
+    if(!This->doc_node->nsdoc) {
+        FIXME("not a real doc object\n");
+        return E_NOTIMPL;
+    }
+
+    if(lIndex != -1)
+        FIXME("Unsupported lIndex %d\n", lIndex);
+
+    if(bstrHref) {
+        FIXME("semi-stub for href %s\n", debugstr_w(bstrHref));
+        *ppnewStyleSheet = HTMLStyleSheet_Create(NULL);
+        return S_OK;
+    }
+
+    hres = create_element(This->doc_node, styleW, &elem);
+    if(FAILED(hres))
+        return hres;
+
+    nsres = nsIDOMHTMLDocument_GetHead(This->doc_node->nsdoc, &head_elem);
+    if(NS_SUCCEEDED(nsres)) {
+        nsIDOMNode *tmp_node;
+
+        nsres = nsIDOMHTMLHeadElement_AppendChild(head_elem, (nsIDOMNode*)elem->nselem, &tmp_node);
+        nsIDOMHTMLHeadElement_Release(head_elem);
+        if(NS_SUCCEEDED(nsres) && tmp_node)
+            nsIDOMNode_Release(tmp_node);
+    }
+    if(NS_FAILED(nsres)) {
+        IHTMLElement_Release(&elem->IHTMLElement_iface);
+        return E_FAIL;
+    }
+
+    hres = IHTMLElement_QueryInterface(&elem->IHTMLElement_iface, &IID_IHTMLStyleElement, (void**)&style_elem);
+    assert(hres == S_OK);
+    IHTMLElement_Release(&elem->IHTMLElement_iface);
+
+    hres = IHTMLStyleElement_get_styleSheet(style_elem, ppnewStyleSheet);
+    IHTMLStyleElement_Release(style_elem);
+    return hres;
 }
 
 static const IHTMLDocument2Vtbl HTMLDocumentVtbl = {
@@ -2101,6 +2133,11 @@ static void HTMLDocumentNode_destructor(HTMLDOMNode *iface)
     while(!list_empty(&This->plugin_hosts))
         detach_plugin_host(LIST_ENTRY(list_head(&This->plugin_hosts), PluginHost, entry));
 
+    if(This->nsnode_selector) {
+        nsIDOMNodeSelector_Release(This->nsnode_selector);
+        This->nsnode_selector = NULL;
+    }
+
     if(This->nsdoc) {
         assert(!This->window);
         release_document_mutation(This);
@@ -2126,6 +2163,8 @@ static void HTMLDocumentNode_traverse(HTMLDOMNode *iface, nsCycleCollectionTrave
 {
     HTMLDocumentNode *This = impl_from_HTMLDOMNode(iface);
 
+    if(This->nsnode_selector)
+        note_cc_edge((nsISupports*)This->nsnode_selector, "This->nsnode_selector", cb);
     if(This->nsdoc)
         note_cc_edge((nsISupports*)This->nsdoc, "This->nsdoc", cb);
 }
@@ -2133,6 +2172,11 @@ static void HTMLDocumentNode_traverse(HTMLDOMNode *iface, nsCycleCollectionTrave
 static void HTMLDocumentNode_unlink(HTMLDOMNode *iface)
 {
     HTMLDocumentNode *This = impl_from_HTMLDOMNode(iface);
+
+    if(This->nsnode_selector) {
+        nsIDOMNodeSelector_Release(This->nsnode_selector);
+        This->nsnode_selector = NULL;
+    }
 
     if(This->nsdoc) {
         nsIDOMHTMLDocument *nsdoc = This->nsdoc;
@@ -2285,6 +2329,7 @@ static HTMLDocumentNode *alloc_doc_node(HTMLDocumentObj *doc_obj, HTMLInnerWindo
 HRESULT create_doc_from_nsdoc(nsIDOMHTMLDocument *nsdoc, HTMLDocumentObj *doc_obj, HTMLInnerWindow *window, HTMLDocumentNode **ret)
 {
     HTMLDocumentNode *doc;
+    nsresult nsres;
 
     doc = alloc_doc_node(doc_obj, window);
     if(!doc)
@@ -2297,6 +2342,9 @@ HRESULT create_doc_from_nsdoc(nsIDOMHTMLDocument *nsdoc, HTMLDocumentObj *doc_ob
 
     nsIDOMHTMLDocument_AddRef(nsdoc);
     doc->nsdoc = nsdoc;
+
+    nsres = nsIDOMHTMLDocument_QueryInterface(nsdoc, &IID_nsIDOMNodeSelector, (void**)&doc->nsnode_selector);
+    assert(nsres == NS_OK);
 
     init_document_mutation(doc);
     doc_init_events(doc);

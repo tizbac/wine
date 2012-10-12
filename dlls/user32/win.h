@@ -62,6 +62,7 @@ typedef struct tagWND
     HICON          hIconSmall;    /* window's small icon */
     struct window_surface *surface; /* Window surface if any */
     struct tagDIALOGINFO *dlgInfo;/* Dialog additional info (dialogs only) */
+    int            pixel_format;  /* Pixel format set by the graphics driver */
     int            cbWndExtra;    /* class cbWndExtra at window creation */
     DWORD_PTR      userdata;      /* User private data */
     DWORD          wExtra[1];     /* Window extra bytes */
@@ -80,6 +81,7 @@ typedef struct tagWND
   /* Window functions */
 extern HWND get_hwnd_message_parent(void) DECLSPEC_HIDDEN;
 extern BOOL is_desktop_window( HWND hwnd ) DECLSPEC_HIDDEN;
+extern struct window_surface dummy_surface DECLSPEC_HIDDEN;
 extern void register_window_surface( struct window_surface *old, struct window_surface *new ) DECLSPEC_HIDDEN;
 extern void flush_window_surfaces( BOOL idle ) DECLSPEC_HIDDEN;
 extern WND *WIN_GetPtr( HWND hwnd ) DECLSPEC_HIDDEN;

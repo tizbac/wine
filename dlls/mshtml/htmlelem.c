@@ -199,6 +199,24 @@ HRESULT create_nselem(HTMLDocumentNode *doc, const WCHAR *tag, nsIDOMHTMLElement
     return S_OK;
 }
 
+HRESULT create_element(HTMLDocumentNode *doc, const WCHAR *tag, HTMLElement **ret)
+{
+    nsIDOMHTMLElement *nselem;
+    HRESULT hres;
+
+    /* Use owner doc if called on document fragment */
+    if(!doc->nsdoc)
+        doc = doc->node.doc;
+
+    hres = create_nselem(doc, tag, &nselem);
+    if(FAILED(hres))
+        return hres;
+
+    hres = HTMLElement_Create(doc, (nsIDOMNode*)nselem, TRUE, ret);
+    nsIDOMHTMLElement_Release(nselem);
+    return hres;
+}
+
 static HRESULT WINAPI HTMLElement_QueryInterface(IHTMLElement *iface,
                                                  REFIID riid, void **ppv)
 {
@@ -1861,6 +1879,19 @@ HRESULT HTMLElement_Create(HTMLDocumentNode *doc, nsIDOMNode *nsnode, BOOL use_g
         return hres;
 
     *ret = elem;
+    return S_OK;
+}
+
+HRESULT get_elem(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **ret)
+{
+    HTMLDOMNode *node;
+    HRESULT hres;
+
+    hres = get_node(doc, (nsIDOMNode*)nselem, TRUE, &node);
+    if(FAILED(hres))
+        return hres;
+
+    *ret = impl_from_HTMLDOMNode(node);
     return S_OK;
 }
 

@@ -1,9 +1,7 @@
 /*
  * Debugger ARM specific functions
  *
- * Copyright 2000-2003 Marcus Meissner
- *                2004 Eric Pouech
- *           2010-2012 André Hentschel
+ * Copyright 2010-2012 André Hentschel
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -92,6 +90,15 @@ static char const tbl_width_t2[][2] = {
     "b", "h", "", "?"
 };
 
+static char const tbl_special_regs_t2[][12] = {
+    "apsr", "iapsr", "eapsr", "xpsr", "rsvd", "ipsr", "epsr", "iepsr", "msp", "psp", "rsvd", "rsvd",
+    "rsvd", "rsvd", "rsvd", "rsvd", "primask", "basepri", "basepri_max", "faultmask", "control"
+};
+
+static char const tbl_hints_t2[][6] = {
+    "nop", "yield", "wfe", "wfi", "sev"
+};
+
 static UINT db_get_inst(void* addr, int size)
 {
     UINT result = 0;
@@ -171,6 +178,39 @@ static UINT arm_disasm_swp(UINT inst, ADDRESS64 *addr)
     dbg_printf("\n\tswp%s%s\t%s, %s, [%s]", get_cond(inst), byte ? "b" : "",
                tbl_regs[get_nibble(inst, 3)], tbl_regs[get_nibble(inst, 0)],
                tbl_regs[get_nibble(inst, 4)]);
+    return 0;
+}
+
+static UINT arm_disasm_halfwordtrans(UINT inst, ADDRESS64 *addr)
+{
+    short halfword  = (inst >> 5)  & 0x01;
+    short sign      = (inst >> 6)  & 0x01;
+    short load      = (inst >> 20) & 0x01;
+    short writeback = (inst >> 21) & 0x01;
+    short immediate = (inst >> 22) & 0x01;
+    short direction = (inst >> 23) & 0x01;
+    short indexing  = (inst >> 24) & 0x01;
+    short offset    = ((inst >> 4) & 0xf0) + (inst & 0x0f);
+
+    if (!direction) offset *= -1;
+
+    dbg_printf("\n\t%s%s%s%s%s", load ? "ldr" : "str", sign ? "s" : "",
+               halfword ? "h" : (sign ? "b" : ""), writeback ? "t" : "", get_cond(inst));
+    dbg_printf("\t%s, ", tbl_regs[get_nibble(inst, 3)]);
+    if (indexing)
+    {
+        if (immediate)
+            dbg_printf("[%s, #%d]", tbl_regs[get_nibble(inst, 4)], offset);
+        else
+            dbg_printf("[%s, %s]", tbl_regs[get_nibble(inst, 4)], tbl_regs[get_nibble(inst, 0)]);
+    }
+    else
+    {
+        if (immediate)
+            dbg_printf("[%s], #%d", tbl_regs[get_nibble(inst, 4)], offset);
+        else
+            dbg_printf("[%s], %s", tbl_regs[get_nibble(inst, 4)], tbl_regs[get_nibble(inst, 0)]);
+    }
     return 0;
 }
 
@@ -308,39 +348,6 @@ static UINT arm_disasm_singletrans(UINT inst, ADDRESS64 *addr)
     return 0;
 }
 
-static UINT arm_disasm_halfwordtrans(UINT inst, ADDRESS64 *addr)
-{
-    short halfword  = (inst >> 5)  & 0x01;
-    short sign      = (inst >> 6)  & 0x01;
-    short load      = (inst >> 20) & 0x01;
-    short writeback = (inst >> 21) & 0x01;
-    short immediate = (inst >> 22) & 0x01;
-    short direction = (inst >> 23) & 0x01;
-    short indexing  = (inst >> 24) & 0x01;
-    short offset    = ((inst >> 4) & 0xf0) + (inst & 0x0f);
-
-    if (!direction) offset *= -1;
-
-    dbg_printf("\n\t%s%s%s%s%s", load ? "ldr" : "str", sign ? "s" : "",
-               halfword ? "h" : (sign ? "b" : ""), writeback ? "t" : "", get_cond(inst));
-    dbg_printf("\t%s, ", tbl_regs[get_nibble(inst, 3)]);
-    if (indexing)
-    {
-        if (immediate)
-            dbg_printf("[%s, #%d]", tbl_regs[get_nibble(inst, 4)], offset);
-        else
-            dbg_printf("[%s, %s]", tbl_regs[get_nibble(inst, 4)], tbl_regs[get_nibble(inst, 0)]);
-    }
-    else
-    {
-        if (immediate)
-            dbg_printf("[%s], #%d", tbl_regs[get_nibble(inst, 4)], offset);
-        else
-            dbg_printf("[%s], %s", tbl_regs[get_nibble(inst, 4)], tbl_regs[get_nibble(inst, 0)]);
-    }
-    return 0;
-}
-
 static UINT arm_disasm_blocktrans(UINT inst, ADDRESS64 *addr)
 {
     short load      = (inst >> 20) & 0x01;
@@ -370,8 +377,7 @@ static UINT arm_disasm_blocktrans(UINT inst, ADDRESS64 *addr)
 
 static UINT arm_disasm_swi(UINT inst, ADDRESS64 *addr)
 {
-    UINT comment = inst & 0x00ffffff;
-    dbg_printf("\n\tswi%s\t#%d", get_cond(inst), comment);
+    dbg_printf("\n\tswi%s\t#%d", get_cond(inst), inst & 0x00ffffff);
     return 0;
 }
 
@@ -509,6 +515,12 @@ static WORD thumb_disasm_blocktrans(WORD inst, ADDRESS64 *addr)
     return 0;
 }
 
+static WORD thumb_disasm_swi(WORD inst, ADDRESS64 *addr)
+{
+    dbg_printf("\n\tswi\t#%d", inst & 0x00ff);
+    return 0;
+}
+
 static WORD thumb_disasm_condbranch(WORD inst, ADDRESS64 *addr)
 {
     WORD offset = inst & 0x00ff;
@@ -535,19 +547,6 @@ static WORD thumb_disasm_loadadr(WORD inst, ADDRESS64 *addr)
     WORD offset = (inst & 0xff) << 2;
 
     dbg_printf("\n\tadd\t%s, %s, #%d", tbl_regs[(inst >> 8) & 0x07], src ? "sp" : "pc", offset);
-    return 0;
-}
-
-static WORD thumb_disasm_swi(WORD inst, ADDRESS64 *addr)
-{
-    WORD comment = inst & 0x00ff;
-    dbg_printf("\n\tswi\t#%d", comment);
-    return 0;
-}
-
-static WORD thumb_disasm_nop(WORD inst, ADDRESS64 *addr)
-{
-    dbg_printf("\n\tnop");
     return 0;
 }
 
@@ -612,6 +611,12 @@ static WORD thumb_disasm_immop(WORD inst, ADDRESS64 *addr)
     return 0;
 }
 
+static WORD thumb_disasm_nop(WORD inst, ADDRESS64 *addr)
+{
+    dbg_printf("\n\tnop");
+    return 0;
+}
+
 static WORD thumb_disasm_addsub(WORD inst, ADDRESS64 *addr)
 {
     WORD op = (inst >> 9) & 0x01;
@@ -634,12 +639,95 @@ static WORD thumb_disasm_movshift(WORD inst, ADDRESS64 *addr)
     return 0;
 }
 
-static UINT thumb2_disasm_branchlinked(UINT inst, ADDRESS64 *addr)
+static UINT thumb2_disasm_srtrans(UINT inst, ADDRESS64 *addr)
 {
-    UINT offset = (((inst & 0x07ff0000) >> 4) | ((inst & 0x000007ff) << 1)) + 4;
+    UINT fromsr = (inst >> 21) & 0x03;
+    UINT sysreg = inst & 0xff;
 
-    dbg_printf("\n\tbl\t");
-    db_printsym(addr->Offset + offset);
+    if (fromsr == 3 && get_nibble(inst,4) == 0x0f && sysreg <= 20)
+    {
+        dbg_printf("\n\tmrs\t%s, %s", tbl_regs[get_nibble(inst, 2)], tbl_special_regs_t2[sysreg]);
+        return 0;
+    }
+
+    if (fromsr == 0 && sysreg <= 20)
+    {
+        dbg_printf("\n\tmsr\t%s, %s", tbl_special_regs_t2[sysreg], tbl_regs[get_nibble(inst, 4)]);
+        return 0;
+    }
+
+    return inst;
+}
+
+static UINT thumb2_disasm_hint(UINT inst, ADDRESS64 *addr)
+{
+    WORD op1 = (inst >> 8) & 0x07;
+    WORD op2 = inst & 0xff;
+
+    if (op1) return inst;
+
+    if (op2 <= 4)
+    {
+        dbg_printf("\n\t%s", tbl_hints_t2[op2]);
+        return 0;
+    }
+
+    if (op2 & 0xf0)
+    {
+        dbg_printf("\n\tdbg\t#%u", get_nibble(inst, 0));
+        return 0;
+    }
+
+    return inst;
+}
+
+static UINT thumb2_disasm_miscctrl(UINT inst, ADDRESS64 *addr)
+{
+    WORD op = (inst >> 4) & 0x0f;
+
+    switch (op)
+    {
+    case 2:
+        dbg_printf("\n\tclrex");
+        break;
+    case 4:
+        dbg_printf("\n\tdsb\t#%u", get_nibble(inst, 0));
+        break;
+    case 5:
+        dbg_printf("\n\tdmb\t#%u", get_nibble(inst, 0));
+        break;
+    case 6:
+        dbg_printf("\n\tisb\t#%u", get_nibble(inst, 0));
+        break;
+    default:
+        return inst;
+    }
+
+    return 0;
+}
+
+static UINT thumb2_disasm_branch(UINT inst, ADDRESS64 *addr)
+{
+    UINT S  = (inst >> 26) & 0x01;
+    UINT L  = (inst >> 14) & 0x01;
+    UINT I1 = !(((inst >> 13) & 0x01) ^ S);
+    UINT C  = !((inst >> 12) & 0x01);
+    UINT I2 = !(((inst >> 11) & 0x01) ^ S);
+    UINT offset = (inst & 0x000007ff) << 1;
+
+    if (C)
+    {
+        offset |= I1 << 19 | I2 << 18 | (inst & 0x003f0000) >> 4;
+        if (S) offset |= 0x0fff << 20;
+    }
+    else
+    {
+        offset |= I1 << 23 | I2 << 22 | (inst & 0x03ff0000) >> 4;
+        if (S) offset |= 0xff << 24;
+    }
+
+    dbg_printf("\n\tb%s%s\t", L ? "l" : "", C ? tbl_cond[(inst >> 22) & 0x0f] : "");
+    db_printsym(addr->Offset + offset + 4);
     return 0;
 }
 
@@ -869,20 +957,164 @@ static UINT thumb2_disasm_ldrword(UINT inst, ADDRESS64 *addr)
     return 0;
 }
 
+static UINT thumb2_disasm_preload(UINT inst, ADDRESS64 *addr)
+{
+    WORD op1 = (inst >> 23) & 0x03;
+
+    if (!(op1 & 0x01) && !((inst >> 6) & 0x3f) && get_nibble(inst, 4) != 15)
+    {
+        WORD shift = (inst >> 4) & 0x03;
+        dbg_printf("\n\t%s\t[%s, %s", op1?"pli":"pld", tbl_regs[get_nibble(inst, 4)],
+                   tbl_regs[get_nibble(inst, 0)]);
+        if (shift) dbg_printf(", lsl #%u]", shift);
+        else dbg_printf("]");
+        return 0;
+    }
+
+    if (get_nibble(inst, 4) != 15)
+    {
+        dbg_printf("\n\t%s\t[%s, #%d]", (op1 & 0x02)?"pli":"pld", tbl_regs[get_nibble(inst, 4)],
+                   (op1 & 0x01)?(inst & 0x0fff):(-1 * (inst & 0xff)));
+        return 0;
+    }
+
+    if (get_nibble(inst, 4) == 15)
+    {
+        int offset = inst & 0x0fff;
+        if (!op1) offset *= -1;
+        dbg_printf("\n\t%s\t", (op1 & 0x02)?"pli":"pld");
+        db_printsym(addr->Offset + offset + 4);
+        return 0;
+    }
+
+    return inst;
+}
+
+static UINT thumb2_disasm_ldrnonword(UINT inst, ADDRESS64 *addr)
+{
+    WORD op1 = (inst >> 23) & 0x03;
+    WORD hw  = (inst >> 21) & 0x01;
+
+    if (!(op1 & 0x01) && !((inst >> 6) & 0x3f) && get_nibble(inst, 4) != 15)
+    {
+        WORD shift = (inst >> 4) & 0x03;
+        dbg_printf("\n\t%s%s\t%s, [%s, %s", op1?"ldrs":"ldr", hw?"h":"b",
+                   tbl_regs[get_nibble(inst, 3)], tbl_regs[get_nibble(inst, 4)],
+                   tbl_regs[get_nibble(inst, 0)]);
+        if (shift) dbg_printf(", lsl #%u]", shift);
+        else dbg_printf("]");
+        return 0;
+    }
+
+    if (!(op1 & 0x01) && ((inst >> 8) & 0x0f) == 14 && get_nibble(inst, 4) != 15)
+    {
+        WORD offset = inst & 0xff;
+        dbg_printf("\n\t%s%s\t%s, [%s", op1?"ldrs":"ldr", hw?"ht":"bt",
+                   tbl_regs[get_nibble(inst, 3)], tbl_regs[get_nibble(inst, 4)]);
+        if (offset) dbg_printf(", #%u]", offset);
+        else dbg_printf("]");
+        return 0;
+    }
+
+    if (get_nibble(inst, 4) != 15)
+    {
+        int offset;
+
+        dbg_printf("\n\t%s%s\t%s, [%s", (op1 & 0x02)?"ldrs":"ldr", hw?"h":"b",
+                   tbl_regs[get_nibble(inst, 3)], tbl_regs[get_nibble(inst, 4)]);
+
+        if (op1 & 0x01)
+        {
+            dbg_printf(", #%u]", inst & 0x0fff);
+            return 0;
+        }
+
+        offset = inst & 0xff;
+        if (!(inst & 0x0200)) offset *= -1;
+
+        if (!(inst & 0x0400) && (inst & 0x0100)) dbg_printf("], #%i", offset);
+        else if (inst & 0x0400) dbg_printf(", #%i]%s", offset, (inst & 0x0100)?"!":"");
+        else return inst;
+
+        return 0;
+    }
+
+    if (get_nibble(inst, 4) == 15)
+    {
+        int offset = inst & 0x0fff;
+        if (!op1) offset *= -1;
+        dbg_printf("\n\t%s%s\t%s, ", (op1 & 0x02)?"ldrs":"ldr", hw?"h":"b",
+                   tbl_regs[get_nibble(inst, 3)]);
+        db_printsym(addr->Offset + offset + 4);
+        return 0;
+    }
+
+    return inst;
+}
+
+static UINT thumb2_disasm_coprocdat(UINT inst, ADDRESS64 *addr)
+{
+    WORD opc2 = (inst >> 5) & 0x07;
+
+    dbg_printf("\n\tcdp%s\tp%u, #%u, cr%u, cr%u, cr%u", (inst & 0x10000000)?"2":"",
+               get_nibble(inst, 2), get_nibble(inst, 5), get_nibble(inst, 3),
+               get_nibble(inst, 4), get_nibble(inst, 0));
+
+    if (opc2) dbg_printf(", #%u", opc2);
+    return 0;
+}
+
 static UINT thumb2_disasm_coprocmov1(UINT inst, ADDRESS64 *addr)
 {
     WORD opc1 = (inst >> 21) & 0x07;
     WORD opc2 = (inst >> 5) & 0x07;
 
-    if (opc2)
-        dbg_printf("\n\t%s%s\tp%u, #%u, %s, cr%u, cr%u, #%u", (inst & 0x00100000)?"mrc":"mcr",
-                   (inst & 0x10000000)?"2":"", get_nibble(inst, 2), opc1,
-                   tbl_regs[get_nibble(inst, 3)], get_nibble(inst, 4), get_nibble(inst, 0), opc2);
-    else
-        dbg_printf("\n\t%s%s\tp%u, #%u, %s, cr%u, cr%u", (inst & 0x00100000)?"mrc":"mcr",
-                   (inst & 0x10000000)?"2":"", get_nibble(inst, 2), opc1,
-                   tbl_regs[get_nibble(inst, 3)], get_nibble(inst, 4), get_nibble(inst, 0));
+    dbg_printf("\n\t%s%s\tp%u, #%u, %s, cr%u, cr%u", (inst & 0x00100000)?"mrc":"mcr",
+               (inst & 0x10000000)?"2":"", get_nibble(inst, 2), opc1,
+               tbl_regs[get_nibble(inst, 3)], get_nibble(inst, 4), get_nibble(inst, 0));
 
+    if (opc2) dbg_printf(", #%u", opc2);
+    return 0;
+}
+
+static UINT thumb2_disasm_coprocmov2(UINT inst, ADDRESS64 *addr)
+{
+    dbg_printf("\n\t%s%s\tp%u, #%u, %s, %s, cr%u", (inst & 0x00100000)?"mrrc":"mcrr",
+               (inst & 0x10000000)?"2":"", get_nibble(inst, 2), get_nibble(inst, 1),
+               tbl_regs[get_nibble(inst, 3)], tbl_regs[get_nibble(inst, 4)], get_nibble(inst, 0));
+
+    return 0;
+}
+
+static UINT thumb2_disasm_coprocdatatrans(UINT inst, ADDRESS64 *addr)
+{
+    WORD indexing  = (inst >> 24) & 0x01;
+    WORD direction = (inst >> 23) & 0x01;
+    WORD translen  = (inst >> 22) & 0x01;
+    WORD writeback = (inst >> 21) & 0x01;
+    WORD load      = (inst >> 20) & 0x01;
+    short offset    = (inst & 0xff) << 2;
+
+    if (!direction) offset *= -1;
+
+    dbg_printf("\n\t%s%s%s", load ? "ldc" : "stc", (inst & 0x10000000)?"2":"", translen ? "l" : "");
+    if (indexing)
+    {
+        if (load && get_nibble(inst, 4) == 15)
+        {
+            dbg_printf("\tp%u, cr%u, ", get_nibble(inst, 2), get_nibble(inst, 3));
+            db_printsym(addr->Offset + offset + 4);
+        }
+        else
+            dbg_printf("\tp%u, cr%u, [%s, #%d]%s", get_nibble(inst, 2), get_nibble(inst, 3), tbl_regs[get_nibble(inst, 4)], offset, writeback?"!":"");
+    }
+    else
+    {
+        if (writeback)
+            dbg_printf("\tp%u, cr%u, [%s], #%d", get_nibble(inst, 2), get_nibble(inst, 3), tbl_regs[get_nibble(inst, 4)], offset);
+        else
+            dbg_printf("\tp%u, cr%u, [%s], {%u}", get_nibble(inst, 2), get_nibble(inst, 3), tbl_regs[get_nibble(inst, 4)], inst & 0xff);
+    }
     return 0;
 }
 
@@ -927,6 +1159,7 @@ static const struct inst_thumb16 tbl_thumb16[] = {
     { 0xfc00, 0x4000, thumb_disasm_aluop },
     { 0xf600, 0xb400, thumb_disasm_pushpop },
     { 0xf000, 0xc000, thumb_disasm_blocktrans },
+    { 0xff00, 0xdf00, thumb_disasm_swi },
     { 0xf000, 0xd000, thumb_disasm_condbranch },
     { 0xf800, 0xe000, thumb_disasm_uncondbranch },
     { 0xf000, 0xa000, thumb_disasm_loadadr },
@@ -938,7 +1171,6 @@ static const struct inst_thumb16 tbl_thumb16[] = {
     { 0xf200, 0x5000, thumb_disasm_ldrreg },
     { 0xf200, 0x5200, thumb_disasm_ldrsreg },
     { 0xe000, 0x2000, thumb_disasm_immop },
-    { 0xff00, 0xdf00, thumb_disasm_swi },
     { 0xff00, 0xbf00, thumb_disasm_nop },
     { 0xf800, 0x1800, thumb_disasm_addsub },
     { 0xe000, 0x0000, thumb_disasm_movshift },
@@ -946,7 +1178,11 @@ static const struct inst_thumb16 tbl_thumb16[] = {
 };
 
 static const struct inst_arm tbl_thumb32[] = {
-    { 0xf800f800, 0xf000f800, thumb2_disasm_branchlinked },
+    { 0xfff0f000, 0xf3e08000, thumb2_disasm_srtrans },
+    { 0xfff0f000, 0xf3808000, thumb2_disasm_srtrans },
+    { 0xfff0d000, 0xf3a08000, thumb2_disasm_hint },
+    { 0xfff0d000, 0xf3b08000, thumb2_disasm_miscctrl },
+    { 0xf8008000, 0xf0008000, thumb2_disasm_branch },
     { 0xffc0f0c0, 0xfa80f080, thumb2_disasm_misc },
     { 0xff80f000, 0xfa00f000, thumb2_disasm_dataprocessingreg },
     { 0xff8000c0, 0xfb000000, thumb2_disasm_mul },
@@ -954,7 +1190,12 @@ static const struct inst_arm tbl_thumb32[] = {
     { 0xff8000f0, 0xfb8000f0, thumb2_disasm_longmuldiv },
     { 0xff100000, 0xf8000000, thumb2_disasm_str },
     { 0xff700000, 0xf8500000, thumb2_disasm_ldrword },
+    { 0xfe70f000, 0xf810f000, thumb2_disasm_preload },
+    { 0xfe500000, 0xf8100000, thumb2_disasm_ldrnonword },
+    { 0xef000010, 0xee000000, thumb2_disasm_coprocdat },
     { 0xef000010, 0xee000010, thumb2_disasm_coprocmov1 },
+    { 0xefe00000, 0xec400000, thumb2_disasm_coprocmov2 },
+    { 0xee000000, 0xec000000, thumb2_disasm_coprocdatatrans },
     { 0x00000000, 0x00000000, NULL }
 };
 
@@ -989,7 +1230,7 @@ void be_arm_disasm_one_insn(ADDRESS64 *addr, int display)
         size = ARM_INSN_SIZE;
         inst = db_get_inst( memory_to_linear_addr(addr), size );
         while (a_ptr->func) {
-            if ((inst & a_ptr->mask) ==  a_ptr->pattern) {
+            if ((inst & a_ptr->mask) == a_ptr->pattern) {
                     matched = 1;
                     break;
             }
@@ -1022,7 +1263,7 @@ void be_arm_disasm_one_insn(ADDRESS64 *addr, int display)
                 inst |= (tinst << 16);
 
                 while (t2_ptr->func) {
-                    if ((inst & t2_ptr->mask) ==  t2_ptr->pattern) {
+                    if ((inst & t2_ptr->mask) == t2_ptr->pattern) {
                             matched = 1;
                             break;
                     }
@@ -1045,7 +1286,7 @@ void be_arm_disasm_one_insn(ADDRESS64 *addr, int display)
 
         size = THUMB_INSN_SIZE;
         while (t_ptr->func) {
-            if ((tinst & t_ptr->mask) ==  t_ptr->pattern) {
+            if ((tinst & t_ptr->mask) == t_ptr->pattern) {
                     matched = 1;
                     break;
             }

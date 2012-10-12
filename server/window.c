@@ -93,10 +93,16 @@ struct window
     char             extra_bytes[1];  /* extra bytes storage */
 };
 
-#define PAINT_INTERNAL      0x01  /* internal WM_PAINT pending */
-#define PAINT_ERASE         0x02  /* needs WM_ERASEBKGND */
-#define PAINT_NONCLIENT     0x04  /* needs WM_NCPAINT */
-#define PAINT_DELAYED_ERASE 0x08  /* still needs erase after WM_ERASEBKGND */
+/* flags that can be set by the client */
+#define PAINT_HAS_SURFACE        SET_WINPOS_PAINT_SURFACE
+#define PAINT_HAS_PIXEL_FORMAT   SET_WINPOS_PIXEL_FORMAT
+#define PAINT_CLIENT_FLAGS       (PAINT_HAS_SURFACE | PAINT_HAS_PIXEL_FORMAT)
+/* flags only manipulated by the server */
+#define PAINT_INTERNAL           0x0010  /* internal WM_PAINT pending */
+#define PAINT_ERASE              0x0020  /* needs WM_ERASEBKGND */
+#define PAINT_NONCLIENT          0x0040  /* needs WM_NCPAINT */
+#define PAINT_DELAYED_ERASE      0x0080  /* still needs erase after WM_ERASEBKGND */
+#define PAINT_PIXEL_FORMAT_CHILD 0x0100  /* at least one child has a custom pixel format */
 
 /* growable array of user handles */
 struct user_handle_array
@@ -158,6 +164,14 @@ static inline struct window *get_last_child( struct window *win )
 {
     struct list *ptr = list_tail( &win->children );
     return ptr ? LIST_ENTRY( ptr, struct window, entry ) : NULL;
+}
+
+/* set the PAINT_PIXEL_FORMAT_CHILD flag on all the parents */
+/* note: we never reset the flag, it's just a heuristic */
+static inline void update_pixel_format_flags( struct window *win )
+{
+    for (win = win->parent; win && win->parent; win = win->parent)
+        win->paint_flags |= PAINT_PIXEL_FORMAT_CHILD;
 }
 
 /* link a window at the right place in the siblings list */
@@ -239,6 +253,8 @@ static int set_parent_window( struct window *win, struct window *parent )
         /* top-level, attach the two threads */
         if (parent->thread && parent->thread != win->thread && !is_desktop_window(parent))
             attach_thread_input( win->thread, parent->thread );
+
+        if (win->paint_flags & PAINT_HAS_PIXEL_FORMAT) update_pixel_format_flags( win );
     }
     else  /* move it to parent unlinked list */
     {
@@ -920,7 +936,8 @@ static void set_region_client_rect( struct region *region, struct window *win )
 /* get the top-level window to clip against for a given window */
 static inline struct window *get_top_clipping_window( struct window *win )
 {
-    while (win->parent && !is_desktop_window(win->parent)) win = win->parent;
+    while (!(win->paint_flags & PAINT_HAS_SURFACE) && win->parent && !is_desktop_window(win->parent))
+        win = win->parent;
     return win;
 }
 
@@ -1007,6 +1024,81 @@ static struct region *get_visible_region( struct window *win, unsigned int flags
 
 error:
     if (tmp) free_region( tmp );
+    free_region( region );
+    return NULL;
+}
+
+
+/* clip all children with a custom pixel format out of the visible region */
+static struct region *clip_pixel_format_children( struct window *parent, struct region *parent_clip,
+                                                  struct region *region, int offset_x, int offset_y )
+{
+    struct window *ptr;
+    struct region *clip = create_empty_region();
+
+    if (!clip) return NULL;
+
+    LIST_FOR_EACH_ENTRY_REV( ptr, &parent->children, struct window, entry )
+    {
+        if (!(ptr->style & WS_VISIBLE)) continue;
+        if (ptr->ex_style & WS_EX_TRANSPARENT) continue;
+
+        /* add the visible rect */
+        set_region_rect( clip, &ptr->visible_rect );
+        if (ptr->win_region && !intersect_window_region( clip, ptr )) break;
+        offset_region( clip, offset_x, offset_y );
+        if (!intersect_region( clip, clip, parent_clip )) break;
+        if (!union_region( region, region, clip )) break;
+        if (!(ptr->paint_flags & (PAINT_HAS_PIXEL_FORMAT | PAINT_PIXEL_FORMAT_CHILD))) continue;
+
+        /* subtract the client rect if it uses a custom pixel format */
+        set_region_rect( clip, &ptr->client_rect );
+        if (ptr->win_region && !intersect_window_region( clip, ptr )) break;
+        offset_region( clip, offset_x, offset_y );
+        if (!intersect_region( clip, clip, parent_clip )) break;
+        if ((ptr->paint_flags & PAINT_HAS_PIXEL_FORMAT) && !subtract_region( region, region, clip ))
+            break;
+
+        if (!clip_pixel_format_children( ptr, clip, region, offset_x + ptr->client_rect.left,
+                                         offset_y + ptr->client_rect.top ))
+            break;
+    }
+    free_region( clip );
+    return region;
+}
+
+
+/* compute the visible surface region of a window, in parent coordinates */
+static struct region *get_surface_region( struct window *win )
+{
+    struct region *region, *clip;
+    int offset_x, offset_y;
+
+    /* create a region relative to the window itself */
+
+    if (!(region = create_empty_region())) return NULL;
+    if (!(clip = create_empty_region())) goto error;
+    set_region_rect( region, &win->visible_rect );
+    if (win->win_region && !intersect_window_region( region, win )) goto error;
+    set_region_rect( clip, &win->client_rect );
+    if (win->win_region && !intersect_window_region( clip, win )) goto error;
+
+    /* clip children */
+
+    if (!is_desktop_window(win))
+    {
+        offset_x = win->client_rect.left;
+        offset_y = win->client_rect.top;
+    }
+    else offset_x = offset_y = 0;
+
+    if (!clip_pixel_format_children( win, clip, region, offset_x, offset_y )) goto error;
+
+    free_region( clip );
+    return region;
+
+error:
+    if (clip) free_region( clip );
     free_region( region );
     return NULL;
 }
@@ -2101,8 +2193,8 @@ DECL_HANDLER(set_window_pos)
 {
     rectangle_t window_rect, client_rect, visible_rect;
     struct window *previous = NULL;
-    struct window *win = get_window( req->handle );
-    unsigned int flags = req->flags;
+    struct window *top, *win = get_window( req->handle );
+    unsigned int flags = req->swp_flags;
 
     if (!win) return;
     if (!win->parent) flags |= SWP_NOZORDER;  /* no Z order for the desktop */
@@ -2157,6 +2249,9 @@ DECL_HANDLER(set_window_pos)
         mirror_rect( &win->parent->client_rect, &client_rect );
     }
 
+    win->paint_flags = (win->paint_flags & ~PAINT_CLIENT_FLAGS) | (req->paint_flags & PAINT_CLIENT_FLAGS);
+    if (win->paint_flags & PAINT_HAS_PIXEL_FORMAT) update_pixel_format_flags( win );
+
     if (get_req_data_size() >= 3 * sizeof(rectangle_t))
     {
         rectangle_t valid_rects[2];
@@ -2172,6 +2267,12 @@ DECL_HANDLER(set_window_pos)
 
     reply->new_style = win->style;
     reply->new_ex_style = win->ex_style;
+
+    top = get_top_clipping_window( win );
+    if (is_visible( top ) &&
+        (top->paint_flags & PAINT_HAS_SURFACE) &&
+        (top->paint_flags & PAINT_PIXEL_FORMAT_CHILD))
+        reply->surface_win = top->handle;
 }
 
 
@@ -2337,6 +2438,26 @@ DECL_HANDLER(get_visible_region)
         reply->win_rect.right  = win->client_rect.right - win->client_rect.left;
         reply->win_rect.bottom = win->client_rect.bottom - win->client_rect.top;
     }
+}
+
+
+/* get the surface visible region of a window */
+DECL_HANDLER(get_surface_region)
+{
+    struct region *region;
+    struct window *win = get_window( req->window );
+
+    if (!win || !is_visible( win )) return;
+
+    if ((region = get_surface_region( win )))
+    {
+        rectangle_t *data;
+        if (win->parent) map_win_region_to_screen( win->parent, region );
+        data = get_region_data_and_free( region, get_reply_max_size(), &reply->total_size );
+        if (data) set_reply_data_ptr( data, reply->total_size );
+    }
+    reply->visible_rect = win->visible_rect;
+    if (win->parent) client_to_screen_rect( win->parent, &reply->visible_rect );
 }
 
 

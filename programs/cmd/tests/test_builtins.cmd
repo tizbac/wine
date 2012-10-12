@@ -726,6 +726,129 @@ rem del tmp
 rem for /d %%i in (*) do echo %%i>> tmp
 rem sort < tmp
 rem del tmp
+echo > baz\bazbaz
+goto :TestForR
+
+:SetExpected
+del temp.bat 2>nul
+call :WriteLine set found=N
+for /l %%i in (1,1,%expectedresults%) do (
+  call :WriteLine if "%%%%expectedresults.%%i%%%%"=="%%%%1" set found=Y
+  call :WriteLine if "%%%%found%%%%"=="Y" set expectedresults.%%i=
+  call :WriteLine if "%%%%found%%%%"=="Y" goto :eof
+)
+call :WriteLine echo Got unexpected result: "%%%%1"
+goto :eof
+
+:WriteLine
+echo %*>> temp.bat
+goto :EOF
+
+:ValidateExpected
+del temp.bat 2>nul
+for /l %%i in (1,1,%expectedresults%) do  call :WriteLine if not "%%%%expectedresults.%%i%%%%"=="" echo Found missing result: "%%%%expectedresults.%%i%%%%"
+call temp.bat
+del temp.bat 2>nul
+goto :eof
+
+:TestForR
+rem %CD% does not tork on NT4 so use the following workaround
+for /d %%i in (.) do set CURDIR=%%~dpnxi
+
+echo --- for /R
+echo Plain directory enumeration
+set expectedresults=4
+set expectedresults.1=%CURDIR%\.
+set expectedresults.2=%CURDIR%\bar\.
+set expectedresults.3=%CURDIR%\baz\.
+set expectedresults.4=%CURDIR%\foo\.
+call :SetExpected
+for /R %%i in (.) do call temp.bat %%i
+call :ValidateExpected
+
+echo Plain directory enumeration from provided root
+set expectedresults=4
+set expectedresults.1=%CURDIR%\.
+set expectedresults.2=%CURDIR%\bar\.
+set expectedresults.3=%CURDIR%\baz\.
+set expectedresults.4=%CURDIR%\foo\.
+if "%CD%"=="" goto :SkipBrokenNT4
+call :SetExpected
+for /R "%CURDIR%" %%i in (.) do call temp.bat %%i
+call :ValidateExpected
+:SkipBrokenNT4
+
+echo File enumeration
+set expectedresults=2
+set expectedresults.1=%CURDIR%\baz\bazbaz
+set expectedresults.2=%CURDIR%\bazbaz
+call :SetExpected
+for /R %%i in (baz*) do call temp.bat %%i
+call :ValidateExpected
+
+echo File enumeration from provided root
+set expectedresults=2
+set expectedresults.1=%CURDIR%\baz\bazbaz
+set expectedresults.2=%CURDIR%\bazbaz
+call :SetExpected
+for /R %%i in (baz*) do call temp.bat %%i
+call :ValidateExpected
+
+echo Mixed enumeration
+set expectedresults=6
+set expectedresults.1=%CURDIR%\.
+set expectedresults.2=%CURDIR%\bar\.
+set expectedresults.3=%CURDIR%\baz\.
+set expectedresults.4=%CURDIR%\baz\bazbaz
+set expectedresults.5=%CURDIR%\bazbaz
+set expectedresults.6=%CURDIR%\foo\.
+call :SetExpected
+for /R %%i in (. baz*) do call temp.bat %%i
+call :ValidateExpected
+
+echo Mixed enumeration from provided root
+set expectedresults=6
+set expectedresults.1=%CURDIR%\.
+set expectedresults.2=%CURDIR%\bar\.
+set expectedresults.3=%CURDIR%\baz\.
+set expectedresults.4=%CURDIR%\baz\bazbaz
+set expectedresults.5=%CURDIR%\bazbaz
+set expectedresults.6=%CURDIR%\foo\.
+call :SetExpected
+for /R %%i in (. baz*) do call temp.bat %%i
+call :ValidateExpected
+
+echo With duplicates enumeration
+set expectedresults=12
+set expectedresults.1=%CURDIR%\bar\bazbaz
+set expectedresults.2=%CURDIR%\bar\fred
+set expectedresults.3=%CURDIR%\baz\bazbaz
+set expectedresults.4=%CURDIR%\baz\bazbaz
+set expectedresults.5=%CURDIR%\baz\bazbaz
+set expectedresults.6=%CURDIR%\baz\fred
+set expectedresults.7=%CURDIR%\bazbaz
+set expectedresults.8=%CURDIR%\bazbaz
+set expectedresults.9=%CURDIR%\bazbaz
+set expectedresults.10=%CURDIR%\foo\bazbaz
+set expectedresults.11=%CURDIR%\foo\fred
+set expectedresults.12=%CURDIR%\fred
+call :SetExpected
+for /R %%i in (baz* bazbaz fred ba*) do call temp.bat %%i
+call :ValidateExpected
+
+echo Strip missing wildcards, keep unwildcarded names
+set expectedresults=6
+set expectedresults.1=%CURDIR%\bar\jim
+set expectedresults.2=%CURDIR%\baz\bazbaz
+set expectedresults.3=%CURDIR%\baz\jim
+set expectedresults.4=%CURDIR%\bazbaz
+set expectedresults.5=%CURDIR%\foo\jim
+set expectedresults.6=%CURDIR%\jim
+call :SetExpected
+for /R %%i in (baz* fred* jim) do call temp.bat %%i
+call :ValidateExpected
+
+echo for /R passed
 cd .. & rd /s/Q foobar
 echo --- for /L
 rem Some cases loop forever writing 0s, like e.g. (1,0,1), (1,a,3) or (a,b,c); those can't be tested here
@@ -1536,27 +1659,165 @@ cmd /e:oN /C tmp.cmd
 
 rem FIXME: creating file before setting envvar value to prevent parsing-time evaluation (due to EnableDelayedExpansion not being implemented/available yet)
 echo --- setlocal with corresponding endlocal
+rem %CD% does not tork on NT4 so use the following workaround
+for /d %%i in (.) do set CURDIR=%%~dpnxi
 echo @echo off> test.cmd
 echo echo %%VAR%%>> test.cmd
 echo setlocal>> test.cmd
 echo set VAR=localval>> test.cmd
+echo md foobar2>> test.cmd
+echo cd foobar2>> test.cmd
 echo echo %%VAR%%>> test.cmd
+echo for /d %%%%i in (.) do echo %%%%~dpnxi>> test.cmd
 echo endlocal>> test.cmd
 echo echo %%VAR%%>> test.cmd
+echo for /d %%%%i in (.) do echo %%%%~dpnxi>> test.cmd
 set VAR=globalval
 call test.cmd
 echo %VAR%
+for /d %%i in (.) do echo %%~dpnxi
+cd /d %curdir%
+rd foobar2
 set VAR=
 echo --- setlocal with no corresponding endlocal
 echo @echo off> test.cmd
 echo echo %%VAR%%>> test.cmd
 echo setlocal>> test.cmd
 echo set VAR=localval>> test.cmd
+echo md foobar2>> test.cmd
+echo cd foobar2>> test.cmd
 echo echo %%VAR%%>> test.cmd
+echo for /d %%%%i in (.) do echo %%%%~dpnxi>> test.cmd
 set VAR=globalval
+rem %CD% does not tork on NT4 so use the following workaround
+for /d %%i in (.) do set CURDIR=%%~dpnxi
 call test.cmd
 echo %VAR%
+for /d %%i in (.) do echo %%~dpnxi
+cd /d %curdir%
+rd foobar2
 set VAR=
+echo --- setlocal within same batch program
+set var1=one
+set var2=
+set var3=
+rem %CD% does not tork on NT4 so use the following workaround
+for /d %%i in (.) do set CURDIR=%%~dpnxi
+setlocal
+set var2=two
+mkdir foobar2
+cd foobar2
+setlocal
+set var3=three
+if "%var1%"=="one" echo Var1 ok 1
+if "%var2%"=="two" echo Var2 ok 2
+if "%var3%"=="three" echo Var3 ok 3
+for /d %%i in (.) do set curdir2=%%~dpnxi
+if "%curdir2%"=="%curdir%\foobar2" echo Directory is ok 1
+endlocal
+if "%var1%"=="one" echo Var1 ok 1
+if "%var2%"=="two" echo Var2 ok 2
+if "%var3%"=="" echo Var3 ok 3
+for /d %%i in (.) do set curdir2=%%~dpnxi
+if "%curdir2%"=="%curdir%\foobar2" echo Directory is ok 2
+endlocal
+if "%var1%"=="one" echo Var1 ok 1
+if "%var2%"=="" echo Var2 ok 2
+if "%var3%"=="" echo Var3 ok 3
+for /d %%i in (.) do set curdir2=%%~dpnxi
+if "%curdir2%"=="%curdir%" echo Directory is ok 3
+rd foobar2 /s /q
+set var1=
+
+echo --- Mismatched set and end locals
+mkdir foodir2 2>nul
+mkdir foodir3 2>nul
+mkdir foodir4 2>nul
+rem %CD% does not tork on NT4 so use the following workaround
+for /d %%i in (.) do set curdir=%%~dpnxi
+
+echo @echo off> 2set1end.cmd
+echo echo %%VAR%%>> 2set1end.cmd
+echo setlocal>> 2set1end.cmd
+echo set VAR=2set1endvalue1>> 2set1end.cmd
+echo cd ..\foodir3>> 2set1end.cmd
+echo setlocal>> 2set1end.cmd
+echo set VAR=2set1endvalue2>> 2set1end.cmd
+echo cd ..\foodir4>> 2set1end.cmd
+echo endlocal>> 2set1end.cmd
+echo echo %%VAR%%>> 2set1end.cmd
+echo for /d %%%%i in (.) do echo %%%%~dpnxi>> 2set1end.cmd
+
+echo @echo off> 1set2end.cmd
+echo echo %%VAR%%>> 1set2end.cmd
+echo setlocal>> 1set2end.cmd
+echo set VAR=1set2endvalue1>> 1set2end.cmd
+echo cd ..\foodir3>> 1set2end.cmd
+echo endlocal>> 1set2end.cmd
+echo echo %%VAR%%>> 1set2end.cmd
+echo for /d %%%%i in (.) do echo %%%%~dpnxi>> 1set2end.cmd
+echo endlocal>> 1set2end.cmd
+echo echo %%VAR%%>> 1set2end.cmd
+echo for /d %%%%i in (.) do echo %%%%~dpnxi>> 1set2end.cmd
+
+echo --- Extra setlocal in called batch
+set VAR=value1
+rem -- setlocal1 == this batch, should never be used inside a called routine
+setlocal
+set var=value2
+cd foodir2
+call %curdir%\2set1end.cmd
+echo Finished:
+echo %VAR%
+for /d %%i in (.) do echo %%~dpnxi
+endlocal
+echo %VAR%
+for /d %%i in (.) do echo %%~dpnxi
+cd /d %curdir%
+
+echo --- Extra endlocal in called batch
+set VAR=value1
+rem -- setlocal1 == this batch, should never be used inside a called routine
+setlocal
+set var=value2
+cd foodir2
+call %curdir%\1set2end.cmd
+echo Finished:
+echo %VAR%
+for /d %%i in (.) do echo %%~dpnxi
+endlocal
+echo %VAR%
+for /d %%i in (.) do echo %%~dpnxi
+cd /d %curdir%
+
+echo --- endlocal in called function rather than batch pgm is ineffective
+@echo off
+set var=1
+set var2=1
+setlocal
+set var=2
+call :endlocalroutine
+echo %var%
+endlocal
+echo %var%
+goto :endlocalfinished
+:endlocalroutine
+echo %var%
+endlocal
+echo %var%
+setlocal
+set var2=2
+endlocal
+echo %var2%
+endlocal
+echo %var%
+echo %var2%
+goto :eof
+:endlocalfinished
+echo %var%
+
+set var=
+set var2=
 cd .. & rd /q/s foobar
 
 echo ------------ Testing Errorlevel ------------

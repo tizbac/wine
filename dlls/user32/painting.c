@@ -165,7 +165,8 @@ static void update_visible_region( struct dce *dce )
 
     if ((win = WIN_GetPtr( top_win )) && win != WND_DESKTOP && win != WND_OTHER_PROCESS)
     {
-        surface = win->surface;
+        /* don't use a surface to paint the client area of OpenGL windows */
+        if (!win->pixel_format || (flags & DCX_WINDOW)) surface = win->surface;
         if (surface) window_surface_add_ref( surface );
         WIN_ReleasePtr( win );
     }
@@ -191,12 +192,9 @@ static void reset_dce_attrs( struct dce *dce )
  */
 static void release_dce( struct dce *dce )
 {
-    RECT vis_rect;
-
     if (!dce->hwnd) return;  /* already released */
 
-    vis_rect = get_virtual_screen_rect();
-    __wine_set_visible_region( dce->hdc, 0, &vis_rect, &vis_rect, NULL );
+    __wine_set_visible_region( dce->hdc, 0, &dummy_surface.rect, &dummy_surface.rect, &dummy_surface );
     USER_Driver->pReleaseDC( dce->hwnd, dce->hdc );
 
     if (dce->clip_rgn) DeleteObject( dce->clip_rgn );

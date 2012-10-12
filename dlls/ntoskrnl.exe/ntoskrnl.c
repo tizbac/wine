@@ -197,7 +197,7 @@ static NTSTATUS process_ioctl( DEVICE_OBJECT *device, ULONG code, void *in_buff,
     *out_size = (irp.IoStatus.u.Status >= 0) ? irp.IoStatus.Information : 0;
     if ((code & 3) == METHOD_BUFFERED)
     {
-        memcpy( out_buff, irp.AssociatedIrp.SystemBuffer, *out_size );
+        if (out_buff) memcpy( out_buff, irp.AssociatedIrp.SystemBuffer, *out_size );
         HeapFree( GetProcessHeap(), 0, irp.AssociatedIrp.SystemBuffer );
     }
     return irp.IoStatus.u.Status;
@@ -280,6 +280,24 @@ NTSTATUS CDECL wine_ntoskrnl_main_loop( HANDLE stop_event )
             break;
         }
     }
+}
+
+
+/***********************************************************************
+ *           IoAcquireCancelSpinLock  (NTOSKRNL.EXE.@)
+ */
+void WINAPI IoAcquireCancelSpinLock(PKIRQL irql)
+{
+    FIXME("(%p): stub\n", irql);
+}
+
+
+/***********************************************************************
+ *           IoReleaseCancelSpinLock  (NTOSKRNL.EXE.@)
+ */
+void WINAPI IoReleaseCancelSpinLock(PKIRQL irql)
+{
+    FIXME("(%p): stub\n", irql);
 }
 
 
@@ -397,12 +415,33 @@ PVOID WINAPI IoAllocateErrorLogEntry( PVOID IoObject, UCHAR EntrySize )
 PMDL WINAPI IoAllocateMdl( PVOID VirtualAddress, ULONG Length, BOOLEAN SecondaryBuffer, BOOLEAN ChargeQuota, PIRP Irp )
 {
     PMDL mdl;
+    ULONG_PTR address = (ULONG_PTR)VirtualAddress;
+    ULONG_PTR page_address;
+    SIZE_T nb_pages, mdl_size;
 
-    FIXME("partial stub: %p, %u, %i, %i, %p\n", VirtualAddress, Length, SecondaryBuffer, ChargeQuota, Irp);
+    TRACE("(%p, %u, %i, %i, %p)\n", VirtualAddress, Length, SecondaryBuffer, ChargeQuota, Irp);
 
-    mdl = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(MDL));
+    if (Irp)
+        FIXME("Attaching the MDL to an IRP is not yet supported\n");
+
+    if (ChargeQuota)
+        FIXME("Charge quota is not yet supported\n");
+
+    /* FIXME: We suppose that page size is 4096 */
+    page_address = address & ~(4096 - 1);
+    nb_pages = (((address + Length - 1) & ~(4096 - 1)) - page_address) / 4096 + 1;
+
+    mdl_size = sizeof(MDL) + nb_pages * sizeof(PVOID);
+
+    mdl = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, mdl_size);
     if (!mdl)
         return NULL;
+
+    mdl->Size = mdl_size;
+    mdl->Process = IoGetCurrentProcess();
+    mdl->StartVa = (PVOID)page_address;
+    mdl->ByteCount = Length;
+    mdl->ByteOffset = address - page_address;
 
     return mdl;
 }
@@ -500,6 +539,8 @@ NTSTATUS WINAPI IoCreateDriver( UNICODE_STRING *name, PDRIVER_INITIALIZE init )
     DRIVER_EXTENSION *extension;
     NTSTATUS status;
 
+    TRACE("(%s, %p)\n", debugstr_us(name), init);
+
     if (!(driver = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY,
                                     sizeof(*driver) + sizeof(*extension) )))
         return STATUS_NO_MEMORY;
@@ -533,6 +574,8 @@ NTSTATUS WINAPI IoCreateDriver( UNICODE_STRING *name, PDRIVER_INITIALIZE init )
  */
 void WINAPI IoDeleteDriver( DRIVER_OBJECT *driver )
 {
+    TRACE("(%p)\n", driver);
+
     RtlFreeUnicodeString( &driver->DriverName );
     RtlFreeHeap( GetProcessHeap(), 0, driver );
 }
@@ -685,6 +728,7 @@ NTSTATUS WINAPI IoGetDeviceInterfaces( CONST GUID *InterfaceClassGuid,
 NTSTATUS  WINAPI IoGetDeviceObjectPointer( UNICODE_STRING *name, ACCESS_MASK access, PFILE_OBJECT *file, PDEVICE_OBJECT *device )
 {
     FIXME( "stub: %s %x %p %p\n", debugstr_us(name), access, file, device );
+
     return STATUS_NOT_IMPLEMENTED;
 }
 
@@ -1057,6 +1101,18 @@ PVOID WINAPI ExAllocatePoolWithTag( POOL_TYPE type, SIZE_T size, ULONG tag )
 PVOID WINAPI ExAllocatePoolWithQuotaTag( POOL_TYPE type, SIZE_T size, ULONG tag )
 {
     return ExAllocatePoolWithTag( type, size, tag );
+}
+
+
+/***********************************************************************
+ *           ExCreateCallback   (NTOSKRNL.EXE.@)
+ */
+NTSTATUS WINAPI ExCreateCallback(PCALLBACK_OBJECT *obj, POBJECT_ATTRIBUTES attr,
+                                 BOOLEAN create, BOOLEAN allow_multiple)
+{
+    FIXME("(%p, %p, %u, %u): stub\n", obj, attr, create, allow_multiple);
+
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 
@@ -1445,6 +1501,19 @@ PVOID WINAPI MmMapIoSpace( PHYSICAL_ADDRESS PhysicalAddress, DWORD NumberOfBytes
     return NULL;
 }
 
+
+/***********************************************************************
+ *           MmMapLockedPagesSpecifyCache  (NTOSKRNL.EXE.@)
+ */
+PVOID WINAPI  MmMapLockedPagesSpecifyCache(PMDLX MemoryDescriptorList, KPROCESSOR_MODE AccessMode, MEMORY_CACHING_TYPE CacheType,
+                                           PVOID BaseAddress, ULONG BugCheckOnFailure, MM_PAGE_PRIORITY Priority)
+{
+    FIXME("(%p, %u, %u, %p, %u, %u): stub\n", MemoryDescriptorList, AccessMode, CacheType, BaseAddress, BugCheckOnFailure, Priority);
+
+    return NULL;
+}
+
+
 /***********************************************************************
  *           MmPageEntireDriver   (NTOSKRNL.EXE.@)
  */
@@ -1454,6 +1523,16 @@ PVOID WINAPI MmPageEntireDriver(PVOID AddrInSection)
     return AddrInSection;
 }
 
+
+/***********************************************************************
+ *           MmProbeAndLockPages  (NTOSKRNL.EXE.@)
+ */
+void WINAPI MmProbeAndLockPages(PMDLX MemoryDescriptorList, KPROCESSOR_MODE AccessMode, LOCK_OPERATION Operation)
+{
+    FIXME("(%p, %u, %u): stub\n", MemoryDescriptorList, AccessMode, Operation);
+}
+
+
 /***********************************************************************
  *           MmResetDriverPaging   (NTOSKRNL.EXE.@)
  */
@@ -1461,6 +1540,16 @@ void WINAPI MmResetDriverPaging(PVOID AddrInSection)
 {
     TRACE("%p\n", AddrInSection);
 }
+
+
+/***********************************************************************
+ *           MmUnlockPages  (NTOSKRNL.EXE.@)
+ */
+void WINAPI  MmUnlockPages(PMDLX MemoryDescriptorList)
+{
+    FIXME("(%p): stub\n", MemoryDescriptorList);
+}
+
 
 /***********************************************************************
  *           MmUnmapIoSpace   (NTOSKRNL.EXE.@)
@@ -1579,6 +1668,18 @@ BOOLEAN WINAPI PsGetVersion(ULONG *major, ULONG *minor, ULONG *build, UNICODE_ST
 #endif
     }
     return TRUE;
+}
+
+
+/***********************************************************************
+ *           PsImpersonateClient   (NTOSKRNL.EXE.@)
+ */
+NTSTATUS WINAPI PsImpersonateClient(PETHREAD Thread, PACCESS_TOKEN Token, BOOLEAN CopyOnOpen,
+                                    BOOLEAN EffectiveOnly, SECURITY_IMPERSONATION_LEVEL ImpersonationLevel)
+{
+    FIXME("(%p, %p, %u, %u, %u): stub\n", Thread, Token, CopyOnOpen, EffectiveOnly, ImpersonationLevel);
+
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 

@@ -402,8 +402,16 @@ static HRESULT Global_CSng(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARI
 
 static HRESULT Global_CStr(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    BSTR str;
+    HRESULT hres;
+
+    TRACE("%s\n", debugstr_variant(arg));
+
+    hres = to_string(arg, &str);
+    if(FAILED(hres))
+        return hres;
+
+    return return_bstr(res, str);
 }
 
 static inline WCHAR hex_char(unsigned n)
@@ -632,10 +640,42 @@ static HRESULT Global_LenB(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARI
     return E_NOTIMPL;
 }
 
-static HRESULT Global_Left(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
+static HRESULT Global_Left(vbdisp_t *This, VARIANT *args, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    BSTR str, ret, conv_str = NULL;
+    int len, str_len;
+    HRESULT hres;
+
+    TRACE("(%s %s)\n", debugstr_variant(args+1), debugstr_variant(args));
+
+    if(V_VT(args+1) == VT_BSTR) {
+        str = V_BSTR(args+1);
+    }else {
+        hres = to_string(args+1, &conv_str);
+        if(FAILED(hres))
+            return hres;
+        str = conv_str;
+    }
+
+    hres = to_int(args, &len);
+    if(FAILED(hres))
+        return hres;
+
+    if(len < 0) {
+        FIXME("len = %d\n", len);
+        return E_FAIL;
+    }
+
+    str_len = SysStringLen(str);
+    if(len > str_len)
+        len = str_len;
+
+    ret = SysAllocStringLen(str, len);
+    SysFreeString(conv_str);
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    return return_bstr(res, ret);
 }
 
 static HRESULT Global_LeftB(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
@@ -644,10 +684,42 @@ static HRESULT Global_LeftB(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VAR
     return E_NOTIMPL;
 }
 
-static HRESULT Global_Right(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
+static HRESULT Global_Right(vbdisp_t *This, VARIANT *args, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    BSTR str, ret, conv_str = NULL;
+    int len, str_len;
+    HRESULT hres;
+
+    TRACE("(%s %s)\n", debugstr_variant(args+1), debugstr_variant(args));
+
+    if(V_VT(args+1) == VT_BSTR) {
+        str = V_BSTR(args+1);
+    }else {
+        hres = to_string(args+1, &conv_str);
+        if(FAILED(hres))
+            return hres;
+        str = conv_str;
+    }
+
+    hres = to_int(args, &len);
+    if(FAILED(hres))
+        return hres;
+
+    if(len < 0) {
+        FIXME("len = %d\n", len);
+        return E_FAIL;
+    }
+
+    str_len = SysStringLen(str);
+    if(len > str_len)
+        len = str_len;
+
+    ret = SysAllocStringLen(str+str_len-len, len);
+    SysFreeString(conv_str);
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    return return_bstr(res, ret);
 }
 
 static HRESULT Global_RightB(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
@@ -788,20 +860,84 @@ static HRESULT Global_UCase(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VAR
 
 static HRESULT Global_LTrim(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    BSTR str, conv_str = NULL;
+    WCHAR *ptr;
+    HRESULT hres;
+
+    TRACE("%s\n", debugstr_variant(arg));
+
+    if(V_VT(arg) == VT_BSTR) {
+        str = V_BSTR(arg);
+    }else {
+        hres = to_string(arg, &conv_str);
+        if(FAILED(hres))
+            return hres;
+        str = conv_str;
+    }
+
+    for(ptr = str; *ptr && isspaceW(*ptr); ptr++);
+
+    str = SysAllocString(ptr);
+    SysFreeString(conv_str);
+    if(!str)
+        return E_OUTOFMEMORY;
+
+    return return_bstr(res, str);
 }
 
 static HRESULT Global_RTrim(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    BSTR str, conv_str = NULL;
+    WCHAR *ptr;
+    HRESULT hres;
+
+    TRACE("%s\n", debugstr_variant(arg));
+
+    if(V_VT(arg) == VT_BSTR) {
+        str = V_BSTR(arg);
+    }else {
+        hres = to_string(arg, &conv_str);
+        if(FAILED(hres))
+            return hres;
+        str = conv_str;
+    }
+
+    for(ptr = str+SysStringLen(str); ptr-1 > str && isspaceW(*(ptr-1)); ptr--);
+
+    str = SysAllocStringLen(str, ptr-str);
+    SysFreeString(conv_str);
+    if(!str)
+        return E_OUTOFMEMORY;
+
+    return return_bstr(res, str);
 }
 
 static HRESULT Global_Trim(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    BSTR str, conv_str = NULL;
+    WCHAR *begin_ptr, *end_ptr;
+    HRESULT hres;
+
+    TRACE("%s\n", debugstr_variant(arg));
+
+    if(V_VT(arg) == VT_BSTR) {
+        str = V_BSTR(arg);
+    }else {
+        hres = to_string(arg, &conv_str);
+        if(FAILED(hres))
+            return hres;
+        str = conv_str;
+    }
+
+    for(begin_ptr = str; *begin_ptr && isspaceW(*begin_ptr); begin_ptr++);
+    for(end_ptr = str+SysStringLen(str); end_ptr-1 > begin_ptr && isspaceW(*(end_ptr-1)); end_ptr--);
+
+    str = SysAllocStringLen(begin_ptr, end_ptr-begin_ptr);
+    SysFreeString(conv_str);
+    if(!str)
+        return E_OUTOFMEMORY;
+
+    return return_bstr(res, str);
 }
 
 static HRESULT Global_Space(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
@@ -1466,38 +1602,38 @@ static HRESULT Global_vbFirstFullWeek(vbdisp_t *This, VARIANT *arg, unsigned arg
 
 static HRESULT Global_vbOKOnly(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, MB_OK);
 }
 
 static HRESULT Global_vbOKCancel(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, MB_OKCANCEL);
 }
 
 static HRESULT Global_vbAbortRetryIgnore(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, MB_ABORTRETRYIGNORE);
 }
 
 static HRESULT Global_vbYesNoCancel(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, MB_YESNOCANCEL);
 }
 
 static HRESULT Global_vbYesNo(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, MB_YESNO);
 }
 
 static HRESULT Global_vbRetryCancel(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, MB_RETRYCANCEL);
 }
 
 static HRESULT Global_vbCritical(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
@@ -1562,44 +1698,44 @@ static HRESULT Global_vbSystemModal(vbdisp_t *This, VARIANT *arg, unsigned args_
 
 static HRESULT Global_vbOK(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, IDOK);
 }
 
 static HRESULT Global_vbCancel(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, IDCANCEL);
 }
 
 static HRESULT Global_vbAbort(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, IDABORT);
 }
 
 static HRESULT Global_vbRetry(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, IDRETRY);
 }
 
 static HRESULT Global_vbIgnore(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, IDIGNORE);
 }
 
 static HRESULT Global_vbYes(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, IDYES);
 }
 
 static HRESULT Global_vbNo(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+    return return_short(res, IDNO);
 }
 
 static HRESULT Global_vbEmpty(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)

@@ -234,7 +234,7 @@ typedef struct {
 } nsCycleCollectingAutoRefCnt;
 
 typedef struct {
-    void *x[3];
+    void *x[9];
 } nsXPCOMCycleCollectionParticipant;
 
 typedef struct nsCycleCollectionTraversalCallback nsCycleCollectionTraversalCallback;
@@ -689,6 +689,7 @@ struct HTMLDocumentNode {
     HTMLInnerWindow *window;
 
     nsIDOMHTMLDocument *nsdoc;
+    nsIDOMNodeSelector *nsnode_selector;
     BOOL content_ready;
     event_target_t *body_event_target;
 
@@ -739,6 +740,18 @@ void TargetContainer_Init(HTMLDocumentObj*) DECLSPEC_HIDDEN;
 void init_binding_ui(HTMLDocumentObj*) DECLSPEC_HIDDEN;
 
 void HTMLDocumentNode_SecMgr_Init(HTMLDocumentNode*) DECLSPEC_HIDDEN;
+
+typedef struct {
+    HTMLElement element;
+
+    IHTMLScriptElement IHTMLScriptElement_iface;
+
+    nsIDOMHTMLScriptElement *nsscript;
+    BOOL parsed;
+} HTMLScriptElement;
+
+HRESULT script_elem_from_nsscript(HTMLDocumentNode*,nsIDOMHTMLScriptElement*,HTMLScriptElement**) DECLSPEC_HIDDEN;
+void bind_event_scripts(HTMLDocumentNode*) DECLSPEC_HIDDEN;
 
 HRESULT HTMLCurrentStyle_Create(HTMLElement*,IHTMLCurrentStyle**) DECLSPEC_HIDDEN;
 
@@ -825,6 +838,7 @@ HRESULT get_node_text(HTMLDOMNode*,BSTR*) DECLSPEC_HIDDEN;
 HRESULT replace_node_by_html(nsIDOMHTMLDocument*,nsIDOMNode*,const WCHAR*) DECLSPEC_HIDDEN;
 
 HRESULT create_nselem(HTMLDocumentNode*,const WCHAR*,nsIDOMHTMLElement**) DECLSPEC_HIDDEN;
+HRESULT create_element(HTMLDocumentNode*,const WCHAR*,HTMLElement**) DECLSPEC_HIDDEN;
 
 HRESULT HTMLDOMTextNode_Create(HTMLDocumentNode*,nsIDOMNode*,HTMLDOMNode**) DECLSPEC_HIDDEN;
 
@@ -897,12 +911,13 @@ HRESULT HTMLFrameBase_QI(HTMLFrameBase*,REFIID,void**) DECLSPEC_HIDDEN;
 void HTMLFrameBase_destructor(HTMLFrameBase*) DECLSPEC_HIDDEN;
 
 HRESULT get_node(HTMLDocumentNode*,nsIDOMNode*,BOOL,HTMLDOMNode**) DECLSPEC_HIDDEN;
+HRESULT get_elem(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**) DECLSPEC_HIDDEN;
 
 HTMLElement *unsafe_impl_from_IHTMLElement(IHTMLElement*) DECLSPEC_HIDDEN;
 
 void release_script_hosts(HTMLInnerWindow*) DECLSPEC_HIDDEN;
 void connect_scripts(HTMLInnerWindow*) DECLSPEC_HIDDEN;
-void doc_insert_script(HTMLInnerWindow*,nsIDOMHTMLScriptElement*) DECLSPEC_HIDDEN;
+void doc_insert_script(HTMLInnerWindow*,HTMLScriptElement*) DECLSPEC_HIDDEN;
 IDispatch *script_parse_event(HTMLInnerWindow*,LPCWSTR) DECLSPEC_HIDDEN;
 HRESULT exec_script(HTMLInnerWindow*,const WCHAR*,const WCHAR*,VARIANT*) DECLSPEC_HIDDEN;
 void set_script_mode(HTMLOuterWindow*,SCRIPTMODE) DECLSPEC_HIDDEN;
@@ -910,6 +925,7 @@ BOOL find_global_prop(HTMLInnerWindow*,BSTR,DWORD,ScriptHost**,DISPID*) DECLSPEC
 IDispatch *get_script_disp(ScriptHost*) DECLSPEC_HIDDEN;
 HRESULT search_window_props(HTMLInnerWindow*,BSTR,DWORD,DISPID*) DECLSPEC_HIDDEN;
 HRESULT get_frame_by_name(HTMLOuterWindow*,const WCHAR*,BOOL,HTMLOuterWindow**) DECLSPEC_HIDDEN;
+HRESULT get_doc_elem_by_id(HTMLDocumentNode*,const WCHAR*,HTMLElement**) DECLSPEC_HIDDEN;
 
 HRESULT wrap_iface(IUnknown*,IUnknown*,IUnknown**) DECLSPEC_HIDDEN;
 

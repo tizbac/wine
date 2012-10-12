@@ -123,7 +123,6 @@ static X11DRV_PDEVICE *create_x11_physdev( Drawable drawable )
 static BOOL X11DRV_CreateDC( PHYSDEV *pdev, LPCWSTR driver, LPCWSTR device,
                              LPCWSTR output, const DEVMODEW* initData )
 {
-    const struct gdi_dc_funcs *glx_funcs = get_glx_driver();
     X11DRV_PDEVICE *physDev = create_x11_physdev( root_window );
 
     if (!physDev) return FALSE;
@@ -134,7 +133,6 @@ static BOOL X11DRV_CreateDC( PHYSDEV *pdev, LPCWSTR driver, LPCWSTR device,
              virtual_screen_rect.bottom - virtual_screen_rect.top );
     push_dc_driver( pdev, &physDev->dev, &x11drv_funcs );
     if (xrender_funcs && !xrender_funcs->pCreateDC( pdev, driver, device, output, initData )) return FALSE;
-    if (glx_funcs && !glx_funcs->pCreateDC( pdev, driver, device, output, initData )) return FALSE;
     return TRUE;
 }
 
@@ -144,7 +142,6 @@ static BOOL X11DRV_CreateDC( PHYSDEV *pdev, LPCWSTR driver, LPCWSTR device,
  */
 static BOOL X11DRV_CreateCompatibleDC( PHYSDEV orig, PHYSDEV *pdev )
 {
-    const struct gdi_dc_funcs *glx_funcs = get_glx_driver();
     X11DRV_PDEVICE *physDev = create_x11_physdev( stock_bitmap_pixmap );
 
     if (!physDev) return FALSE;
@@ -154,7 +151,6 @@ static BOOL X11DRV_CreateCompatibleDC( PHYSDEV orig, PHYSDEV *pdev )
     push_dc_driver( pdev, &physDev->dev, &x11drv_funcs );
     if (orig) return TRUE;  /* we already went through Xrender if we have an orig device */
     if (xrender_funcs && !xrender_funcs->pCreateCompatibleDC( NULL, pdev )) return FALSE;
-    if (glx_funcs && !glx_funcs->pCreateCompatibleDC( NULL, pdev )) return FALSE;
     return TRUE;
 }
 
@@ -351,6 +347,24 @@ static INT X11DRV_ExtEscape( PHYSDEV dev, INT escape, INT in_count, LPCVOID in_d
                     return TRUE;
                 }
                 break;
+            case X11DRV_FLUSH_GL_DRAWABLE:
+                if (in_count >= sizeof(struct x11drv_escape_flush_gl_drawable))
+                {
+                    const struct x11drv_escape_flush_gl_drawable *data = in_data;
+                    RECT rect = physDev->dc_rect;
+
+                    OffsetRect( &rect, -physDev->dc_rect.left, -physDev->dc_rect.top );
+                    /* The GL drawable may be lagged behind if we don't flush first, so
+                     * flush the display make sure we copy up-to-date data */
+                    XFlush( gdi_display );
+                    XSetFunction( gdi_display, physDev->gc, GXcopy );
+                    XCopyArea( gdi_display, data->gl_drawable, physDev->drawable, physDev->gc,
+                               0, 0, rect.right, rect.bottom,
+                               physDev->dc_rect.left, physDev->dc_rect.top );
+                    add_device_bounds( physDev, &rect );
+                    return TRUE;
+                }
+                break;
             case X11DRV_START_EXPOSURES:
                 XSetGraphicsExposures( gdi_display, physDev->gc, True );
                 physDev->exposures = 0;
@@ -412,6 +426,21 @@ static INT X11DRV_ExtEscape( PHYSDEV dev, INT escape, INT in_count, LPCVOID in_d
         break;
     }
     return 0;
+}
+
+/**********************************************************************
+ *           X11DRV_wine_get_wgl_driver
+ */
+static struct opengl_funcs * X11DRV_wine_get_wgl_driver( PHYSDEV dev, UINT version )
+{
+    struct opengl_funcs *ret;
+
+    if (!(ret = get_glx_driver( version )))
+    {
+        dev = GET_NEXT_PHYSDEV( dev, wine_get_wgl_driver );
+        ret = dev->funcs->wine_get_wgl_driver( dev, version );
+    }
+    return ret;
 }
 
 
@@ -543,7 +572,7 @@ static const struct gdi_dc_funcs x11drv_funcs =
     NULL,                               /* pStrokePath */
     X11DRV_UnrealizePalette,            /* pUnrealizePalette */
     NULL,                               /* pWidenPath */
-    NULL,                               /* wine_get_wgl_driver */
+    X11DRV_wine_get_wgl_driver,         /* wine_get_wgl_driver */
     GDI_PRIORITY_GRAPHICS_DRV           /* priority */
 };
 

@@ -75,7 +75,7 @@ static void dump_instr_arg(instr_arg_type_t type, instr_arg_t *arg)
 {
     switch(type) {
     case ARG_STR:
-        TRACE_(jscript_disas)("\t%s", debugstr_w(arg->str));
+        TRACE_(jscript_disas)("\t%s", debugstr_jsstr(arg->str));
         break;
     case ARG_BSTR:
         TRACE_(jscript_disas)("\t%s", debugstr_wn(arg->bstr, SysStringLen(arg->bstr)));
@@ -119,37 +119,78 @@ static inline void *compiler_alloc(bytecode_t *code, size_t size)
     return jsheap_alloc(&code->heap, size);
 }
 
-static WCHAR *compiler_alloc_string(bytecode_t *code, const WCHAR *str)
+static jsstr_t *compiler_alloc_string_len(compiler_ctx_t *ctx, const WCHAR *str, unsigned len)
 {
-    size_t size;
-    WCHAR *ret;
+    jsstr_t *new_str;
 
-    size = (strlenW(str)+1)*sizeof(WCHAR);
-    ret = compiler_alloc(code, size);
-    if(ret)
-        memcpy(ret, str, size);
-    return ret;
+    if(!ctx->code->str_pool_size) {
+        ctx->code->str_pool = heap_alloc(8 * sizeof(jsstr_t*));
+        if(!ctx->code->str_pool)
+            return NULL;
+        ctx->code->str_pool_size = 8;
+    }else if(ctx->code->str_pool_size == ctx->code->str_cnt) {
+        jsstr_t **new_pool;
+
+        new_pool = heap_realloc(ctx->code->str_pool, ctx->code->str_pool_size*2*sizeof(jsstr_t*));
+        if(!new_pool)
+            return NULL;
+
+        ctx->code->str_pool = new_pool;
+        ctx->code->str_pool_size *= 2;
+    }
+
+    new_str = jsstr_alloc_len(str, len);
+    if(!new_str)
+        return NULL;
+
+    ctx->code->str_pool[ctx->code->str_cnt++] = new_str;
+    return new_str;
 }
 
-static BSTR compiler_alloc_bstr(compiler_ctx_t *ctx, const WCHAR *str)
+static jsstr_t *compiler_alloc_string(compiler_ctx_t *ctx, const WCHAR *str)
+{
+    return compiler_alloc_string_len(ctx, str, strlenW(str));
+}
+
+static BOOL ensure_bstr_slot(compiler_ctx_t *ctx)
 {
     if(!ctx->code->bstr_pool_size) {
         ctx->code->bstr_pool = heap_alloc(8 * sizeof(BSTR));
         if(!ctx->code->bstr_pool)
-            return NULL;
+            return FALSE;
         ctx->code->bstr_pool_size = 8;
     }else if(ctx->code->bstr_pool_size == ctx->code->bstr_cnt) {
         BSTR *new_pool;
 
         new_pool = heap_realloc(ctx->code->bstr_pool, ctx->code->bstr_pool_size*2*sizeof(BSTR));
         if(!new_pool)
-            return NULL;
+            return FALSE;
 
         ctx->code->bstr_pool = new_pool;
         ctx->code->bstr_pool_size *= 2;
     }
 
+    return TRUE;
+}
+
+static BSTR compiler_alloc_bstr(compiler_ctx_t *ctx, const WCHAR *str)
+{
+    if(!ensure_bstr_slot(ctx))
+        return NULL;
+
     ctx->code->bstr_pool[ctx->code->bstr_cnt] = SysAllocString(str);
+    if(!ctx->code->bstr_pool[ctx->code->bstr_cnt])
+        return NULL;
+
+    return ctx->code->bstr_pool[ctx->code->bstr_cnt++];
+}
+
+static BSTR compiler_alloc_bstr_len(compiler_ctx_t *ctx, const WCHAR *str, size_t len)
+{
+    if(!ensure_bstr_slot(ctx))
+        return NULL;
+
+    ctx->code->bstr_pool[ctx->code->bstr_cnt] = SysAllocStringLen(str, len);
     if(!ctx->code->bstr_pool[ctx->code->bstr_cnt])
         return NULL;
 
@@ -196,9 +237,9 @@ static HRESULT push_instr_int(compiler_ctx_t *ctx, jsop_t op, LONG arg)
 static HRESULT push_instr_str(compiler_ctx_t *ctx, jsop_t op, const WCHAR *arg)
 {
     unsigned instr;
-    WCHAR *str;
+    jsstr_t *str;
 
-    str = compiler_alloc_string(ctx->code, arg);
+    str = compiler_alloc_string(ctx, arg);
     if(!str)
         return E_OUTOFMEMORY;
 
@@ -248,9 +289,9 @@ static HRESULT push_instr_bstr_uint(compiler_ctx_t *ctx, jsop_t op, const WCHAR 
 static HRESULT push_instr_uint_str(compiler_ctx_t *ctx, jsop_t op, unsigned arg1, const WCHAR *arg2)
 {
     unsigned instr;
-    WCHAR *str;
+    jsstr_t *str;
 
-    str = compiler_alloc_string(ctx->code, arg2);
+    str = compiler_alloc_string(ctx, arg2);
     if(!str)
         return E_OUTOFMEMORY;
 
@@ -691,7 +732,7 @@ static HRESULT compile_typeof_expression(compiler_ctx_t *ctx, unary_expression_t
 
     if(is_memberid_expr(expr->expression->type)) {
         if(expr->expression->type == EXPR_IDENT)
-            return push_instr_str(ctx, OP_typeofident, ((identifier_expression_t*)expr->expression)->identifier);
+            return push_instr_bstr(ctx, OP_typeofident, ((identifier_expression_t*)expr->expression)->identifier);
 
         op = OP_typeofid;
         hres = compile_memberid_expression(ctx, expr->expression, 0);
@@ -718,13 +759,11 @@ static HRESULT compile_literal(compiler_ctx_t *ctx, literal_t *literal)
         return push_instr_str(ctx, OP_str, literal->u.wstr);
     case LT_REGEXP: {
         unsigned instr;
-        WCHAR *str;
+        jsstr_t *str;
 
-        str = compiler_alloc(ctx->code, (literal->u.regexp.str_len+1)*sizeof(WCHAR));
+        str = compiler_alloc_string_len(ctx, literal->u.regexp.str, literal->u.regexp.str_len);
         if(!str)
             return E_OUTOFMEMORY;
-        memcpy(str, literal->u.regexp.str, literal->u.regexp.str_len*sizeof(WCHAR));
-        str[literal->u.regexp.str_len] = 0;
 
         instr = push_instr(ctx, OP_regexp);
         if(!instr)
@@ -746,8 +785,18 @@ static HRESULT literal_as_bstr(compiler_ctx_t *ctx, literal_t *literal, BSTR *st
     case LT_STRING:
         *str = compiler_alloc_bstr(ctx, literal->u.wstr);
         break;
-    case LT_DOUBLE:
-        return double_to_bstr(literal->u.dval, str);
+    case LT_DOUBLE: {
+        jsstr_t *jsstr;
+        HRESULT hres;
+
+        hres = double_to_string(literal->u.dval, &jsstr);
+        if(FAILED(hres))
+            return hres;
+
+        *str = SysAllocStringLen(jsstr->str, jsstr_length(jsstr));
+        jsstr_release(jsstr);
+        break;
+    }
     default:
         assert(0);
     }
@@ -1766,10 +1815,13 @@ void release_bytecode(bytecode_t *code)
 
     for(i=0; i < code->bstr_cnt; i++)
         SysFreeString(code->bstr_pool[i]);
+    for(i=0; i < code->str_cnt; i++)
+        jsstr_release(code->str_pool[i]);
 
     heap_free(code->source);
     jsheap_free(&code->heap);
     heap_free(code->bstr_pool);
+    heap_free(code->str_pool);
     heap_free(code->instrs);
     heap_free(code);
 }
@@ -1885,8 +1937,78 @@ static HRESULT compile_function(compiler_ctx_t *ctx, source_elements_t *source, 
     return S_OK;
 }
 
-HRESULT compile_script(script_ctx_t *ctx, const WCHAR *code, const WCHAR *delimiter, BOOL from_eval, BOOL use_decode,
-        bytecode_t **ret)
+static HRESULT parse_arguments(compiler_ctx_t *ctx, const WCHAR *args, BSTR *arg_array, unsigned *args_size)
+{
+    const WCHAR *ptr = args, *ptr2;
+    unsigned arg_cnt = 0;
+
+    while(isspaceW(*ptr))
+        ptr++;
+    if(!*ptr) {
+        if(args_size)
+            *args_size = 0;
+        return S_OK;
+    }
+
+    while(1) {
+        if(!isalphaW(*ptr) && *ptr != '_') {
+            FIXME("expected alpha or '_': %s\n", debugstr_w(ptr));
+            return E_FAIL;
+        }
+
+        ptr2 = ptr;
+        while(isalnumW(*ptr) || *ptr == '_')
+            ptr++;
+
+        if(*ptr && *ptr != ',' && !isspaceW(*ptr)) {
+            FIXME("unexpected har %s\n", debugstr_w(ptr));
+            return E_FAIL;
+        }
+
+        if(arg_array) {
+            arg_array[arg_cnt] = compiler_alloc_bstr_len(ctx, ptr2, ptr-ptr2);
+            if(!arg_array[arg_cnt])
+                return E_OUTOFMEMORY;
+        }
+        arg_cnt++;
+
+        while(isspaceW(*ptr))
+            ptr++;
+        if(!*ptr)
+            break;
+        if(*ptr != ',') {
+            FIXME("expected ',': %s\n", debugstr_w(ptr));
+            return E_FAIL;
+        }
+
+        ptr++;
+        while(isspaceW(*ptr))
+            ptr++;
+    }
+
+    if(args_size)
+        *args_size = arg_cnt;
+    return S_OK;
+}
+
+static HRESULT compile_arguments(compiler_ctx_t *ctx, const WCHAR *args)
+{
+    HRESULT hres;
+
+    hres = parse_arguments(ctx, args, NULL, &ctx->code->global_code.param_cnt);
+    if(FAILED(hres))
+        return hres;
+
+    ctx->code->global_code.params = compiler_alloc(ctx->code,
+            ctx->code->global_code.param_cnt * sizeof(*ctx->code->global_code.params));
+    if(!ctx->code->global_code.params)
+        return E_OUTOFMEMORY;
+
+    return parse_arguments(ctx, args, ctx->code->global_code.params, NULL);
+}
+
+HRESULT compile_script(script_ctx_t *ctx, const WCHAR *code, const WCHAR *args, const WCHAR *delimiter,
+        BOOL from_eval, BOOL use_decode, bytecode_t **ret)
 {
     compiler_ctx_t compiler = {0};
     HRESULT hres;
@@ -1894,6 +2016,12 @@ HRESULT compile_script(script_ctx_t *ctx, const WCHAR *code, const WCHAR *delimi
     hres = init_code(&compiler, code);
     if(FAILED(hres))
         return hres;
+
+    if(args) {
+        hres = compile_arguments(&compiler, args);
+        if(FAILED(hres))
+            return hres;
+    }
 
     if(use_decode) {
         hres = decode_source(compiler.code->source);

@@ -140,6 +140,15 @@ HRESULT d3d10_blend_state_init(struct d3d10_blend_state *state)
     return S_OK;
 }
 
+struct d3d10_blend_state *unsafe_impl_from_ID3D10BlendState(ID3D10BlendState *iface)
+{
+    if (!iface)
+        return NULL;
+    assert(iface->lpVtbl == &d3d10_blend_state_vtbl);
+
+    return impl_from_ID3D10BlendState(iface);
+}
+
 static inline struct d3d10_depthstencil_state *impl_from_ID3D10DepthStencilState(ID3D10DepthStencilState *iface)
 {
     return CONTAINING_RECORD(iface, struct d3d10_depthstencil_state, ID3D10DepthStencilState_iface);
@@ -256,6 +265,15 @@ HRESULT d3d10_depthstencil_state_init(struct d3d10_depthstencil_state *state)
     return S_OK;
 }
 
+struct d3d10_depthstencil_state *unsafe_impl_from_ID3D10DepthStencilState(ID3D10DepthStencilState *iface)
+{
+    if (!iface)
+        return NULL;
+    assert(iface->lpVtbl == &d3d10_depthstencil_state_vtbl);
+
+    return impl_from_ID3D10DepthStencilState(iface);
+}
+
 static inline struct d3d10_rasterizer_state *impl_from_ID3D10RasterizerState(ID3D10RasterizerState *iface)
 {
     return CONTAINING_RECORD(iface, struct d3d10_rasterizer_state, ID3D10RasterizerState_iface);
@@ -370,6 +388,15 @@ HRESULT d3d10_rasterizer_state_init(struct d3d10_rasterizer_state *state)
     state->refcount = 1;
 
     return S_OK;
+}
+
+struct d3d10_rasterizer_state *unsafe_impl_from_ID3D10RasterizerState(ID3D10RasterizerState *iface)
+{
+    if (!iface)
+        return NULL;
+    assert(iface->lpVtbl == &d3d10_rasterizer_state_vtbl);
+
+    return impl_from_ID3D10RasterizerState(iface);
 }
 
 static inline struct d3d10_sampler_state *impl_from_ID3D10SamplerState(ID3D10SamplerState *iface)

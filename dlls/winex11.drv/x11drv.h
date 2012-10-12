@@ -190,7 +190,8 @@ extern Pixmap create_pixmap_from_image( HDC hdc, const XVisualInfo *vis, const B
                                         const struct gdi_image_bits *bits, UINT coloruse ) DECLSPEC_HIDDEN;
 extern DWORD get_pixmap_image( Pixmap pixmap, int width, int height, const XVisualInfo *vis,
                                BITMAPINFO *info, struct gdi_image_bits *bits ) DECLSPEC_HIDDEN;
-extern struct window_surface *create_surface( Window window, const XVisualInfo *vis, const RECT *rect, COLORREF color_key ) DECLSPEC_HIDDEN;
+extern struct window_surface *create_surface( Window window, const XVisualInfo *vis, const RECT *rect,
+                                              COLORREF color_key, BOOL use_alpha ) DECLSPEC_HIDDEN;
 extern void set_surface_color_key( struct window_surface *window_surface, COLORREF color_key ) DECLSPEC_HIDDEN;
 
 extern RGNDATA *X11DRV_GetRegionData( HRGN hrgn, HDC hdc_lptodp ) DECLSPEC_HIDDEN;
@@ -213,7 +214,7 @@ extern int client_side_antialias_with_core DECLSPEC_HIDDEN;
 extern int client_side_antialias_with_render DECLSPEC_HIDDEN;
 extern const struct gdi_dc_funcs *X11DRV_XRender_Init(void) DECLSPEC_HIDDEN;
 
-extern const struct gdi_dc_funcs *get_glx_driver(void) DECLSPEC_HIDDEN;
+extern struct opengl_funcs *get_glx_driver(UINT) DECLSPEC_HIDDEN;
 
 /* IME support */
 extern void IME_SetOpenStatus(BOOL fOpen) DECLSPEC_HIDDEN;
@@ -290,6 +291,12 @@ struct x11drv_escape_get_drawable
     int                      pixel_format; /* internal GL pixel format */
 };
 
+struct x11drv_escape_flush_gl_drawable
+{
+    enum x11drv_escape_codes code;         /* escape code (X11DRV_FLUSH_GL_DRAWABLE) */
+    Drawable                 gl_drawable;  /* GL drawable */
+};
+
 /**************************************************************************
  * X11 USER driver
  */
@@ -345,6 +352,7 @@ static inline size_t get_property_size( int format, unsigned long count )
 }
 
 extern XVisualInfo default_visual DECLSPEC_HIDDEN;
+extern XVisualInfo argb_visual DECLSPEC_HIDDEN;
 extern Colormap default_colormap DECLSPEC_HIDDEN;
 extern XPixmapFormatValues **pixmap_formats DECLSPEC_HIDDEN;
 extern Window root_window DECLSPEC_HIDDEN;
@@ -405,6 +413,7 @@ enum x11drv_atoms
     XATOM__NET_SUPPORTED,
     XATOM__NET_SYSTEM_TRAY_OPCODE,
     XATOM__NET_SYSTEM_TRAY_S0,
+    XATOM__NET_SYSTEM_TRAY_VISUAL,
     XATOM__NET_WM_ICON,
     XATOM__NET_WM_MOVERESIZE,
     XATOM__NET_WM_NAME,
@@ -508,7 +517,6 @@ extern DWORD EVENT_x11_time_to_win32_time(Time time) DECLSPEC_HIDDEN;
 enum x11drv_window_messages
 {
     WM_X11DRV_ACQUIRE_SELECTION = 0x80001000,
-    WM_X11DRV_SET_WIN_FORMAT,
     WM_X11DRV_SET_WIN_REGION,
     WM_X11DRV_RESIZE_DESKTOP,
     WM_X11DRV_SET_CURSOR,
@@ -530,6 +538,8 @@ enum x11drv_net_wm_state
 struct x11drv_win_data
 {
     Display    *display;        /* display connection for the thread owning the window */
+    XVisualInfo vis;            /* X visual used by this window */
+    Colormap    colormap;       /* colormap if non-default visual */
     HWND        hwnd;           /* hwnd that this private data belongs to */
     Window      whole_window;   /* X window for the complete window */
     RECT        window_rect;    /* USER window rectangle relative to parent */
@@ -557,16 +567,16 @@ extern void release_win_data( struct x11drv_win_data *data ) DECLSPEC_HIDDEN;
 extern Window X11DRV_get_whole_window( HWND hwnd ) DECLSPEC_HIDDEN;
 extern XIC X11DRV_get_ic( HWND hwnd ) DECLSPEC_HIDDEN;
 
-extern BOOL set_win_format( HWND hwnd, XID fbconfig_id ) DECLSPEC_HIDDEN;
-extern BOOL has_gl_drawable( HWND hwnd ) DECLSPEC_HIDDEN;
 extern void sync_gl_drawable( HWND hwnd, const RECT *visible_rect, const RECT *client_rect ) DECLSPEC_HIDDEN;
+extern void set_gl_drawable_parent( HWND hwnd, HWND parent ) DECLSPEC_HIDDEN;
 extern void destroy_gl_drawable( HWND hwnd ) DECLSPEC_HIDDEN;
 
 extern void wait_for_withdrawn_state( HWND hwnd, BOOL set ) DECLSPEC_HIDDEN;
 extern Window init_clip_window(void) DECLSPEC_HIDDEN;
 extern void update_user_time( Time time ) DECLSPEC_HIDDEN;
 extern void update_net_wm_states( struct x11drv_win_data *data ) DECLSPEC_HIDDEN;
-extern void make_window_embedded( HWND hwnd ) DECLSPEC_HIDDEN;
+extern void make_window_embedded( struct x11drv_win_data *data ) DECLSPEC_HIDDEN;
+extern void set_window_visual( struct x11drv_win_data *data, const XVisualInfo *vis ) DECLSPEC_HIDDEN;
 extern void change_systray_owner( Display *display, Window systray_window ) DECLSPEC_HIDDEN;
 extern void update_systray_balloon_position(void) DECLSPEC_HIDDEN;
 extern HWND create_foreign_window( Display *display, Window window ) DECLSPEC_HIDDEN;

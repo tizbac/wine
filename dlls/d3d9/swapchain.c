@@ -131,20 +131,22 @@ static HRESULT WINAPI d3d9_swapchain_GetBackBuffer(IDirect3DSwapChain9 *iface,
     struct d3d9_swapchain *swapchain = impl_from_IDirect3DSwapChain9(iface);
     struct wined3d_surface *wined3d_surface = NULL;
     struct d3d9_surface *surface_impl;
-    HRESULT hr;
+    HRESULT hr = D3D_OK;
 
     TRACE("iface %p, backbuffer_idx %u, backbuffer_type %#x, backbuffer %p.\n",
             iface, backbuffer_idx, backbuffer_type, backbuffer);
 
     wined3d_mutex_lock();
-    hr = wined3d_swapchain_get_back_buffer(swapchain->wined3d_swapchain,
-            backbuffer_idx, (enum wined3d_backbuffer_type)backbuffer_type, &wined3d_surface);
-    if (SUCCEEDED(hr) && wined3d_surface)
+    if ((wined3d_surface = wined3d_swapchain_get_back_buffer(swapchain->wined3d_swapchain,
+            backbuffer_idx, (enum wined3d_backbuffer_type)backbuffer_type)))
     {
        surface_impl = wined3d_surface_get_parent(wined3d_surface);
        *backbuffer = &surface_impl->IDirect3DSurface9_iface;
        IDirect3DSurface9_AddRef(*backbuffer);
-       wined3d_surface_decref(wined3d_surface);
+    }
+    else
+    {
+        hr = D3DERR_INVALIDCALL;
     }
     wined3d_mutex_unlock();
 
@@ -208,16 +210,15 @@ static HRESULT WINAPI d3d9_swapchain_GetPresentParameters(IDirect3DSwapChain9 *i
 {
     struct d3d9_swapchain *swapchain = impl_from_IDirect3DSwapChain9(iface);
     struct wined3d_swapchain_desc desc;
-    HRESULT hr;
 
     TRACE("iface %p, parameters %p.\n", iface, parameters);
 
     wined3d_mutex_lock();
-    hr = wined3d_swapchain_get_desc(swapchain->wined3d_swapchain, &desc);
+    wined3d_swapchain_get_desc(swapchain->wined3d_swapchain, &desc);
     wined3d_mutex_unlock();
     present_parameters_from_wined3d_swapchain_desc(parameters, &desc);
 
-    return hr;
+    return D3D_OK;
 }
 
 

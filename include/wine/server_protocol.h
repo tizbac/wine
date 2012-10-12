@@ -3312,7 +3312,8 @@ struct get_window_tree_reply
 struct set_window_pos_request
 {
     struct request_header __header;
-    unsigned int   flags;
+    unsigned short swp_flags;
+    unsigned short paint_flags;
     user_handle_t  handle;
     user_handle_t  previous;
     rectangle_t    window;
@@ -3324,8 +3325,11 @@ struct set_window_pos_reply
     struct reply_header __header;
     unsigned int   new_style;
     unsigned int   new_ex_style;
+    user_handle_t  surface_win;
+    char __pad_20[4];
 };
-
+#define SET_WINPOS_PAINT_SURFACE 0x01
+#define SET_WINPOS_PIXEL_FORMAT  0x02
 
 
 struct get_window_rectangles_request
@@ -3411,6 +3415,22 @@ struct get_visible_region_reply
     rectangle_t    win_rect;
     data_size_t    total_size;
     /* VARARG(region,rectangles); */
+};
+
+
+
+struct get_surface_region_request
+{
+    struct request_header __header;
+    user_handle_t  window;
+};
+struct get_surface_region_reply
+{
+    struct reply_header __header;
+    rectangle_t    visible_rect;
+    data_size_t    total_size;
+    /* VARARG(region,rectangles); */
+    char __pad_28[4];
 };
 
 
@@ -5090,6 +5110,7 @@ enum request
     REQ_set_window_text,
     REQ_get_windows_offset,
     REQ_get_visible_region,
+    REQ_get_surface_region,
     REQ_get_window_region,
     REQ_set_window_region,
     REQ_get_update_region,
@@ -5345,6 +5366,7 @@ union generic_request
     struct set_window_text_request set_window_text_request;
     struct get_windows_offset_request get_windows_offset_request;
     struct get_visible_region_request get_visible_region_request;
+    struct get_surface_region_request get_surface_region_request;
     struct get_window_region_request get_window_region_request;
     struct set_window_region_request set_window_region_request;
     struct get_update_region_request get_update_region_request;
@@ -5598,6 +5620,7 @@ union generic_reply
     struct set_window_text_reply set_window_text_reply;
     struct get_windows_offset_reply get_windows_offset_reply;
     struct get_visible_region_reply get_visible_region_reply;
+    struct get_surface_region_reply get_surface_region_reply;
     struct get_window_region_reply get_window_region_reply;
     struct set_window_region_reply set_window_region_reply;
     struct get_update_region_reply get_update_region_reply;
@@ -5690,6 +5713,6 @@ union generic_reply
     struct set_suspend_context_reply set_suspend_context_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 435
+#define SERVER_PROTOCOL_VERSION 437
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */

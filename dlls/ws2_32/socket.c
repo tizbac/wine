@@ -92,6 +92,9 @@
 #ifdef HAVE_NET_IF_H
 # include <net/if.h>
 #endif
+#ifdef HAVE_LINUX_FILTER_H
+# include <linux/filter.h>
+#endif
 
 #ifdef HAVE_NETIPX_IPX_H
 # include <netipx/ipx.h>
@@ -167,6 +170,27 @@
 WINE_DEFAULT_DEBUG_CHANNEL(winsock);
 WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
+#if defined(IP_UNICAST_IF) && defined(SO_ATTACH_FILTER)
+# define LINUX_BOUND_IF
+struct interface_filter {
+    struct sock_filter iface_memaddr;
+    struct sock_filter iface_rule;
+    struct sock_filter return_keep;
+    struct sock_filter return_dump;
+};
+# define FILTER_JUMP_DUMP(here)  (u_char)(offsetof(struct interface_filter, return_dump) \
+                                 -offsetof(struct interface_filter, here)-sizeof(struct sock_filter)) \
+                                 /sizeof(struct sock_filter)
+# define FILTER_JUMP_KEEP(here)  (u_char)(offsetof(struct interface_filter, return_keep) \
+                                 -offsetof(struct interface_filter, here)-sizeof(struct sock_filter)) \
+                                 /sizeof(struct sock_filter)
+static struct interface_filter generic_interface_filter = {
+    BPF_STMT(BPF_LD+BPF_W+BPF_ABS, SKF_AD_OFF+SKF_AD_IFINDEX),
+    BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, 0xdeadbeef, FILTER_JUMP_KEEP(iface_rule), FILTER_JUMP_DUMP(iface_rule)),
+    BPF_STMT(BPF_RET+BPF_K, (u_int)-1), /* keep packet */
+    BPF_STMT(BPF_RET+BPF_K, 0)          /* dump packet */
+};
+#endif /* LINUX_BOUND_IF */
 
 /*
  * The actual definition of WSASendTo, wrapped in a different function name
@@ -2107,6 +2131,82 @@ static int WINAPI WS2_WSARecvMsg( SOCKET s, LPWSAMSG msg, LPDWORD lpNumberOfByte
 }
 
 /***********************************************************************
+ *               interface_bind         (INTERNAL)
+ *
+ * Take bind() calls on any name corresponding to a local network adapter and restrict the given socket to
+ * operating only on the specified interface.  This restriction consists of two components:
+ *  1) An outgoing packet restriction suggesting the egress interface for all packets.
+ *  2) An incoming packet restriction dropping packets not meant for the interface.
+ * If the function succeeds in placing these restrictions (returns TRUE) then the name for the bind() may
+ * safely be changed to INADDR_ANY, permitting the transmission and receipt of broadcast packets on the
+ * socket. This behavior is only relevant to UDP sockets and is needed for applications that expect to be able
+ * to receive broadcast packets on a socket that is bound to a specific network interface.
+ */
+static BOOL interface_bind( SOCKET s, int fd, struct sockaddr *addr )
+{
+    struct sockaddr_in *in_sock = (struct sockaddr_in *) addr;
+    unsigned int sock_type = 0, optlen = sizeof(sock_type);
+    PIP_ADAPTER_INFO adapters = NULL, adapter;
+    BOOL ret = FALSE;
+    DWORD adap_size;
+    int enable = 1;
+
+    if (in_sock->sin_addr.s_addr == htonl(WS_INADDR_ANY))
+        return FALSE; /* Not binding to specific interface, uses default route */
+    if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &sock_type, &optlen) == -1 || sock_type != SOCK_DGRAM)
+        return FALSE; /* Special interface binding is only necessary for UDP datagrams. */
+    if (GetAdaptersInfo(NULL, &adap_size) != ERROR_BUFFER_OVERFLOW)
+        goto cleanup;
+    adapters = HeapAlloc(GetProcessHeap(), 0, adap_size);
+    if (adapters == NULL || GetAdaptersInfo(adapters, &adap_size) != NO_ERROR)
+        goto cleanup;
+    /* Search the IPv4 adapter list for the appropriate binding interface */
+    for (adapter = adapters; adapter != NULL; adapter = adapter->Next)
+    {
+        in_addr_t adapter_addr = (in_addr_t) inet_addr(adapter->IpAddressList.IpAddress.String);
+
+        if (in_sock->sin_addr.s_addr == adapter_addr)
+        {
+#if defined(IP_BOUND_IF)
+            /* IP_BOUND_IF sets both the incoming and outgoing restriction at once */
+            if (setsockopt(fd, IPPROTO_IP, IP_BOUND_IF, &adapter->Index, sizeof(adapter->Index)) != 0)
+                goto cleanup;
+            ret = TRUE;
+#elif defined(LINUX_BOUND_IF)
+            in_addr_t ifindex = (in_addr_t) htonl(adapter->Index);
+            struct interface_filter specific_interface_filter;
+            struct sock_fprog filter_prog;
+
+            if (setsockopt(fd, IPPROTO_IP, IP_UNICAST_IF, &ifindex, sizeof(ifindex)) != 0)
+                goto cleanup; /* Failed to suggest egress interface */
+            memcpy(&specific_interface_filter, &generic_interface_filter, sizeof(generic_interface_filter));
+            specific_interface_filter.iface_rule.k = adapter->Index;
+            filter_prog.len = sizeof(generic_interface_filter)/sizeof(struct sock_filter);
+            filter_prog.filter = (struct sock_filter *) &specific_interface_filter;
+            if (setsockopt(fd, SOL_SOCKET, SO_ATTACH_FILTER, &filter_prog, sizeof(filter_prog)) != 0)
+                goto cleanup; /* Failed to specify incoming packet filter */
+            ret = TRUE;
+#else
+            FIXME("Broadcast packets on interface-bound sockets are not currently supported on this platform, "
+                  "receiving broadcast packets will not work on socket %04lx.\n", s);
+#endif
+            break;
+        }
+    }
+    /* Will soon be switching to INADDR_ANY: permit address reuse */
+    if (ret && setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) == 0)
+        TRACE("Socket %04lx bound to interface index %d\n", s, adapter->Index);
+    else
+        ret = FALSE;
+
+cleanup:
+    if(!ret)
+        ERR("Failed to bind to interface, receiving broadcast packets will not work on socket %04lx.\n", s);
+    HeapFree(GetProcessHeap(), 0, adapters);
+    return ret;
+}
+
+/***********************************************************************
  *		bind			(WS2_32.2)
  */
 int WINAPI WS_bind(SOCKET s, const struct WS_sockaddr* name, int namelen)
@@ -2157,6 +2257,8 @@ int WINAPI WS_bind(SOCKET s, const struct WS_sockaddr* name, int namelen)
                              "INADDR_ANY instead.\n");
                         in4->sin_addr.s_addr = htonl(WS_INADDR_ANY);
                     }
+                    else if (interface_bind(s, fd, &uaddr.addr))
+                        in4->sin_addr.s_addr = htonl(WS_INADDR_ANY);
                 }
                 if (bind(fd, &uaddr.addr, uaddrlen) < 0)
                 {
@@ -2409,7 +2511,7 @@ int WINAPI WS_getpeername(SOCKET s, struct WS_sockaddr *name, int *namelen)
     int fd;
     int res;
 
-    TRACE("socket: %04lx, ptr %p, len %08x\n", s, name, namelen?*namelen:0);
+    TRACE("socket: %04lx, ptr %p, len %08x\n", s, name, namelen ? *namelen : 0);
 
     fd = get_sock_fd( s, 0, NULL );
     res = SOCKET_ERROR;
@@ -2444,7 +2546,7 @@ int WINAPI WS_getsockname(SOCKET s, struct WS_sockaddr *name, int *namelen)
     int fd;
     int res;
 
-    TRACE("socket: %04lx, ptr %p, len %8x\n", s, name, *namelen);
+    TRACE("socket: %04lx, ptr %p, len %08x\n", s, name, namelen ? *namelen : 0);
 
     /* Check if what we've received is valid. Should we use IsBadReadPtr? */
     if( (name == NULL) || (namelen == NULL) )
@@ -4092,7 +4194,7 @@ int WINAPI WS_setsockopt(SOCKET s, int level, int optname,
                 SetLastError(WSAEFAULT);
                 return SOCKET_ERROR;
             }
-            linger.l_onoff  = *((const int*)optval) ? 0: 1;
+            linger.l_onoff  = *(const int*)optval == 0;
             linger.l_linger = 0;
             level = SOL_SOCKET;
             optname = SO_LINGER;
@@ -5975,7 +6077,7 @@ SOCKET WINAPI WSAAccept( SOCKET s, struct WS_sockaddr *addr, LPINT addrlen,
        {
                case CF_ACCEPT:
                        if (addr && addrlen)
-                           memcpy(addr, &src_addr, (*addrlen > size) ?  size : *addrlen );
+                           memcpy(addr, &src_addr, (*addrlen > size) ? size : *addrlen );
                        return cs;
                case CF_DEFER:
                        SERVER_START_REQ( set_socket_deferred )
