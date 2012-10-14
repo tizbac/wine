@@ -864,6 +864,59 @@ BOOL WINAPI GetFileInformationByHandle( HANDLE hFile, BY_HANDLE_FILE_INFORMATION
 
 
 /***********************************************************************
+*             GetFileInformationByHandleEx (KERNEL32.@)
+*/
+BOOL WINAPI GetFileInformationByHandleEx( HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class,
+                                          LPVOID info, DWORD size )
+{
+    NTSTATUS status;
+    IO_STATUS_BLOCK io;
+
+    switch (class)
+    {
+    case FileBasicInfo:
+    case FileStandardInfo:
+    case FileNameInfo:
+    case FileRenameInfo:
+    case FileDispositionInfo:
+    case FileAllocationInfo:
+    case FileEndOfFileInfo:
+    case FileStreamInfo:
+    case FileCompressionInfo:
+    case FileAttributeTagInfo:
+    case FileIoPriorityHintInfo:
+    case FileRemoteProtocolInfo:
+    case FileFullDirectoryInfo:
+    case FileFullDirectoryRestartInfo:
+    case FileStorageInfo:
+    case FileAlignmentInfo:
+    case FileIdInfo:
+    case FileIdExtdDirectoryInfo:
+    case FileIdExtdDirectoryRestartInfo:
+        FIXME( "%p, %u, %p, %u\n", handle, class, info, size );
+        SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
+        return FALSE;
+
+    case FileIdBothDirectoryRestartInfo:
+    case FileIdBothDirectoryInfo:
+        status = NtQueryDirectoryFile( handle, NULL, NULL, NULL, &io, info, size,
+                                       FileIdBothDirectoryInformation, FALSE, NULL,
+                                       (class == FileIdBothDirectoryRestartInfo) );
+        if (status != STATUS_SUCCESS)
+        {
+            SetLastError( RtlNtStatusToDosError( status ) );
+            return FALSE;
+        }
+        return TRUE;
+
+    default:
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+}
+
+
+/***********************************************************************
  *           GetFileSize   (KERNEL32.@)
  *
  * Retrieve the size of a file.
@@ -2547,6 +2600,57 @@ error:  /* We get here if there was an error opening the file */
     WARN("(%s): return = HFILE_ERROR error= %d\n", name,ofs->nErrCode );
     return HFILE_ERROR;
 }
+
+
+/***********************************************************************
+ *             OpenFileById (KERNEL32.@)
+ */
+HANDLE WINAPI OpenFileById( HANDLE handle, LPFILE_ID_DESCRIPTOR id, DWORD access,
+                            DWORD share, LPSECURITY_ATTRIBUTES sec_attr, DWORD flags )
+{
+    UINT options;
+    HANDLE result;
+    OBJECT_ATTRIBUTES attr;
+    NTSTATUS status;
+    IO_STATUS_BLOCK io;
+    UNICODE_STRING objectName;
+
+    if (!id)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return INVALID_HANDLE_VALUE;
+    }
+
+    options = FILE_OPEN_BY_FILE_ID;
+    if (flags & FILE_FLAG_BACKUP_SEMANTICS)
+        options |= FILE_OPEN_FOR_BACKUP_INTENT;
+    else
+        options |= FILE_NON_DIRECTORY_FILE;
+    if (flags & FILE_FLAG_NO_BUFFERING) options |= FILE_NO_INTERMEDIATE_BUFFERING;
+    if (!(flags & FILE_FLAG_OVERLAPPED)) options |= FILE_SYNCHRONOUS_IO_NONALERT;
+    if (flags & FILE_FLAG_RANDOM_ACCESS) options |= FILE_RANDOM_ACCESS;
+    flags &= FILE_ATTRIBUTE_VALID_FLAGS;
+
+    objectName.Length             = sizeof(ULONGLONG);
+    objectName.Buffer             = (WCHAR *)&id->u.FileId;
+    attr.Length                   = sizeof(attr);
+    attr.RootDirectory            = handle;
+    attr.Attributes               = 0;
+    attr.ObjectName               = &objectName;
+    attr.SecurityDescriptor       = sec_attr ? sec_attr->lpSecurityDescriptor : NULL;
+    attr.SecurityQualityOfService = NULL;
+    if (sec_attr && sec_attr->bInheritHandle) attr.Attributes |= OBJ_INHERIT;
+
+    status = NtCreateFile( &result, access, &attr, &io, NULL, flags,
+                           share, OPEN_EXISTING, options, NULL, 0 );
+    if (status != STATUS_SUCCESS)
+    {
+        SetLastError( RtlNtStatusToDosError( status ) );
+        return INVALID_HANDLE_VALUE;
+    }
+    return result;
+}
+
 
 /***********************************************************************
  *           K32EnumDeviceDrivers (KERNEL32.@)

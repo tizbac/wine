@@ -225,11 +225,26 @@ static struct record *create_record( const struct column *columns, UINT num_cols
     }
     for (i = 0; i < num_cols; i++)
     {
-        record->fields[i].type   = columns[i].type;
-        record->fields[i].u.ival = 0;
+        record->fields[i].type    = columns[i].type;
+        record->fields[i].vartype = columns[i].vartype;
+        record->fields[i].u.ival  = 0;
     }
     record->count = num_cols;
     return record;
+}
+
+void destroy_array( struct array *array, CIMTYPE type )
+{
+    UINT i, size;
+
+    if (!array) return;
+    if (type == CIM_STRING || type == CIM_DATETIME)
+    {
+        size = get_type_size( type );
+        for (i = 0; i < array->count; i++) heap_free( *(WCHAR **)((char *)array->ptr + i * size) );
+    }
+    heap_free( array->ptr );
+    heap_free( array );
 }
 
 static void destroy_record( struct record *record )
@@ -241,11 +256,8 @@ static void destroy_record( struct record *record )
     {
         if (record->fields[i].type == CIM_STRING || record->fields[i].type == CIM_DATETIME)
             heap_free( record->fields[i].u.sval );
-        else if ((record->fields[i].type & CIM_FLAG_ARRAY) && record->fields[i].u.aval)
-        {
-            heap_free( record->fields[i].u.aval->ptr );
-            heap_free( record->fields[i].u.aval );
-        }
+        else if (record->fields[i].type & CIM_FLAG_ARRAY)
+            destroy_array( record->fields[i].u.aval, record->fields[i].type & CIM_TYPE_MASK );
     }
     heap_free( record->fields );
     heap_free( record );
@@ -330,34 +342,37 @@ static HRESULT WINAPI class_object_GetQualifierSet(
 
 static HRESULT record_get_value( const struct record *record, UINT index, VARIANT *var, CIMTYPE *type )
 {
+    VARTYPE vartype = record->fields[index].vartype;
+
     if (type) *type = record->fields[index].type;
 
     if (record->fields[index].type & CIM_FLAG_ARRAY)
     {
-        V_VT( var ) = VT_ARRAY;
-        V_ARRAY( var ) = to_safearray( record->fields[index].u.aval, record->fields[index].type & COL_TYPE_MASK );
+        V_VT( var ) = vartype ? vartype : to_vartype( record->fields[index].type & CIM_TYPE_MASK ) | VT_ARRAY;
+        V_ARRAY( var ) = to_safearray( record->fields[index].u.aval, record->fields[index].type & CIM_TYPE_MASK );
         return S_OK;
     }
     switch (record->fields[index].type)
     {
     case CIM_STRING:
     case CIM_DATETIME:
-        V_VT( var ) = VT_BSTR;
+        if (!vartype) vartype = VT_BSTR;
         V_BSTR( var ) = SysAllocString( record->fields[index].u.sval );
-        return S_OK;
+        break;
     case CIM_SINT32:
-        V_VT( var ) = VT_I4;
+        if (!vartype) vartype = VT_I4;
         V_I4( var ) = record->fields[index].u.ival;
-        return S_OK;
+        break;
     case CIM_UINT32:
-        V_VT( var ) = VT_UI4;
+        if (!vartype) vartype = VT_UI4;
         V_UI4( var ) = record->fields[index].u.ival;
-        return S_OK;
+        break;
     default:
         FIXME("unhandled type %u\n", record->fields[index].type);
-        break;
+        return WBEM_E_INVALID_PARAMETER;
     }
-    return WBEM_E_INVALID_PARAMETER;
+    V_VT( var ) = vartype;
+    return S_OK;
 }
 
 static HRESULT WINAPI class_object_Get(
@@ -702,6 +717,7 @@ static HRESULT create_signature_columns_and_data( IEnumWbemClassObject *iter, UI
 {
     static const WCHAR parameterW[] = {'P','a','r','a','m','e','t','e','r',0};
     static const WCHAR typeW[] = {'T','y','p','e',0};
+    static const WCHAR varianttypeW[] = {'V','a','r','i','a','n','t','T','y','p','e',0};
     static const WCHAR defaultvalueW[] = {'D','e','f','a','u','l','t','V','a','l','u','e',0};
     struct column *columns;
     BYTE *row;
@@ -728,8 +744,11 @@ static HRESULT create_signature_columns_and_data( IEnumWbemClassObject *iter, UI
 
         hr = IWbemClassObject_Get( param, typeW, 0, &val, NULL, NULL );
         if (hr != S_OK) goto error;
-        columns[i].type    = V_UI4( &val );
-        columns[i].vartype = 0;
+        columns[i].type = V_UI4( &val );
+
+        hr = IWbemClassObject_Get( param, varianttypeW, 0, &val, NULL, NULL );
+        if (hr != S_OK) goto error;
+        columns[i].vartype = V_UI4( &val );
 
         hr = IWbemClassObject_Get( param, defaultvalueW, 0, &val, NULL, NULL );
         if (hr != S_OK) goto error;
@@ -785,8 +804,8 @@ static WCHAR *build_signature_table_name( const WCHAR *class, const WCHAR *metho
     return struprW( ret );
 }
 
-static HRESULT create_signature( const WCHAR *class, const WCHAR *method, enum param_direction dir,
-                                 IWbemClassObject **sig )
+HRESULT create_signature( const WCHAR *class, const WCHAR *method, enum param_direction dir,
+                          IWbemClassObject **sig )
 {
     static const WCHAR selectW[] =
         {'S','E','L','E','C','T',' ','*',' ','F','R','O','M',' ',

@@ -2268,6 +2268,29 @@ static void shader_glsl_relop(const struct wined3d_shader_instruction *ins)
     }
 }
 
+static void shader_glsl_imul(const struct wined3d_shader_instruction *ins)
+{
+    struct wined3d_shader_buffer *buffer = ins->ctx->buffer;
+    struct glsl_src_param src0_param;
+    struct glsl_src_param src1_param;
+    DWORD write_mask;
+
+    /* If we have ARB_gpu_shader5 or GLSL 4.0, we can use imulExtended(). If
+     * not, we can emulate it. */
+    if (ins->dst[0].reg.type != WINED3DSPR_NULL)
+        FIXME("64-bit integer multiplies not implemented.\n");
+
+    if (ins->dst[1].reg.type != WINED3DSPR_NULL)
+    {
+        write_mask = shader_glsl_append_dst_ext(buffer, ins, &ins->dst[1]);
+        shader_glsl_add_src_param(ins, &ins->src[0], write_mask, &src0_param);
+        shader_glsl_add_src_param(ins, &ins->src[1], write_mask, &src1_param);
+
+        shader_addline(ins->ctx->buffer, "%s * %s);\n",
+                src0_param.param_str, src1_param.param_str);
+    }
+}
+
 /* Process the WINED3DSIO_MOV opcode using GLSL (dst = src) */
 static void shader_glsl_mov(const struct wined3d_shader_instruction *ins)
 {
@@ -2541,6 +2564,40 @@ static void shader_glsl_expp(const struct wined3d_shader_instruction *ins)
             shader_addline(ins->ctx->buffer, "exp2(%s));\n", src_param.param_str);
         }
     }
+}
+
+static void shader_glsl_to_int(const struct wined3d_shader_instruction *ins)
+{
+    struct wined3d_shader_buffer *buffer = ins->ctx->buffer;
+    struct glsl_src_param src_param;
+    unsigned int mask_size;
+    DWORD write_mask;
+
+    write_mask = shader_glsl_append_dst(buffer, ins);
+    mask_size = shader_glsl_get_write_mask_size(write_mask);
+    shader_glsl_add_src_param(ins, &ins->src[0], write_mask, &src_param);
+
+    if (mask_size > 1)
+        shader_addline(buffer, "ivec%u(%s));\n", mask_size, src_param.param_str);
+    else
+        shader_addline(buffer, "int(%s));\n", src_param.param_str);
+}
+
+static void shader_glsl_to_float(const struct wined3d_shader_instruction *ins)
+{
+    struct wined3d_shader_buffer *buffer = ins->ctx->buffer;
+    struct glsl_src_param src_param;
+    unsigned int mask_size;
+    DWORD write_mask;
+
+    write_mask = shader_glsl_append_dst(buffer, ins);
+    mask_size = shader_glsl_get_write_mask_size(write_mask);
+    shader_glsl_add_src_param(ins, &ins->src[0], write_mask, &src_param);
+
+    if (mask_size > 1)
+        shader_addline(buffer, "vec%u(%s));\n", mask_size, src_param.param_str);
+    else
+        shader_addline(buffer, "float(%s));\n", src_param.param_str);
 }
 
 /** Process the RCP (reciprocal or inverse) opcode in GLSL (dst = 1 / src) */
@@ -5277,15 +5334,15 @@ static const SHADER_HANDLER shader_glsl_instruction_handler_table[WINED3DSIH_TAB
     /* WINED3DSIH_EXP                   */ shader_glsl_map2gl,
     /* WINED3DSIH_EXPP                  */ shader_glsl_expp,
     /* WINED3DSIH_FRC                   */ shader_glsl_map2gl,
-    /* WINED3DSIH_FTOI                  */ NULL,
+    /* WINED3DSIH_FTOI                  */ shader_glsl_to_int,
     /* WINED3DSIH_GE                    */ shader_glsl_relop,
     /* WINED3DSIH_IADD                  */ shader_glsl_binop,
     /* WINED3DSIH_IEQ                   */ NULL,
     /* WINED3DSIH_IF                    */ shader_glsl_if,
     /* WINED3DSIH_IFC                   */ shader_glsl_ifc,
     /* WINED3DSIH_IGE                   */ shader_glsl_relop,
-    /* WINED3DSIH_IMUL                  */ NULL,
-    /* WINED3DSIH_ITOF                  */ NULL,
+    /* WINED3DSIH_IMUL                  */ shader_glsl_imul,
+    /* WINED3DSIH_ITOF                  */ shader_glsl_to_float,
     /* WINED3DSIH_LABEL                 */ shader_glsl_label,
     /* WINED3DSIH_LD                    */ NULL,
     /* WINED3DSIH_LIT                   */ shader_glsl_lit,
@@ -5349,7 +5406,7 @@ static const SHADER_HANDLER shader_glsl_instruction_handler_table[WINED3DSIH_TAB
     /* WINED3DSIH_TEXREG2RGB            */ shader_glsl_texreg2rgb,
     /* WINED3DSIH_UDIV                  */ NULL,
     /* WINED3DSIH_USHR                  */ NULL,
-    /* WINED3DSIH_UTOF                  */ NULL,
+    /* WINED3DSIH_UTOF                  */ shader_glsl_to_float,
     /* WINED3DSIH_XOR                   */ shader_glsl_binop,
 };
 

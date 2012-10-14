@@ -31,6 +31,8 @@ enum param_direction
     PARAM_IN    = 1
 };
 
+#define CIM_TYPE_MASK    0x00000fff
+
 #define COL_TYPE_MASK    0x0000ffff
 #define COL_FLAG_DYNAMIC 0x00010000
 #define COL_FLAG_KEY     0x00020000
@@ -76,6 +78,7 @@ struct array
 struct field
 {
     UINT type;
+    VARTYPE vartype; /* 0 for default mapping */
     union
     {
         LONGLONG ival;
@@ -177,16 +180,24 @@ HRESULT get_propval( const struct view *, UINT, const WCHAR *, VARIANT *,
 HRESULT put_propval( const struct view *, UINT, const WCHAR *, VARIANT *, CIMTYPE ) DECLSPEC_HIDDEN;
 HRESULT to_longlong( VARIANT *, LONGLONG *, CIMTYPE * ) DECLSPEC_HIDDEN;
 SAFEARRAY *to_safearray( const struct array *, CIMTYPE ) DECLSPEC_HIDDEN;
+VARTYPE to_vartype( CIMTYPE ) DECLSPEC_HIDDEN;
+void destroy_array( struct array *, CIMTYPE ) DECLSPEC_HIDDEN;
 HRESULT get_properties( const struct view *, SAFEARRAY ** ) DECLSPEC_HIDDEN;
 HRESULT get_object( const WCHAR *, IWbemClassObject ** ) DECLSPEC_HIDDEN;
 BSTR get_method_name( const WCHAR *, UINT ) DECLSPEC_HIDDEN;
 BSTR get_property_name( const WCHAR *, UINT ) DECLSPEC_HIDDEN;
+void set_variant( VARTYPE, LONGLONG, void *, VARIANT * ) DECLSPEC_HIDDEN;
+HRESULT create_signature( const WCHAR *, const WCHAR *, enum param_direction,
+                          IWbemClassObject ** ) DECLSPEC_HIDDEN;
 
 HRESULT WbemLocator_create(IUnknown *, LPVOID *) DECLSPEC_HIDDEN;
 HRESULT WbemServices_create(IUnknown *, const WCHAR *, LPVOID *) DECLSPEC_HIDDEN;
 HRESULT create_class_object(const WCHAR *, IEnumWbemClassObject *, UINT,
                             struct record *, IWbemClassObject **) DECLSPEC_HIDDEN;
 HRESULT EnumWbemClassObject_create(IUnknown *, struct query *, LPVOID *) DECLSPEC_HIDDEN;
+
+HRESULT reg_enumkey(IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
+HRESULT reg_enumvalues(IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
 
 static void *heap_alloc( size_t len ) __WINE_ALLOC_SIZE(1);
 static inline void *heap_alloc( size_t len )
@@ -218,3 +229,14 @@ static inline WCHAR *heap_strdupW( const WCHAR *src )
     if ((dst = heap_alloc( (strlenW( src ) + 1) * sizeof(WCHAR) ))) strcpyW( dst, src );
     return dst;
 }
+
+static const WCHAR class_stdregprovW[] = {'S','t','d','R','e','g','P','r','o','v',0};
+
+static const WCHAR method_enumkeyW[] = {'E','n','u','m','K','e','y',0};
+static const WCHAR method_enumvaluesW[] = {'E','n','u','m','V','a','l','u','e','s',0};
+
+static const WCHAR param_defkeyW[] = {'h','D','e','f','K','e','y',0};
+static const WCHAR param_namesW[] = {'s','N','a','m','e','s',0};
+static const WCHAR param_returnvalueW[] = {'R','e','t','u','r','n','V','a','l','u','e',0};
+static const WCHAR param_subkeynameW[] = {'s','S','u','b','K','e','y','N','a','m','e',0};
+static const WCHAR param_typesW[] = {'T','y','p','e','s',0};

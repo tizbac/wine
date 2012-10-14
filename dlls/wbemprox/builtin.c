@@ -69,8 +69,6 @@ static const WCHAR class_serviceW[] =
     {'W','i','n','3','2','_','S','e','r','v','i','c','e',0};
 static const WCHAR class_sounddeviceW[] =
     {'W','i','n','3','2','_','S','o','u','n','d','D','e','v','i','c','e',0};
-static const WCHAR class_stdregprovW[] =
-    {'S','t','d','R','e','g','P','r','o','v',0};
 static const WCHAR class_videocontrollerW[] =
     {'W','i','n','3','2','_','V','i','d','e','o','C','o','n','t','r','o','l','l','e','r',0};
 
@@ -186,24 +184,10 @@ static const WCHAR prop_typeW[] =
     {'T','y','p','e',0};
 static const WCHAR prop_uniqueidW[] =
     {'U','n','i','q','u','e','I','d',0};
+static const WCHAR prop_varianttypeW[] =
+    {'V','a','r','i','a','n','t','T','y','p','e',0};
 static const WCHAR prop_versionW[] =
     {'V','e','r','s','i','o','n',0};
-
-static const WCHAR method_enumkeyW[] =
-    {'E','n','u','m','K','e','y',0};
-static const WCHAR method_enumvaluesW[] =
-    {'E','n','u','m','V','a','l','u','e','s',0};
-
-static const WCHAR param_defkeyW[] =
-    {'h','D','e','f','K','e','y',0};
-static const WCHAR param_namesW[] =
-    {'N','a','m','e','s',0};
-static const WCHAR param_returnvalueW[] =
-    {'R','e','t','u','r','n','V','a','l','u','e',0};
-static const WCHAR param_subkeynameW[] =
-    {'s','S','u','b','K','e','y','N','a','m','e',0};
-static const WCHAR param_typesW[] =
-    {'T','y','p','e','s',0};
 
 /* column definitions must be kept in sync with record structures below */
 static const struct column col_baseboard[] =
@@ -247,6 +231,7 @@ static const struct column col_logicaldisk[] =
     { prop_drivetypeW,  CIM_UINT32, VT_I4 },
     { prop_filesystemW, CIM_STRING|COL_FLAG_DYNAMIC },
     { prop_freespaceW,  CIM_UINT64 },
+    { prop_nameW,       CIM_STRING|COL_FLAG_DYNAMIC },
     { prop_sizeW,       CIM_UINT64 }
 };
 static const struct column col_networkadapter[] =
@@ -276,6 +261,7 @@ static const struct column col_params[] =
     { prop_directionW,    CIM_SINT32 },
     { prop_parameterW,    CIM_STRING },
     { prop_typeW,         CIM_UINT32 },
+    { prop_varianttypeW,  CIM_UINT32 },
     { prop_defaultvalueW, CIM_UINT32 }
 };
 static const struct column col_process[] =
@@ -317,8 +303,8 @@ static const struct column col_sounddevice[] =
 };
 static const struct column col_stdregprov[] =
 {
-    { method_enumkeyW,    CIM_OBJECT|COL_FLAG_METHOD },
-    { method_enumvaluesW, CIM_OBJECT|COL_FLAG_METHOD }
+    { method_enumkeyW,    CIM_FLAG_ARRAY|COL_FLAG_METHOD },
+    { method_enumvaluesW, CIM_FLAG_ARRAY|COL_FLAG_METHOD }
 };
 static const struct column col_videocontroller[] =
 {
@@ -421,6 +407,7 @@ struct record_logicaldisk
     UINT32       drivetype;
     const WCHAR *filesystem;
     UINT64       freespace;
+    const WCHAR *name;
     UINT64       size;
 };
 struct record_networkadapter
@@ -450,6 +437,7 @@ struct record_params
     INT32        direction;
     const WCHAR *parameter;
     UINT32       type;
+    UINT32       varianttype;
     UINT32       defaultvalue;
 };
 struct record_process
@@ -506,17 +494,6 @@ struct record_videocontroller
 };
 #include "poppack.h"
 
-static HRESULT reg_enumkey( IWbemClassObject *in, IWbemClassObject **out )
-{
-    FIXME("\n");
-    return E_NOTIMPL;
-}
-static HRESULT reg_enumvalues( IWbemClassObject *in, IWbemClassObject **out )
-{
-    FIXME("\n");
-    return E_NOTIMPL;
-}
-
 static const struct record_baseboard data_baseboard[] =
 {
     { baseboard_manufacturerW, baseboard_serialnumberW, baseboard_tagW }
@@ -535,13 +512,13 @@ static const struct record_diskdrive data_diskdrive[] =
 };
 static const struct record_params data_params[] =
 {
-    { class_stdregprovW, method_enumkeyW, 1, param_defkeyW, CIM_UINT32, 0x80000002 },
+    { class_stdregprovW, method_enumkeyW, 1, param_defkeyW, CIM_SINT32, 0, 0x80000002 },
     { class_stdregprovW, method_enumkeyW, 1, param_subkeynameW, CIM_STRING },
-    { class_stdregprovW, method_enumkeyW, -1, param_returnvalueW, CIM_UINT32 },
+    { class_stdregprovW, method_enumkeyW, -1, param_returnvalueW, CIM_UINT32, VT_I4 },
     { class_stdregprovW, method_enumkeyW, -1, param_namesW, CIM_STRING|CIM_FLAG_ARRAY },
-    { class_stdregprovW, method_enumvaluesW, 1, param_defkeyW, CIM_UINT32, 0x80000002 },
+    { class_stdregprovW, method_enumvaluesW, 1, param_defkeyW, CIM_SINT32, 0, 0x80000002 },
     { class_stdregprovW, method_enumvaluesW, 1, param_subkeynameW, CIM_STRING },
-    { class_stdregprovW, method_enumvaluesW, -1, param_returnvalueW, CIM_UINT32 },
+    { class_stdregprovW, method_enumvaluesW, -1, param_returnvalueW, CIM_UINT32, VT_I4 },
     { class_stdregprovW, method_enumvaluesW, -1, param_namesW, CIM_STRING|CIM_FLAG_ARRAY },
     { class_stdregprovW, method_enumvaluesW, -1, param_typesW, CIM_SINT32|CIM_FLAG_ARRAY }
 };
@@ -681,6 +658,7 @@ static void fill_logicaldisk( struct table *table )
             rec->drivetype  = type;
             rec->filesystem = get_filesystem( root );
             rec->freespace  = get_freespace( root, &size );
+            rec->name       = heap_strdupW( device_id );
             rec->size       = size;
             offset += sizeof(*rec);
             num_rows++;
