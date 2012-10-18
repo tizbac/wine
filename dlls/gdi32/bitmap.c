@@ -211,7 +211,7 @@ HBITMAP WINAPI CreateBitmapIndirect( const BITMAP *bmp )
     bmpobj->dib.dsBm = bm;
     bmpobj->dib.dsBm.bmBits = NULL;
 
-    if (!(hbitmap = alloc_gdi_handle( &bmpobj->header, OBJ_BITMAP, &bitmap_funcs )))
+    if (!(hbitmap = alloc_gdi_handle( bmpobj, OBJ_BITMAP, &bitmap_funcs )))
     {
         HeapFree( GetProcessHeap(), 0, bmpobj );
         return 0;
@@ -436,7 +436,7 @@ static HGDIOBJ BITMAP_SelectObject( HGDIOBJ handle, HDC hdc )
         goto done;
     }
 
-    if (bitmap->header.selcount && (handle != GetStockObject(DEFAULT_BITMAP)))
+    if (handle != GetStockObject(DEFAULT_BITMAP) && GDI_get_ref_count( handle ))
     {
         WARN( "Bitmap already selected in another DC\n" );
         GDI_ReleaseObj( handle );

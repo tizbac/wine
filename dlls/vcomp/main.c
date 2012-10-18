@@ -86,9 +86,25 @@ void CDECL omp_set_num_threads(int num_threads)
     TRACE("(%d): stub\n", num_threads);
 }
 
+void CDECL _vcomp_barrier(void)
+{
+    TRACE("stub\n");
+}
+
 void CDECL _vcomp_set_num_threads(int num_threads)
 {
     TRACE("(%d): stub\n", num_threads);
+}
+
+int CDECL _vcomp_single_begin(int flags)
+{
+    TRACE("(%x): stub\n", flags);
+    return TRUE;
+}
+
+void CDECL _vcomp_single_end(void)
+{
+    TRACE("stub\n");
 }
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)

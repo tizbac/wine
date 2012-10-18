@@ -48,6 +48,7 @@ static const char range_test2_str[] =
 static const char elem_test_str[] =
     "<html><head><title>test</title><style id=\"styleid\">.body { margin-right: 0px; }</style>"
     "<meta id=\"metaid\" name=\"meta name\" http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">"
+    "<link id=\"linkid\"></head>"
     "<body onload=\"Testing()\">text test<!-- a comment -->"
     "<a id=\"a\" href=\"http://test\" name=\"x\">link</a>"
     "<input id=\"in\" class=\"testclass\" tabIndex=\"2\" title=\"test title\" />"
@@ -63,6 +64,7 @@ static const char elem_test_str[] =
     "</body></html>";
 static const char elem_test2_str[] =
     "<html><head><title>test</title><style>.body { margin-right: 0px; }</style>"
+    "<link id=\"linkid\" rel=\"stylesheet\" href=\"about:blank\" type=\"text/css\"></head>"
     "<body><div id=\"divid\" emptyattr=\"\" onclick=\"parseInt();\"></div></body>"
     "</html>";
 
@@ -119,7 +121,8 @@ typedef enum {
     ET_EMBED,
     ET_DIV,
     ET_META,
-    ET_NOSCRIPT
+    ET_NOSCRIPT,
+    ET_LINK
 } elem_type_t;
 
 static const IID * const none_iids[] = {
@@ -320,6 +323,13 @@ static const IID * const meta_iids[] = {
     NULL
 };
 
+static const IID * const link_iids[] = {
+    ELEM_IFACES,
+    &IID_IHTMLLinkElement,
+    &IID_IConnectionPointContainer,
+    NULL
+};
+
 static const IID * const object_iids[] = {
     ELEM_IFACES,
     &IID_IHTMLObjectElement,
@@ -432,7 +442,8 @@ static const elem_type_info_t elem_type_infos[] = {
     {"EMBED",     embed_iids,       &DIID_DispHTMLEmbed},
     {"DIV",       elem_iids,        NULL},
     {"META",      meta_iids,        &DIID_DispHTMLMetaElement},
-    {"NOSCRIPT",  elem_iids,        NULL /*&DIID_DispHTMLNoShowElement*/}
+    {"NOSCRIPT",  elem_iids,        NULL /*&DIID_DispHTMLNoShowElement*/},
+    {"LINK",      link_iids,        &DIID_DispHTMLLinkElement}
 };
 
 static const char *dbgstr_guid(REFIID riid)
@@ -853,6 +864,17 @@ static IHTMLMetaElement *_get_metaelem_iface(unsigned line, IUnknown *unk)
 
     hres = IUnknown_QueryInterface(unk, &IID_IHTMLMetaElement, (void**)&ret);
     ok_(__FILE__,line) (hres == S_OK, "Could not get IHTMLMetaElement: %08x\n", hres);
+    return ret;
+}
+
+#define get_link_iface(u) _get_link_iface(__LINE__,u)
+static IHTMLLinkElement *_get_link_iface(unsigned line, IUnknown *unk)
+{
+    IHTMLLinkElement *ret;
+    HRESULT hres;
+
+    hres = IUnknown_QueryInterface(unk, &IID_IHTMLLinkElement, (void**)&ret);
+    ok_(__FILE__,line) (hres == S_OK, "Could not get IHTMLLinkElement: %08x\n", hres);
     return ret;
 }
 
@@ -2482,6 +2504,19 @@ static void _test_img_name(unsigned line, IUnknown *unk, const char *pValue)
     SysFreeString(sName);
 }
 
+#define test_img_complete(a,b) _test_img_complete(__LINE__,a,b)
+static void _test_img_complete(unsigned line, IHTMLElement *elem, VARIANT_BOOL exb)
+{
+    IHTMLImgElement *img = _get_img_iface(line, (IUnknown*)elem);
+    VARIANT_BOOL b = 100;
+    HRESULT hres;
+
+    hres = IHTMLImgElement_get_complete(img, &b);
+    ok_(__FILE__,line) (hres == S_OK, "get_complete failed: %08x\n", hres);
+    ok_(__FILE__,line) (b == exb, "complete = %x, expected %x\n", b, exb);
+    IHTMLImgElement_Release(img);
+}
+
 static void test_dynamic_properties(IHTMLElement *elem)
 {
     static const WCHAR attr1W[] = {'a','t','t','r','1',0};
@@ -3403,6 +3438,125 @@ static void _test_meta_httpequiv(unsigned line, IUnknown *unk, const char *exval
     ok_(__FILE__,line)(!strcmp_wa(val, exval), "httpEquiv = %s, expected %s\n", wine_dbgstr_w(val), exval);
     SysFreeString(val);
     IHTMLMetaElement_Release(meta);
+}
+
+#define test_link_disabled(a,b) _test_link_disabled(__LINE__,a,b)
+static void _test_link_disabled(unsigned line, IHTMLElement *elem, VARIANT_BOOL v)
+{
+    IHTMLLinkElement *link = _get_link_iface(line, (IUnknown*)elem);
+    VARIANT_BOOL b = 10;
+    HRESULT hres;
+
+    hres = IHTMLLinkElement_get_disabled(link, &b);
+    ok_(__FILE__,line)(hres == S_OK, "get_disabled failed: %08x\n", hres);
+    ok_(__FILE__,line)(b == v, "disabled = %x, expected %x\n", b, v);
+
+    IHTMLLinkElement_Release(link);
+}
+
+#define link_put_disabled(a,b) _link_put_disabled(__LINE__,a,b)
+static void _link_put_disabled(unsigned line, IHTMLElement *elem, VARIANT_BOOL v)
+{
+    IHTMLLinkElement *link = _get_link_iface(line, (IUnknown*)elem);
+    HRESULT hres;
+
+    hres = IHTMLLinkElement_put_disabled(link, v);
+    ok_(__FILE__,line)(hres == S_OK, "put_disabled failed: %08x\n", hres);
+    IHTMLLinkElement_Release(link);
+    _test_link_disabled(line, elem, v);
+}
+
+#define test_link_rel(a,b) _test_link_rel(__LINE__,a,b)
+static void _test_link_rel(unsigned line, IHTMLElement *elem, const char *v)
+{
+    IHTMLLinkElement *link = _get_link_iface(line, (IUnknown*)elem);
+    BSTR rel;
+    HRESULT hres;
+
+    hres = IHTMLLinkElement_get_rel(link, &rel);
+    ok_(__FILE__,line)(hres == S_OK, "get_rel failed: %08x\n", hres);
+    if(v)
+        ok_(__FILE__,line)(!strcmp_wa(rel, v), "rel = %s, expected %s\n", wine_dbgstr_w(rel), v);
+    else
+        ok_(__FILE__,line)(!rel, "rel = %s, expected NULL\n", wine_dbgstr_w(rel));
+
+    IHTMLLinkElement_Release(link);
+}
+
+#define link_put_rel(a,b) _link_put_rel(__LINE__,a,b)
+static void _link_put_rel(unsigned line, IHTMLElement *elem, const char *v)
+{
+    IHTMLLinkElement *link = _get_link_iface(line, (IUnknown*)elem);
+    BSTR str = a2bstr(v);
+    HRESULT hres;
+
+    hres = IHTMLLinkElement_put_rel(link, str);
+    ok_(__FILE__,line)(hres == S_OK, "put_disabled failed: %08x\n", hres);
+    SysFreeString(str);
+    IHTMLLinkElement_Release(link);
+    _test_link_rel(line, elem, v);
+}
+
+#define test_link_type(a,b) _test_link_type(__LINE__,a,b)
+static void _test_link_type(unsigned line, IHTMLElement *elem, const char *v)
+{
+    IHTMLLinkElement *link = _get_link_iface(line, (IUnknown*)elem);
+    BSTR type;
+    HRESULT hres;
+
+    hres = IHTMLLinkElement_get_type(link, &type);
+    ok_(__FILE__,line)(hres == S_OK, "get_type failed: %08x\n", hres);
+    if(v)
+        ok_(__FILE__,line)(!strcmp_wa(type, v), "type = %s, expected %s\n", wine_dbgstr_w(type), v);
+    else
+        ok_(__FILE__,line)(!type, "type = %s, expected NULL\n", wine_dbgstr_w(type));
+
+    IHTMLLinkElement_Release(link);
+}
+
+#define link_put_type(a,b) _link_put_type(__LINE__,a,b)
+static void _link_put_type(unsigned line, IHTMLElement *elem, const char *v)
+{
+    IHTMLLinkElement *link = _get_link_iface(line, (IUnknown*)elem);
+    BSTR str = a2bstr(v);
+    HRESULT hres;
+
+    hres = IHTMLLinkElement_put_type(link, str);
+    ok_(__FILE__,line)(hres == S_OK, "put_disabled failed: %08x\n", hres);
+    SysFreeString(str);
+    IHTMLLinkElement_Release(link);
+    _test_link_type(line, elem, v);
+}
+
+#define test_link_href(a,b) _test_link_href(__LINE__,a,b)
+static void _test_link_href(unsigned line, IHTMLElement *elem, const char *v)
+{
+    IHTMLLinkElement *link = _get_link_iface(line, (IUnknown*)elem);
+    BSTR href;
+    HRESULT hres;
+
+    hres = IHTMLLinkElement_get_href(link, &href);
+    ok_(__FILE__,line)(hres == S_OK, "get_href failed: %08x\n", hres);
+    if(v)
+        ok_(__FILE__,line)(!strcmp_wa(href, v), "href = %s, expected %s\n", wine_dbgstr_w(href), v);
+    else
+        ok_(__FILE__,line)(!href, "href = %s, expected NULL\n", wine_dbgstr_w(href));
+
+    IHTMLLinkElement_Release(link);
+}
+
+#define link_put_href(a,b) _link_put_href(__LINE__,a,b)
+static void _link_put_href(unsigned line, IHTMLElement *elem, const char *v)
+{
+    IHTMLLinkElement *link = _get_link_iface(line, (IUnknown*)elem);
+    BSTR str = a2bstr(v);
+    HRESULT hres;
+
+    hres = IHTMLLinkElement_put_href(link, str);
+    ok_(__FILE__,line)(hres == S_OK, "put_disabled failed: %08x\n", hres);
+    SysFreeString(str);
+    IHTMLLinkElement_Release(link);
+    _test_link_href(line, elem, v);
 }
 
 #define get_elem_doc(e) _get_elem_doc(__LINE__,e)
@@ -4355,6 +4509,7 @@ static void test_navigator(IHTMLDocument2 *doc)
 {
     IHTMLWindow2 *window;
     IOmNavigator *navigator, *navigator2;
+    VARIANT_BOOL b;
     char buf[512];
     DWORD size;
     ULONG ref;
@@ -4439,6 +4594,11 @@ static void test_navigator(IHTMLDocument2 *doc)
     ok(hres == S_OK, "toString failed: %08x\n", hres);
     ok(!strcmp_wa(bstr, "[object]"), "toString returned %s\n", wine_dbgstr_w(bstr));
     SysFreeString(bstr);
+
+    b = 100;
+    hres = IOmNavigator_get_onLine(navigator, &b);
+    ok(hres == S_OK, "get_onLine failed: %08x\n", hres);
+    ok(b == VARIANT_TRUE, "onLine = %x\n", b);
 
     size = sizeof(buf);
     hres = ObtainUserAgentString(0, buf, &size);
@@ -5277,6 +5437,7 @@ static void test_elems(IHTMLDocument2 *doc)
         ET_TITLE,
         ET_STYLE,
         ET_META,
+        ET_LINK,
         ET_BODY,
         ET_COMMENT,
         ET_A,
@@ -5555,6 +5716,7 @@ static void test_elems(IHTMLDocument2 *doc)
         test_img_alt((IUnknown*)elem, NULL);
         test_img_set_alt((IUnknown*)elem, "alt test");
         test_img_name((IUnknown*)elem, "WineImg");
+        test_img_complete(elem, VARIANT_FALSE);
         IHTMLElement_Release(elem);
     }
 
@@ -5901,6 +6063,19 @@ static void test_elems2(IHTMLDocument2 *doc)
     };
 
     div = get_doc_elem_by_id(doc, "divid");
+
+    elem = get_elem_by_id(doc, "linkid", TRUE);
+    if(elem) {
+        test_link_disabled(elem, VARIANT_FALSE);
+        test_link_rel(elem, "stylesheet");
+        test_link_type(elem, "text/css");
+        test_link_href(elem, "about:blank");
+        link_put_disabled(elem, VARIANT_TRUE);
+        link_put_rel(elem, "prev");
+        link_put_type(elem, "text/plain");
+        link_put_href(elem, "about:prev");
+        IHTMLElement_Release(elem);
+    }
 
     test_elem_set_innerhtml((IUnknown*)div, "<div id=\"innerid\"></div>");
     elem2 = get_doc_elem_by_id(doc, "innerid");

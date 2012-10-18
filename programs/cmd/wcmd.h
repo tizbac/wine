@@ -60,7 +60,7 @@ void WCMD_change_tty (void);
 void WCMD_choice (const WCHAR *);
 void WCMD_clear_screen (void);
 void WCMD_color (void);
-void WCMD_copy (void);
+void WCMD_copy (WCHAR *);
 void WCMD_create_dir (WCHAR *);
 BOOL WCMD_delete (WCHAR *);
 void WCMD_directory (WCHAR *);
@@ -69,7 +69,7 @@ void WCMD_endlocal (void);
 void WCMD_enter_paged_mode(const WCHAR *);
 void WCMD_exit (CMD_LIST **cmdList);
 void WCMD_for (WCHAR *, CMD_LIST **cmdList);
-void WCMD_give_help (const WCHAR *command);
+void WCMD_give_help (const WCHAR *args);
 void WCMD_goto (CMD_LIST **cmdList);
 void WCMD_if (WCHAR *, CMD_LIST **cmdList);
 void WCMD_leave_paged_mode(void);
@@ -83,31 +83,31 @@ void WCMD_output_asis_stderr (const WCHAR *message);
 void WCMD_pause (void);
 void WCMD_popd (void);
 void WCMD_print_error (void);
-void WCMD_pushd (const WCHAR *command);
+void WCMD_pushd (const WCHAR *args);
 void WCMD_remove_dir (WCHAR *command);
 void WCMD_rename (void);
 void WCMD_run_program (WCHAR *command, BOOL called);
-void WCMD_setlocal (const WCHAR *command);
+void WCMD_setlocal (const WCHAR *args);
 void WCMD_setshow_date (void);
-void WCMD_setshow_default (const WCHAR *command);
+void WCMD_setshow_default (const WCHAR *args);
 void WCMD_setshow_env (WCHAR *command);
-void WCMD_setshow_path (const WCHAR *command);
+void WCMD_setshow_path (const WCHAR *args);
 void WCMD_setshow_prompt (void);
 void WCMD_setshow_time (void);
-void WCMD_shift (const WCHAR *command);
-void WCMD_start (const WCHAR *command);
+void WCMD_shift (const WCHAR *args);
+void WCMD_start (const WCHAR *args);
 void WCMD_title (const WCHAR *);
 void WCMD_type (WCHAR *);
-void WCMD_verify (const WCHAR *command);
+void WCMD_verify (const WCHAR *args);
 void WCMD_version (void);
-int  WCMD_volume (BOOL set_label, const WCHAR *command);
+int  WCMD_volume (BOOL set_label, const WCHAR *args);
 
 static inline BOOL WCMD_is_console_handle(HANDLE h)
 {
     return (((DWORD_PTR)h) & 3) == 3;
 }
 WCHAR *WCMD_fgets (WCHAR *buf, DWORD n, HANDLE stream);
-WCHAR *WCMD_parameter (WCHAR *s, int n, WCHAR **start, WCHAR **end, BOOL raw);
+WCHAR *WCMD_parameter (WCHAR *s, int n, WCHAR **start, WCHAR **end, BOOL raw, BOOL wholecmdline);
 WCHAR *WCMD_skip_leading_spaces (WCHAR *string);
 BOOL WCMD_keyword_ws_found(const WCHAR *keyword, int len, const WCHAR *ptr);
 void WCMD_HandleTildaModifiers(WCHAR **start, const WCHAR *forVariable, const WCHAR *forValue, BOOL justFors);
@@ -121,11 +121,11 @@ BOOL WCMD_ReadFile(const HANDLE hIn, WCHAR *intoBuf, const DWORD maxChars, LPDWO
 
 WCHAR    *WCMD_ReadAndParseLine(const WCHAR *initialcmd, CMD_LIST **output, HANDLE readFrom);
 CMD_LIST *WCMD_process_commands(CMD_LIST *thisCmd, BOOL oneBracket,
-                                const WCHAR *var, const WCHAR *val);
+                                const WCHAR *var, const WCHAR *val, BOOL retrycall);
 void      WCMD_free_commands(CMD_LIST *cmds);
 void      WCMD_execute (const WCHAR *orig_command, const WCHAR *redirects,
                         const WCHAR *parameter, const WCHAR *substitution,
-                        CMD_LIST **cmdList);
+                        CMD_LIST **cmdList, BOOL retrycall);
 
 /* Data structure to hold context when executing batch files */
 

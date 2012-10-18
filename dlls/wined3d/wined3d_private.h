@@ -320,6 +320,7 @@ enum wined3d_shader_register_type
     WINED3DSPR_PREDICATE = 19,
     WINED3DSPR_IMMCONST,
     WINED3DSPR_CONSTBUFFER,
+    WINED3DSPR_PRIMID,
     WINED3DSPR_NULL,
     WINED3DSPR_RESOURCE,
 };
@@ -625,14 +626,17 @@ struct wined3d_shader_context
     void *backend_data;
 };
 
+struct wined3d_shader_register_index
+{
+    const struct wined3d_shader_src_param *rel_addr;
+    unsigned int offset;
+};
+
 struct wined3d_shader_register
 {
     enum wined3d_shader_register_type type;
     enum wined3d_data_type data_type;
-    UINT idx;
-    UINT array_idx;
-    const struct wined3d_shader_src_param *rel_addr;
-    const struct wined3d_shader_src_param *array_rel_addr;
+    struct wined3d_shader_register_index idx[2];
     enum wined3d_immconst_type immconst_type;
     DWORD immconst_data[4];
 };
@@ -699,7 +703,6 @@ struct wined3d_shader_frontend
     void (*shader_free)(void *data);
     void (*shader_read_header)(void *data, const DWORD **ptr, struct wined3d_shader_version *shader_version);
     void (*shader_read_instruction)(void *data, const DWORD **ptr, struct wined3d_shader_instruction *ins);
-    void (*shader_read_comment)(const DWORD **ptr, const char **comment, UINT *comment_size);
     BOOL (*shader_is_end)(void *data, const DWORD **ptr);
 };
 
@@ -2667,7 +2670,8 @@ static inline BOOL shader_is_scalar(const struct wined3d_shader_register *reg)
     {
         case WINED3DSPR_RASTOUT:
             /* oFog & oPts */
-            if (reg->idx) return TRUE;
+            if (reg->idx[0].offset)
+                return TRUE;
             /* oPos */
             return FALSE;
 
@@ -2675,10 +2679,11 @@ static inline BOOL shader_is_scalar(const struct wined3d_shader_register *reg)
         case WINED3DSPR_CONSTBOOL:  /* b# */
         case WINED3DSPR_LOOP:       /* aL */
         case WINED3DSPR_PREDICATE:  /* p0 */
+        case WINED3DSPR_PRIMID:     /* primID */
             return TRUE;
 
         case WINED3DSPR_MISCTYPE:
-            switch(reg->idx)
+            switch (reg->idx[0].offset)
             {
                 case 0: /* vPos */
                     return FALSE;

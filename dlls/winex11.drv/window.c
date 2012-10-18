@@ -83,7 +83,6 @@ static Window user_time_window;
 static const char foreign_window_prop[] = "__wine_x11_foreign_window";
 static const char whole_window_prop[] = "__wine_x11_whole_window";
 static const char clip_window_prop[]  = "__wine_x11_clip_window";
-static const char managed_prop[]      = "__wine_x11_managed";
 
 static CRITICAL_SECTION win_data_section;
 static CRITICAL_SECTION_DEBUG critsect_debug =
@@ -1135,7 +1134,6 @@ void make_window_embedded( struct x11drv_win_data *data )
     }
     data->embedded = TRUE;
     data->managed = TRUE;
-    SetPropA( data->hwnd, managed_prop, (HANDLE)1 );
     sync_window_style( data );
     set_xembed_flags( data, data->mapped ? XEMBED_MAPPED : 0 );
 }
@@ -1353,7 +1351,6 @@ static void create_whole_window( struct x11drv_win_data *data )
     {
         TRACE( "making win %p/%lx managed\n", data->hwnd, data->whole_window );
         data->managed = TRUE;
-        SetPropA( data->hwnd, managed_prop, (HANDLE)1 );
     }
 
     if ((win_rgn = CreateRectRgn( 0, 0, 0, 0 )) && GetWindowRgn( data->hwnd, win_rgn ) == ERROR)
@@ -1577,7 +1574,6 @@ static BOOL create_desktop_win_data( Display *display, HWND hwnd )
     if (!(data = alloc_win_data( display, hwnd ))) return FALSE;
     data->whole_window = root_window;
     data->managed = TRUE;
-    SetPropA( data->hwnd, managed_prop, (HANDLE)1 );
     SetPropA( data->hwnd, whole_window_prop, (HANDLE)root_window );
     set_initial_wm_hints( display, root_window );
     release_win_data( data );
@@ -1989,11 +1985,7 @@ void CDECL X11DRV_SetParent( HWND hwnd, HWND parent, HWND old_parent )
         {
             /* destroy the old X windows */
             destroy_whole_window( data, FALSE );
-            if (data->managed)
-            {
-                data->managed = FALSE;
-                RemovePropA( data->hwnd, managed_prop );
-            }
+            data->managed = FALSE;
         }
     }
     else  /* new top level window */
@@ -2044,7 +2036,6 @@ void CDECL X11DRV_WindowPosChanging( HWND hwnd, HWND insert_after, UINT swp_flag
         unmap_window( hwnd );
         if (!(data = get_win_data( hwnd ))) return;
         data->managed = TRUE;
-        SetPropA( hwnd, managed_prop, (HANDLE)1 );
     }
 
     *visible_rect = *window_rect;
@@ -2175,7 +2166,7 @@ void CDECL X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, UINT swp_flags
     if (data->mapped && event_type != ReparentNotify)
     {
         if (((swp_flags & SWP_HIDEWINDOW) && !(new_style & WS_VISIBLE)) ||
-            (!event_type &&
+            (!event_type && !(new_style & WS_MINIMIZE) &&
              !is_window_rect_mapped( rectWindow ) && is_window_rect_mapped( &old_window_rect )))
         {
             release_win_data( data );
@@ -2241,9 +2232,18 @@ UINT CDECL X11DRV_ShowWindow( HWND hwnd, INT cmd, RECT *rect, UINT swp )
     struct x11drv_thread_data *thread_data = x11drv_thread_data();
     struct x11drv_win_data *data = get_win_data( hwnd );
 
-    if (!data || !data->whole_window || !data->managed || !data->mapped || data->iconic) goto done;
-    if (style & WS_MINIMIZE) goto done;
+    if (!data || !data->whole_window || !data->managed) goto done;
     if (IsRectEmpty( rect )) goto done;
+    if (style & WS_MINIMIZE)
+    {
+        if (rect->left != -32000 || rect->top != -32000)
+        {
+            OffsetRect( rect, -32000 - rect->left, -32000 - rect->top );
+            swp &= ~(SWP_NOMOVE | SWP_NOCLIENTMOVE);
+        }
+        goto done;
+    }
+    if (!data->mapped || data->iconic) goto done;
 
     /* only fetch the new rectangle if the ShowWindow was a result of a window manager event */
 

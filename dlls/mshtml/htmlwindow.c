@@ -36,6 +36,7 @@
 
 #include "mshtml_private.h"
 #include "htmlevent.h"
+#include "htmlscript.h"
 #include "binding.h"
 #include "resource.h"
 
@@ -105,23 +106,24 @@ static inline HRESULT get_window_event(HTMLWindow *window, eventid_t eid, VARIAN
     return get_event_handler(&window->inner_window->doc->body_event_target, eid, var);
 }
 
-static void detach_inner_window(HTMLOuterWindow *outer_window)
+static void detach_inner_window(HTMLInnerWindow *window)
 {
-    HTMLInnerWindow *window = outer_window->base.inner_window;
+    HTMLOuterWindow *outer_window = window->base.outer_window;
 
-    if(!window)
-        return;
-
-    if(outer_window->doc_obj && outer_window == outer_window->doc_obj->basedoc.window)
+    if(outer_window && outer_window->doc_obj && outer_window == outer_window->doc_obj->basedoc.window)
         window->doc->basedoc.cp_container.forward_container = NULL;
 
-    detach_events(window->doc);
+    if(window->doc)
+        detach_events(window->doc);
     abort_window_bindings(window);
+    remove_target_tasks(window->task_magic);
     release_script_hosts(window);
-    window->doc->basedoc.window = NULL;
     window->base.outer_window = NULL;
 
-    IHTMLWindow2_Release(&window->base.IHTMLWindow2_iface);
+    if(outer_window && outer_window->base.inner_window == window) {
+        outer_window->base.inner_window = NULL;
+        IHTMLWindow2_Release(&window->base.IHTMLWindow2_iface);
+    }
 }
 
 static inline HTMLWindow *impl_from_IHTMLWindow2(IHTMLWindow2 *iface)
@@ -205,7 +207,8 @@ static void release_outer_window(HTMLOuterWindow *This)
 
     remove_target_tasks(This->task_magic);
     set_current_mon(This, NULL);
-    detach_inner_window(This);
+    if(This->base.inner_window)
+        detach_inner_window(This->base.inner_window);
     release_children(This);
 
     if(This->secmgr)
@@ -230,9 +233,7 @@ static void release_inner_window(HTMLInnerWindow *This)
 
     TRACE("%p\n", This);
 
-    remove_target_tasks(This->task_magic);
-    abort_window_bindings(This);
-    release_script_hosts(This);
+    detach_inner_window(This);
 
     if(This->doc) {
         This->doc->window = NULL;
@@ -566,7 +567,7 @@ static HRESULT WINAPI HTMLWindow2_clearTimeout(IHTMLWindow2 *iface, LONG timerID
 
     TRACE("(%p)->(%d)\n", This, timerID);
 
-    return clear_task_timer(&This->inner_window->doc->basedoc, FALSE, timerID);
+    return clear_task_timer(This->inner_window, FALSE, timerID);
 }
 
 #define MAX_MESSAGE_LEN 2000
@@ -1242,7 +1243,7 @@ static HRESULT WINAPI HTMLWindow2_clearInterval(IHTMLWindow2 *iface, LONG timerI
 
     TRACE("(%p)->(%d)\n", This, timerID);
 
-    return clear_task_timer(&This->inner_window->doc->basedoc, TRUE, timerID);
+    return clear_task_timer(This->inner_window, TRUE, timerID);
 }
 
 static HRESULT WINAPI HTMLWindow2_put_offscreenBuffering(IHTMLWindow2 *iface, VARIANT v)
@@ -1562,7 +1563,7 @@ static HRESULT window_set_timer(HTMLInnerWindow *This, VARIANT *expr, LONG msec,
     if(!disp)
         return E_FAIL;
 
-    *timer_id = set_task_timer(&This->doc->basedoc, msec, interval, disp);
+    *timer_id = set_task_timer(This, msec, interval, disp);
     IDispatch_Release(disp);
 
     return S_OK;
@@ -2719,6 +2720,7 @@ static HRESULT create_inner_window(HTMLOuterWindow *outer_window, IMoniker *mon,
 
     list_init(&window->script_hosts);
     list_init(&window->bindings);
+    list_init(&window->script_queue);
 
     window->base.outer_window = outer_window;
     window->base.inner_window = window;
@@ -2875,7 +2877,8 @@ HRESULT update_window_doc(HTMLInnerWindow *window)
         return S_OK;
     }
 
-    detach_inner_window(outer_window);
+    if(outer_window->base.inner_window)
+        detach_inner_window(outer_window->base.inner_window);
     outer_window->base.inner_window = window;
     outer_window->pending_window = NULL;
 

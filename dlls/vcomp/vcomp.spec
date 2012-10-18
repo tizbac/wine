@@ -50,7 +50,7 @@
 @ stub _vcomp_atomic_xor_i2
 @ stub _vcomp_atomic_xor_i4
 @ stub _vcomp_atomic_xor_i8
-@ stub _vcomp_barrier
+@ cdecl _vcomp_barrier()
 @ stub _vcomp_copyprivate_broadcast
 @ stub _vcomp_copyprivate_receive
 @ stub _vcomp_enter_critsect
@@ -86,8 +86,8 @@
 @ stub _vcomp_sections_init
 @ stub _vcomp_sections_next
 @ cdecl _vcomp_set_num_threads(long)
-@ stub _vcomp_single_begin
-@ stub _vcomp_single_end
+@ cdecl _vcomp_single_begin(long)
+@ cdecl _vcomp_single_end()
 @ stub omp_destroy_lock
 @ stub omp_destroy_nest_lock
 @ cdecl omp_get_dynamic()

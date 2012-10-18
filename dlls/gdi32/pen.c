@@ -36,7 +36,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(gdi);
   /* GDI logical pen object */
 typedef struct
 {
-    GDIOBJHDR            header;
     struct brush_pattern pattern;
     EXTLOGPEN            logpen;
 } PENOBJ;
@@ -113,7 +112,7 @@ HPEN WINAPI CreatePenIndirect( const LOGPEN * pen )
         break;
     }
 
-    if (!(hpen = alloc_gdi_handle( &penPtr->header, OBJ_PEN, &pen_funcs )))
+    if (!(hpen = alloc_gdi_handle( penPtr, OBJ_PEN, &pen_funcs )))
         HeapFree( GetProcessHeap(), 0, penPtr );
     return hpen;
 }
@@ -203,7 +202,7 @@ HPEN WINAPI ExtCreatePen( DWORD style, DWORD width,
     penPtr->logpen.elpNumEntries = style_count;
     memcpy(penPtr->logpen.elpStyleEntry, style_bits, style_count * sizeof(DWORD));
 
-    if (!(hpen = alloc_gdi_handle( &penPtr->header, OBJ_EXTPEN, &pen_funcs )))
+    if (!(hpen = alloc_gdi_handle( penPtr, OBJ_EXTPEN, &pen_funcs )))
     {
         free_brush_pattern( &penPtr->pattern );
         HeapFree( GetProcessHeap(), 0, penPtr );
@@ -236,7 +235,7 @@ static HGDIOBJ PEN_SelectObject( HGDIOBJ handle, HDC hdc )
         struct brush_pattern *pattern;
         PHYSDEV physdev = GET_DC_PHYSDEV( dc, pSelectPen );
 
-        switch (pen->header.type)
+        switch (GetObjectType( handle ))
         {
         case OBJ_PEN:
             pattern = NULL;
@@ -293,7 +292,7 @@ static INT PEN_GetObject( HGDIOBJ handle, INT count, LPVOID buffer )
 
     if (!pen) return 0;
 
-    switch (pen->header.type)
+    switch (GetObjectType( handle ))
     {
     case OBJ_PEN:
     {

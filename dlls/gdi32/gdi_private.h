@@ -57,27 +57,10 @@ struct gdi_obj_funcs
     BOOL    (*pDeleteObject)( HGDIOBJ handle );
 };
 
-struct hdc_list
-{
-    HDC hdc;
-    struct hdc_list *next;
-};
-
-typedef struct tagGDIOBJHDR
-{
-    WORD        type;         /* object type (one of the OBJ_* constants) */
-    WORD        system : 1;   /* system object flag */
-    WORD        deleted : 1;  /* whether DeleteObject has been called on this object */
-    DWORD       selcount;     /* number of times the object is selected in a DC */
-    const struct gdi_obj_funcs *funcs;
-    struct hdc_list *hdcs;
-} GDIOBJHDR;
-
 typedef struct tagGdiFont GdiFont;
 
 typedef struct tagDC
 {
-    GDIOBJHDR    header;
     HDC          hSelf;            /* Handle to this DC */
     struct gdi_physdev nulldrv;    /* physdev for the null driver */
     PHYSDEV      physDev;          /* current top of the physdev stack */
@@ -192,7 +175,6 @@ static inline PHYSDEV find_dc_driver( DC *dc, const struct gdi_dc_funcs *funcs )
 
 typedef struct tagBITMAPOBJ
 {
-    GDIOBJHDR           header;
     DIBSECTION          dib;
     SIZE                size;   /* For SetBitmapDimension() */
     RGBQUAD            *color_table;  /* DIB color table if <= 8bpp (always 1 << bpp in size) */
@@ -320,15 +302,16 @@ extern BOOL WineEngInit(void) DECLSPEC_HIDDEN;
 extern BOOL WineEngRemoveFontResourceEx(LPCWSTR, DWORD, PVOID) DECLSPEC_HIDDEN;
 
 /* gdiobj.c */
-extern HGDIOBJ alloc_gdi_handle( GDIOBJHDR *obj, WORD type, const struct gdi_obj_funcs *funcs ) DECLSPEC_HIDDEN;
+extern HGDIOBJ alloc_gdi_handle( void *obj, WORD type, const struct gdi_obj_funcs *funcs ) DECLSPEC_HIDDEN;
 extern void *free_gdi_handle( HGDIOBJ handle ) DECLSPEC_HIDDEN;
 extern void *GDI_GetObjPtr( HGDIOBJ, WORD ) DECLSPEC_HIDDEN;
 extern void GDI_ReleaseObj( HGDIOBJ ) DECLSPEC_HIDDEN;
 extern void GDI_CheckNotLock(void) DECLSPEC_HIDDEN;
+extern UINT GDI_get_ref_count( HGDIOBJ handle ) DECLSPEC_HIDDEN;
 extern HGDIOBJ GDI_inc_ref_count( HGDIOBJ handle ) DECLSPEC_HIDDEN;
 extern BOOL GDI_dec_ref_count( HGDIOBJ handle ) DECLSPEC_HIDDEN;
-extern BOOL GDI_hdc_using_object(HGDIOBJ obj, HDC hdc) DECLSPEC_HIDDEN;
-extern BOOL GDI_hdc_not_using_object(HGDIOBJ obj, HDC hdc) DECLSPEC_HIDDEN;
+extern void GDI_hdc_using_object(HGDIOBJ obj, HDC hdc) DECLSPEC_HIDDEN;
+extern void GDI_hdc_not_using_object(HGDIOBJ obj, HDC hdc) DECLSPEC_HIDDEN;
 
 /* metafile.c */
 extern HMETAFILE MF_Create_HMETAFILE(METAHEADER *mh) DECLSPEC_HIDDEN;
@@ -360,7 +343,12 @@ typedef struct
     RECT *rects;
     RECT extents;
 } WINEREGION;
-extern const WINEREGION *get_wine_region(HRGN rgn) DECLSPEC_HIDDEN;
+
+/* return the region data without making a copy */
+static inline const WINEREGION *get_wine_region(HRGN rgn)
+{
+    return GDI_GetObjPtr( rgn, OBJ_REGION );
+}
 static inline void release_wine_region(HRGN rgn)
 {
     GDI_ReleaseObj(rgn);

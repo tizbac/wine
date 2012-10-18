@@ -55,7 +55,7 @@ typedef struct _locale__Locimp {
     MSVCP_size_t facet_cnt;
     category catmask;
     MSVCP_bool transparent;
-    basic_string_char name;
+    _Yarn_char name;
 } locale__Locimp;
 
 typedef struct {
@@ -64,10 +64,10 @@ typedef struct {
 
 typedef struct {
     _Lockit lock;
-    basic_string_char days;
-    basic_string_char months;
-    basic_string_char oldlocname;
-    basic_string_char newlocname;
+    _Yarn_char days;
+    _Yarn_char months;
+    _Yarn_char oldlocname;
+    _Yarn_char newlocname;
 } _Locinfo;
 
 typedef struct {
@@ -403,9 +403,9 @@ _Locinfo* __cdecl _Locinfo__Locinfo_ctor_cat_cstr(_Locinfo *locinfo, int categor
         throw_exception(EXCEPTION_RUNTIME_ERROR, "bad locale name");
 
     _Lockit_ctor_locktype(&locinfo->lock, _LOCK_LOCALE);
-    MSVCP_basic_string_char_ctor_cstr(&locinfo->days, "");
-    MSVCP_basic_string_char_ctor_cstr(&locinfo->months, "");
-    MSVCP_basic_string_char_ctor_cstr(&locinfo->oldlocname, setlocale(LC_ALL, NULL));
+    _Yarn_char_ctor_cstr(&locinfo->days, NULL);
+    _Yarn_char_ctor_cstr(&locinfo->months, NULL);
+    _Yarn_char_ctor_cstr(&locinfo->oldlocname, setlocale(LC_ALL, NULL));
 
     if(category)
         locale = setlocale(LC_ALL, locstr);
@@ -413,9 +413,9 @@ _Locinfo* __cdecl _Locinfo__Locinfo_ctor_cat_cstr(_Locinfo *locinfo, int categor
         locale = setlocale(LC_ALL, NULL);
 
     if(locale)
-        MSVCP_basic_string_char_ctor_cstr(&locinfo->newlocname, locale);
+        _Yarn_char_ctor_cstr(&locinfo->newlocname, locale);
     else
-        MSVCP_basic_string_char_ctor_cstr(&locinfo->newlocname, "*");
+        _Yarn_char_ctor_cstr(&locinfo->newlocname, "*");
 
     return locinfo;
 }
@@ -449,11 +449,11 @@ void __cdecl _Locinfo__Locinfo_dtor(_Locinfo *locinfo)
 {
     TRACE("(%p)\n", locinfo);
 
-    setlocale(LC_ALL, MSVCP_basic_string_char_c_str(&locinfo->oldlocname));
-    MSVCP_basic_string_char_dtor(&locinfo->days);
-    MSVCP_basic_string_char_dtor(&locinfo->months);
-    MSVCP_basic_string_char_dtor(&locinfo->oldlocname);
-    MSVCP_basic_string_char_dtor(&locinfo->newlocname);
+    setlocale(LC_ALL, _Yarn_char_c_str(&locinfo->oldlocname));
+    _Yarn_char_dtor(&locinfo->days);
+    _Yarn_char_dtor(&locinfo->months);
+    _Yarn_char_dtor(&locinfo->oldlocname);
+    _Yarn_char_dtor(&locinfo->newlocname);
     _Lockit_dtor(&locinfo->lock);
 }
 
@@ -484,7 +484,7 @@ _Locinfo* __cdecl _Locinfo__Locinfo_Addcats(_Locinfo *locinfo, int category, con
     if(!locstr)
         throw_exception(EXCEPTION_RUNTIME_ERROR, "bad locale name");
 
-    MSVCP_basic_string_char_dtor(&locinfo->newlocname);
+    _Yarn_char_dtor(&locinfo->newlocname);
 
     if(category)
         locale = setlocale(LC_ALL, locstr);
@@ -492,9 +492,9 @@ _Locinfo* __cdecl _Locinfo__Locinfo_Addcats(_Locinfo *locinfo, int category, con
         locale = setlocale(LC_ALL, NULL);
 
     if(locale)
-        MSVCP_basic_string_char_ctor_cstr(&locinfo->newlocname, locale);
+        _Yarn_char_ctor_cstr(&locinfo->newlocname, locale);
     else
-        MSVCP_basic_string_char_ctor_cstr(&locinfo->newlocname, "*");
+        _Yarn_char_ctor_cstr(&locinfo->newlocname, "*");
 
     return locinfo;
 }
@@ -610,12 +610,12 @@ const char* __thiscall _Locinfo__Getdays(_Locinfo *this)
     TRACE("(%p)\n", this);
 
     if(days) {
-        MSVCP_basic_string_char_dtor(&this->days);
-        MSVCP_basic_string_char_ctor_cstr(&this->days, days);
+        _Yarn_char_dtor(&this->days);
+        _Yarn_char_ctor_cstr(&this->days, days);
         free(days);
     }
 
-    return this->days.size ? MSVCP_basic_string_char_c_str(&this->days) :
+    return this->days.str ? _Yarn_char_c_str(&this->days) :
         ":Sun:Sunday:Mon:Monday:Tue:Tuesday:Wed:Wednesday:Thu:Thursday:Fri:Friday:Sat:Saturday";
 }
 
@@ -629,12 +629,12 @@ const char* __thiscall _Locinfo__Getmonths(_Locinfo *this)
     TRACE("(%p)\n", this);
 
     if(months) {
-        MSVCP_basic_string_char_dtor(&this->months);
-        MSVCP_basic_string_char_ctor_cstr(&this->months, months);
+        _Yarn_char_dtor(&this->months);
+        _Yarn_char_ctor_cstr(&this->months, months);
         free(months);
     }
 
-    return this->months.size ? MSVCP_basic_string_char_c_str(&this->months) :
+    return this->months.str ? _Yarn_char_c_str(&this->months) :
         ":Jan:January:Feb:February:Mar:March:Apr:April:May:May:Jun:June:Jul:July"
         ":Aug:August:Sep:September:Oct:October:Nov:November:Dec:December";
 }
@@ -1126,7 +1126,7 @@ MSVCP_size_t __cdecl ctype_char__Getcat(const locale_facet **facet, const locale
             return 0;
         }
 
-        _Locinfo_ctor_cstr(&locinfo, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+        _Locinfo_ctor_cstr(&locinfo, _Yarn_char_c_str(&loc->ptr->name));
         ctype_char_ctor_locinfo((ctype_char*)*facet, &locinfo, 0);
         _Locinfo_dtor(&locinfo);
     }
@@ -1752,7 +1752,7 @@ MSVCP_size_t __cdecl ctype_wchar__Getcat(const locale_facet **facet, const local
             return 0;
         }
 
-        _Locinfo_ctor_cstr(&locinfo, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+        _Locinfo_ctor_cstr(&locinfo, _Yarn_char_c_str(&loc->ptr->name));
         ctype_wchar_ctor_locinfo((ctype_wchar*)*facet, &locinfo, 0);
         _Locinfo_dtor(&locinfo);
     }
@@ -2550,7 +2550,7 @@ MSVCP_size_t __cdecl codecvt_wchar__Getcat(const locale_facet **facet, const loc
             return 0;
         }
 
-        _Locinfo_ctor_cstr(&locinfo, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+        _Locinfo_ctor_cstr(&locinfo, _Yarn_char_c_str(&loc->ptr->name));
         codecvt_wchar_ctor_locinfo((codecvt_wchar*)*facet, &locinfo, 0);
         _Locinfo_dtor(&locinfo);
     }
@@ -2602,7 +2602,7 @@ MSVCP_size_t __cdecl codecvt_short__Getcat(const locale_facet **facet, const loc
             return 0;
         }
 
-        _Locinfo_ctor_cstr(&locinfo, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+        _Locinfo_ctor_cstr(&locinfo, _Yarn_char_c_str(&loc->ptr->name));
         codecvt_short_ctor((codecvt_wchar*)*facet);
         _Locinfo_dtor(&locinfo);
     }
@@ -2747,6 +2747,7 @@ int __thiscall codecvt_wchar_do_out(const codecvt_wchar *this, int *state,
             }
 
             (*from_next)++;
+            memcpy_s(*to_next, to_end-*to_next, buf, size);
             (*to_next) += size;
         }
     }
@@ -2979,7 +2980,7 @@ static MSVCP_size_t numpunct_char__Getcat(const locale_facet **facet, const loca
             return 0;
         }
         numpunct_char_ctor_name((numpunct_char*)*facet,
-                MSVCP_basic_string_char_c_str(&loc->ptr->name), 0, TRUE);
+                _Yarn_char_c_str(&loc->ptr->name), 0, TRUE);
     }
 
     return LC_NUMERIC;
@@ -3285,7 +3286,7 @@ static MSVCP_size_t numpunct_wchar__Getcat(const locale_facet **facet, const loc
             return 0;
         }
         numpunct_wchar_ctor_name((numpunct_wchar*)*facet,
-                MSVCP_basic_string_char_c_str(&loc->ptr->name), 0, TRUE);
+                _Yarn_char_c_str(&loc->ptr->name), 0, TRUE);
     }
 
     return LC_NUMERIC;
@@ -3333,7 +3334,7 @@ static MSVCP_size_t numpunct_short__Getcat(const locale_facet **facet, const loc
             return 0;
         }
         numpunct_short_ctor_name((numpunct_wchar*)*facet,
-                MSVCP_basic_string_char_c_str(&loc->ptr->name), 0, TRUE);
+                _Yarn_char_c_str(&loc->ptr->name), 0, TRUE);
     }
 
     return LC_NUMERIC;
@@ -3719,7 +3720,7 @@ MSVCP_size_t __cdecl num_get_wchar__Getcat(const locale_facet **facet, const loc
             return 0;
         }
 
-        _Locinfo_ctor_cstr(&locinfo, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+        _Locinfo_ctor_cstr(&locinfo, _Yarn_char_c_str(&loc->ptr->name));
         num_get_wchar_ctor_locinfo((num_get*)*facet, &locinfo, 0);
         _Locinfo_dtor(&locinfo);
     }
@@ -3807,11 +3808,12 @@ static int num_get__Getffld(const num_get *this, char *dest, istreambuf_iterator
         istreambuf_iterator_wchar *last, const locale *loc, numpunct_wchar *numpunct)
 {
     basic_string_char grouping_bstr;
+    basic_string_char groups_found;
     int i, groups_no = 0, cur_group = 0, exp = 0;
-    char *dest_beg = dest, *num_end = dest+25, *exp_end = dest+31, *groups = NULL;
+    char *dest_beg = dest, *num_end = dest+25, *exp_end = dest+31;
     wchar_t sep, digits[11], *digits_pos;
-    const char *grouping;
-    BOOL error = FALSE, got_digit = FALSE, dest_empty = TRUE;
+    const char *grouping, *groups;
+    BOOL error = FALSE, got_digit = FALSE, got_nonzero = FALSE;
 
     TRACE("(%p %p %p %p)\n", dest, first, last, loc);
 
@@ -3823,7 +3825,11 @@ static int num_get__Getffld(const num_get *this, char *dest, istreambuf_iterator
     grouping = MSVCP_basic_string_char_c_str(&grouping_bstr);
     sep = grouping[0] ? numpunct_wchar_thousands_sep(numpunct) : (wchar_t)0;
 
+    if(sep)
+        MSVCP_basic_string_char_ctor(&groups_found);
+
     istreambuf_iterator_wchar_val(first);
+    /* get sign */
     if(first->strbuf && first->val==mb_to_wc('-', &this->cvt)) {
         *dest++ = '-';
         istreambuf_iterator_wchar_inc(first);
@@ -3832,45 +3838,99 @@ static int num_get__Getffld(const num_get *this, char *dest, istreambuf_iterator
         istreambuf_iterator_wchar_inc(first);
     }
 
-    if(sep) {
-        groups_no = strlen(grouping)+2;
-        groups = calloc(groups_no, sizeof(char));
-    }
-
+    /* read possibly grouped numbers before decimal */
     for(; first->strbuf; istreambuf_iterator_wchar_inc(first)) {
         if(!(digits_pos = wcschr(digits, first->val))) {
             if(sep && first->val==sep) {
-                if(cur_group == groups_no+1) {
-                    if(groups[1] != groups[2]) {
-                        error = TRUE;
-                        break;
-                    }else {
-                        memmove(groups+1, groups+2, groups_no);
-                        groups[cur_group] = 0;
-                    }
-                }else {
-                    cur_group++;
-                }
+                if(!groups_no) break; /* empty group - stop parsing */
+                MSVCP_basic_string_char_append_ch(&groups_found, groups_no);
+                groups_no = 0;
+                ++cur_group;
             }else {
                 break;
             }
         }else {
-            got_digit = TRUE;
-            if(dest_empty && first->val == digits[0])
+            got_digit = TRUE; /* found a digit, zero or non-zero */
+            /* write digit to dest if not a leading zero (to not waste dest buffer) */
+            if(!got_nonzero && first->val == digits[0])
+            {
+                ++groups_no;
                 continue;
-            dest_empty = FALSE;
+            }
+            got_nonzero = TRUE;
             if(dest < num_end)
                 *dest++ = '0'+digits_pos-digits;
             else
-                exp++;
-            if(sep && groups[cur_group]<CHAR_MAX)
-                groups[cur_group]++;
+                exp++; /* too many digits, just multiply by 10 */
+            if(sep && groups_no<CHAR_MAX)
+                ++groups_no;
         }
     }
 
-    if(cur_group && !groups[cur_group])
+    /* if all leading zeroes, we didn't write anything so put a zero we check for a decimal */
+    if(got_digit && !got_nonzero)
+        *dest++ = '0';
+
+    /* get decimal, if any */
+    if(first->strbuf && first->val==numpunct_wchar_decimal_point(numpunct)) {
+        if(dest < num_end)
+            *dest++ = *localeconv()->decimal_point;
+        istreambuf_iterator_wchar_inc(first);
+    }
+
+    /* read non-grouped after decimal */
+    for(; first->strbuf; istreambuf_iterator_wchar_inc(first)) {
+        if(!(digits_pos = wcschr(digits, first->val)))
+            break;
+        else if(dest<num_end) {
+            got_digit = TRUE;
+            *dest++ = '0'+digits_pos-digits;
+        }
+    }
+
+    /* read exponent, if any */
+    if(first->strbuf && (first->val==mb_to_wc('e', &this->cvt) || first->val==mb_to_wc('E', &this->cvt))) {
+        *dest++ = 'e';
+        istreambuf_iterator_wchar_inc(first);
+
+        if(first->strbuf && first->val==mb_to_wc('-', &this->cvt)) {
+            *dest++ = '-';
+            istreambuf_iterator_wchar_inc(first);
+        }else if(first->strbuf && first->val==mb_to_wc('+', &this->cvt)) {
+            *dest++ = '+';
+            istreambuf_iterator_wchar_inc(first);
+        }
+
+        got_digit = got_nonzero = FALSE;
         error = TRUE;
-    else if(!cur_group)
+        /* skip any leading zeroes */
+        for(; first->strbuf && first->val==digits[0]; istreambuf_iterator_wchar_inc(first))
+            error = FALSE;
+
+        for(; first->strbuf && (digits_pos = wcschr(digits, first->val)); istreambuf_iterator_wchar_inc(first)) {
+            got_digit = got_nonzero = TRUE; /* leading zeroes would have been skipped, so first digit is non-zero */
+            error = FALSE;
+            if(dest<exp_end)
+                *dest++ = '0'+digits_pos-digits;
+        }
+
+        /* if just found zeroes for exponent, use that */
+        if(got_digit && !got_nonzero)
+        {
+            error = FALSE;
+            if(dest<exp_end)
+                *dest++ = '0';
+        }
+    }
+
+    if(sep && groups_no)
+        MSVCP_basic_string_char_append_ch(&groups_found, groups_no);
+
+    groups = MSVCP_basic_string_char_c_str(&groups_found);
+    if(cur_group && !groups[cur_group])
+    {
+        error = TRUE; /* trailing empty */
+    }else if(!cur_group) /* no groups, skip loop */
         cur_group--;
 
     for(; cur_group>=0 && !error; cur_group--) {
@@ -3887,75 +3947,13 @@ static int num_get__Getffld(const num_get *this, char *dest, istreambuf_iterator
         }
     }
     MSVCP_basic_string_char_dtor(&grouping_bstr);
-    free(groups);
+    if(sep)
+        MSVCP_basic_string_char_dtor(&groups_found);
 
     if(error) {
         *dest_beg = '\0';
         return 0;
-    }else if(dest_empty) {
-        *dest++ = '0';
     }
-
-    if(first->strbuf && first->val==numpunct_wchar_decimal_point(numpunct)) {
-        if(dest < num_end)
-            *dest++ = *localeconv()->decimal_point;
-        istreambuf_iterator_wchar_inc(first);
-
-        if(dest_empty) {
-            for(; first->strbuf && first->val==digits[0]; istreambuf_iterator_wchar_inc(first)) {
-                got_digit = TRUE;
-                exp--;
-            }
-
-            if(!first->strbuf || !wcschr(digits, first->val))
-                dest--;
-        }
-    }
-
-    for(; first->strbuf; istreambuf_iterator_wchar_inc(first)) {
-        if(!(digits_pos = wcschr(digits, first->val)))
-            break;
-        else if(dest<num_end) {
-            got_digit = TRUE;
-            *dest++ = '0'+digits_pos-digits;
-        }
-    }
-
-    if(!got_digit) {
-        *dest_beg = '\0';
-        return 0;
-    }
-
-    if(first->strbuf && (first->val==mb_to_wc('e', &this->cvt) || first->val==mb_to_wc('E', &this->cvt))) {
-        *dest++ = 'e';
-        istreambuf_iterator_wchar_inc(first);
-
-        if(first->strbuf && first->val==mb_to_wc('-', &this->cvt)) {
-            *dest++ = '-';
-            istreambuf_iterator_wchar_inc(first);
-        }else if(first->strbuf && first->val==mb_to_wc('+', &this->cvt)) {
-            *dest++ = '+';
-            istreambuf_iterator_wchar_inc(first);
-        }
-
-        error = dest_empty = TRUE;
-        for(; first->strbuf && first->val==digits[0]; istreambuf_iterator_wchar_inc(first))
-            error = FALSE;
-
-        for(; first->strbuf && (digits_pos = wcschr(digits, first->val)); istreambuf_iterator_wchar_inc(first)) {
-            error = dest_empty = FALSE;
-            if(dest<exp_end)
-                *dest++ = '0'+digits_pos-digits;
-        }
-
-        if(error) {
-            *dest_beg = '\0';
-            return 0;
-        }else if(dest_empty) {
-            *dest++ = '0';
-        }
-    }
-
     *dest++ = '\0';
     return exp;
 }
@@ -3976,10 +3974,11 @@ static int num_get__Getifld(const num_get *this, char *dest, istreambuf_iterator
 {
     wchar_t digits[23], *digits_pos, sep;
     basic_string_char grouping_bstr;
+    basic_string_char groups_found;
     int i, basefield, base, groups_no = 0, cur_group = 0;
-    char *dest_beg = dest, *dest_end = dest+24, *groups = NULL;
-    const char *grouping;
-    BOOL error = TRUE, dest_empty = TRUE;
+    char *dest_beg = dest, *dest_end = dest+24;
+    const char *grouping, *groups;
+    BOOL error = TRUE, dest_empty = TRUE, found_zero = FALSE;
 
     TRACE("(%p %p %p %04x %p)\n", dest, first, last, fmtflags, loc);
 
@@ -4013,46 +4012,48 @@ static int num_get__Getifld(const num_get *this, char *dest, istreambuf_iterator
         istreambuf_iterator_wchar_inc(first);
     }
 
-    if(!base && first->strbuf && first->val==digits[0]) {
+    if(first->strbuf && first->val==digits[0]) {
+        found_zero = TRUE;
         istreambuf_iterator_wchar_inc(first);
-        if(first->strbuf && (first->val==mb_to_wc('x', &this->cvt) || first->val==mb_to_wc('x', &this->cvt))) {
-            istreambuf_iterator_wchar_inc(first);
-            base = 22;
+        if(first->strbuf && (first->val==mb_to_wc('x', &this->cvt) || first->val==mb_to_wc('X', &this->cvt))) {
+            if(!base || base == 22) {
+                found_zero = FALSE;
+                istreambuf_iterator_wchar_inc(first);
+                base = 22;
+            }else {
+                base = 10;
+            }
         }else {
             error = FALSE;
-            base = 8;
+            if(!base) base = 8;
         }
     }else {
-        base = 10;
+        if(!base) base = 10;
     }
     digits[base] = 0;
 
     if(sep) {
-        groups_no = strlen(grouping)+2;
-        groups = calloc(groups_no, sizeof(char));
+        MSVCP_basic_string_char_ctor(&groups_found);
+        if(found_zero) ++groups_no;
     }
 
     for(; first->strbuf; istreambuf_iterator_wchar_inc(first)) {
         if(!(digits_pos = wcschr(digits, first->val))) {
             if(sep && first->val==sep) {
-                if(cur_group == groups_no+1) {
-                    if(groups[1] != groups[2]) {
-                        error = TRUE;
-                        break;
-                    }else {
-                        memmove(groups+1, groups+2, groups_no);
-                        groups[cur_group] = 0;
-                    }
-                }else {
-                    cur_group++;
-                }
+                if(!groups_no) break; /* empty group - stop parsing */
+                MSVCP_basic_string_char_append_ch(&groups_found, groups_no);
+                groups_no = 0;
+                ++cur_group;
             }else {
                 break;
             }
         }else {
             error = FALSE;
-            if(dest_empty && first->val == digits[0])
+            if(dest_empty && first->val == digits[0]) {
+                found_zero = TRUE;
+                ++groups_no;
                 continue;
+            }
             dest_empty = FALSE;
             /* skip digits that can't be copied to dest buffer, other
              * functions are responsible for detecting overflows */
@@ -4060,14 +4061,20 @@ static int num_get__Getifld(const num_get *this, char *dest, istreambuf_iterator
                 *dest++ = (digits_pos-digits<10 ? '0'+digits_pos-digits :
                         (digits_pos-digits<16 ? 'a'+digits_pos-digits-10 :
                          'A'+digits_pos-digits-16));
-            if(sep && groups[cur_group]<CHAR_MAX)
-                groups[cur_group]++;
+            if(sep && groups_no<CHAR_MAX)
+                ++groups_no;
         }
     }
 
+    if(sep && groups_no)
+        MSVCP_basic_string_char_append_ch(&groups_found, groups_no);
+
+    groups = MSVCP_basic_string_char_c_str(&groups_found);
     if(cur_group && !groups[cur_group])
-        error = TRUE;
-    else if(!cur_group)
+    {
+        error = TRUE; /* trailing empty */
+        found_zero = FALSE;
+    }else if(!cur_group) /* no groups, skip loop */
         cur_group--;
 
     for(; cur_group>=0 && !error; cur_group--) {
@@ -4083,12 +4090,17 @@ static int num_get__Getifld(const num_get *this, char *dest, istreambuf_iterator
             grouping++;
         }
     }
-    MSVCP_basic_string_char_dtor(&grouping_bstr);
-    free(groups);
 
-    if(error)
-        dest = dest_beg;
-    else if(dest_empty)
+    MSVCP_basic_string_char_dtor(&grouping_bstr);
+    if(sep)
+        MSVCP_basic_string_char_dtor(&groups_found);
+
+    if(error) {
+        if (found_zero)
+            *dest++ = '0';
+        else
+            dest = dest_beg;
+    }else if(dest_empty)
         *dest++ = '0';
     *dest = '\0';
 
@@ -4852,7 +4864,7 @@ MSVCP_size_t __cdecl num_get_char__Getcat(const locale_facet **facet, const loca
             return 0;
         }
 
-        _Locinfo_ctor_cstr(&locinfo, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+        _Locinfo_ctor_cstr(&locinfo, _Yarn_char_c_str(&loc->ptr->name));
         num_get_char_ctor_locinfo((num_get*)*facet, &locinfo, 0);
         _Locinfo_dtor(&locinfo);
     }
@@ -4901,10 +4913,11 @@ static int num_get_char__Getffld(const num_get *this, char *dest, istreambuf_ite
 {
     numpunct_char *numpunct = numpunct_char_use_facet(loc);
     basic_string_char grouping_bstr;
+    basic_string_char groups_found;
     int groups_no = 0, cur_group = 0, exp = 0;
-    char *dest_beg = dest, *num_end = dest+25, *exp_end = dest+31, *groups = NULL, sep;
-    const char *grouping;
-    BOOL error = FALSE, got_digit = FALSE, dest_empty = TRUE;
+    char *dest_beg = dest, *num_end = dest+25, *exp_end = dest+31, sep;
+    const char *grouping, *groups;
+    BOOL error = FALSE, got_digit = FALSE, got_nonzero = FALSE;
 
     TRACE("(%p %p %p %p)\n", dest, first, last, loc);
 
@@ -4912,51 +4925,106 @@ static int num_get_char__Getffld(const num_get *this, char *dest, istreambuf_ite
     grouping = MSVCP_basic_string_char_c_str(&grouping_bstr);
     sep = grouping[0] ? numpunct_char_thousands_sep(numpunct) : '\0';
 
+    if(sep)
+        MSVCP_basic_string_char_ctor(&groups_found);
+
     istreambuf_iterator_char_val(first);
+    /* get sign */
     if(first->strbuf && (first->val=='-' || first->val=='+')) {
         *dest++ = first->val;
         istreambuf_iterator_char_inc(first);
     }
 
-    if(sep) {
-        groups_no = strlen(grouping)+2;
-        groups = calloc(groups_no, sizeof(char));
-    }
-
+    /* read possibly grouped numbers before decimal */
     for(; first->strbuf; istreambuf_iterator_char_inc(first)) {
         if(first->val<'0' || first->val>'9') {
             if(sep && first->val==sep) {
-                if(cur_group == groups_no+1) {
-                    if(groups[1] != groups[2]) {
-                        error = TRUE;
-                        break;
-                    }else {
-                        memmove(groups+1, groups+2, groups_no);
-                        groups[cur_group] = 0;
-                    }
-                }else {
-                    cur_group++;
-                }
+                if(!groups_no) break; /* empty group - stop parsing */
+                MSVCP_basic_string_char_append_ch(&groups_found, groups_no);
+                groups_no = 0;
+                ++cur_group;
             }else {
                 break;
             }
         }else {
-            got_digit = TRUE;
-            if(dest_empty && first->val == '0')
+            got_digit = TRUE; /* found a digit, zero or non-zero */
+            /* write digit to dest if not a leading zero (to not waste dest buffer) */
+            if(!got_nonzero && first->val == '0')
+            {
+                ++groups_no;
                 continue;
-            dest_empty = FALSE;
+            }
+            got_nonzero = TRUE;
             if(dest < num_end)
                 *dest++ = first->val;
             else
-                exp++;
-            if(sep && groups[cur_group]<CHAR_MAX)
-                groups[cur_group]++;
+                exp++; /* too many digits, just multiply by 10 */
+            if(sep && groups_no<CHAR_MAX)
+                ++groups_no;
         }
     }
 
-    if(cur_group && !groups[cur_group])
+    /* if all leading zeroes, we didn't write anything so put a zero we check for a decimal */
+    if(got_digit && !got_nonzero)
+        *dest++ = '0';
+
+    /* get decimal, if any */
+    if(first->strbuf && first->val==numpunct_char_decimal_point(numpunct)) {
+        if(dest < num_end)
+            *dest++ = *localeconv()->decimal_point;
+        istreambuf_iterator_char_inc(first);
+    }
+
+    /* read non-grouped after decimal */
+    for(; first->strbuf; istreambuf_iterator_char_inc(first)) {
+        if(first->val<'0' || first->val>'9')
+            break;
+        else if(dest<num_end) {
+            got_digit = TRUE;
+            *dest++ = first->val;
+        }
+    }
+
+    /* read exponent, if any */
+    if(first->strbuf && (first->val=='e' || first->val=='E')) {
+        *dest++ = first->val;
+        istreambuf_iterator_char_inc(first);
+
+        if(first->strbuf && (first->val=='-' || first->val=='+')) {
+            *dest++ = first->val;
+            istreambuf_iterator_char_inc(first);
+        }
+
+        got_digit = got_nonzero = FALSE;
         error = TRUE;
-    else if(!cur_group)
+        /* skip any leading zeroes */
+        for(; first->strbuf && first->val=='0'; istreambuf_iterator_char_inc(first))
+            got_digit = TRUE;
+
+        for(; first->strbuf && first->val>='0' && first->val<='9'; istreambuf_iterator_char_inc(first)) {
+            got_digit = got_nonzero = TRUE; /* leading zeroes would have been skipped, so first digit is non-zero */
+            error = FALSE;
+            if(dest<exp_end)
+                *dest++ = first->val;
+        }
+
+        /* if just found zeroes for exponent, use that */
+        if(got_digit && !got_nonzero)
+        {
+            error = FALSE;
+            if(dest<exp_end)
+                *dest++ = '0';
+        }
+    }
+
+    if(sep && groups_no)
+        MSVCP_basic_string_char_append_ch(&groups_found, groups_no);
+
+    groups = MSVCP_basic_string_char_c_str(&groups_found);
+    if(cur_group && !groups[cur_group])
+    {
+        error = TRUE; /* trailing empty */
+    }else if(!cur_group) /* no groups, skip loop */
         cur_group--;
 
     for(; cur_group>=0 && !error; cur_group--) {
@@ -4973,72 +5041,13 @@ static int num_get_char__Getffld(const num_get *this, char *dest, istreambuf_ite
         }
     }
     MSVCP_basic_string_char_dtor(&grouping_bstr);
-    free(groups);
+    if(sep)
+        MSVCP_basic_string_char_dtor(&groups_found);
 
     if(error) {
         *dest_beg = '\0';
         return 0;
-    }else if(dest_empty) {
-        *dest++ = '0';
     }
-
-    if(first->strbuf && first->val==numpunct_char_decimal_point(numpunct)) {
-        if(dest < num_end)
-            *dest++ = *localeconv()->decimal_point;
-        istreambuf_iterator_char_inc(first);
-
-        if(dest_empty) {
-            for(; first->strbuf && first->val=='0'; istreambuf_iterator_char_inc(first)) {
-                got_digit = TRUE;
-                exp--;
-            }
-
-            if(!first->strbuf || first->val<'1' || first->val>'9')
-                dest--;
-        }
-    }
-
-    for(; first->strbuf; istreambuf_iterator_char_inc(first)) {
-        if(first->val<'0' || first->val>'9')
-            break;
-        else if(dest<num_end) {
-            got_digit = TRUE;
-            *dest++ = first->val;
-        }
-    }
-
-    if(!got_digit) {
-        *dest_beg = '\0';
-        return 0;
-    }
-
-    if(first->strbuf && (first->val=='e' || first->val=='E')) {
-        *dest++ = first->val;
-        istreambuf_iterator_char_inc(first);
-
-        if(first->strbuf && (first->val=='-' || first->val=='+')) {
-            *dest++ = first->val;
-            istreambuf_iterator_char_inc(first);
-        }
-
-        error = dest_empty = TRUE;
-        for(; first->strbuf && first->val=='0'; istreambuf_iterator_char_inc(first))
-            error = FALSE;
-
-        for(; first->strbuf && first->val>='0' && first->val<='9'; istreambuf_iterator_char_inc(first)) {
-            error = dest_empty = FALSE;
-            if(dest<exp_end)
-                *dest++ = first->val;
-        }
-
-        if(error) {
-            *dest_beg = '\0';
-            return 0;
-        }else if(dest_empty) {
-            *dest++ = '0';
-        }
-    }
-
     *dest++ = '\0';
     return exp;
 }
@@ -5067,10 +5076,11 @@ int __cdecl num_get_char__Getifld(const num_get *this, char *dest, istreambuf_it
 
     numpunct_char *numpunct = numpunct_char_use_facet(loc);
     basic_string_char grouping_bstr;
+    basic_string_char groups_found;
     int basefield, base, groups_no = 0, cur_group = 0;
-    char *dest_beg = dest, *dest_end = dest+24, *groups = NULL, sep;
-    const char *grouping;
-    BOOL error = TRUE, dest_empty = TRUE;
+    char *dest_beg = dest, *dest_end = dest+24, sep;
+    const char *grouping, *groups;
+    BOOL error = TRUE, dest_empty = TRUE, found_zero = FALSE;
 
     TRACE("(%p %p %p %04x %p)\n", dest, first, last, fmtflags, loc);
 
@@ -5094,58 +5104,68 @@ int __cdecl num_get_char__Getifld(const num_get *this, char *dest, istreambuf_it
         istreambuf_iterator_char_inc(first);
     }
 
-    if(!base && first->strbuf && first->val=='0') {
+    if(first->strbuf && first->val=='0') {
+        found_zero = TRUE;
         istreambuf_iterator_char_inc(first);
         if(first->strbuf && (first->val=='x' || first->val=='X')) {
-            istreambuf_iterator_char_inc(first);
-            base = 22;
+            if(!base || base == 22) {
+                found_zero = FALSE;
+                istreambuf_iterator_char_inc(first);
+                base = 22;
+            }else {
+                base = 10;
+            }
         }else {
             error = FALSE;
-            base = 8;
+            if(!base) base = 8;
         }
     }else {
-        base = 10;
+        if (!base) base = 10;
     }
 
-    if(sep) {
-        groups_no = strlen(grouping)+2;
-        groups = calloc(groups_no, sizeof(char));
+    if(sep)
+    {
+        MSVCP_basic_string_char_ctor(&groups_found);
+        if(found_zero) ++groups_no;
     }
 
     for(; first->strbuf; istreambuf_iterator_char_inc(first)) {
         if(!memchr(digits, first->val, base)) {
             if(sep && first->val==sep) {
-                if(cur_group == groups_no+1) {
-                    if(groups[1] != groups[2]) {
-                        error = TRUE;
-                        break;
-                    }else {
-                        memmove(groups+1, groups+2, groups_no);
-                        groups[cur_group] = 0;
-                    }
-                }else {
-                    cur_group++;
-                }
+                if(!groups_no) break; /* empty group - stop parsing */
+                MSVCP_basic_string_char_append_ch(&groups_found, groups_no);
+                groups_no = 0;
+                ++cur_group;
             }else {
                 break;
             }
         }else {
             error = FALSE;
             if(dest_empty && first->val == '0')
+            {
+                found_zero = TRUE;
+                ++groups_no;
                 continue;
+            }
             dest_empty = FALSE;
             /* skip digits that can't be copied to dest buffer, other
              * functions are responsible for detecting overflows */
             if(dest < dest_end)
                 *dest++ = first->val;
-            if(sep && groups[cur_group]<CHAR_MAX)
-                groups[cur_group]++;
+            if(sep && groups_no<CHAR_MAX)
+                ++groups_no;
         }
     }
 
+    if(sep && groups_no)
+        MSVCP_basic_string_char_append_ch(&groups_found, groups_no);
+
+    groups = MSVCP_basic_string_char_c_str(&groups_found);
     if(cur_group && !groups[cur_group])
-        error = TRUE;
-    else if(!cur_group)
+    {
+        error = TRUE; /* trailing empty */
+        found_zero = FALSE;
+    }else if(!cur_group) /* no groups, skip loop */
         cur_group--;
 
     for(; cur_group>=0 && !error; cur_group--) {
@@ -5161,12 +5181,17 @@ int __cdecl num_get_char__Getifld(const num_get *this, char *dest, istreambuf_it
             grouping++;
         }
     }
-    MSVCP_basic_string_char_dtor(&grouping_bstr);
-    free(groups);
 
-    if(error)
-        dest = dest_beg;
-    else if(dest_empty)
+    MSVCP_basic_string_char_dtor(&grouping_bstr);
+    if(sep)
+        MSVCP_basic_string_char_dtor(&groups_found);
+
+    if(error) {
+        if (found_zero)
+            *dest++ = '0';
+        else
+            dest = dest_beg;
+    }else if(dest_empty)
         *dest++ = '0';
     *dest = '\0';
 
@@ -5713,7 +5738,7 @@ MSVCP_size_t __cdecl num_put_char__Getcat(const locale_facet **facet, const loca
             return 0;
         }
 
-        _Locinfo_ctor_cstr(&locinfo, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+        _Locinfo_ctor_cstr(&locinfo, _Yarn_char_c_str(&loc->ptr->name));
         num_put_char_ctor_locinfo((num_put*)*facet, &locinfo, 0);
         _Locinfo_dtor(&locinfo);
     }
@@ -6360,7 +6385,7 @@ MSVCP_size_t __cdecl num_put_wchar__Getcat(const locale_facet **facet, const loc
             return 0;
         }
 
-        _Locinfo_ctor_cstr(&locinfo, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+        _Locinfo_ctor_cstr(&locinfo, _Yarn_char_c_str(&loc->ptr->name));
         num_put_wchar_ctor_locinfo((num_put*)*facet, &locinfo, 0);
         _Locinfo_dtor(&locinfo);
     }
@@ -6384,7 +6409,7 @@ MSVCP_size_t __cdecl num_put_short__Getcat(const locale_facet **facet, const loc
             return 0;
         }
 
-        _Locinfo_ctor_cstr(&locinfo, MSVCP_basic_string_char_c_str(&loc->ptr->name));
+        _Locinfo_ctor_cstr(&locinfo, _Yarn_char_c_str(&loc->ptr->name));
         num_put_short_ctor_locinfo((num_put*)*facet, &locinfo, 0);
         _Locinfo_dtor(&locinfo);
     }
@@ -7148,7 +7173,7 @@ locale__Locimp* __thiscall locale__Locimp_ctor_transparent(locale__Locimp *this,
     memset(this, 0, sizeof(locale__Locimp));
     locale_facet_ctor_refs(&this->facet, 1);
     this->transparent = transparent;
-    MSVCP_basic_string_char_ctor_cstr(&this->name, "*");
+    _Yarn_char_ctor_cstr(&this->name, "*");
     return this;
 }
 
@@ -7188,7 +7213,7 @@ locale__Locimp* __thiscall locale__Locimp_copy_ctor(locale__Locimp *this, const 
                 locale_facet__Incref(this->facetvec[i]);
         }
     }
-    MSVCP_basic_string_char_copy_ctor(&this->name, &copy->name);
+    _Yarn_char_copy_ctor(&this->name, &copy->name);
     _Lockit_dtor(&lock);
     return this;
 }
@@ -7214,7 +7239,7 @@ void __thiscall locale__Locimp_dtor(locale__Locimp *this)
                 call_locale_facet_vector_dtor(this->facetvec[i], 0);
 
         MSVCRT_operator_delete(this->facetvec);
-        MSVCP_basic_string_char_dtor(&this->name);
+        _Yarn_char_dtor(&this->name);
     }
 }
 
@@ -7574,7 +7599,7 @@ locale__Locimp* __cdecl locale__Locimp__Makeloc(const _Locinfo *locinfo, categor
     locale__Locimp__Makeushloc(locinfo, cat, locimp, loc);
 
     locimp->catmask |= cat;
-    MSVCP_basic_string_char_copy_ctor(&locimp->name, &locinfo->newlocname);
+    _Yarn_char_copy_ctor(&locimp->name, &locinfo->newlocname);
     return locimp;
 }
 
@@ -7617,8 +7642,8 @@ locale__Locimp* __cdecl locale__Init(void)
 
     locale__Locimp_ctor(global_locale);
     global_locale->catmask = (1<<(LC_MAX+1))-1;
-    MSVCP_basic_string_char_dtor(&global_locale->name);
-    MSVCP_basic_string_char_ctor_cstr(&global_locale->name, "C");
+    _Yarn_char_dtor(&global_locale->name);
+    _Yarn_char_ctor_cstr(&global_locale->name, "C");
 
     locale__Locimp__Clocptr = global_locale;
     global_locale->facet.refs++;
@@ -7741,7 +7766,7 @@ locale* __cdecl locale_global(locale *ret, const locale *loc)
         for(i=LC_ALL+1; i<=LC_MAX; i++) {
             if((global_locale->catmask & (1<<(i-1))) == 0)
                 continue;
-            setlocale(i, MSVCP_basic_string_char_c_str(&global_locale->name));
+            setlocale(i, _Yarn_char_c_str(&global_locale->name));
         }
     }
     _Lockit_dtor(&lock);

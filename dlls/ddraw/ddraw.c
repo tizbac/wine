@@ -27,6 +27,10 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(ddraw);
 
+static struct wined3d_display_mode original_mode;
+static const struct ddraw *exclusive_ddraw;
+static BOOL restore_mode;
+
 /* Device identifier. Don't relay it to WineD3D */
 static const DDDEVICEIDENTIFIER2 deviceidentifier =
 {
@@ -967,6 +971,11 @@ static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd,
     if(cooplevel & DDSCL_FPUSETUP)
         WARN("(%p) Unhandled flag DDSCL_FPUSETUP, harmless\n", This);
 
+    if (cooplevel & DDSCL_EXCLUSIVE)
+        exclusive_ddraw = This;
+    else if (exclusive_ddraw == This)
+        exclusive_ddraw = NULL;
+
     /* Store the cooperative_level */
     This->cooperative_level = cooplevel;
     TRACE("SetCooperativeLevel retuning DD_OK\n");
@@ -1003,79 +1012,6 @@ static HRESULT WINAPI ddraw1_SetCooperativeLevel(IDirectDraw *iface, HWND window
 }
 
 /*****************************************************************************
- *
- * Helper function for SetDisplayMode and RestoreDisplayMode
- *
- * Implements DirectDraw's SetDisplayMode, but ignores the value of
- * ForceRefreshRate, since it is already handled by
- * ddraw7_SetDisplayMode.  RestoreDisplayMode can use this function
- * without worrying that ForceRefreshRate will override the refresh rate.  For
- * argument and return value documentation, see
- * ddraw7_SetDisplayMode.
- *
- *****************************************************************************/
-static HRESULT ddraw_set_display_mode(struct ddraw *ddraw, DWORD Width, DWORD Height,
-        DWORD BPP, DWORD RefreshRate, DWORD Flags)
-{
-    struct wined3d_display_mode mode;
-    enum wined3d_format_id format;
-    HRESULT hr;
-
-    TRACE("ddraw %p, width %u, height %u, bpp %u, refresh_rate %u, flags %#x.\n", ddraw, Width,
-            Height, BPP, RefreshRate, Flags);
-
-    wined3d_mutex_lock();
-    if( !Width || !Height )
-    {
-        ERR("Width %u, Height %u, what to do?\n", Width, Height);
-        /* It looks like Need for Speed Porsche Unleashed expects DD_OK here */
-        wined3d_mutex_unlock();
-        return DD_OK;
-    }
-
-    switch(BPP)
-    {
-        case 8:  format = WINED3DFMT_P8_UINT;          break;
-        case 15: format = WINED3DFMT_B5G5R5X1_UNORM;   break;
-        case 16: format = WINED3DFMT_B5G6R5_UNORM;     break;
-        case 24: format = WINED3DFMT_B8G8R8_UNORM;     break;
-        case 32: format = WINED3DFMT_B8G8R8X8_UNORM;   break;
-        default: format = WINED3DFMT_UNKNOWN;          break;
-    }
-
-    /* Check the exclusive mode
-    if(!(ddraw->cooperative_level & DDSCL_EXCLUSIVE))
-        return DDERR_NOEXCLUSIVEMODE;
-     * This is WRONG. Don't know if the SDK is completely
-     * wrong and if there are any conditions when DDERR_NOEXCLUSIVE
-     * is returned, but Half-Life 1.1.1.1 (Steam version)
-     * depends on this
-     */
-
-    mode.width = Width;
-    mode.height = Height;
-    mode.refresh_rate = RefreshRate;
-    mode.format_id = format;
-    mode.scanline_ordering = WINED3D_SCANLINE_ORDERING_UNKNOWN;
-
-    /* TODO: The possible return values from msdn suggest that
-     * the screen mode can't be changed if a surface is locked
-     * or some drawing is in progress
-     */
-
-    /* TODO: Lose the primary surface */
-    hr = wined3d_set_adapter_display_mode(ddraw->wined3d, WINED3DADAPTER_DEFAULT, &mode);
-
-    wined3d_mutex_unlock();
-
-    switch(hr)
-    {
-        case WINED3DERR_NOTAVAILABLE:       return DDERR_UNSUPPORTED;
-        default:                            return hr;
-    }
-}
-
-/*****************************************************************************
  * IDirectDraw7::SetDisplayMode
  *
  * Sets the display screen resolution, color depth and refresh frequency
@@ -1097,22 +1033,75 @@ static HRESULT ddraw_set_display_mode(struct ddraw *ddraw, DWORD Width, DWORD He
  *  DD_OK on success
  *
  *****************************************************************************/
-static HRESULT WINAPI ddraw7_SetDisplayMode(IDirectDraw7 *iface, DWORD Width, DWORD Height,
-        DWORD BPP, DWORD RefreshRate, DWORD Flags)
+static HRESULT WINAPI ddraw7_SetDisplayMode(IDirectDraw7 *iface, DWORD width, DWORD height,
+        DWORD bpp, DWORD refresh_rate, DWORD flags)
 {
     struct ddraw *ddraw = impl_from_IDirectDraw7(iface);
+    struct wined3d_display_mode mode;
+    enum wined3d_format_id format;
+    HRESULT hr;
 
     TRACE("iface %p, width %u, height %u, bpp %u, refresh_rate %u, flags %#x.\n",
-            iface, Width, Height, BPP, RefreshRate, Flags);
+            iface, width, height, bpp, refresh_rate, flags);
 
     if (force_refresh_rate != 0)
     {
         TRACE("ForceRefreshRate overriding passed-in refresh rate (%u Hz) to %u Hz\n",
-                RefreshRate, force_refresh_rate);
-        RefreshRate = force_refresh_rate;
+                refresh_rate, force_refresh_rate);
+        refresh_rate = force_refresh_rate;
     }
 
-    return ddraw_set_display_mode(ddraw, Width, Height, BPP, RefreshRate, Flags);
+    wined3d_mutex_lock();
+
+    if (exclusive_ddraw && exclusive_ddraw != ddraw)
+    {
+        wined3d_mutex_unlock();
+        return DDERR_NOEXCLUSIVEMODE;
+    }
+
+    if (!width || !height)
+    {
+        /* It looks like Need for Speed Porsche Unleashed expects DD_OK here. */
+        wined3d_mutex_unlock();
+        return DD_OK;
+    }
+
+    if (!restore_mode && FAILED(hr = wined3d_get_adapter_display_mode(ddraw->wined3d,
+            WINED3DADAPTER_DEFAULT, &original_mode, NULL)))
+        ERR("Failed to get current display mode, hr %#x.\n", hr);
+
+    switch (bpp)
+    {
+        case 8:  format = WINED3DFMT_P8_UINT;        break;
+        case 15: format = WINED3DFMT_B5G5R5X1_UNORM; break;
+        case 16: format = WINED3DFMT_B5G6R5_UNORM;   break;
+        case 24: format = WINED3DFMT_B8G8R8_UNORM;   break;
+        case 32: format = WINED3DFMT_B8G8R8X8_UNORM; break;
+        default: format = WINED3DFMT_UNKNOWN;        break;
+    }
+
+    mode.width = width;
+    mode.height = height;
+    mode.refresh_rate = refresh_rate;
+    mode.format_id = format;
+    mode.scanline_ordering = WINED3D_SCANLINE_ORDERING_UNKNOWN;
+
+    /* TODO: The possible return values from msdn suggest that the screen mode
+     * can't be changed if a surface is locked or some drawing is in progress. */
+    /* TODO: Lose the primary surface. */
+    if (SUCCEEDED(hr = wined3d_set_adapter_display_mode(ddraw->wined3d, WINED3DADAPTER_DEFAULT, &mode)))
+    {
+        ddraw->restore_mode = TRUE;
+        restore_mode = TRUE;
+    }
+
+    wined3d_mutex_unlock();
+
+    switch (hr)
+    {
+        case WINED3DERR_NOTAVAILABLE: return DDERR_UNSUPPORTED;
+        default:                      return hr;
+    }
 }
 
 static HRESULT WINAPI ddraw4_SetDisplayMode(IDirectDraw4 *iface, DWORD width, DWORD height,
@@ -1151,17 +1140,6 @@ static HRESULT WINAPI ddraw1_SetDisplayMode(IDirectDraw *iface, DWORD width, DWO
  *
  * Restores the display mode to what it was at creation time. Basically.
  *
- * A problem arises when there are 2 DirectDraw objects using the same hwnd:
- *  -> DD_1 finds the screen at 1400x1050x32 when created, sets it to 640x480x16
- *  -> DD_2 is created, finds the screen at 640x480x16, sets it to 1024x768x32
- *  -> DD_1 is released. The screen should be left at 1024x768x32.
- *  -> DD_2 is released. The screen should be set to 1400x1050x32
- * This case is unhandled right now, but Empire Earth does it this way.
- * (But perhaps there is something in SetCooperativeLevel to prevent this)
- *
- * The msdn says that this method resets the display mode to what it was before
- * SetDisplayMode was called. What if SetDisplayModes is called 2 times??
- *
  * Returns
  *  DD_OK on success
  *  DDERR_NOEXCLUSIVE mode if the device isn't in fullscreen mode
@@ -1170,10 +1148,33 @@ static HRESULT WINAPI ddraw1_SetDisplayMode(IDirectDraw *iface, DWORD width, DWO
 static HRESULT WINAPI ddraw7_RestoreDisplayMode(IDirectDraw7 *iface)
 {
     struct ddraw *ddraw = impl_from_IDirectDraw7(iface);
+    HRESULT hr;
 
     TRACE("iface %p.\n", iface);
 
-    return ddraw_set_display_mode(ddraw, ddraw->orig_width, ddraw->orig_height, ddraw->orig_bpp, 0, 0);
+    wined3d_mutex_lock();
+
+    if (!ddraw->restore_mode)
+    {
+        wined3d_mutex_unlock();
+        return DD_OK;
+    }
+
+    if (exclusive_ddraw && exclusive_ddraw != ddraw)
+    {
+        wined3d_mutex_unlock();
+        return DDERR_NOEXCLUSIVEMODE;
+    }
+
+    if (SUCCEEDED(hr = wined3d_set_adapter_display_mode(ddraw->wined3d, WINED3DADAPTER_DEFAULT, &original_mode)))
+    {
+        ddraw->restore_mode = FALSE;
+        restore_mode = FALSE;
+    }
+
+    wined3d_mutex_unlock();
+
+    return hr;
 }
 
 static HRESULT WINAPI ddraw4_RestoreDisplayMode(IDirectDraw4 *iface)
@@ -2772,35 +2773,10 @@ static HRESULT CreateSurface(struct ddraw *ddraw, DDSURFACEDESC2 *DDSD,
     copy_to_surfacedesc2(&desc2, DDSD);
     desc2.u4.ddpfPixelFormat.dwSize=sizeof(DDPIXELFORMAT); /* Just to be sure */
 
-    /* Get the video mode from WineD3D - we will need it */
     if (FAILED(hr = wined3d_get_adapter_display_mode(ddraw->wined3d, WINED3DADAPTER_DEFAULT, &mode, NULL)))
     {
         ERR("Failed to get display mode, hr %#x.\n", hr);
-
-        switch (ddraw->orig_bpp)
-        {
-            case 8:
-                mode.format_id = WINED3DFMT_P8_UINT;
-                break;
-
-            case 15:
-                mode.format_id = WINED3DFMT_B5G5R5X1_UNORM;
-                break;
-
-            case 16:
-                mode.format_id = WINED3DFMT_B5G6R5_UNORM;
-                break;
-
-            case 24:
-                mode.format_id = WINED3DFMT_B8G8R8_UNORM;
-                break;
-
-            case 32:
-                mode.format_id = WINED3DFMT_B8G8R8X8_UNORM;
-                break;
-        }
-        mode.width = ddraw->orig_width;
-        mode.height = ddraw->orig_height;
+        return hr;
     }
 
     /* No pixelformat given? Use the current screen format */
@@ -5386,7 +5362,6 @@ static const struct wined3d_device_parent_ops ddraw_wined3d_device_parent_ops =
 HRESULT ddraw_init(struct ddraw *ddraw, enum wined3d_device_type device_type)
 {
     HRESULT hr;
-    HDC hDC;
 
     ddraw->IDirectDraw7_iface.lpVtbl = &ddraw7_vtbl;
     ddraw->IDirectDraw_iface.lpVtbl = &ddraw1_vtbl;
@@ -5399,13 +5374,6 @@ HRESULT ddraw_init(struct ddraw *ddraw, enum wined3d_device_type device_type)
     ddraw->device_parent.ops = &ddraw_wined3d_device_parent_ops;
     ddraw->numIfaces = 1;
     ddraw->ref7 = 1;
-
-    /* Get the current screen settings. */
-    hDC = GetDC(0);
-    ddraw->orig_bpp = GetDeviceCaps(hDC, BITSPIXEL) * GetDeviceCaps(hDC, PLANES);
-    ReleaseDC(0, hDC);
-    ddraw->orig_width = GetSystemMetrics(SM_CXSCREEN);
-    ddraw->orig_height = GetSystemMetrics(SM_CYSCREEN);
 
     ddraw->wined3d = wined3d_create(7, WINED3D_LEGACY_DEPTH_BIAS);
     if (!ddraw->wined3d)

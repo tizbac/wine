@@ -29,6 +29,7 @@
 #include "wine/debug.h"
 
 #include "mshtml_private.h"
+#include "htmlscript.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 
@@ -94,8 +95,57 @@ static HRESULT WINAPI HTMLScriptElement_Invoke(IHTMLScriptElement *iface, DISPID
 static HRESULT WINAPI HTMLScriptElement_put_src(IHTMLScriptElement *iface, BSTR v)
 {
     HTMLScriptElement *This = impl_from_IHTMLScriptElement(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_w(v));
-    return E_NOTIMPL;
+    HTMLInnerWindow *window;
+    nsIDOMNode *parent;
+    nsAString src_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    if(!This->element.node.doc || !This->element.node.doc->window) {
+        WARN("no windoow\n");
+        return E_UNEXPECTED;
+    }
+
+    window = This->element.node.doc->window;
+
+    nsAString_InitDepend(&src_str, v);
+    nsres = nsIDOMHTMLScriptElement_SetSrc(This->nsscript, &src_str);
+    nsAString_Finish(&src_str);
+    if(NS_FAILED(nsres)) {
+        ERR("SetSrc failed: %08x\n", nsres);
+        return E_FAIL;
+    }
+
+    if(This->parsed) {
+        WARN("already parsed\n");
+        return S_OK;
+    }
+
+    if(window->parser_callback_cnt) {
+        script_queue_entry_t *queue;
+
+        queue = heap_alloc(sizeof(*queue));
+        if(!queue)
+            return E_OUTOFMEMORY;
+
+        IHTMLScriptElement_AddRef(&This->IHTMLScriptElement_iface);
+        queue->script = This;
+
+        list_add_tail(&window->script_queue, &queue->entry);
+        return S_OK;
+    }
+
+    nsres = nsIDOMHTMLScriptElement_GetParentNode(This->nsscript, &parent);
+    if(NS_FAILED(nsres) || !parent) {
+        TRACE("No parent, not executing\n");
+        This->parse_on_bind = TRUE;
+        return S_OK;
+    }
+
+    nsIDOMNode_Release(parent);
+    doc_insert_script(window, This);
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLScriptElement_get_src(IHTMLScriptElement *iface, BSTR *p)

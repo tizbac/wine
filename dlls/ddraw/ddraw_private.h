@@ -68,7 +68,8 @@ struct ddraw
 
     struct wined3d *wined3d;
     struct wined3d_device *wined3d_device;
-    BOOL                    d3d_initialized;
+    BOOL d3d_initialized;
+    BOOL restore_mode;
 
     struct ddraw_surface *primary;
     RECT primary_lock;
@@ -78,9 +79,6 @@ struct ddraw
 
     /* DirectDraw things, which are not handled by WineD3D */
     DWORD                   cooperative_level;
-
-    DWORD                   orig_width, orig_height;
-    DWORD                   orig_bpp;
 
     /* D3D things */
     HWND                    d3d_window;

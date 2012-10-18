@@ -3234,21 +3234,23 @@ TREEVIEW_Collapse(TREEVIEW_INFO *infoPtr, TREEVIEW_ITEM *item,
     RECT scrollRect;
     LONG scrollDist = 0;
     TREEVIEW_ITEM *nextItem = NULL, *tmpItem;
+    BOOL wasExpanded;
 
     TRACE("TVE_COLLAPSE %p %s\n", item, TREEVIEW_ItemName(item));
 
-    if (!(item->state & TVIS_EXPANDED))
+    if (!TREEVIEW_HasChildren(infoPtr, item))
 	return FALSE;
 
-    if (bUser || !(item->state & TVIS_EXPANDEDONCE))
+    if (bUser)
 	TREEVIEW_SendExpanding(infoPtr, item, action);
 
     if (item->firstChild == NULL)
 	return FALSE;
 
+    wasExpanded = (item->state & TVIS_EXPANDED) != 0;
     item->state &= ~TVIS_EXPANDED;
 
-    if (bUser || !(item->state & TVIS_EXPANDEDONCE))
+    if (wasExpanded && bUser)
 	TREEVIEW_SendExpanded(infoPtr, item, action);
 
     bSetSelection = (infoPtr->selectedItem != NULL
@@ -3329,7 +3331,7 @@ TREEVIEW_Collapse(TREEVIEW_INFO *infoPtr, TREEVIEW_ITEM *item,
                              bSetFirstVisible ? item : infoPtr->firstVisible,
                              TRUE);
 
-    return TRUE;
+    return wasExpanded;
 }
 
 static BOOL
@@ -3344,8 +3346,8 @@ TREEVIEW_Expand(TREEVIEW_INFO *infoPtr, TREEVIEW_ITEM *item,
 
     TRACE("(%p, %p, partial=%d, %d\n", infoPtr, item, partial, user);
 
-    if (item->state & TVIS_EXPANDED)
-       return TRUE;
+    if (!TREEVIEW_HasChildren(infoPtr, item))
+	return FALSE;
 
     tmpItem = item; nextItem = NULL;
     while (tmpItem)
@@ -5238,13 +5240,11 @@ TREEVIEW_KeyDown(TREEVIEW_INFO *infoPtr, WPARAM wParam)
 	break;
 
     case VK_ADD:
-	if (!(prevItem->state & TVIS_EXPANDED))
-	    TREEVIEW_Expand(infoPtr, prevItem, FALSE, TRUE);
+	TREEVIEW_Expand(infoPtr, prevItem, FALSE, TRUE);
 	break;
 
     case VK_SUBTRACT:
-	if (prevItem->state & TVIS_EXPANDED)
-	    TREEVIEW_Collapse(infoPtr, prevItem, FALSE, TRUE);
+	TREEVIEW_Collapse(infoPtr, prevItem, FALSE, TRUE);
 	break;
 
     case VK_PRIOR:

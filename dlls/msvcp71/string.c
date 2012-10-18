@@ -531,7 +531,7 @@ const MSVCP_size_t MSVCP_basic_string_char_npos = -1;
 DEFINE_THISCALL_WRAPPER(basic_string_char_ptr, 4)
 char* __thiscall basic_string_char_ptr(basic_string_char *this)
 {
-    if(this->res == BUF_SIZE_CHAR-1)
+    if(this->res < BUF_SIZE_CHAR)
         return this->data.buf;
     return this->data.ptr;
 }
@@ -541,7 +541,7 @@ char* __thiscall basic_string_char_ptr(basic_string_char *this)
 DEFINE_THISCALL_WRAPPER(basic_string_char_const_ptr, 4)
 const char* __thiscall basic_string_char_const_ptr(const basic_string_char *this)
 {
-    if(this->res == BUF_SIZE_CHAR-1)
+    if(this->res < BUF_SIZE_CHAR)
         return this->data.buf;
     return this->data.ptr;
 }
@@ -1528,6 +1528,8 @@ MSVCP_size_t __thiscall MSVCP_basic_string_char_find_cstr_substr(
 
     if(len==0 && pos<=this->size)
         return pos;
+    if(pos>=this->size || len>this->size)
+        return MSVCP_basic_string_char_npos;
 
     end = basic_string_char_const_ptr(this)+this->size-len+1;
     for(p=basic_string_char_const_ptr(this)+pos; p<end; p++) {
@@ -2214,7 +2216,7 @@ const MSVCP_size_t MSVCP_basic_string_wchar_npos = -1;
 DEFINE_THISCALL_WRAPPER(basic_string_wchar_ptr, 4)
 wchar_t* __thiscall basic_string_wchar_ptr(basic_string_wchar *this)
 {
-    if(this->res == BUF_SIZE_WCHAR-1)
+    if(this->res < BUF_SIZE_WCHAR)
         return this->data.buf;
     return this->data.ptr;
 }
@@ -2226,7 +2228,7 @@ wchar_t* __thiscall basic_string_wchar_ptr(basic_string_wchar *this)
 DEFINE_THISCALL_WRAPPER(basic_string_wchar_const_ptr, 4)
 const wchar_t* __thiscall basic_string_wchar_const_ptr(const basic_string_wchar *this)
 {
-    if(this->res == BUF_SIZE_WCHAR-1)
+    if(this->res < BUF_SIZE_WCHAR)
         return this->data.buf;
     return this->data.ptr;
 }
@@ -3381,6 +3383,8 @@ MSVCP_size_t __thiscall MSVCP_basic_string_wchar_find_cstr_substr(
 
     if(len==0 && pos<=this->size)
         return pos;
+    if(pos>=this->size || len>this->size)
+        return MSVCP_basic_string_wchar_npos;
 
     end = basic_string_wchar_const_ptr(this)+this->size-len+1;
     for(p=basic_string_wchar_const_ptr(this)+pos; p<end; p++) {

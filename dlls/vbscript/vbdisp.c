@@ -138,8 +138,8 @@ static HRESULT invoke_variant_prop(VARIANT *v, WORD flags, DISPPARAMS *dp, VARIA
 
 static HRESULT invoke_builtin(vbdisp_t *This, const builtin_prop_t *prop, WORD flags, DISPPARAMS *dp, VARIANT *res)
 {
-    VARIANT *args, arg_buf[8];
-    unsigned argn;
+    VARIANT args[8];
+    unsigned argn, i;
 
     switch(flags) {
     case DISPATCH_PROPERTYGET:
@@ -149,6 +149,12 @@ static HRESULT invoke_builtin(vbdisp_t *This, const builtin_prop_t *prop, WORD f
         }
         break;
     case DISPATCH_PROPERTYGET|DISPATCH_METHOD:
+        if(!prop->proc && prop->flags == BP_GET) {
+            assert((INT16)prop->min_args == prop->min_args);
+            V_VT(res) = VT_I2;
+            V_I2(res) = prop->min_args;
+            return S_OK;
+        }
         break;
     case DISPATCH_METHOD:
         if(prop->flags & (BP_GET|BP_GETPUT)) {
@@ -176,28 +182,13 @@ static HRESULT invoke_builtin(vbdisp_t *This, const builtin_prop_t *prop, WORD f
         return E_FAIL;
     }
 
-    args = dp->rgvarg;
+    assert(argn < sizeof(args)/sizeof(*args));
 
-    if(argn == 1) {
-        if(V_VT(dp->rgvarg) == (VT_BYREF|VT_VARIANT))
-            args = V_VARIANTREF(dp->rgvarg);
-    }else {
-        unsigned i;
-
-        assert(argn < sizeof(arg_buf)/sizeof(*arg_buf));
-
-        for(i=0; i < argn; i++) {
-            if(V_VT(dp->rgvarg+i) == (VT_BYREF|VT_VARIANT)) {
-                for(i=0; i < argn; i++) {
-                    if(V_VT(dp->rgvarg+i) == (VT_BYREF|VT_VARIANT))
-                        arg_buf[i] = *V_VARIANTREF(dp->rgvarg+i);
-                    else
-                        arg_buf[i] = dp->rgvarg[i];
-                }
-                args = arg_buf;
-                break;
-            }
-        }
+    for(i=0; i < argn; i++) {
+        if(V_VT(dp->rgvarg+dp->cArgs-i-1) == (VT_BYREF|VT_VARIANT))
+            args[i] = *V_VARIANTREF(dp->rgvarg+dp->cArgs-i-1);
+        else
+            args[i] = dp->rgvarg[dp->cArgs-i-1];
     }
 
     return prop->proc(This, args, dp->cArgs, res);

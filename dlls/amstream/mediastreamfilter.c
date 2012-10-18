@@ -76,6 +76,48 @@ static inline IMediaStreamFilterImpl *impl_from_IMediaStreamFilter(IMediaStreamF
 
 static HRESULT WINAPI BasePinImpl_CheckMediaType(BasePin *This, const AM_MEDIA_TYPE *pmt)
 {
+    IMediaStreamFilterImpl *filter = impl_from_IMediaStreamFilter((IMediaStreamFilter*)This->pinInfo.pFilter);
+    MSPID purpose_id;
+    int i;
+
+    TRACE("Checking media type %s - %s\n", debugstr_guid(&pmt->majortype), debugstr_guid(&pmt->subtype));
+
+    /* Find which stream is associated with the pin */
+    for (i = 0; i < filter->nb_streams; i++)
+        if (&This->IPin_iface == filter->pins[i])
+            break;
+
+    if (i == filter->nb_streams)
+        return S_FALSE;
+
+    if (FAILED(IMediaStream_GetInformation(filter->streams[i], &purpose_id, NULL)))
+        return S_FALSE;
+
+    TRACE("Checking stream with purpose id %s\n", debugstr_guid(&purpose_id));
+
+    if (IsEqualGUID(&purpose_id, &MSPID_PrimaryVideo) && IsEqualGUID(&pmt->majortype, &MEDIATYPE_Video))
+    {
+        if (IsEqualGUID(&pmt->subtype, &MEDIASUBTYPE_RGB1) ||
+            IsEqualGUID(&pmt->subtype, &MEDIASUBTYPE_RGB4) ||
+            IsEqualGUID(&pmt->subtype, &MEDIASUBTYPE_RGB8)  ||
+            IsEqualGUID(&pmt->subtype, &MEDIASUBTYPE_RGB565) ||
+            IsEqualGUID(&pmt->subtype, &MEDIASUBTYPE_RGB555) ||
+            IsEqualGUID(&pmt->subtype, &MEDIASUBTYPE_RGB24) ||
+            IsEqualGUID(&pmt->subtype, &MEDIASUBTYPE_RGB32))
+        {
+            TRACE("Video sub-type %s matches\n", debugstr_guid(&pmt->subtype));
+            return S_OK;
+        }
+    }
+    else if (IsEqualGUID(&purpose_id, &MSPID_PrimaryAudio) && IsEqualGUID(&pmt->majortype, &MEDIATYPE_Audio))
+    {
+        if (IsEqualGUID(&pmt->subtype, &MEDIASUBTYPE_PCM))
+        {
+            TRACE("Audio sub-type %s matches\n", debugstr_guid(&pmt->subtype));
+            return S_OK;
+        }
+    }
+
     return S_FALSE;
 }
 
@@ -84,8 +126,66 @@ static LONG WINAPI BasePinImp_GetMediaTypeVersion(BasePin *This)
     return 0;
 }
 
-static HRESULT WINAPI BasePinImp_GetMediaType(BasePin *This, int iPosition, AM_MEDIA_TYPE *amt)
+static HRESULT WINAPI BasePinImp_GetMediaType(BasePin *This, int index, AM_MEDIA_TYPE *amt)
 {
+    IMediaStreamFilterImpl *filter = (IMediaStreamFilterImpl*)This->pinInfo.pFilter;
+    MSPID purpose_id;
+    int i;
+
+    /* Find which stream is associated with the pin */
+    for (i = 0; i < filter->nb_streams; i++)
+        if (&This->IPin_iface == filter->pins[i])
+            break;
+
+    if (i == filter->nb_streams)
+        return S_FALSE;
+
+    if (FAILED(IMediaStream_GetInformation(filter->streams[i], &purpose_id, NULL)))
+        return S_FALSE;
+
+    TRACE("Processing stream with purpose id %s\n", debugstr_guid(&purpose_id));
+
+    if (IsEqualGUID(&purpose_id, &MSPID_PrimaryVideo))
+    {
+        amt->majortype = MEDIATYPE_Video;
+
+        switch (index)
+        {
+            case 0:
+                amt->subtype = MEDIASUBTYPE_RGB1;
+                break;
+            case 1:
+                amt->subtype = MEDIASUBTYPE_RGB4;
+                break;
+            case 2:
+                amt->subtype = MEDIASUBTYPE_RGB8;
+                break;
+            case 3:
+                amt->subtype = MEDIASUBTYPE_RGB565;
+                break;
+            case 4:
+                amt->subtype = MEDIASUBTYPE_RGB555;
+                break;
+            case 5:
+                amt->subtype = MEDIASUBTYPE_RGB24;
+                break;
+            case 6:
+                amt->subtype = MEDIASUBTYPE_RGB32;
+                break;
+            default:
+                return S_FALSE;
+        }
+    }
+    else if (IsEqualGUID(&purpose_id, &MSPID_PrimaryAudio))
+    {
+        if (!index)
+        {
+            amt->majortype = MEDIATYPE_Audio;
+            amt->subtype = MEDIASUBTYPE_PCM;
+            return S_OK;
+        }
+    }
+
     return S_FALSE;
 }
 
@@ -102,29 +202,22 @@ static const BaseInputPinFuncTable input_BaseInputFuncTable = {
 
 /*** IUnknown methods ***/
 
-static HRESULT WINAPI MediaStreamFilterImpl_QueryInterface(IMediaStreamFilter *iface, REFIID riid,
-        void **ppv)
+static HRESULT WINAPI MediaStreamFilterImpl_QueryInterface(IMediaStreamFilter *iface, REFIID riid, void **ret_iface)
 {
-    IMediaStreamFilterImpl *This = impl_from_IMediaStreamFilter(iface);
+    TRACE("(%p)->(%s, %p)\n", iface, debugstr_guid(riid), ret_iface);
 
-    TRACE("(%p)->(%s, %p)\n", iface, debugstr_guid(riid), ppv);
+    *ret_iface = NULL;
 
-    *ppv = NULL;
+    if (IsEqualIID(riid, &IID_IUnknown) ||
+        IsEqualIID(riid, &IID_IPersist) ||
+        IsEqualIID(riid, &IID_IMediaFilter) ||
+        IsEqualIID(riid, &IID_IBaseFilter) ||
+        IsEqualIID(riid, &IID_IMediaStreamFilter))
+        *ret_iface = iface;
 
-    if (IsEqualIID(riid, &IID_IUnknown))
-        *ppv = This;
-    else if (IsEqualIID(riid, &IID_IPersist))
-        *ppv = This;
-    else if (IsEqualIID(riid, &IID_IMediaFilter))
-        *ppv = This;
-    else if (IsEqualIID(riid, &IID_IBaseFilter))
-        *ppv = This;
-    else if (IsEqualIID(riid, &IID_IMediaStreamFilter))
-        *ppv = This;
-
-    if (*ppv)
+    if (*ret_iface)
     {
-        IUnknown_AddRef((IUnknown *)(*ppv));
+        IMediaStreamFilter_AddRef(*ret_iface);
         return S_OK;
     }
 
@@ -164,74 +257,82 @@ static ULONG WINAPI MediaStreamFilterImpl_Release(IMediaStreamFilter *iface)
 
 /*** IPersist methods ***/
 
-static HRESULT WINAPI MediaStreamFilterImpl_GetClassID(IMediaStreamFilter * iface, CLSID * pClsid)
+static HRESULT WINAPI MediaStreamFilterImpl_GetClassID(IMediaStreamFilter *iface, CLSID *clsid)
 {
-    return BaseFilterImpl_GetClassID((IBaseFilter*)iface, pClsid);
+    IMediaStreamFilterImpl *This = impl_from_IMediaStreamFilter(iface);
+    return BaseFilterImpl_GetClassID(&This->filter.IBaseFilter_iface, clsid);
 }
 
 /*** IBaseFilter methods ***/
 
-static HRESULT WINAPI MediaStreamFilterImpl_Stop(IMediaStreamFilter * iface)
+static HRESULT WINAPI MediaStreamFilterImpl_Stop(IMediaStreamFilter *iface)
 {
     FIXME("(%p)->(): Stub!\n", iface);
 
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_Pause(IMediaStreamFilter * iface)
+static HRESULT WINAPI MediaStreamFilterImpl_Pause(IMediaStreamFilter *iface)
 {
     FIXME("(%p)->(): Stub!\n", iface);
 
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_Run(IMediaStreamFilter * iface, REFERENCE_TIME tStart)
+static HRESULT WINAPI MediaStreamFilterImpl_Run(IMediaStreamFilter *iface, REFERENCE_TIME start)
 {
-    FIXME("(%p)->(%s): Stub!\n", iface, wine_dbgstr_longlong(tStart));
+    FIXME("(%p)->(%s): Stub!\n", iface, wine_dbgstr_longlong(start));
 
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_GetState(IMediaStreamFilter * iface, DWORD dwMilliSecsTimeout, FILTER_STATE *pState)
+static HRESULT WINAPI MediaStreamFilterImpl_GetState(IMediaStreamFilter *iface, DWORD ms_timeout, FILTER_STATE *state)
 {
-    return BaseFilterImpl_GetState((IBaseFilter*)iface, dwMilliSecsTimeout, pState);
+    IMediaStreamFilterImpl *This = impl_from_IMediaStreamFilter(iface);
+    return BaseFilterImpl_GetState(&This->filter.IBaseFilter_iface, ms_timeout, state);
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_SetSyncSource(IMediaStreamFilter * iface, IReferenceClock *pClock)
+static HRESULT WINAPI MediaStreamFilterImpl_SetSyncSource(IMediaStreamFilter *iface, IReferenceClock *clock)
 {
-    return BaseFilterImpl_SetSyncSource((IBaseFilter*)iface, pClock);
+    IMediaStreamFilterImpl *This = impl_from_IMediaStreamFilter(iface);
+    return BaseFilterImpl_SetSyncSource(&This->filter.IBaseFilter_iface, clock);
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_GetSyncSource(IMediaStreamFilter * iface, IReferenceClock **ppClock)
+static HRESULT WINAPI MediaStreamFilterImpl_GetSyncSource(IMediaStreamFilter *iface, IReferenceClock **clock)
 {
-    return BaseFilterImpl_GetSyncSource((IBaseFilter*)iface, ppClock);
+    IMediaStreamFilterImpl *This = impl_from_IMediaStreamFilter(iface);
+    return BaseFilterImpl_GetSyncSource(&This->filter.IBaseFilter_iface, clock);
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_EnumPins(IMediaStreamFilter * iface, IEnumPins **ppEnum)
+static HRESULT WINAPI MediaStreamFilterImpl_EnumPins(IMediaStreamFilter *iface, IEnumPins **enum_pins)
 {
-    return BaseFilterImpl_EnumPins((IBaseFilter*)iface, ppEnum);
+    IMediaStreamFilterImpl *This = impl_from_IMediaStreamFilter(iface);
+    return BaseFilterImpl_EnumPins(&This->filter.IBaseFilter_iface, enum_pins);
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_FindPin(IMediaStreamFilter * iface, LPCWSTR Id, IPin **ppPin)
+static HRESULT WINAPI MediaStreamFilterImpl_FindPin(IMediaStreamFilter *iface, LPCWSTR id, IPin **pin)
 {
-    FIXME("(%p)->(%s,%p): Stub!\n", iface, debugstr_w(Id), ppPin);
+    FIXME("(%p)->(%s,%p): Stub!\n", iface, debugstr_w(id), pin);
 
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_QueryFilterInfo(IMediaStreamFilter * iface, FILTER_INFO *pInfo)
+static HRESULT WINAPI MediaStreamFilterImpl_QueryFilterInfo(IMediaStreamFilter *iface, FILTER_INFO *info)
 {
-    return BaseFilterImpl_QueryFilterInfo((IBaseFilter*)iface, pInfo);
+    IMediaStreamFilterImpl *This = impl_from_IMediaStreamFilter(iface);
+    return BaseFilterImpl_QueryFilterInfo(&This->filter.IBaseFilter_iface, info);
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_JoinFilterGraph(IMediaStreamFilter * iface, IFilterGraph *pGraph, LPCWSTR pName)
+static HRESULT WINAPI MediaStreamFilterImpl_JoinFilterGraph(IMediaStreamFilter *iface, IFilterGraph *graph, LPCWSTR name)
 {
-    return BaseFilterImpl_JoinFilterGraph((IBaseFilter*)iface, pGraph, pName);
+    IMediaStreamFilterImpl *This = impl_from_IMediaStreamFilter(iface);
+    return BaseFilterImpl_JoinFilterGraph(&This->filter.IBaseFilter_iface, graph, name);
 }
 
-static HRESULT WINAPI MediaStreamFilterImpl_QueryVendorInfo(IMediaStreamFilter * iface, LPWSTR *pVendorInfo)
+static HRESULT WINAPI MediaStreamFilterImpl_QueryVendorInfo(IMediaStreamFilter *iface, LPWSTR *vendor_info)
 {
-    return BaseFilterImpl_QueryVendorInfo((IBaseFilter*)iface, pVendorInfo);
+    IMediaStreamFilterImpl *This = impl_from_IMediaStreamFilter(iface);
+    return BaseFilterImpl_QueryVendorInfo(&This->filter.IBaseFilter_iface, vendor_info);
 }
 
 /*** IMediaStreamFilter methods ***/

@@ -28,6 +28,7 @@
 
 #include "mshtml_private.h"
 #include "htmlevent.h"
+#include "htmlscript.h"
 
 #include "wine/debug.h"
 
@@ -43,6 +44,9 @@ struct event_target_t {
     DWORD node_handlers_mask;
     handler_vector_t *event_table[EVENTID_LAST];
 };
+
+static const WCHAR abortW[] = {'a','b','o','r','t',0};
+static const WCHAR onabortW[] = {'o','n','a','b','o','r','t',0};
 
 static const WCHAR beforeunloadW[] = {'b','e','f','o','r','e','u','n','l','o','a','d',0};
 static const WCHAR onbeforeunloadW[] = {'o','n','b','e','f','o','r','e','u','n','l','o','a','d',0};
@@ -159,6 +163,8 @@ typedef struct {
 #define EVENT_HASDEFAULTHANDLERS 0x0020
 
 static const event_info_t event_info[] = {
+    {abortW,             onabortW,             EVENTT_NONE,   DISPID_EVMETH_ONABORT,
+        EVENT_NODEHANDLER},
     {beforeunloadW,      onbeforeunloadW,      EVENTT_NONE,   DISPID_EVMETH_ONBEFOREUNLOAD,
         EVENT_DEFAULTLISTENER|EVENT_FORWARDBODY},
     {blurW,              onblurW,              EVENTT_HTML,   DISPID_EVMETH_ONBLUR,
@@ -215,7 +221,7 @@ static const event_info_t event_info[] = {
         EVENT_DEFAULTLISTENER|EVENT_BUBBLE|EVENT_CANCELABLE}
 };
 
-static const eventid_t node_handled_list[] = { EVENTID_ERROR, EVENTID_LOAD };
+static const eventid_t node_handled_list[] = { EVENTID_ABORT, EVENTID_ERROR, EVENTID_LOAD };
 
 eventid_t str_to_eid(LPCWSTR str)
 {
@@ -1306,8 +1312,10 @@ void detach_events(HTMLDocumentNode *doc)
         int i;
 
         for(i=0; i < EVENTID_LAST; i++) {
-            if(doc->event_vector[i])
+            if(doc->event_vector[i]) {
                 detach_nsevent(doc, event_info[i].name);
+                doc->event_vector[i] = FALSE;
+            }
         }
     }
 

@@ -48,10 +48,12 @@ typedef struct
     MSVCP_size_t res;
 } basic_string_char;
 
+basic_string_char* MSVCP_basic_string_char_ctor(basic_string_char*);
 basic_string_char* MSVCP_basic_string_char_ctor_cstr(basic_string_char*, const char*);
 basic_string_char* MSVCP_basic_string_char_copy_ctor(basic_string_char*, const basic_string_char*);
 void MSVCP_basic_string_char_dtor(basic_string_char*);
 const char* MSVCP_basic_string_char_c_str(const basic_string_char*);
+basic_string_char* MSVCP_basic_string_char_append_ch(basic_string_char*, char);
 MSVCP_size_t MSVCP_basic_string_char_length(const basic_string_char*);
 
 #define BUF_SIZE_WCHAR 8
@@ -75,6 +77,17 @@ char* MSVCP_allocator_char_allocate(void*, MSVCP_size_t);
 void MSVCP_allocator_char_deallocate(void*, char*, MSVCP_size_t);
 wchar_t* MSVCP_allocator_wchar_allocate(void*, MSVCP_size_t);
 void MSVCP_allocator_wchar_deallocate(void*, wchar_t*, MSVCP_size_t);
+
+typedef struct
+{
+    char *str;
+    char null_str;
+} _Yarn_char;
+
+_Yarn_char* __thiscall _Yarn_char_ctor_cstr(_Yarn_char*, const char*);
+_Yarn_char* __thiscall _Yarn_char_copy_ctor(_Yarn_char*, const _Yarn_char*);
+const char* __thiscall _Yarn_char_c_str(const _Yarn_char*);
+void __thiscall _Yarn_char_dtor(_Yarn_char*);
 
 /* class locale::facet */
 typedef struct {

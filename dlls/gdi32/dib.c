@@ -1549,7 +1549,7 @@ HBITMAP WINAPI CreateDIBSection(HDC hdc, CONST BITMAPINFO *bmi, UINT usage,
 
     if (!bmp->dib.dsBm.bmBits) goto error;
 
-    if (!(ret = alloc_gdi_handle( &bmp->header, OBJ_BITMAP, &dib_funcs ))) goto error;
+    if (!(ret = alloc_gdi_handle( bmp, OBJ_BITMAP, &dib_funcs ))) goto error;
 
     if (bits) *bits = bmp->dib.dsBm.bmBits;
     return ret;
@@ -1589,7 +1589,7 @@ static HGDIOBJ DIB_SelectObject( HGDIOBJ handle, HDC hdc )
         goto done;
     }
 
-    if (bitmap->header.selcount)
+    if (GDI_get_ref_count( handle ))
     {
         WARN( "Bitmap already selected in another DC\n" );
         GDI_ReleaseObj( handle );

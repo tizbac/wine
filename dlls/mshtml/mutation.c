@@ -30,6 +30,7 @@
 #include "shlguid.h"
 
 #include "mshtml_private.h"
+#include "htmlscript.h"
 #include "htmlevent.h"
 
 #include "wine/debug.h"
@@ -297,10 +298,16 @@ static nsresult run_insert_script(HTMLDocumentNode *doc, nsISupports *script_ifa
     nsIDOMHTMLScriptElement *nsscript;
     HTMLScriptElement *script_elem;
     nsIParser *nsparser = NULL;
+    script_queue_entry_t *iter;
+    HTMLInnerWindow *window;
     nsresult nsres;
     HRESULT hres;
 
     TRACE("(%p)->(%p)\n", doc, script_iface);
+
+    window = doc->window;
+    if(!window)
+        return NS_OK;
 
     nsres = nsISupports_QueryInterface(script_iface, &IID_nsIDOMHTMLScriptElement, (void**)&nsscript);
     if(NS_FAILED(nsres)) {
@@ -321,17 +328,33 @@ static nsresult run_insert_script(HTMLDocumentNode *doc, nsISupports *script_ifa
     if(FAILED(hres))
         return NS_ERROR_FAILURE;
 
-    if(nsparser)
+    if(nsparser) {
         nsIParser_BeginEvaluatingParserInsertedScript(nsparser);
+        window->parser_callback_cnt++;
+    }
 
-    doc_insert_script(doc->window, script_elem);
+    IHTMLWindow2_AddRef(&window->base.IHTMLWindow2_iface);
+
+    doc_insert_script(window, script_elem);
+
+    while(!list_empty(&window->script_queue)) {
+        iter = LIST_ENTRY(list_head(&window->script_queue), script_queue_entry_t, entry);
+        list_remove(&iter->entry);
+        doc_insert_script(window, iter->script);
+        IHTMLScriptElement_Release(&iter->script->IHTMLScriptElement_iface);
+        heap_free(iter);
+    }
+
+    IHTMLWindow2_Release(&window->base.IHTMLWindow2_iface);
 
     if(nsparser) {
+        window->parser_callback_cnt--;
         nsIParser_EndEvaluatingParserInsertedScript(nsparser);
         nsIParser_Release(nsparser);
     }
 
     IHTMLScriptElement_Release(&script_elem->IHTMLScriptElement_iface);
+
     return NS_OK;
 }
 
@@ -606,6 +629,7 @@ static void NSAPI nsDocumentObserver_BindToDocument(nsIDocumentObserver *iface, 
     HTMLDocumentNode *This = impl_from_nsIDocumentObserver(iface);
     nsIDOMHTMLIFrameElement *nsiframe;
     nsIDOMHTMLFrameElement *nsframe;
+    nsIDOMHTMLScriptElement *nsscript;
     nsIDOMComment *nscomment;
     nsIDOMElement *nselem;
     nsresult nsres;
@@ -624,6 +648,7 @@ static void NSAPI nsDocumentObserver_BindToDocument(nsIDocumentObserver *iface, 
 
         add_script_runner(This, run_insert_comment, (nsISupports*)nscomment, NULL);
         nsIDOMComment_Release(nscomment);
+        return;
     }
 
     nsres = nsIContent_QueryInterface(aContent, &IID_nsIDOMHTMLIFrameElement, (void**)&nsiframe);
@@ -632,6 +657,7 @@ static void NSAPI nsDocumentObserver_BindToDocument(nsIDocumentObserver *iface, 
 
         add_script_runner(This, run_bind_to_tree, (nsISupports*)nsiframe, NULL);
         nsIDOMHTMLIFrameElement_Release(nsiframe);
+        return;
     }
 
     nsres = nsIContent_QueryInterface(aContent, &IID_nsIDOMHTMLFrameElement, (void**)&nsframe);
@@ -640,6 +666,25 @@ static void NSAPI nsDocumentObserver_BindToDocument(nsIDocumentObserver *iface, 
 
         add_script_runner(This, run_bind_to_tree, (nsISupports*)nsframe, NULL);
         nsIDOMHTMLFrameElement_Release(nsframe);
+        return;
+    }
+
+    nsres = nsIContent_QueryInterface(aContent, &IID_nsIDOMHTMLScriptElement, (void**)&nsscript);
+    if(NS_SUCCEEDED(nsres)) {
+        HTMLScriptElement *script_elem;
+        HRESULT hres;
+
+        TRACE("script element\n");
+
+        hres = script_elem_from_nsscript(This, nsscript, &script_elem);
+        nsIDOMHTMLScriptElement_Release(nsscript);
+        if(FAILED(hres))
+            return;
+
+        if(script_elem->parse_on_bind)
+            add_script_runner(This, run_insert_script, (nsISupports*)nsscript, NULL);
+
+        IHTMLScriptElement_Release(&script_elem->IHTMLScriptElement_iface);
     }
 }
 

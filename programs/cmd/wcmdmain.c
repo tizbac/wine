@@ -47,6 +47,11 @@ BOOL echo_mode = TRUE;
 WCHAR anykey[100], version_string[100];
 const WCHAR newlineW[] = {'\r','\n','\0'};
 const WCHAR spaceW[]   = {' ','\0'};
+static const WCHAR envPathExt[] = {'P','A','T','H','E','X','T','\0'};
+static const WCHAR dfltPathExt[] = {'.','b','a','t',';',
+                                    '.','c','o','m',';',
+                                    '.','c','m','d',';',
+                                    '.','e','x','e','\0'};
 
 static BOOL opt_c, opt_k, opt_s, unicodeOutput = FALSE;
 
@@ -832,16 +837,19 @@ static void handleExpansion(WCHAR *cmd, BOOL justFors,
 
     /* Replace use of %0...%9 if in batch program*/
     } else if (!justFors && context && (i >= 0) && (i <= 9)) {
-      t = WCMD_parameter(context -> command, i + context -> shift_count[i], NULL, NULL, TRUE);
+      t = WCMD_parameter(context -> command, i + context -> shift_count[i],
+                         NULL, NULL, TRUE, TRUE);
       WCMD_strsubstW(p, p+2, t, -1);
 
     /* Replace use of %* if in batch program*/
     } else if (!justFors && context && *(p+1)=='*') {
       WCHAR *startOfParms = NULL;
-      WCMD_parameter(context -> command, 1, &startOfParms, NULL, TRUE);
-      if (startOfParms != NULL)
+      WCMD_parameter(context -> command, 0, NULL, &startOfParms, TRUE, TRUE);
+      if (startOfParms != NULL) {
+        startOfParms++; /* Skip to first delimiter then skip whitespace */
+        while (*startOfParms==' ' || *startOfParms == '\t') startOfParms++;
         WCMD_strsubstW(p, p+2, startOfParms, -1);
-      else
+      } else
         WCMD_strsubstW(p, p+2, NULL, 0);
 
     } else if (forVariable &&
@@ -992,6 +1000,9 @@ static void init_msvcrt_io_block(STARTUPINFOW* st)
  *      Launching
  *        Once a match has been found, it is launched - Code currently uses
  *          findexecutable to achieve this which is left untouched.
+ *        If an executable has not been found, and we were launched through
+ *          a call, we need to check if the command is an internal command,
+ *          so go back through wcmd_execute.
  */
 
 void WCMD_run_program (WCHAR *command, BOOL called)
@@ -1003,26 +1014,22 @@ void WCMD_run_program (WCHAR *command, BOOL called)
                                        MAX_PATH, including null character */
   WCHAR *lastSlash;
   WCHAR  pathext[MAXSTRING];
+  WCHAR *firstParam;
   BOOL  extensionsupplied = FALSE;
   BOOL  launched = FALSE;
   BOOL  status;
   BOOL  assumeInternal = FALSE;
   DWORD len;
   static const WCHAR envPath[] = {'P','A','T','H','\0'};
-  static const WCHAR envPathExt[] = {'P','A','T','H','E','X','T','\0'};
   static const WCHAR delims[] = {'/','\\',':','\0'};
 
-  /* Quick way to get the filename
-   * (but handle leading / as part of program name, not qualifier)
-   */
-  for (len = 0; command[len] == '/'; len++) param1[len] = '/';
-  WCMD_parse (command + len, quals, param1 + len, param2);
-
-  if (!(*param1) && !(*param2))
-    return;
+  /* Quick way to get the filename is to extract the first argument. */
+  WINE_TRACE("Running '%s' (%d)\n", wine_dbgstr_w(command), called);
+  firstParam = WCMD_parameter(command, 0, NULL, NULL, FALSE, TRUE);
+  if (!firstParam) return;
 
   /* Calculate the search path and stem to search for */
-  if (strpbrkW (param1, delims) == NULL) {  /* No explicit path given, search path */
+  if (strpbrkW (firstParam, delims) == NULL) {  /* No explicit path given, search path */
     static const WCHAR curDir[] = {'.',';','\0'};
     strcpyW(pathtosearch, curDir);
     len = GetEnvironmentVariableW(envPath, &pathtosearch[2], (sizeof(pathtosearch)/sizeof(WCHAR))-2);
@@ -1030,19 +1037,19 @@ void WCMD_run_program (WCHAR *command, BOOL called)
       static const WCHAR curDir[] = {'.','\0'};
       strcpyW (pathtosearch, curDir);
     }
-    if (strchrW(param1, '.') != NULL) extensionsupplied = TRUE;
-    if (strlenW(param1) >= MAX_PATH)
+    if (strchrW(firstParam, '.') != NULL) extensionsupplied = TRUE;
+    if (strlenW(firstParam) >= MAX_PATH)
     {
         WCMD_output_asis_stderr(WCMD_LoadMessage(WCMD_LINETOOLONG));
         return;
     }
 
-    strcpyW(stemofsearch, param1);
+    strcpyW(stemofsearch, firstParam);
 
   } else {
 
     /* Convert eg. ..\fred to include a directory by removing file part */
-    GetFullPathNameW(param1, sizeof(pathtosearch)/sizeof(WCHAR), pathtosearch, NULL);
+    GetFullPathNameW(firstParam, sizeof(pathtosearch)/sizeof(WCHAR), pathtosearch, NULL);
     lastSlash = strrchrW(pathtosearch, '\\');
     if (lastSlash && strchrW(lastSlash, '.') != NULL) extensionsupplied = TRUE;
     strcpyW(stemofsearch, lastSlash+1);
@@ -1055,10 +1062,6 @@ void WCMD_run_program (WCHAR *command, BOOL called)
   /* Now extract PATHEXT */
   len = GetEnvironmentVariableW(envPathExt, pathext, sizeof(pathext)/sizeof(WCHAR));
   if ((len == 0) || (len >= (sizeof(pathext)/sizeof(WCHAR)))) {
-    static const WCHAR dfltPathExt[] = {'.','b','a','t',';',
-                                        '.','c','o','m',';',
-                                        '.','c','m','d',';',
-                                        '.','e','x','e','\0'};
     strcpyW (pathext, dfltPathExt);
   }
 
@@ -1162,7 +1165,10 @@ void WCMD_run_program (WCHAR *command, BOOL called)
 
       /* Special case BAT and CMD */
       if (ext && (!strcmpiW(ext, batExt) || !strcmpiW(ext, cmdExt))) {
+        BOOL oldinteractive = interactive;
+        interactive = FALSE;
         WCMD_batch (thisDir, command, called, NULL, INVALID_HANDLE_VALUE);
+        interactive = oldinteractive;
         return;
       } else {
 
@@ -1194,6 +1200,8 @@ void WCMD_run_program (WCHAR *command, BOOL called)
         if (!status)
           break;
 
+        called = FALSE; /* No need to retry as we launched something */
+
         if (!assumeInternal && !console) errorlevel = 0;
         else
         {
@@ -1207,6 +1215,18 @@ void WCMD_run_program (WCHAR *command, BOOL called)
         return;
       }
     }
+  }
+
+  /* Not found anywhere - were we called? */
+  if (called) {
+    CMD_LIST *toExecute = NULL;         /* Commands left to be executed */
+
+    /* Parse the command string, without reading any more input */
+    WCMD_ReadAndParseLine(command, &toExecute, INVALID_HANDLE_VALUE);
+    WCMD_process_commands(toExecute, FALSE, NULL, NULL, called);
+    WCMD_free_commands(toExecute);
+    toExecute = NULL;
+    return;
   }
 
   /* Not found anywhere - give up */
@@ -1223,10 +1243,13 @@ void WCMD_run_program (WCHAR *command, BOOL called)
 /*****************************************************************************
  * Process one command. If the command is EXIT this routine does not return.
  * We will recurse through here executing batch files.
+ * Note: If call is used to a non-existing program, we reparse the line and
+ *       try to run it as an internal command. 'retrycall' represents whether
+ *       we are attempting this retry.
  */
 void WCMD_execute (const WCHAR *command, const WCHAR *redirects,
                    const WCHAR *forVariable, const WCHAR *forValue,
-                   CMD_LIST **cmdList)
+                   CMD_LIST **cmdList, BOOL retrycall)
 {
     WCHAR *cmd, *p, *redir;
     int status, i;
@@ -1357,7 +1380,7 @@ void WCMD_execute (const WCHAR *command, const WCHAR *redirects,
 
     /* Otherwise STDIN could come from a '<' redirect */
     } else if ((p = strchrW(new_redir,'<')) != NULL) {
-      h = CreateFileW(WCMD_parameter(++p, 0, NULL, NULL, FALSE), GENERIC_READ, FILE_SHARE_READ,
+      h = CreateFileW(WCMD_parameter(++p, 0, NULL, NULL, FALSE, FALSE), GENERIC_READ, FILE_SHARE_READ,
                       &sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
       if (h == INVALID_HANDLE_VALUE) {
 	WCMD_print_error ();
@@ -1402,7 +1425,7 @@ void WCMD_execute (const WCHAR *command, const WCHAR *redirects,
         WINE_TRACE("Redirect %d (%p) to %d (%p)\n", handle, GetStdHandle(idx_stdhandles[idx]), idx, h);
 
       } else {
-        WCHAR *param = WCMD_parameter(p, 0, NULL, NULL, FALSE);
+        WCHAR *param = WCMD_parameter(p, 0, NULL, NULL, FALSE, FALSE);
         h = CreateFileW(param, GENERIC_WRITE, 0, &sa, creationDisposition,
                         FILE_ATTRIBUTE_NORMAL, NULL);
         if (h == INVALID_HANDLE_VALUE) {
@@ -1466,7 +1489,7 @@ void WCMD_execute (const WCHAR *command, const WCHAR *redirects,
         WCMD_clear_screen ();
         break;
       case WCMD_COPY:
-        WCMD_copy ();
+        WCMD_copy (p);
         break;
       case WCMD_CTTY:
         WCMD_change_tty ();
@@ -1484,18 +1507,12 @@ void WCMD_execute (const WCHAR *command, const WCHAR *redirects,
       case WCMD_ECHO:
         WCMD_echo(&whichcmd[count]);
         break;
-      case WCMD_FOR:
-        WCMD_for (p, cmdList);
-        break;
       case WCMD_GOTO:
         WCMD_goto (cmdList);
         break;
       case WCMD_HELP:
         WCMD_give_help (p);
 	break;
-      case WCMD_IF:
-	WCMD_if (p, cmdList);
-        break;
       case WCMD_LABEL:
         WCMD_volume (TRUE, p);
         break;
@@ -1584,6 +1601,17 @@ void WCMD_execute (const WCHAR *command, const WCHAR *redirects,
       case WCMD_EXIT:
         WCMD_exit (cmdList);
         break;
+      case WCMD_FOR:
+      case WCMD_IF:
+        /* Very oddly, probably because of all the special parsing required for
+           these two commands, neither for nor if are supported when called,
+           ie call if 1==1... will fail.                                        */
+        if (!retrycall) {
+          if (i==WCMD_FOR) WCMD_for (p, cmdList);
+          else if (i==WCMD_IF) WCMD_if (p, cmdList);
+          break;
+        }
+        /* else: drop through */
       default:
         prev_echo_mode = echo_mode;
         WCMD_run_program (whichcmd, FALSE);
@@ -2237,7 +2265,8 @@ WCHAR *WCMD_ReadAndParseLine(const WCHAR *optionalcmd, CMD_LIST **output, HANDLE
  * Process all the commands read in so far
  */
 CMD_LIST *WCMD_process_commands(CMD_LIST *thisCmd, BOOL oneBracket,
-                                const WCHAR *var, const WCHAR *val) {
+                                const WCHAR *var, const WCHAR *val,
+                                BOOL retrycall) {
 
     int bdepth = -1;
 
@@ -2262,7 +2291,7 @@ CMD_LIST *WCMD_process_commands(CMD_LIST *thisCmd, BOOL oneBracket,
          Also, skip over any batch labels (eg. :fred)          */
       if (thisCmd->command && thisCmd->command[0] != ':') {
         WINE_TRACE("Executing command: '%s'\n", wine_dbgstr_w(thisCmd->command));
-        WCMD_execute (thisCmd->command, thisCmd->redirects, var, val, &thisCmd);
+        WCMD_execute (thisCmd->command, thisCmd->redirects, var, val, &thisCmd, retrycall);
       }
 
       /* Step on unless the command itself already stepped on */
@@ -2328,14 +2357,14 @@ int wmain (int argc, WCHAR *argvW[])
   args = 1;                /* start at first arg, skipping cmd.exe itself */
 
   opt_c = opt_k = opt_q = opt_s = FALSE;
-  WCMD_parameter(cmdLine, args, &argPos, NULL, TRUE);
+  WCMD_parameter(cmdLine, args, &argPos, NULL, TRUE, TRUE);
   while (argPos && argPos[0] != 0x00)
   {
       WCHAR c;
       WINE_TRACE("Command line parm: '%s'\n", wine_dbgstr_w(argPos));
       if (argPos[0]!='/' || argPos[1]=='\0') {
           args++;
-          WCMD_parameter(cmdLine, args, &argPos, NULL, TRUE);
+          WCMD_parameter(cmdLine, args, &argPos, NULL, TRUE, TRUE);
           continue;
       }
 
@@ -2360,7 +2389,7 @@ int wmain (int argc, WCHAR *argvW[])
 
       if (argPos[2]==0 || argPos[2]==' ' || argPos[2]=='\t') {
           args++;
-          WCMD_parameter(cmdLine, args, &argPos, NULL, TRUE);
+          WCMD_parameter(cmdLine, args, &argPos, NULL, TRUE, TRUE);
       }
       else /* handle `cmd /cnotepad.exe` and `cmd /x/c ...` */
       {
@@ -2441,10 +2470,15 @@ int wmain (int argc, WCHAR *argvW[])
       /* Finally, we only stay in new mode IF the first parameter is quoted and
          is a valid executable, ie must exist, otherwise drop back to old mode  */
       if (!opt_s) {
-        WCHAR *thisArg = WCMD_parameter(cmd, 0, NULL, NULL, FALSE);
-        static const WCHAR extEXEW[]    = {'.','e','x','e','\0'};
-        static const WCHAR extCOMW[]    = {'.','c','o','m','\0'};
+        WCHAR *thisArg = WCMD_parameter(cmd, 0, NULL, NULL, FALSE, TRUE);
+        WCHAR  pathext[MAXSTRING];
         BOOL found = FALSE;
+
+        /* Now extract PATHEXT */
+        len = GetEnvironmentVariableW(envPathExt, pathext, sizeof(pathext)/sizeof(WCHAR));
+        if ((len == 0) || (len >= (sizeof(pathext)/sizeof(WCHAR)))) {
+          strcpyW (pathext, dfltPathExt);
+        }
 
         /* If the supplied parameter has any directory information, look there */
         WINE_TRACE("First parameter is '%s'\n", wine_dbgstr_w(thisArg));
@@ -2458,18 +2492,28 @@ int wmain (int argc, WCHAR *argvW[])
           if (GetFileAttributesW(string) != INVALID_FILE_ATTRIBUTES) {
             WINE_TRACE("Found file as '%s'\n", wine_dbgstr_w(string));
             found = TRUE;
-          } else strcpyW(p, extEXEW);
+          } else {
+            WCHAR *thisExt = pathext;
 
-          /* Does file exist with .exe appended */
-          if (!found && GetFileAttributesW(string) != INVALID_FILE_ATTRIBUTES) {
-            WINE_TRACE("Found file as '%s'\n", wine_dbgstr_w(string));
-            found = TRUE;
-          } else strcpyW(p, extCOMW);
+            /* No - try with each of the PATHEXT extensions */
+            while (!found && thisExt) {
+              WCHAR *nextExt = strchrW(thisExt, ';');
 
-          /* Does file exist with .com appended */
-          if (!found && GetFileAttributesW(string) != INVALID_FILE_ATTRIBUTES) {
-            WINE_TRACE("Found file as '%s'\n", wine_dbgstr_w(string));
-            found = TRUE;
+              if (nextExt) {
+                memcpy(p, thisExt, (nextExt-thisExt) * sizeof(WCHAR));
+                p[(nextExt-thisExt)] = 0x00;
+                thisExt = nextExt+1;
+              } else {
+                strcpyW(p, thisExt);
+                thisExt = NULL;
+              }
+
+              /* Does file exist with this extension appended? */
+              if (GetFileAttributesW(string) != INVALID_FILE_ATTRIBUTES) {
+                WINE_TRACE("Found file as '%s'\n", wine_dbgstr_w(string));
+                found = TRUE;
+              }
+            }
           }
 
         /* Otherwise we now need to look in the path to see if we can find it */
@@ -2480,18 +2524,28 @@ int wmain (int argc, WCHAR *argvW[])
           if (SearchPathW(NULL, thisArg, NULL, sizeof(string)/sizeof(WCHAR), string, NULL) != 0)  {
             WINE_TRACE("Found on path as '%s'\n", wine_dbgstr_w(string));
             found = TRUE;
-          }
+          } else {
+            WCHAR *thisExt = pathext;
 
-          /* Does file exist plus an extension of .exe? */
-          if (SearchPathW(NULL, thisArg, extEXEW, sizeof(string)/sizeof(WCHAR), string, NULL) != 0)  {
-            WINE_TRACE("Found on path as '%s'\n", wine_dbgstr_w(string));
-            found = TRUE;
-          }
+            /* No - try with each of the PATHEXT extensions */
+            while (!found && thisExt) {
+              WCHAR *nextExt = strchrW(thisExt, ';');
 
-          /* Does file exist plus an extension of .com? */
-          if (SearchPathW(NULL, thisArg, extCOMW, sizeof(string)/sizeof(WCHAR), string, NULL) != 0)  {
-            WINE_TRACE("Found on path as '%s'\n", wine_dbgstr_w(string));
-            found = TRUE;
+              if (nextExt) {
+                *nextExt = 0;
+                nextExt = nextExt+1;
+              } else {
+                nextExt = NULL;
+              }
+
+              /* Does file exist with this extension? */
+              if (SearchPathW(NULL, thisArg, thisExt, sizeof(string)/sizeof(WCHAR), string, NULL) != 0)  {
+                WINE_TRACE("Found on path as '%s' with extension '%s'\n", wine_dbgstr_w(string),
+                           wine_dbgstr_w(thisExt));
+                found = TRUE;
+              }
+              thisExt = nextExt;
+            }
           }
         }
 
@@ -2527,7 +2581,7 @@ int wmain (int argc, WCHAR *argvW[])
 
       /* Parse the command string, without reading any more input */
       WCMD_ReadAndParseLine(cmd, &toExecute, INVALID_HANDLE_VALUE);
-      WCMD_process_commands(toExecute, FALSE, NULL, NULL);
+      WCMD_process_commands(toExecute, FALSE, NULL, NULL, FALSE);
       WCMD_free_commands(toExecute);
       toExecute = NULL;
 
@@ -2614,7 +2668,7 @@ int wmain (int argc, WCHAR *argvW[])
   if (opt_k) {
       /* Parse the command string, without reading any more input */
       WCMD_ReadAndParseLine(cmd, &toExecute, INVALID_HANDLE_VALUE);
-      WCMD_process_commands(toExecute, FALSE, NULL, NULL);
+      WCMD_process_commands(toExecute, FALSE, NULL, NULL, FALSE);
       WCMD_free_commands(toExecute);
       toExecute = NULL;
       HeapFree(GetProcessHeap(), 0, cmd);
@@ -2634,7 +2688,7 @@ int wmain (int argc, WCHAR *argvW[])
     if (echo_mode) WCMD_show_prompt();
     if (!WCMD_ReadAndParseLine(NULL, &toExecute, GetStdHandle(STD_INPUT_HANDLE)))
       break;
-    WCMD_process_commands(toExecute, FALSE, NULL, NULL);
+    WCMD_process_commands(toExecute, FALSE, NULL, NULL, FALSE);
     WCMD_free_commands(toExecute);
     toExecute = NULL;
   }

@@ -65,8 +65,6 @@ static const WCHAR class_processW[] =
     {'W','i','n','3','2','_','P','r','o','c','e','s','s',0};
 static const WCHAR class_processorW[] =
     {'W','i','n','3','2','_','P','r','o','c','e','s','s','o','r',0};
-static const WCHAR class_serviceW[] =
-    {'W','i','n','3','2','_','S','e','r','v','i','c','e',0};
 static const WCHAR class_sounddeviceW[] =
     {'W','i','n','3','2','_','S','o','u','n','d','D','e','v','i','c','e',0};
 static const WCHAR class_videocontrollerW[] =
@@ -132,8 +130,6 @@ static const WCHAR prop_methodW[] =
     {'M','e','t','h','o','d',0};
 static const WCHAR prop_modelW[] =
     {'M','o','d','e','l',0};
-static const WCHAR prop_nameW[] =
-    {'N','a','m','e',0};
 static const WCHAR prop_netconnectionstatusW[] =
     {'N','e','t','C','o','n','n','e','c','t','i','o','n','S','t','a','t','u','s',0};
 static const WCHAR prop_numlogicalprocessorsW[] =
@@ -295,7 +291,12 @@ static const struct column col_service[] =
     { prop_servicetypeW,      CIM_STRING },
     { prop_startmodeW,        CIM_STRING },
     { prop_stateW,            CIM_STRING },
-    { prop_systemnameW,       CIM_STRING|COL_FLAG_DYNAMIC }
+    { prop_systemnameW,       CIM_STRING|COL_FLAG_DYNAMIC },
+    /* methods */
+    { method_pauseserviceW,   CIM_FLAG_ARRAY|COL_FLAG_METHOD },
+    { method_resumeserviceW,  CIM_FLAG_ARRAY|COL_FLAG_METHOD },
+    { method_startserviceW,   CIM_FLAG_ARRAY|COL_FLAG_METHOD },
+    { method_stopserviceW,    CIM_FLAG_ARRAY|COL_FLAG_METHOD }
 };
 static const struct column col_sounddevice[] =
 {
@@ -303,8 +304,9 @@ static const struct column col_sounddevice[] =
 };
 static const struct column col_stdregprov[] =
 {
-    { method_enumkeyW,    CIM_FLAG_ARRAY|COL_FLAG_METHOD },
-    { method_enumvaluesW, CIM_FLAG_ARRAY|COL_FLAG_METHOD }
+    { method_enumkeyW,        CIM_FLAG_ARRAY|COL_FLAG_METHOD },
+    { method_enumvaluesW,     CIM_FLAG_ARRAY|COL_FLAG_METHOD },
+    { method_getstringvalueW, CIM_FLAG_ARRAY|COL_FLAG_METHOD }
 };
 static const struct column col_videocontroller[] =
 {
@@ -472,6 +474,11 @@ struct record_service
     const WCHAR *startmode;
     const WCHAR *state;
     const WCHAR *systemname;
+    /* methods */
+    class_method *pause_service;
+    class_method *resume_service;
+    class_method *start_service;
+    class_method *stop_service;
 };
 struct record_sounddevice
 {
@@ -481,6 +488,7 @@ struct record_stdregprov
 {
     class_method *enumkey;
     class_method *enumvalues;
+    class_method *getstringvalue;
 };
 struct record_videocontroller
 {
@@ -512,6 +520,10 @@ static const struct record_diskdrive data_diskdrive[] =
 };
 static const struct record_params data_params[] =
 {
+    { class_serviceW, method_pauseserviceW, -1, param_returnvalueW, CIM_UINT32, VT_I4 },
+    { class_serviceW, method_resumeserviceW, -1, param_returnvalueW, CIM_UINT32, VT_I4 },
+    { class_serviceW, method_startserviceW, -1, param_returnvalueW, CIM_UINT32, VT_I4 },
+    { class_serviceW, method_stopserviceW, -1, param_returnvalueW, CIM_UINT32, VT_I4 },
     { class_stdregprovW, method_enumkeyW, 1, param_defkeyW, CIM_SINT32, 0, 0x80000002 },
     { class_stdregprovW, method_enumkeyW, 1, param_subkeynameW, CIM_STRING },
     { class_stdregprovW, method_enumkeyW, -1, param_returnvalueW, CIM_UINT32, VT_I4 },
@@ -520,7 +532,12 @@ static const struct record_params data_params[] =
     { class_stdregprovW, method_enumvaluesW, 1, param_subkeynameW, CIM_STRING },
     { class_stdregprovW, method_enumvaluesW, -1, param_returnvalueW, CIM_UINT32, VT_I4 },
     { class_stdregprovW, method_enumvaluesW, -1, param_namesW, CIM_STRING|CIM_FLAG_ARRAY },
-    { class_stdregprovW, method_enumvaluesW, -1, param_typesW, CIM_SINT32|CIM_FLAG_ARRAY }
+    { class_stdregprovW, method_enumvaluesW, -1, param_typesW, CIM_SINT32|CIM_FLAG_ARRAY },
+    { class_stdregprovW, method_getstringvalueW, 1, param_defkeyW, CIM_SINT32, 0, 0x80000002 },
+    { class_stdregprovW, method_getstringvalueW, 1, param_subkeynameW, CIM_STRING },
+    { class_stdregprovW, method_getstringvalueW, 1, param_valuenameW, CIM_STRING },
+    { class_stdregprovW, method_getstringvalueW, -1, param_returnvalueW, CIM_UINT32, VT_I4 },
+    { class_stdregprovW, method_getstringvalueW, -1, param_valueW, CIM_STRING }
 };
 static const struct record_sounddevice data_sounddevice[] =
 {
@@ -528,7 +545,7 @@ static const struct record_sounddevice data_sounddevice[] =
 };
 static const struct record_stdregprov data_stdregprov[] =
 {
-    { reg_enumkey, reg_enumvalues }
+    { reg_enum_key, reg_enum_values, reg_get_stringvalue }
 };
 
 static UINT get_processor_count(void)
@@ -1096,15 +1113,19 @@ static void fill_service( struct table *table )
 
         status = &services[i].ServiceStatusProcess;
         rec = (struct record_service *)(table->data + offset);
-        rec->accept_pause = (status->dwControlsAccepted & SERVICE_ACCEPT_PAUSE_CONTINUE) ? -1 : 0;
-        rec->accept_stop  = (status->dwControlsAccepted & SERVICE_ACCEPT_STOP) ? -1 : 0;
-        rec->displayname  = heap_strdupW( services[i].lpDisplayName );
-        rec->name         = heap_strdupW( services[i].lpServiceName );
-        rec->process_id   = status->dwProcessId;
-        rec->servicetype  = get_service_type( status->dwServiceType );
-        rec->startmode    = get_service_startmode( config->dwStartType );
-        rec->state        = get_service_state( status->dwCurrentState );
-        rec->systemname   = heap_strdupW( sysnameW );
+        rec->accept_pause   = (status->dwControlsAccepted & SERVICE_ACCEPT_PAUSE_CONTINUE) ? -1 : 0;
+        rec->accept_stop    = (status->dwControlsAccepted & SERVICE_ACCEPT_STOP) ? -1 : 0;
+        rec->displayname    = heap_strdupW( services[i].lpDisplayName );
+        rec->name           = heap_strdupW( services[i].lpServiceName );
+        rec->process_id     = status->dwProcessId;
+        rec->servicetype    = get_service_type( status->dwServiceType );
+        rec->startmode      = get_service_startmode( config->dwStartType );
+        rec->state          = get_service_state( status->dwCurrentState );
+        rec->systemname     = heap_strdupW( sysnameW );
+        rec->pause_service  = service_pause_service;
+        rec->resume_service = service_resume_service;
+        rec->start_service  = service_start_service;
+        rec->stop_service   = service_stop_service;
         heap_free( config );
         offset += sizeof(*rec);
         num_rows++;

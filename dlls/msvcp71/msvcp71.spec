@@ -1002,9 +1002,9 @@
 @ stub -arch=win64 ??0messages_base@std@@QEAA@_K@Z
 @ stub -arch=win32 ??0money_base@std@@QAE@I@Z
 @ stub -arch=win64 ??0money_base@std@@QEAA@_K@Z
-@ stub -arch=win32 ??0ostrstream@std@@QAE@PADHH@Z
-@ stub -arch=win32 ??0strstream@std@@QAE@PADHH@Z
-@ stub -arch=win64 ??0strstream@std@@QEAA@PEAD_JH@Z
+@ thiscall -arch=win32 ??0ostrstream@std@@QAE@PADHH@Z(ptr ptr long long long) ostrstream_ctor
+@ thiscall -arch=win32 ??0strstream@std@@QAE@PADHH@Z(ptr ptr long long long) strstream_ctor
+@ cdecl -arch=win64 ??0strstream@std@@QEAA@PEAD_JH@Z(ptr ptr long long long) strstream_ctor
 @ stub -arch=win32 ??0time_base@std@@QAE@I@Z
 @ stub -arch=win64 ??0time_base@std@@QEAA@_K@Z
 @ stub -arch=win32 ??1?$_Mpunct@D@std@@MAE@XZ
@@ -1197,18 +1197,18 @@
 @ cdecl -arch=win64 ??1facet@locale@std@@UEAA@XZ(ptr) locale_facet_dtor
 @ thiscall -arch=win32 ??1ios_base@std@@UAE@XZ(ptr) ios_base_dtor
 @ cdecl -arch=win64 ??1ios_base@std@@UEAA@XZ(ptr) ios_base_dtor
-@ stub -arch=win32 ??1istrstream@std@@UAE@XZ
-@ stub -arch=win64 ??1istrstream@std@@UEAA@XZ
+@ thiscall -arch=win32 ??1istrstream@std@@UAE@XZ(ptr) istrstream_dtor
+@ cdecl -arch=win64 ??1istrstream@std@@UEAA@XZ(ptr) istrstream_dtor
 @ thiscall -arch=win32 ??1locale@std@@QAE@XZ(ptr) locale_dtor
 @ cdecl -arch=win64 ??1locale@std@@QEAA@XZ(ptr) locale_dtor
 @ stub -arch=win32 ??1messages_base@std@@UAE@XZ
 @ stub -arch=win64 ??1messages_base@std@@UEAA@XZ
 @ stub -arch=win32 ??1money_base@std@@UAE@XZ
 @ stub -arch=win64 ??1money_base@std@@UEAA@XZ
-@ stub -arch=win32 ??1ostrstream@std@@UAE@XZ
-@ stub -arch=win64 ??1ostrstream@std@@UEAA@XZ
-@ stub -arch=win32 ??1strstream@std@@UAE@XZ
-@ stub -arch=win64 ??1strstream@std@@UEAA@XZ
+@ thiscall -arch=win32 ??1ostrstream@std@@UAE@XZ(ptr) ostrstream_dtor
+@ cdecl -arch=win64 ??1ostrstream@std@@UEAA@XZ(ptr) ostrstream_dtor
+@ thiscall -arch=win32 ??1strstream@std@@UAE@XZ(ptr) strstream_dtor
+@ cdecl -arch=win64 ??1strstream@std@@UEAA@XZ(ptr) strstream_dtor
 @ thiscall -arch=win32 ??1strstreambuf@std@@UAE@XZ(ptr) strstreambuf_dtor
 @ cdecl -arch=win64 ??1strstreambuf@std@@UEAA@XZ(ptr) strstreambuf_dtor
 @ stub -arch=win32 ??1time_base@std@@UAE@XZ
@@ -2326,7 +2326,7 @@
 @ stub ?_Nanv@?$_Ctraits@M@std@@SAMM@Z
 @ stub ?_Nanv@?$_Ctraits@N@std@@SANN@Z
 @ stub ?_Nanv@?$_Ctraits@O@std@@SAOO@Z
-@ stub ?_Nomemory@std@@YAXXZ
+@ cdecl ?_Nomemory@std@@YAXXZ() _Nomemory
 @ thiscall -arch=win32 ?_Osfx@?$basic_ostream@DU?$char_traits@D@std@@@std@@QAEXXZ(ptr) basic_ostream_char__Osfx
 @ cdecl -arch=win64 ?_Osfx@?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAAXXZ(ptr) basic_ostream_char__Osfx
 @ thiscall -arch=win32 ?_Osfx@?$basic_ostream@GU?$char_traits@G@std@@@std@@QAEXXZ(ptr) basic_ostream_wchar__Osfx

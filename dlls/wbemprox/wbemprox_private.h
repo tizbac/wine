@@ -38,7 +38,7 @@ enum param_direction
 #define COL_FLAG_KEY     0x00020000
 #define COL_FLAG_METHOD  0x00040000
 
-typedef HRESULT (class_method)(IWbemClassObject *, IWbemClassObject **);
+typedef HRESULT (class_method)(IWbemClassObject *, IWbemClassObject *, IWbemClassObject **);
 
 struct column
 {
@@ -91,6 +91,7 @@ struct record
 {
     UINT count;
     struct field *fields;
+    struct table *table;
 };
 
 enum operator
@@ -154,7 +155,7 @@ struct query
     struct list mem;
 };
 
-void addref_query( struct query * ) DECLSPEC_HIDDEN;
+struct query *addref_query( struct query * ) DECLSPEC_HIDDEN;
 void release_query( struct query *query ) DECLSPEC_HIDDEN;
 HRESULT exec_query( const WCHAR *, IEnumWbemClassObject ** ) DECLSPEC_HIDDEN;
 HRESULT parse_query( const WCHAR *, struct view **, struct list * ) DECLSPEC_HIDDEN;
@@ -163,6 +164,7 @@ HRESULT create_view( const struct property *, const WCHAR *, const struct expr *
 void destroy_view( struct view * ) DECLSPEC_HIDDEN;
 void init_table_list( void ) DECLSPEC_HIDDEN;
 struct table *grab_table( const WCHAR * ) DECLSPEC_HIDDEN;
+struct table *addref_table( struct table * ) DECLSPEC_HIDDEN;
 void release_table( struct table * ) DECLSPEC_HIDDEN;
 struct table *create_table( const WCHAR *, UINT, const struct column *, UINT,
                             BYTE *, void (*)(struct table *)) DECLSPEC_HIDDEN;
@@ -196,8 +198,13 @@ HRESULT create_class_object(const WCHAR *, IEnumWbemClassObject *, UINT,
                             struct record *, IWbemClassObject **) DECLSPEC_HIDDEN;
 HRESULT EnumWbemClassObject_create(IUnknown *, struct query *, LPVOID *) DECLSPEC_HIDDEN;
 
-HRESULT reg_enumkey(IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
-HRESULT reg_enumvalues(IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
+HRESULT reg_enum_key(IWbemClassObject *, IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
+HRESULT reg_enum_values(IWbemClassObject *, IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
+HRESULT reg_get_stringvalue(IWbemClassObject *, IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
+HRESULT service_pause_service(IWbemClassObject *, IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
+HRESULT service_resume_service(IWbemClassObject *, IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
+HRESULT service_start_service(IWbemClassObject *, IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
+HRESULT service_stop_service(IWbemClassObject *, IWbemClassObject *, IWbemClassObject **) DECLSPEC_HIDDEN;
 
 static void *heap_alloc( size_t len ) __WINE_ALLOC_SIZE(1);
 static inline void *heap_alloc( size_t len )
@@ -230,13 +237,23 @@ static inline WCHAR *heap_strdupW( const WCHAR *src )
     return dst;
 }
 
+static const WCHAR class_serviceW[] = {'W','i','n','3','2','_','S','e','r','v','i','c','e',0};
 static const WCHAR class_stdregprovW[] = {'S','t','d','R','e','g','P','r','o','v',0};
+
+static const WCHAR prop_nameW[] = {'N','a','m','e',0};
 
 static const WCHAR method_enumkeyW[] = {'E','n','u','m','K','e','y',0};
 static const WCHAR method_enumvaluesW[] = {'E','n','u','m','V','a','l','u','e','s',0};
+static const WCHAR method_getstringvalueW[] = {'G','e','t','S','t','r','i','n','g','V','a','l','u','e',0};
+static const WCHAR method_pauseserviceW[] = {'P','a','u','s','e','S','e','r','v','i','c','e',0};
+static const WCHAR method_resumeserviceW[] = {'R','e','s','u','m','e','S','e','r','v','i','c','e',0};
+static const WCHAR method_startserviceW[] = {'S','t','a','r','t','S','e','r','v','i','c','e',0};
+static const WCHAR method_stopserviceW[] = {'S','t','o','p','S','e','r','v','i','c','e',0};
 
 static const WCHAR param_defkeyW[] = {'h','D','e','f','K','e','y',0};
 static const WCHAR param_namesW[] = {'s','N','a','m','e','s',0};
 static const WCHAR param_returnvalueW[] = {'R','e','t','u','r','n','V','a','l','u','e',0};
 static const WCHAR param_subkeynameW[] = {'s','S','u','b','K','e','y','N','a','m','e',0};
 static const WCHAR param_typesW[] = {'T','y','p','e','s',0};
+static const WCHAR param_valueW[] = {'s','V','a','l','u','e',0};
+static const WCHAR param_valuenameW[] = {'s','V','a','l','u','e','N','a','m','e',0};
