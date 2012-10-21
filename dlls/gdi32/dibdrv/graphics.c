@@ -440,31 +440,20 @@ static inline void get_text_bkgnd_masks( dibdrv_physdev *pdev, rop_mask *mask )
     }
 }
 
-static void draw_glyph( dibdrv_physdev *pdev, const POINT *origin, const GLYPHMETRICS *metrics,
-                        const struct gdi_image_bits *image, DWORD text_color,
+static void draw_glyph( dib_info *dib, int x, int y, const GLYPHMETRICS *metrics,
+                        const dib_info *glyph_dib, DWORD text_color,
                         const struct intensity_range *ranges, const struct clipped_rects *clipped_rects,
                         RECT *bounds )
 {
     int i;
     RECT rect, clipped_rect;
     POINT src_origin;
-    dib_info glyph_dib;
 
-    glyph_dib.bit_count   = 8;
-    glyph_dib.width       = metrics->gmBlackBoxX;
-    glyph_dib.height      = metrics->gmBlackBoxY;
-    glyph_dib.rect.left   = 0;
-    glyph_dib.rect.top    = 0;
-    glyph_dib.rect.right  = metrics->gmBlackBoxX;
-    glyph_dib.rect.bottom = metrics->gmBlackBoxY;
-    glyph_dib.stride      = get_dib_stride( metrics->gmBlackBoxX, 8 );
-    glyph_dib.bits        = *image;
-
-    rect.left   = origin->x  + metrics->gmptGlyphOrigin.x;
-    rect.top    = origin->y  - metrics->gmptGlyphOrigin.y;
+    rect.left   = x          + metrics->gmptGlyphOrigin.x;
+    rect.top    = y          - metrics->gmptGlyphOrigin.y;
     rect.right  = rect.left  + metrics->gmBlackBoxX;
     rect.bottom = rect.top   + metrics->gmBlackBoxY;
-    add_bounds_rect( bounds, &rect );
+    if (bounds) add_bounds_rect( bounds, &rect );
 
     for (i = 0; i < clipped_rects->count; i++)
     {
@@ -473,8 +462,8 @@ static void draw_glyph( dibdrv_physdev *pdev, const POINT *origin, const GLYPHME
             src_origin.x = clipped_rect.left - rect.left;
             src_origin.y = clipped_rect.top  - rect.top;
 
-            pdev->dib.funcs->draw_glyph( &pdev->dib, &clipped_rect, &glyph_dib, &src_origin,
-                                         text_color, ranges );
+            dib->funcs->draw_glyph( dib, &clipped_rect, glyph_dib, &src_origin,
+                                    text_color, ranges );
         }
     }
 }
@@ -491,7 +480,7 @@ static const int padding[4] = {0, 3, 2, 1};
  * using only values 0 or 16.
  */
 static DWORD get_glyph_bitmap( HDC hdc, UINT index, UINT aa_flags, GLYPHMETRICS *metrics,
-                               struct gdi_image_bits *image )
+                               dib_info *glyph_dib )
 {
     UINT ggo_flags = aa_flags | GGO_GLYPH_INDEX;
     static const MAT2 identity = { {0,1}, {0,0}, {0,0}, {0,1} };
@@ -499,12 +488,12 @@ static DWORD get_glyph_bitmap( HDC hdc, UINT index, UINT aa_flags, GLYPHMETRICS 
     int i, x, y;
     DWORD ret, size;
     BYTE *buf, *dst, *src;
-    int pad, stride;
+    int pad;
 
-    image->ptr = NULL;
-    image->is_copy = FALSE;
-    image->free = free_heap_bits;
-    image->param = NULL;
+    glyph_dib->bits.ptr = NULL;
+    glyph_dib->bits.is_copy = FALSE;
+    glyph_dib->bits.free = free_heap_bits;
+    glyph_dib->bits.param = NULL;
 
     indices[0] = index;
 
@@ -519,9 +508,17 @@ static DWORD get_glyph_bitmap( HDC hdc, UINT index, UINT aa_flags, GLYPHMETRICS 
     if (!ret) return ERROR_SUCCESS; /* empty glyph */
 
     /* We'll convert non-antialiased 1-bpp bitmaps to 8-bpp, so these sizes relate to 8-bpp */
+    glyph_dib->bit_count   = 8;
+    glyph_dib->width       = metrics->gmBlackBoxX;
+    glyph_dib->height      = metrics->gmBlackBoxY;
+    glyph_dib->rect.left   = 0;
+    glyph_dib->rect.top    = 0;
+    glyph_dib->rect.right  = metrics->gmBlackBoxX;
+    glyph_dib->rect.bottom = metrics->gmBlackBoxY;
+    glyph_dib->stride      = get_dib_stride( metrics->gmBlackBoxX, glyph_dib->bit_count );
+
     pad = padding[ metrics->gmBlackBoxX % 4 ];
-    stride = get_dib_stride( metrics->gmBlackBoxX, 8 );
-    size = metrics->gmBlackBoxY * stride;
+    size = metrics->gmBlackBoxY * glyph_dib->stride;
 
     buf = HeapAlloc( GetProcessHeap(), 0, size );
     if (!buf) return ERROR_OUTOFMEMORY;
@@ -538,7 +535,7 @@ static DWORD get_glyph_bitmap( HDC hdc, UINT index, UINT aa_flags, GLYPHMETRICS 
         for (y = metrics->gmBlackBoxY - 1; y >= 0; y--)
         {
             src = buf + y * get_dib_stride( metrics->gmBlackBoxX, 1 );
-            dst = buf + y * stride;
+            dst = buf + y * glyph_dib->stride;
 
             if (pad) memset( dst + metrics->gmBlackBoxX, 0, pad );
 
@@ -548,12 +545,50 @@ static DWORD get_glyph_bitmap( HDC hdc, UINT index, UINT aa_flags, GLYPHMETRICS 
     }
     else if (pad)
     {
-        for (y = 0, dst = buf; y < metrics->gmBlackBoxY; y++, dst += stride)
+        for (y = 0, dst = buf; y < metrics->gmBlackBoxY; y++, dst += glyph_dib->stride)
             memset( dst + metrics->gmBlackBoxX, 0, pad );
     }
 
-    image->ptr = buf;
+    glyph_dib->bits.ptr = buf;
     return ERROR_SUCCESS;
+}
+
+static void render_string( HDC hdc, dib_info *dib, INT x, INT y, UINT flags, UINT aa_flags,
+                           const WCHAR *str, UINT count, const INT *dx, DWORD text_color,
+                           const struct intensity_range *ranges, const struct clipped_rects *clipped_rects,
+                           RECT *bounds )
+{
+    UINT i;
+    DWORD err;
+    GLYPHMETRICS metrics;
+    dib_info glyph_dib;
+
+    for (i = 0; i < count; i++)
+    {
+        err = get_glyph_bitmap( hdc, (UINT)str[i], aa_flags, &metrics, &glyph_dib );
+        if (err) continue;
+
+        if (glyph_dib.bits.ptr)
+            draw_glyph( dib, x, y, &metrics, &glyph_dib, text_color, ranges, clipped_rects, bounds );
+
+        free_dib_info( &glyph_dib );
+
+        if (dx)
+        {
+            if (flags & ETO_PDY)
+            {
+                x += dx[ i * 2 ];
+                y += dx[ i * 2 + 1];
+            }
+            else
+                x += dx[ i ];
+        }
+        else
+        {
+            x += metrics.gmCellIncX;
+            y += metrics.gmCellIncY;
+        }
+    }
 }
 
 BOOL render_aa_text_bitmapinfo( HDC hdc, BITMAPINFO *info, struct gdi_image_bits *bits,
@@ -561,16 +596,18 @@ BOOL render_aa_text_bitmapinfo( HDC hdc, BITMAPINFO *info, struct gdi_image_bits
                                 UINT aa_flags, LPCWSTR str, UINT count, const INT *dx )
 {
     dib_info dib;
-    UINT i;
-    DWORD err;
     BOOL got_pixel;
     COLORREF fg, bg;
     DWORD fg_pixel, bg_pixel;
     struct intensity_range glyph_intensities[17];
+    struct clipped_rects visrect;
 
     assert( info->bmiHeader.biBitCount > 8 ); /* mono and indexed formats don't support anti-aliasing */
 
     init_dib_info_from_bitmapinfo( &dib, info, bits->ptr );
+
+    visrect.count = 1;
+    visrect.rects = &src->visrect;
 
     fg = make_rgb_colorref( hdc, &dib, GetTextColor( hdc ), &got_pixel, &fg_pixel);
     if (!got_pixel) fg_pixel = dib.funcs->colorref_to_pixel( &dib, fg );
@@ -589,62 +626,8 @@ BOOL render_aa_text_bitmapinfo( HDC hdc, BITMAPINFO *info, struct gdi_image_bits
         dib.funcs->solid_rects( &dib, 1, &src->visrect, bkgnd_color.and, bkgnd_color.xor );
     }
 
-    for (i = 0; i < count; i++)
-    {
-        GLYPHMETRICS metrics;
-        struct gdi_image_bits image;
-
-        err = get_glyph_bitmap( hdc, (UINT)str[i], aa_flags, &metrics, &image );
-        if (err) continue;
-
-        if (image.ptr)
-        {
-            RECT rect, clipped_rect;
-            POINT src_origin;
-            dib_info glyph_dib;
-
-            glyph_dib.bit_count   = 8;
-            glyph_dib.width       = metrics.gmBlackBoxX;
-            glyph_dib.height      = metrics.gmBlackBoxY;
-            glyph_dib.rect.left   = 0;
-            glyph_dib.rect.top    = 0;
-            glyph_dib.rect.right  = metrics.gmBlackBoxX;
-            glyph_dib.rect.bottom = metrics.gmBlackBoxY;
-            glyph_dib.stride      = get_dib_stride( metrics.gmBlackBoxX, 8 );
-            glyph_dib.bits        = image;
-
-            rect.left   = x + metrics.gmptGlyphOrigin.x;
-            rect.top    = y - metrics.gmptGlyphOrigin.y;
-            rect.right  = rect.left + metrics.gmBlackBoxX;
-            rect.bottom = rect.top  + metrics.gmBlackBoxY;
-
-            if (intersect_rect( &clipped_rect, &rect, &src->visrect ))
-            {
-                src_origin.x = clipped_rect.left - rect.left;
-                src_origin.y = clipped_rect.top  - rect.top;
-
-                dib.funcs->draw_glyph( &dib, &clipped_rect, &glyph_dib, &src_origin,
-                                       fg_pixel, glyph_intensities );
-            }
-        }
-        if (image.free) image.free( &image );
-
-        if (dx)
-        {
-            if (flags & ETO_PDY)
-            {
-                x += dx[ i * 2 ];
-                y += dx[ i * 2 + 1];
-            }
-            else
-                x += dx[ i ];
-        }
-        else
-        {
-            x += metrics.gmCellIncX;
-            y += metrics.gmCellIncY;
-        }
-    }
+    render_string( hdc, &dib, x, y, flags, aa_flags, str, count, dx,
+                   fg_pixel, glyph_intensities, &visrect, NULL );
     return TRUE;
 }
 
@@ -656,10 +639,9 @@ BOOL dibdrv_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags,
 {
     dibdrv_physdev *pdev = get_dibdrv_pdev(dev);
     struct clipped_rects clipped_rects;
-    UINT aa_flags, i;
-    POINT origin;
+    UINT aa_flags;
     RECT bounds;
-    DWORD text_color, err;
+    DWORD text_color;
     struct intensity_range ranges[17];
 
     init_clipped_rects( &clipped_rects );
@@ -693,37 +675,9 @@ BOOL dibdrv_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags,
     get_aa_ranges( pdev->dib.funcs->pixel_to_colorref( &pdev->dib, text_color ), ranges );
 
     aa_flags = get_font_aa_flags( dev->hdc );
-    origin.x = x;
-    origin.y = y;
-    for (i = 0; i < count; i++)
-    {
-        GLYPHMETRICS metrics;
-        struct gdi_image_bits image;
 
-        err = get_glyph_bitmap( dev->hdc, (UINT)str[i], aa_flags, &metrics, &image );
-        if (err) continue;
-
-        if (image.ptr)
-            draw_glyph( pdev, &origin, &metrics, &image, text_color, ranges, &clipped_rects, &bounds );
-
-        if (image.free) image.free( &image );
-
-        if (dx)
-        {
-            if (flags & ETO_PDY)
-            {
-                origin.x += dx[ i * 2 ];
-                origin.y += dx[ i * 2 + 1];
-            }
-            else
-                origin.x += dx[ i ];
-        }
-        else
-        {
-            origin.x += metrics.gmCellIncX;
-            origin.y += metrics.gmCellIncY;
-        }
-    }
+    render_string( dev->hdc, &pdev->dib, x, y, flags, aa_flags, str, count, dx,
+                   text_color, ranges, &clipped_rects, &bounds );
 
 done:
     add_clipped_bounds( pdev, &bounds, pdev->clip );

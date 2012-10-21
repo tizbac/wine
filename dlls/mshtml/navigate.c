@@ -215,7 +215,11 @@ static const nsIInputStreamVtbl nsInputStreamVtbl = {
 
 static nsProtocolStream *create_nsprotocol_stream(void)
 {
-    nsProtocolStream *ret = heap_alloc(sizeof(nsProtocolStream));
+    nsProtocolStream *ret;
+
+    ret = heap_alloc(sizeof(nsProtocolStream));
+    if(!ret)
+        return NULL;
 
     ret->nsIInputStream_iface.lpVtbl = &nsInputStreamVtbl;
     ret->ref = 1;
@@ -877,8 +881,10 @@ static HRESULT BufferBSC_read_data(BSCallback *bsc, IStream *stream)
     HRESULT hres;
 
     if(!This->buf) {
+        This->buf = heap_alloc(128);
+        if(!This->buf)
+            return E_OUTOFMEMORY;
         This->size = 128;
-        This->buf = heap_alloc(This->size);
     }
 
     do {
@@ -921,22 +927,19 @@ static const BSCallbackVtbl BufferBSCVtbl = {
 };
 
 
-static BufferBSC *create_bufferbsc(IMoniker *mon)
-{
-    BufferBSC *ret = heap_alloc_zero(sizeof(*ret));
-
-    init_bscallback(&ret->bsc, &BufferBSCVtbl, mon, 0);
-    ret->hres = E_FAIL;
-
-    return ret;
-}
-
 HRESULT bind_mon_to_wstr(HTMLInnerWindow *window, IMoniker *mon, WCHAR **ret)
 {
-    BufferBSC *bsc = create_bufferbsc(mon);
+    BufferBSC *bsc;
     int cp = CP_ACP;
     WCHAR *text;
     HRESULT hres;
+
+    bsc = heap_alloc_zero(sizeof(*bsc));
+    if(!bsc)
+        return E_OUTOFMEMORY;
+
+    init_bscallback(&bsc->bsc, &BufferBSCVtbl, mon, 0);
+    bsc->hres = E_FAIL;
 
     hres = start_binding(window, &bsc->bsc, NULL);
     if(SUCCEEDED(hres))
@@ -1164,8 +1167,11 @@ static HRESULT read_stream_data(nsChannelBSC *This, IStream *stream)
         return S_OK;
     }
 
-    if(!This->nsstream)
+    if(!This->nsstream) {
         This->nsstream = create_nsprotocol_stream();
+        if(!This->nsstream)
+            return E_OUTOFMEMORY;
+    }
 
     do {
         BOOL first_read = !This->bsc.readed;
@@ -1437,8 +1443,7 @@ static HRESULT async_stop_request(nsChannelBSC *This)
     IBindStatusCallback_AddRef(&This->bsc.IBindStatusCallback_iface);
     task->bsc = This;
 
-    push_task(&task->header, stop_request_proc, stop_request_task_destr, This->bsc.window->task_magic);
-    return S_OK;
+    return push_task(&task->header, stop_request_proc, stop_request_task_destr, This->bsc.window->task_magic);
 }
 
 static void handle_navigation_error(nsChannelBSC *This, DWORD result)
@@ -1798,8 +1803,7 @@ HRESULT async_start_doc_binding(HTMLOuterWindow *window, HTMLInnerWindow *pendin
     task->pending_window = pending_window;
     IHTMLWindow2_AddRef(&pending_window->base.IHTMLWindow2_iface);
 
-    push_task(&task->header, start_doc_binding_proc, start_doc_binding_task_destr, pending_window->task_magic);
-    return S_OK;
+    return push_task(&task->header, start_doc_binding_proc, start_doc_binding_task_destr, pending_window->task_magic);
 }
 
 void abort_window_bindings(HTMLInnerWindow *window)
@@ -2105,8 +2109,7 @@ HRESULT super_navigate(HTMLOuterWindow *window, IUri *uri, const WCHAR *headers,
         task->window = window;
         task->bscallback = bsc;
         task->mon = mon;
-        push_task(&task->header, navigate_proc, navigate_task_destr, window->task_magic);
-
+        hres = push_task(&task->header, navigate_proc, navigate_task_destr, window->task_magic);
     }else {
         navigate_javascript_task_t *task;
 
@@ -2124,10 +2127,10 @@ HRESULT super_navigate(HTMLOuterWindow *window, IUri *uri, const WCHAR *headers,
         IUri_AddRef(uri);
         task->window = window;
         task->uri = uri;
-        push_task(&task->header, navigate_javascript_proc, navigate_javascript_task_destr, window->task_magic);
+        hres = push_task(&task->header, navigate_javascript_proc, navigate_javascript_task_destr, window->task_magic);
     }
 
-    return S_OK;
+    return hres;
 }
 
 HRESULT navigate_new_window(HTMLOuterWindow *window, IUri *uri, const WCHAR *name, IHTMLWindow2 **ret)

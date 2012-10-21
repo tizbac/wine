@@ -6136,6 +6136,11 @@ ostreambuf_iterator_char* __thiscall num_put_char_put_ulong(const num_put *this,
     return call_num_put_char_do_put_ulong(this, ret, dest, base, fill, v);
 }
 
+static inline streamsize get_precision(const ios_base *base)
+{
+    return base->prec <= 0 && !(base->fmtfl & FMTFLAG_fixed) ? 6 : base->prec;
+}
+
 /* ?do_put@?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@MBE?AV?$ostreambuf_iterator@DU?$char_traits@D@std@@@2@V32@AAVios_base@2@DN@Z */
 /* ?do_put@?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@MEBA?AV?$ostreambuf_iterator@DU?$char_traits@D@std@@@2@V32@AEAVios_base@2@DN@Z */
 /* ?do_put@?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@MBE?AV?$ostreambuf_iterator@DU?$char_traits@D@std@@@2@V32@AAVios_base@2@DO@Z */
@@ -6153,11 +6158,13 @@ ostreambuf_iterator_char* __thiscall num_put_char_do_put_double(const num_put *t
     char *tmp;
     char fmt[8]; /* strlen("%+#.*lg")+1 */
     int size;
+    streamsize prec;
 
     TRACE("(%p %p %p %d %lf)\n", this, ret, base, fill, v);
 
     num_put_char__Ffmt(this, fmt, '\0', base->fmtfl);
-    size = _scprintf(fmt, base->prec, v);
+    prec = get_precision(base);
+    size = _scprintf(fmt, prec, v);
 
     /* TODO: don't use dynamic allocation */
     tmp = MSVCRT_operator_new(size*2);
@@ -6165,7 +6172,7 @@ ostreambuf_iterator_char* __thiscall num_put_char_do_put_double(const num_put *t
         ERR("Out of memory\n");
         throw_exception(EXCEPTION_BAD_ALLOC, NULL);
     }
-    num_put_char_fput(this, ret, dest, base, fill, tmp, sprintf(tmp, fmt, base->prec, v));
+    num_put_char_fput(this, ret, dest, base, fill, tmp, sprintf(tmp, fmt, prec, v));
     MSVCRT_operator_delete(tmp);
     return ret;
 }
@@ -6928,11 +6935,13 @@ ostreambuf_iterator_wchar* __thiscall num_put_short_do_put_double(const num_put 
     char *tmp;
     char fmt[8]; /* strlen("%+#.*lg")+1 */
     int size;
+    streamsize prec;
 
     TRACE("(%p %p %p %d %lf)\n", this, ret, base, fill, v);
 
     num_put_wchar__Ffmt(this, fmt, '\0', base->fmtfl);
-    size = _scprintf(fmt, base->prec, v);
+    prec = get_precision(base);
+    size = _scprintf(fmt, prec, v);
 
     /* TODO: don't use dynamic allocation */
     tmp = MSVCRT_operator_new(size*2);
@@ -6940,7 +6949,7 @@ ostreambuf_iterator_wchar* __thiscall num_put_short_do_put_double(const num_put 
         ERR("Out of memory\n");
         throw_exception(EXCEPTION_BAD_ALLOC, NULL);
     }
-    num_put__fput(this, ret, dest, base, fill, tmp, sprintf(tmp, fmt, base->prec, v),
+    num_put__fput(this, ret, dest, base, fill, tmp, sprintf(tmp, fmt, prec, v),
             numpunct_short_use_facet(base->loc));
     MSVCRT_operator_delete(tmp);
     return ret;
@@ -7240,17 +7249,17 @@ static locale__Locimp* locale__Locimp_copy_ctor(locale__Locimp *this, const loca
 /* ??1_Locimp@locale@std@@MEAA@XZ */
 static void locale__Locimp_dtor(locale__Locimp *this)
 {
+    MSVCP_size_t i;
+
     TRACE("(%p)\n", this);
 
-    if(locale_facet__Decref(&this->facet)) {
-        MSVCP_size_t i;
-        for(i=0; i<this->facet_cnt; i++)
-            if(this->facetvec[i] && locale_facet__Decref(this->facetvec[i]))
-                call_locale_facet_vector_dtor(this->facetvec[i], 0);
+    locale_facet_dtor(&this->facet);
+    for(i=0; i<this->facet_cnt; i++)
+        if(this->facetvec[i] && locale_facet__Decref(this->facetvec[i]))
+            call_locale_facet_vector_dtor(this->facetvec[i], 1);
 
-        MSVCRT_operator_delete(this->facetvec);
-        basic_string_char_dtor(&this->name);
-    }
+    MSVCRT_operator_delete(this->facetvec);
+    basic_string_char_dtor(&this->name);
 }
 
 DEFINE_THISCALL_WRAPPER(locale__Locimp_vector_dtor, 8)
@@ -7305,7 +7314,7 @@ static void locale__Locimp__Locimp_Addfac(locale__Locimp *locimp, locale_facet *
     }
 
     if(locimp->facetvec[id] && locale_facet__Decref(locimp->facetvec[id]))
-        call_locale_facet_vector_dtor(locimp->facetvec[id], 0);
+        call_locale_facet_vector_dtor(locimp->facetvec[id], 1);
 
     locimp->facetvec[id] = facet;
     if(facet)
@@ -7758,8 +7767,10 @@ DEFINE_THISCALL_WRAPPER(locale_dtor, 4)
 void __thiscall locale_dtor(locale *this)
 {
     TRACE("(%p)\n", this);
-    if(this->ptr)
+    if(this->ptr && locale_facet__Decref(&this->ptr->facet)) {
         locale__Locimp_dtor(this->ptr);
+        MSVCRT_operator_delete(this);
+    }
 }
 
 /* ??4locale@std@@QAEAAV01@ABV01@@Z */

@@ -478,14 +478,30 @@ BOOL WINAPI GetLastInputInfo(PLASTINPUTINFO plii)
 /******************************************************************
 *		GetRawInputDeviceList (USER32.@)
 */
-UINT WINAPI GetRawInputDeviceList(PRAWINPUTDEVICELIST pRawInputDeviceList, PUINT puiNumDevices, UINT cbSize)
+UINT WINAPI GetRawInputDeviceList(RAWINPUTDEVICELIST *devices, UINT *device_count, UINT size)
 {
-    FIXME("(pRawInputDeviceList=%p, puiNumDevices=%p, cbSize=%d) stub!\n", pRawInputDeviceList, puiNumDevices, cbSize);
+    TRACE("devices %p, device_count %p, size %u.\n", devices, device_count, size);
 
-    if(pRawInputDeviceList)
-        memset(pRawInputDeviceList, 0, sizeof *pRawInputDeviceList);
-    *puiNumDevices = 0;
-    return 0;
+    if (size != sizeof(*devices) || !device_count) return ~0U;
+
+    if (!devices)
+    {
+        *device_count = 2;
+        return 0;
+    }
+
+    if (*device_count < 2)
+    {
+        *device_count = 2;
+        return ~0U;
+    }
+
+    devices[0].hDevice = WINE_MOUSE_HANDLE;
+    devices[0].dwType = RIM_TYPEMOUSE;
+    devices[1].hDevice = WINE_KEYBOARD_HANDLE;
+    devices[1].dwType = RIM_TYPEKEYBOARD;
+
+    return 2;
 }
 
 
@@ -601,11 +617,73 @@ UINT WINAPI GetRawInputDeviceInfoA(HANDLE hDevice, UINT uiCommand, LPVOID pData,
 /******************************************************************
 *		GetRawInputDeviceInfoW (USER32.@)
 */
-UINT WINAPI GetRawInputDeviceInfoW(HANDLE hDevice, UINT uiCommand, LPVOID pData, PUINT pcbSize)
+UINT WINAPI GetRawInputDeviceInfoW(HANDLE device, UINT command, void *data, UINT *data_size)
 {
-    FIXME("(hDevice=%p, uiCommand=%d, pData=%p, pcbSize=%p) stub!\n", hDevice, uiCommand, pData, pcbSize);
+    /* FIXME: Most of this is made up. */
+    static const WCHAR keyboard_name[] = {'\\','\\','?','\\','W','I','N','E','_','K','E','Y','B','O','A','R','D',0};
+    static const WCHAR mouse_name[] = {'\\','\\','?','\\','W','I','N','E','_','M','O','U','S','E',0};
+    static const RID_DEVICE_INFO_KEYBOARD keyboard_info = {0, 0, 1, 12, 3, 101};
+    static const RID_DEVICE_INFO_MOUSE mouse_info = {1, 5, 0, FALSE};
+    const WCHAR *name = NULL;
+    RID_DEVICE_INFO *info;
+    UINT s;
 
-    return 0;
+    TRACE("device %p, command %u, data %p, data_size %p.\n", device, command, data, data_size);
+
+    if (!data_size || (device != WINE_MOUSE_HANDLE && device != WINE_KEYBOARD_HANDLE)) return ~0U;
+
+    switch (command)
+    {
+    case RIDI_DEVICENAME:
+        if (device == WINE_MOUSE_HANDLE)
+        {
+            s = sizeof(mouse_name);
+            name = mouse_name;
+        }
+        else
+        {
+            s = sizeof(keyboard_name);
+            name = keyboard_name;
+        }
+        break;
+    case RIDI_DEVICEINFO:
+        s = sizeof(*info);
+        break;
+    default:
+        return ~0U;
+    }
+
+    if (!data)
+    {
+        *data_size = s;
+        return 0;
+    }
+
+    if (*data_size < s)
+    {
+        *data_size = s;
+        return ~0U;
+    }
+
+    if (command == RIDI_DEVICENAME)
+    {
+        memcpy(data, name, s);
+        return s;
+    }
+
+    info = data;
+    info->cbSize = sizeof(*info);
+    if (device == WINE_MOUSE_HANDLE)
+    {
+        info->dwType = RIM_TYPEMOUSE;
+        info->u.mouse = mouse_info;
+    }
+    else
+    {
+        info->dwType = RIM_TYPEKEYBOARD;
+        info->u.keyboard = keyboard_info;
+    }
+    return s;
 }
 
 

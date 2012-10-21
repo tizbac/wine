@@ -54,6 +54,7 @@ static BOOL  (WINAPI *pRemoveFontResourceExA)(LPCSTR, DWORD, PVOID);
 
 static HMODULE hgdi32 = 0;
 static const MAT2 mat = { {0,1}, {0,0}, {0,0}, {0,1} };
+static WORD system_lang_id;
 
 static void init(void)
 {
@@ -74,6 +75,8 @@ static void init(void)
     pRemoveFontMemResourceEx = (void *)GetProcAddress(hgdi32, "RemoveFontMemResourceEx");
     pAddFontResourceExA = (void *)GetProcAddress(hgdi32, "AddFontResourceExA");
     pRemoveFontResourceExA = (void *)GetProcAddress(hgdi32, "RemoveFontResourceExA");
+
+    system_lang_id = PRIMARYLANGID(GetSystemDefaultLangID());
 }
 
 static INT CALLBACK is_truetype_font_installed_proc(const LOGFONT *elf, const TEXTMETRIC *ntm, DWORD type, LPARAM lParam)
@@ -668,6 +671,11 @@ static INT CALLBACK find_font_proc(const LOGFONT *elf, const TEXTMETRIC *ntm, DW
     return 1; /* continue enumeration */
 }
 
+static BOOL is_CJK(void)
+{
+    return (system_lang_id == LANG_CHINESE || system_lang_id == LANG_JAPANESE || system_lang_id == LANG_KOREAN);
+}
+
 #define FH_SCALE 0x80000000
 static void test_bitmap_font_metrics(void)
 {
@@ -682,15 +690,15 @@ static void test_bitmap_font_metrics(void)
         int scaled_height;
     } fd[] =
     {
-        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 6, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, 0, 13 },
+        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 6, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, LANG_ARABIC, 13 },
         { "MS Sans Serif", FW_NORMAL, FH_SCALE | 6, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x7f, 0x20, FS_CYRILLIC, 0, 13 },
-        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 8, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, 0, 13 },
+        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 8, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, LANG_ARABIC, 13 },
         { "MS Sans Serif", FW_NORMAL, FH_SCALE | 8, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x7f, 0x20, FS_CYRILLIC, 0, 13 },
-        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 10, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, 0, 13 },
+        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 10, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, LANG_ARABIC, 13 },
         { "MS Sans Serif", FW_NORMAL, FH_SCALE | 10, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x7f, 0x20, FS_CYRILLIC, 0, 13 },
-        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 14, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, 0, 13 },
+        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 14, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, LANG_ARABIC, 13 },
         { "MS Sans Serif", FW_NORMAL, FH_SCALE | 14, 11, 2, 2, 0, 5, 11, 96, 0x20, 0xff, 0x7f, 0x20, FS_CYRILLIC, 0, 13 },
-        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 18, 13, 3, 3, 0, 7, 14, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, 0, 16 },
+        { "MS Sans Serif", FW_NORMAL, FH_SCALE | 18, 13, 3, 3, 0, 7, 14, 96, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, LANG_ARABIC, 16 },
         { "MS Sans Serif", FW_NORMAL, FH_SCALE | 18, 13, 3, 3, 0, 7, 14, 96, 0x20, 0xff, 0x7f, 0x20, FS_CYRILLIC, 0, 16 },
 
         { "MS Sans Serif", FW_NORMAL, FH_SCALE | 6, 13, 3, 3, 0, 7, 14, 120, 0x20, 0xff, 0x81, 0x20, FS_LATIN1 | FS_LATIN2, 0, 16 },
@@ -774,32 +782,32 @@ static void test_bitmap_font_metrics(void)
 
         { "System", FW_BOLD, 16, 13, 3, 3, 0, 7, 14, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN1 },
         { "System", FW_BOLD, 16, 13, 3, 3, 0, 7, 15, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN2 | FS_CYRILLIC },
-        { "System", FW_NORMAL, 18, 16, 2, 0, 2, 8, 16, 96, 0, 0, 0, 0, FS_JISJAPAN },
+        { "System", FW_NORMAL, 18, 16, 2, 0, 2, 8, 16, 96, 0x20, 0xff, 0x80, 0x20, FS_JISJAPAN },
 
         { "System", FW_BOLD, 20, 16, 4, 4, 0, 9, 14, 120, 0x20, 0xff, 0x80, 0x20, FS_LATIN1 },
         { "System", FW_BOLD, 20, 16, 4, 4, 0, 9, 17, 120, 0x20, 0xff, 0x80, 0x20, FS_LATIN2 | FS_CYRILLIC },
 
         { "Small Fonts", FW_NORMAL, 3, 2, 1, 0, 0, 1, 2, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN1 },
         { "Small Fonts", FW_NORMAL, 3, 2, 1, 0, 0, 1, 8, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN2 | FS_CYRILLIC },
-        { "Small Fonts", FW_NORMAL, 3, 2, 1, 0, 0, 2, 4, 96, 0, 0, 0, 0, FS_JISJAPAN },
+        { "Small Fonts", FW_NORMAL, 3, 2, 1, 0, 0, 2, 4, 96, 0x20, 0xff, 0x80, 0x20, FS_JISJAPAN },
         { "Small Fonts", FW_NORMAL, 5, 4, 1, 1, 0, 3, 4, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN1, LANG_ARABIC },
         { "Small Fonts", FW_NORMAL, 5, 4, 1, 1, 0, 2, 8, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN2 | FS_CYRILLIC },
-        { "Small Fonts", FW_NORMAL, 5, 4, 1, 0, 0, 3, 6, 96, 0, 0, 0, 0, FS_JISJAPAN },
+        { "Small Fonts", FW_NORMAL, 5, 4, 1, 0, 0, 3, 6, 96, 0x20, 0xff, 0x80, 0x20, FS_JISJAPAN },
         { "Small Fonts", FW_NORMAL, 6, 5, 1, 1, 0, 3, 13, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN1, LANG_ARABIC },
         { "Small Fonts", FW_NORMAL, 6, 5, 1, 1, 0, 3, 8, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN2 | FS_CYRILLIC },
-        { "Small Fonts", FW_NORMAL, 6, 5, 1, 1, 0, 3, 8, 96, 0, 0, 0, 0, FS_ARABIC },
-        { "Small Fonts", FW_NORMAL, 6, 5, 1, 0, 0, 4, 8, 96, 0, 0, 0, 0, FS_JISJAPAN },
+        { "Small Fonts", FW_NORMAL, 6, 5, 1, 1, 0, 3, 8, 96, 0x00, 0xff, 0x60, 0x00, FS_ARABIC },
+        { "Small Fonts", FW_NORMAL, 6, 5, 1, 0, 0, 4, 8, 96, 0x20, 0xff, 0x80, 0x20, FS_JISJAPAN },
         { "Small Fonts", FW_NORMAL, 8, 7, 1, 1, 0, 4, 7, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN1, LANG_ARABIC },
         { "Small Fonts", FW_NORMAL, 8, 7, 1, 1, 0, 4, 8, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN2 | FS_CYRILLIC },
-        { "Small Fonts", FW_NORMAL, 8, 7, 1, 1, 0, 4, 8, 96, 0, 0, 0, 0, FS_ARABIC },
-        { "Small Fonts", FW_NORMAL, 8, 7, 1, 0, 0, 5, 10, 96, 0, 0, 0, 0, FS_JISJAPAN },
+        { "Small Fonts", FW_NORMAL, 8, 7, 1, 1, 0, 4, 8, 96, 0x00, 0xff, 0x60, 0x00, FS_ARABIC },
+        { "Small Fonts", FW_NORMAL, 8, 7, 1, 0, 0, 5, 10, 96, 0x20, 0xff, 0x80, 0x20, FS_JISJAPAN },
         { "Small Fonts", FW_NORMAL, 10, 8, 2, 2, 0, 4, 8, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN1 | FS_LATIN2, LANG_ARABIC },
         { "Small Fonts", FW_NORMAL, 10, 8, 2, 2, 0, 5, 8, 96, 0x20, 0xff, 0x80, 0x20, FS_CYRILLIC },
-        { "Small Fonts", FW_NORMAL, 10, 8, 2, 2, 0, 4, 9, 96, 0, 0, 0, 0, FS_ARABIC },
-        { "Small Fonts", FW_NORMAL, 10, 8, 2, 0, 0, 6, 12, 96, 0, 0, 0, 0, FS_JISJAPAN },
+        { "Small Fonts", FW_NORMAL, 10, 8, 2, 2, 0, 4, 9, 96, 0x00, 0xff, 0x60, 0x00, FS_ARABIC },
+        { "Small Fonts", FW_NORMAL, 10, 8, 2, 0, 0, 6, 12, 96, 0x20, 0xff, 0x80, 0x20, FS_JISJAPAN },
         { "Small Fonts", FW_NORMAL, 11, 9, 2, 2, 0, 5, 9, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN1 | FS_LATIN2 | FS_CYRILLIC, LANG_ARABIC },
-        { "Small Fonts", FW_NORMAL, 11, 9, 2, 2, 0, 4, 10, 96, 0, 0, 0, 0, FS_ARABIC },
-        { "Small Fonts", FW_NORMAL, 11, 9, 2, 0, 0, 7, 14, 96, 0, 0, 0, 0, FS_JISJAPAN },
+        { "Small Fonts", FW_NORMAL, 11, 9, 2, 2, 0, 4, 10, 96, 0x00, 0xff, 0x60, 0x00, FS_ARABIC },
+        { "Small Fonts", FW_NORMAL, 11, 9, 2, 0, 0, 7, 14, 96, 0x20, 0xff, 0x80, 0x20, FS_JISJAPAN },
 
         { "Small Fonts", FW_NORMAL, 3, 2, 1, 0, 0, 1, 2, 120, 0x20, 0xff, 0x80, 0x20, FS_LATIN1 | FS_JISJAPAN },
         { "Small Fonts", FW_NORMAL, 3, 2, 1, 0, 0, 1, 8, 120, 0x20, 0xff, 0x80, 0x20, FS_LATIN2 | FS_CYRILLIC },
@@ -816,7 +824,7 @@ static void test_bitmap_font_metrics(void)
 
         { "Fixedsys", FW_NORMAL, 15, 12, 3, 3, 0, 8, 8, 96, 0x20, 0xff, 0x80, 0x20, FS_LATIN1 | FS_LATIN2 },
         { "Fixedsys", FW_NORMAL, 16, 12, 4, 3, 0, 8, 8, 96, 0x20, 0xff, 0x80, 0x20, FS_CYRILLIC },
-        { "FixedSys", FW_NORMAL, 18, 16, 2, 0, 0, 8, 16, 96, 0, 0, 0, 0, FS_JISJAPAN },
+        { "FixedSys", FW_NORMAL, 18, 16, 2, 0, 0, 8, 16, 96, 0x20, 0xff, 0xa0, 0x20, FS_JISJAPAN },
 
         { "Fixedsys", FW_NORMAL, 20, 16, 4, 2, 0, 10, 10, 120, 0x20, 0xff, 0x80, 0x20, FS_LATIN1 | FS_LATIN2 | FS_CYRILLIC }
 
@@ -828,11 +836,9 @@ static void test_bitmap_font_metrics(void)
     HFONT hfont, old_hfont;
     TEXTMETRIC tm;
     INT ret, i, expected_cs, screen_log_pixels, diff, font_res;
-    WORD system_lang_id;
     char face_name[LF_FACESIZE];
     CHARSETINFO csi;
 
-    system_lang_id = PRIMARYLANGID(GetSystemDefaultLangID());
     trace("system language id %04x\n", system_lang_id);
 
     expected_cs = GetACP();
@@ -933,7 +939,10 @@ static void test_bitmap_font_metrics(void)
 
             SetLastError(0xdeadbeef);
             ret = GetTextCharset(hdc);
-            ok(ret == expected_cs, "got charset %d, expected %d\n", ret, expected_cs);
+            if (is_CJK() && lf.lfCharSet == ANSI_CHARSET)
+                ok(ret == ANSI_CHARSET, "got charset %d, expected ANSI_CHARSETd\n", ret);
+            else
+                ok(ret == expected_cs, "got charset %d, expected %d\n", ret, expected_cs);
 
             trace("created %s, height %d charset %x dpi %d\n", face_name, tm.tmHeight, tm.tmCharSet, tm.tmDigitizedAspectX);
             trace("expected %s, height %d scaled_hight %d, dpi %d\n", fd[i].face_name, height, fd[i].scaled_height, fd[i].dpi);
@@ -2433,7 +2442,7 @@ static void test_EnumFontFamiliesEx_default_charset(void)
     }
     trace("'%s' has %d charsets.\n", gui_font.lfFaceName, efd.total);
 
-    ok(efd.lf[0].lfCharSet == gui_font.lfCharSet,
+    ok(efd.lf[0].lfCharSet == gui_font.lfCharSet || broken(system_lang_id == LANG_ARABIC),
        "(%s) got charset %d expected %d\n",
        efd.lf[0].lfFaceName, efd.lf[0].lfCharSet, gui_font.lfCharSet);
 
@@ -4153,7 +4162,7 @@ static void test_fullname2_helper(const char *Family)
         ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FONT_SUBFAMILY, bufW, buf_size, GetSystemDefaultLangID());
         if (!ret)
         {
-            trace("no localized FONT_SUBFAMILY font.\n");
+            trace("no localized FONT_SUBFAMILY found.\n");
             ret = get_ttf_nametable_entry(hdc, TT_NAME_ID_FONT_SUBFAMILY, bufW, buf_size, TT_MS_LANGID_ENGLISH_UNITED_STATES);
         }
         ok(ret, "SUBFAMILY (style name) could not be read\n");
