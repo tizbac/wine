@@ -808,10 +808,12 @@ static void set_rttime_limit(void)
 
     if (!getrlimit( RLIMIT_RTTIME, &rlimit ))
     {
-        /* 50 ms realtime, then 10 ms to undo realtime */
-        if (rlimit.rlim_max > 150000000ULL)
-            rlimit.rlim_max = 150000000ULL;
-        rlimit.rlim_cur = rlimit.rlim_max - 10000000ULL;
+        /* 1000 ms maximum realtime before the first SIGXCPU, this will drop
+         * all realtime threads to normal priority.
+         */
+        if (rlimit.rlim_max > 5000000)
+            rlimit.rlim_max = 5000000;
+        rlimit.rlim_cur = 1000000;
 
         setrlimit( RLIMIT_RTTIME, &rlimit );
     }

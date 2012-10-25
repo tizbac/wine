@@ -79,6 +79,9 @@
 #include "ntdll_misc.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(server);
+WINE_DECLARE_DEBUG_CHANNEL(winediag);
+WINE_DECLARE_DEBUG_CHANNEL(tid);
+WINE_DECLARE_DEBUG_CHANNEL(timestamp);
 
 /* Some versions of glibc don't define this */
 #ifndef SCM_RIGHTS
@@ -979,6 +982,88 @@ static int get_unix_tid(void)
 }
 
 
+#ifdef SIGXCPU
+static int convert_tidtostr_r(char *s, unsigned hex)
+{
+    int i;
+    char *start = s;
+
+    for (i = 0; i < 8; ++i) {
+        unsigned c = hex >> (28 - 4 * i);
+
+        if (c || i >= 4)
+        { /* last 4 digits always printed */
+            c &= 0xf;
+
+            if (c < 10)
+                *s++ = '0' + c;
+            else
+                *s++ = 'a' + c - 10;
+        }
+    }
+
+    *s++ = ':';
+    return s - start;
+}
+
+static int convert_stamptostr_r(char *s, unsigned stamp)
+{
+    unsigned high = stamp / 1000, low = stamp % 1000, i;
+    char *start = s;
+
+    for (i = 1000000; i; i /= 10) {
+        if (high >= i)
+            *s++ = '0' + (high / i) % 10;
+        else if (i <= 100)
+            *s++ = ' ';
+    }
+
+    *s++ = '.';
+
+    for (i = 100; i; i /= 10)
+         *s++ = '0' + (low / i) % 10;
+
+    *s++ = ':';
+
+    return s - start;
+}
+
+
+static const char throttle_str[] =
+"fixme:winediag:sigxcpu_handler realtime priority was throttled due to program exceeding time limit\n";
+
+static void sigxcpu_handler( int sig )
+{
+    char temp[16];
+    int old_errno = errno, ret;
+
+    if (server_pid > 0)
+        kill(server_pid, SIGXCPU);
+    else {
+        /* uh oh, somehow init failed to get server_pid */
+        struct sched_param parm;
+        memset(&parm, 0, sizeof(parm));
+        sched_setscheduler(0, SCHED_OTHER | SCHED_RESET_ON_FORK, &parm);
+    }
+
+    if (FIXME_ON(winediag)) {
+        if (TRACE_ON(timestamp)) {
+            ret = convert_stamptostr_r(temp, NtGetTickCount());
+            write(2, temp, ret);
+        }
+
+        if (TRACE_ON(tid)) {
+            ret = convert_tidtostr_r(temp, GetCurrentThreadId());
+            write(2, temp, ret);
+        }
+
+        write(2, throttle_str, sizeof(throttle_str)-1);
+    }
+
+    errno = old_errno;
+}
+#endif
+
 /***********************************************************************
  *           server_init_process
  *
@@ -988,6 +1073,14 @@ void server_init_process(void)
 {
     obj_handle_t version;
     const char *env_socket = getenv( "WINESERVERSOCKET" );
+#ifdef SIGXCPU
+    struct sigaction sa;
+
+    sa.sa_handler = sigxcpu_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction( SIGXCPU, &sa, NULL );
+#endif
 
     server_pid = -1;
     if (env_socket)
@@ -1070,7 +1163,6 @@ NTSTATUS server_init_process_done(void)
 
     return status;
 }
-
 
 /***********************************************************************
  *           server_init_thread
