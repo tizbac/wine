@@ -31,10 +31,6 @@
 #include "wine/list.h"
 
 extern int ds_hel_buflen DECLSPEC_HIDDEN;
-extern int ds_snd_queue_max DECLSPEC_HIDDEN;
-extern int ds_snd_shadow_maxsize DECLSPEC_HIDDEN;
-extern int ds_default_sample_rate DECLSPEC_HIDDEN;
-extern int ds_default_bits_per_sample DECLSPEC_HIDDEN;
 
 /*****************************************************************************
  * Predeclare the interface implementation structures
