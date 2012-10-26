@@ -417,20 +417,20 @@ bar
 NUL
 @todo_wine@foo created
 ------------ Testing if/else ------------
-if/else should work with blocks
+--- if/else should work with blocks
 if seems to work
 else seems to work
 if seems not to detect /c as parameter
-Testing case sensitivity with and without /i option
+--- case sensitivity with and without /i option
 if seems to default to case sensitivity
 if /i seems to work
 if /I seems to work
-Testing string comparisons
+--- string comparisons
 equal
 non equal
 non equal
 equal
-Testing tabs handling
+--- tabs handling
 doom
 doom
 doom
@@ -438,6 +438,177 @@ lol
 quake
 quake
 quake
+--- comparison operators
+------ for strings
+LSS string can be used as operand for LSS comparison
+@todo_wine@floats are handled as strings
+@todo_wine@numbers in quotes are handled as strings
+@todo_wine@negative numbers as well@or_broken@NT4
+@todo_wine@if /i seems to work for LSS
+@todo_wine@A LSS B
+@todo_wine@AB LSS B
+@todo_wine@AA LSS B
+@todo_wine@A LSS AB
+@todo_wine@AA LSS AB
+@todo_wine@A LSS BA
+@todo_wine@B LSS BA
+@todo_wine@AB LSS BA
+@todo_wine@AA LSS BA
+@todo_wine@A LSS AA
+@todo_wine@b LSS B@or_broken@NT4
+@todo_wine@a LSS B@or_broken@NT4
+@todo_wine@a LSS B insensitive
+@todo_wine@A LSS b
+@todo_wine@A LSS b insensitive
+@todo_wine@A LEQ A
+@todo_wine@A LEQ B
+@todo_wine@B LEQ B
+@todo_wine@AB LEQ B
+@todo_wine@AA LEQ B
+@todo_wine@A LEQ AB
+@todo_wine@AB LEQ AB
+@todo_wine@AA LEQ AB
+@todo_wine@A LEQ BA
+@todo_wine@B LEQ BA
+@todo_wine@AB LEQ BA
+@todo_wine@BA LEQ BA
+@todo_wine@AA LEQ BA
+@todo_wine@A LEQ AA
+@todo_wine@AA LEQ AA
+@todo_wine@b LEQ B@or_broken@NT4
+@todo_wine@b LEQ B insensitive
+@todo_wine@a LEQ B@or_broken@NT4
+@todo_wine@a LEQ B insensitive
+@todo_wine@A LEQ b
+@todo_wine@A LEQ b insensitive
+@todo_wine@A EQU A
+@todo_wine@B EQU B
+@todo_wine@AB EQU AB
+@todo_wine@BA EQU BA
+@todo_wine@AA EQU AA
+@todo_wine@A EQU a insensitive
+@todo_wine@B NEQ A
+@todo_wine@AB NEQ A
+@todo_wine@BA NEQ A
+@todo_wine@AA NEQ A
+@todo_wine@A NEQ B
+@todo_wine@AB NEQ B
+@todo_wine@BA NEQ B
+@todo_wine@AA NEQ B
+@todo_wine@A NEQ AB
+@todo_wine@B NEQ AB
+@todo_wine@BA NEQ AB
+@todo_wine@AA NEQ AB
+@todo_wine@A NEQ BA
+@todo_wine@B NEQ BA
+@todo_wine@AB NEQ BA
+@todo_wine@AA NEQ BA
+@todo_wine@A NEQ AA
+@todo_wine@B NEQ AA
+@todo_wine@AB NEQ AA
+@todo_wine@BA NEQ AA
+@todo_wine@A GEQ A
+@todo_wine@B GEQ A
+@todo_wine@AB GEQ A
+@todo_wine@BA GEQ A
+@todo_wine@AA GEQ A
+@todo_wine@B GEQ B
+@todo_wine@BA GEQ B
+@todo_wine@B GEQ AB
+@todo_wine@AB GEQ AB
+@todo_wine@BA GEQ AB
+@todo_wine@BA GEQ BA
+@todo_wine@B GEQ AA
+@todo_wine@AB GEQ AA
+@todo_wine@BA GEQ AA
+@todo_wine@AA GEQ AA
+@todo_wine@B GTR A
+@todo_wine@AB GTR A
+@todo_wine@BA GTR A
+@todo_wine@AA GTR A
+@todo_wine@BA GTR B
+@todo_wine@B GTR AB
+@todo_wine@BA GTR AB
+@todo_wine@B GTR AA
+@todo_wine@AB GTR AA
+@todo_wine@BA GTR AA
+------ for numbers
+negative numbers handled
+negative numbers handled
+octal handled
+also in negative form
+hexa handled
+also in negative form
+11 LSS 101
+@todo_wine@0 LSS 1
+@todo_wine@0 LSS 10
+@todo_wine@1 LSS 10
+@todo_wine@9 LSS 10
+@todo_wine@0 LSS 9
+@todo_wine@1 LSS 9
+@todo_wine@0 LEQ 0
+@todo_wine@0 LEQ 1
+@todo_wine@1 LEQ 1
+@todo_wine@0 LEQ 10
+@todo_wine@1 LEQ 10
+@todo_wine@10 LEQ 10
+@todo_wine@9 LEQ 10
+@todo_wine@0 LEQ 9
+@todo_wine@1 LEQ 9
+@todo_wine@9 LEQ 9
+@todo_wine@0 EQU 0
+@todo_wine@1 EQU 1
+@todo_wine@10 EQU 10
+@todo_wine@9 EQU 9
+@todo_wine@octal ok
+@todo_wine@hexa ok
+@todo_wine@string/hexa compare ok
+@todo_wine@string/hexa compare ok
+@todo_wine@1 NEQ 0
+@todo_wine@10 NEQ 0
+@todo_wine@9 NEQ 0
+@todo_wine@0 NEQ 1
+@todo_wine@10 NEQ 1
+@todo_wine@9 NEQ 1
+@todo_wine@0 NEQ 10
+@todo_wine@1 NEQ 10
+@todo_wine@9 NEQ 10
+@todo_wine@0 NEQ 9
+@todo_wine@1 NEQ 9
+@todo_wine@10 NEQ 9
+@todo_wine@0 GEQ 0
+@todo_wine@1 GEQ 0
+@todo_wine@10 GEQ 0
+@todo_wine@9 GEQ 0
+@todo_wine@1 GEQ 1
+@todo_wine@10 GEQ 1
+@todo_wine@9 GEQ 1
+@todo_wine@10 GEQ 10
+@todo_wine@10 GEQ 9
+@todo_wine@9 GEQ 9
+@todo_wine@1 GTR 0
+@todo_wine@10 GTR 0
+@todo_wine@9 GTR 0
+@todo_wine@10 GTR 1
+@todo_wine@9 GTR 1
+@todo_wine@10 GTR 9
+------ for numbers and stringified numbers
+strings and integers not equal
+strings and integers not equal
+foo
+@todo_wine@"10" GEQ "1"
+@todo_wine@'1' GEQ 1@or_broken@NT4
+@todo_wine@1 GEQ "1"
+@todo_wine@"1" GEQ "1"
+@todo_wine@'1' GEQ "1"
+@todo_wine@"10" GEQ "1"
+@todo_wine@non NT4@or_broken@1 GEQ '1'
+@todo_wine@'1' GEQ '1'
+@todo_wine@foo
+@todo_wine@1 GEQ "10"
+@todo_wine@foo
+@todo_wine@'1' GEQ "10"
+@todo_wine@"10" GEQ "10"
 ------------ Testing for ------------
 --- plain FOR
 A
@@ -610,11 +781,16 @@ ErrorLevel 0
 
 --- for /F
 ------ string argument
-@todo_wine@a
-@todo_wine@a
 a
-@todo_wine@a
-@todo_wine@a
+a@or_broken@no output
+a
+a@or_broken@no output
+a
+a@or_broken@no output
+a
+a@or_broken@no output
+a
+a@or_broken@no output
 ------ fileset argument
 --------- basic blank handling
 a
@@ -638,24 +814,34 @@ kkk
 a
 b
 c
+------ command argument
+Passed1@or_broken@Missing functionality - Broken1
+Passed2@or_broken@Missing functionality - Broken2
+Passed3@or_broken@Missing functionality - Broken3
 ------ eol option
-@todo_wine@ad
-@todo_wine@z@y
+and@or_broken@Broken NT4 functionality1
+Line@or_broken@Broken NT4 functionality2
+Line@or_broken@Broken NT4 functionality3
+ad
+z@y
 a|d
-@todo_wine@no output
-@todo_wine@no output
+no output
+no output
 ------ delims option
-@todo_wine@a
-@todo_wine@a@space@
-@todo_wine@a d
-@todo_wine@a
-@todo_wine@C r
+a
+a@space@
+a d
+a
+C r
 foo bar baz
 @todo_wine@c:\
 ------ skip option
-@todo_wine@c
-@todo_wine@no output
-@todo_wine@no output
+c
+no output
+no output
+c
+c
+no output
 ------------ Testing del /a ------------
 not-r.test not found after delete, good
 r.test found before delete, good

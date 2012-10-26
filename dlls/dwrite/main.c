@@ -43,6 +43,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD reason, LPVOID reserved)
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls( hinstDLL );
         break;
+    case DLL_PROCESS_DETACH:
+        release_system_fontcollection();
+        break;
     }
     return TRUE;
 }
@@ -99,7 +102,7 @@ static ULONG WINAPI renderingparams_Release(IDWriteRenderingParams *iface)
     if (!ref)
         heap_free(This);
 
-    return S_OK;
+    return ref;
 }
 
 static FLOAT WINAPI renderingparams_GetGamma(IDWriteRenderingParams *iface)
@@ -236,7 +239,7 @@ static ULONG WINAPI localizedstrings_Release(IDWriteLocalizedStrings *iface)
         heap_free(This);
     }
 
-    return S_OK;
+    return ref;
 }
 
 static UINT32 WINAPI localizedstrings_GetCount(IDWriteLocalizedStrings *iface)
@@ -384,8 +387,12 @@ static ULONG WINAPI dwritefactory_Release(IDWriteFactory *iface)
 static HRESULT WINAPI dwritefactory_GetSystemFontCollection(IDWriteFactory *iface,
     IDWriteFontCollection **collection, BOOL check_for_updates)
 {
-    FIXME("(%p %d): stub\n", collection, check_for_updates);
-    return E_NOTIMPL;
+    TRACE("(%p %d)\n", collection, check_for_updates);
+
+    if (check_for_updates)
+        FIXME("checking for system font updates not implemented\n");
+
+    return get_system_fontcollection(collection);
 }
 
 static HRESULT WINAPI dwritefactory_CreateCustomFontCollection(IDWriteFactory *iface,
@@ -481,11 +488,7 @@ static HRESULT WINAPI dwritefactory_CreateTextFormat(IDWriteFactory *iface, WCHA
 {
     TRACE("(%s %p %d %d %d %f %s %p)\n", debugstr_w(family_name), collection, weight, style, stretch,
         size, debugstr_w(locale), format);
-
-    if (collection)
-        FIXME("font collection not supported\n");
-
-    return create_textformat(family_name, weight, style, stretch, size, locale, format);
+    return create_textformat(family_name, collection, weight, style, stretch, size, locale, format);
 }
 
 static HRESULT WINAPI dwritefactory_CreateTypography(IDWriteFactory *iface, IDWriteTypography **typography)
@@ -503,10 +506,10 @@ static HRESULT WINAPI dwritefactory_GetGdiInterop(IDWriteFactory *iface, IDWrite
 static HRESULT WINAPI dwritefactory_CreateTextLayout(IDWriteFactory *iface, WCHAR const* string,
     UINT32 len, IDWriteTextFormat *format, FLOAT max_width, FLOAT max_height, IDWriteTextLayout **layout)
 {
-    FIXME("(%s %u %p %f %f %p): stub\n", debugstr_w(string), len, format, max_width, max_height, layout);
+    TRACE("(%s %u %p %f %f %p)\n", debugstr_w(string), len, format, max_width, max_height, layout);
 
     if (!format) return E_INVALIDARG;
-    return create_textlayout(layout);
+    return create_textlayout(string, len, format, layout);
 }
 
 static HRESULT WINAPI dwritefactory_CreateGdiCompatibleTextLayout(IDWriteFactory *iface, WCHAR const* string,
@@ -517,7 +520,7 @@ static HRESULT WINAPI dwritefactory_CreateGdiCompatibleTextLayout(IDWriteFactory
         pixels_per_dip, transform, use_gdi_natural, layout);
 
     if (!format) return E_INVALIDARG;
-    return create_textlayout(layout);
+    return create_textlayout(string, len, format, layout);
 }
 
 static HRESULT WINAPI dwritefactory_CreateEllipsisTrimmingSign(IDWriteFactory *iface, IDWriteTextFormat *format,

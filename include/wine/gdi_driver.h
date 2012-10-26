@@ -265,6 +265,7 @@ static inline ULONG window_surface_release( struct window_surface *surface )
 #define DCHC_DELETEDC           0x0002
 #define DCHF_INVALIDATEVISRGN   0x0001
 #define DCHF_VALIDATEVISRGN     0x0002
+#define DCHF_RESETDC            0x0004  /* Wine extension */
 
 typedef BOOL (CALLBACK *DCHOOKPROC)(HDC,WORD,DWORD_PTR,LPARAM);
 
@@ -275,6 +276,7 @@ WINGDIAPI WORD      WINAPI SetHookFlags(HDC,WORD);
 extern void CDECL __wine_make_gdi_object_system( HGDIOBJ handle, BOOL set );
 extern void CDECL __wine_set_visible_region( HDC hdc, HRGN hrgn, const RECT *vis_rect,
                                              const RECT *device_rect, struct window_surface *surface );
+extern HMODULE CDECL __wine_get_driver_module( HDC hdc );
 extern struct opengl_funcs * CDECL __wine_get_wgl_driver( HDC hdc, UINT version );
 
 #endif /* __WINE_WINE_GDI_DRIVER_H */

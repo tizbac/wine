@@ -784,6 +784,7 @@ struct vs_compile_args {
 
 struct wined3d_context;
 struct wined3d_state;
+struct fragment_pipeline;
 
 struct wined3d_shader_backend_ops
 {
@@ -798,11 +799,13 @@ struct wined3d_shader_backend_ops
     void (*shader_load_np2fixup_constants)(void *shader_priv, const struct wined3d_gl_info *gl_info,
             const struct wined3d_state *state);
     void (*shader_destroy)(struct wined3d_shader *shader);
-    HRESULT (*shader_alloc_private)(struct wined3d_device *device);
+    HRESULT (*shader_alloc_private)(struct wined3d_device *device, const struct fragment_pipeline *fragment_pipe);
     void (*shader_free_private)(struct wined3d_device *device);
     void (*shader_context_destroyed)(void *shader_priv, const struct wined3d_context *context);
     void (*shader_get_caps)(const struct wined3d_gl_info *gl_info, struct shader_caps *caps);
     BOOL (*shader_color_fixup_supported)(struct color_fixup_desc fixup);
+    void (*shader_enable_fragment_pipe)(void *shader_priv, const struct wined3d_gl_info *gl_info, BOOL enable);
+    BOOL (*shader_has_ffp_proj_control)(void *shader_priv);
 };
 
 extern const struct wined3d_shader_backend_ops glsl_shader_backend DECLSPEC_HIDDEN;
@@ -1704,7 +1707,6 @@ struct wined3d_device
     struct StateEntry StateTable[STATE_HIGHEST + 1];
     /* Array of functions for states which are handled by more than one pipeline part */
     APPLYSTATEFUNC *multistate_funcs[STATE_HIGHEST + 1];
-    const struct fragment_pipeline *frag_pipe;
     const struct blit_shader *blitter;
 
     unsigned int max_ffp_textures;
@@ -2121,7 +2123,7 @@ void surface_set_compatible_renderbuffer(struct wined3d_surface *surface,
 void surface_set_container(struct wined3d_surface *surface,
         enum wined3d_container_type type, void *container) DECLSPEC_HIDDEN;
 void surface_set_texture_name(struct wined3d_surface *surface, GLuint name, BOOL srgb_name) DECLSPEC_HIDDEN;
-void surface_set_texture_target(struct wined3d_surface *surface, GLenum target) DECLSPEC_HIDDEN;
+void surface_set_texture_target(struct wined3d_surface *surface, GLenum target, GLint level) DECLSPEC_HIDDEN;
 void surface_translate_drawable_coords(const struct wined3d_surface *surface, HWND window, RECT *rect) DECLSPEC_HIDDEN;
 void surface_update_draw_binding(struct wined3d_surface *surface) DECLSPEC_HIDDEN;
 HRESULT surface_upload_from_surface(struct wined3d_surface *dst_surface, const POINT *dst_point,
@@ -2653,16 +2655,6 @@ unsigned int shader_find_free_input_register(const struct wined3d_shader_reg_map
 void shader_generate_main(const struct wined3d_shader *shader, struct wined3d_shader_buffer *buffer,
         const struct wined3d_shader_reg_maps *reg_maps, const DWORD *byte_code, void *backend_ctx) DECLSPEC_HIDDEN;
 BOOL shader_match_semantic(const char *semantic_name, enum wined3d_decl_usage usage) DECLSPEC_HIDDEN;
-
-static inline BOOL shader_is_pshader_version(enum wined3d_shader_type type)
-{
-    return type == WINED3D_SHADER_TYPE_PIXEL;
-}
-
-static inline BOOL shader_is_vshader_version(enum wined3d_shader_type type)
-{
-    return type == WINED3D_SHADER_TYPE_VERTEX;
-}
 
 static inline BOOL shader_is_scalar(const struct wined3d_shader_register *reg)
 {

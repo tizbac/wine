@@ -2006,7 +2006,7 @@ struct wined3d_device_parent_ops
             struct wined3d_surface **surface);
     HRESULT (__cdecl *create_texture_surface)(struct wined3d_device_parent *device_parent, void *container_parent,
             UINT width, UINT height, enum wined3d_format_id format_id, DWORD usage, enum wined3d_pool pool,
-            UINT level, enum wined3d_cubemap_face face, struct wined3d_surface **surface);
+            UINT sub_resource_idx, struct wined3d_surface **surface);
     HRESULT (__cdecl *create_volume)(struct wined3d_device_parent *device_parent, void *container_parent,
             UINT width, UINT height, UINT depth, enum wined3d_format_id format_id, enum wined3d_pool pool, DWORD usage,
             struct wined3d_volume **volume);
@@ -2317,7 +2317,7 @@ HRESULT __cdecl wined3d_surface_blt(struct wined3d_surface *dst_surface, const R
         struct wined3d_surface *src_surface, const RECT *src_rect, DWORD flags,
         const WINEDDBLTFX *blt_fx, enum wined3d_texture_filter_type filter);
 HRESULT __cdecl wined3d_surface_create(struct wined3d_device *device, UINT width, UINT height,
-        enum wined3d_format_id format_id, UINT level, DWORD usage, enum wined3d_pool pool,
+        enum wined3d_format_id format_id, DWORD usage, enum wined3d_pool pool,
         enum wined3d_multisample_type multisample_type, DWORD multisample_quality,
         enum wined3d_surface_type surface_type, DWORD flags, void *parent,
         const struct wined3d_parent_ops *parent_ops, struct wined3d_surface **surface);

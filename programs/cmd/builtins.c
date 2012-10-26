@@ -478,10 +478,10 @@ static BOOL WCMD_ManualCopy(WCHAR *srcname, WCHAR *dstname, BOOL ascii, BOOL app
  *  Syntax on command line is
  *   ... /a | /b   filename  /a /b {[ + filename /a /b]}  [dest /a /b]
  *  Where first /a or /b sets 'mode in operation' until another is found
- *  once another is found, it applies to the file preceeding the /a or /b
+ *  once another is found, it applies to the file preceding the /a or /b
  *  In addition each filename can contain wildcards
- * To make matters worse, the + may be in the same parameter (ie no whitespace)
- *  or with whitespace separating it
+ * To make matters worse, the + may be in the same parameter (i.e. no
+ *  whitespace) or with whitespace separating it
  *
  * ASCII mode on read == read and stop at first EOF
  * ASCII mode on write == append EOF to destination
@@ -944,7 +944,7 @@ void WCMD_copy(WCHAR * args) {
     }
   }
 
-  /* Exit out of the routine, freeing any remaing allocated memory */
+  /* Exit out of the routine, freeing any remaining allocated memory */
 exitreturn:
 
   thiscopy = sourcelist;
@@ -1511,6 +1511,284 @@ static void WCMD_part_execute(CMD_LIST **cmdList, const WCHAR *firstcmd,
   return;
 }
 
+/*****************************************************************************
+ * WCMD_parse_forf_options
+ *
+ * Parses the for /f 'options', extracting the values and validating the
+ * keywords. Note all keywords are optional.
+ * Parameters:
+ *  options    [I] The unparsed parameter string
+ *  eol        [O] Set to the comment character (eol=x)
+ *  skip       [O] Set to the number of lines to skip (skip=xx)
+ *  delims     [O] Set to the token delimiters (delims=)
+ *  tokens     [O] Set to the requested tokens, as provided (tokens=)
+ *  usebackq   [O] Set to TRUE if usebackq found
+ *
+ * Returns TRUE on success, FALSE on syntax error
+ *
+ */
+static BOOL WCMD_parse_forf_options(WCHAR *options, WCHAR *eol, int *skip,
+                                    WCHAR *delims, WCHAR *tokens, BOOL *usebackq)
+{
+
+  WCHAR *pos = options;
+  int    len = strlenW(pos);
+  static const WCHAR eolW[] = {'e','o','l','='};
+  static const WCHAR skipW[] = {'s','k','i','p','='};
+  static const WCHAR tokensW[] = {'t','o','k','e','n','s','='};
+  static const WCHAR delimsW[] = {'d','e','l','i','m','s','='};
+  static const WCHAR usebackqW[] = {'u','s','e','b','a','c','k','q'};
+  static const WCHAR forf_defaultdelims[] = {' ', '\t', '\0'};
+  static const WCHAR forf_defaulttokens[] = {'1', '\0'};
+
+  /* Initialize to defaults */
+  strcpyW(delims, forf_defaultdelims);
+  strcpyW(tokens, forf_defaulttokens);
+  *eol      = 0;
+  *skip     = 0;
+  *usebackq = FALSE;
+
+  /* Strip (optional) leading and trailing quotes */
+  if ((*pos == '"') && (pos[len-1] == '"')) {
+    pos[len-1] = 0;
+    pos++;
+  }
+
+  /* Process each keyword */
+  while (pos && *pos) {
+    if (*pos == ' ' || *pos == '\t') {
+      pos++;
+
+    /* Save End of line character (Ignore line if first token (based on delims) starts with it) */
+    } else if (CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE | SORT_STRINGSORT,
+                       pos, sizeof(eolW)/sizeof(WCHAR),
+                       eolW, sizeof(eolW)/sizeof(WCHAR)) == CSTR_EQUAL) {
+      *eol = *(pos + sizeof(eolW)/sizeof(WCHAR));
+      pos = pos + sizeof(eolW)/sizeof(WCHAR) + 1;
+      WINE_TRACE("Found eol as %c(%x)\n", *eol, *eol);
+
+    /* Save number of lines to skip (Can be in base 10, hex (0x...) or octal (0xx) */
+    } else if (CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE | SORT_STRINGSORT,
+                       pos, sizeof(skipW)/sizeof(WCHAR),
+                       skipW, sizeof(skipW)/sizeof(WCHAR)) == CSTR_EQUAL) {
+      WCHAR *nextchar = NULL;
+      pos = pos + sizeof(skipW)/sizeof(WCHAR);
+      *skip = strtoulW(pos, &nextchar, 0);
+      WINE_TRACE("Found skip as %d lines\n", *skip);
+      pos = nextchar;
+
+    /* Save if usebackq semantics are in effect */
+    } else if (CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE | SORT_STRINGSORT,
+                       pos, sizeof(usebackqW)/sizeof(WCHAR),
+                       usebackqW, sizeof(usebackqW)/sizeof(WCHAR)) == CSTR_EQUAL) {
+      *usebackq = TRUE;
+      pos = pos + sizeof(usebackqW)/sizeof(WCHAR);
+      WINE_TRACE("Found usebackq\n");
+
+    /* Save the supplied delims. Slightly odd as space can be a delimiter but only
+       if you finish the optionsroot string with delims= otherwise the space is
+       just a token delimiter!                                                     */
+    } else if (CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE | SORT_STRINGSORT,
+                       pos, sizeof(delimsW)/sizeof(WCHAR),
+                       delimsW, sizeof(delimsW)/sizeof(WCHAR)) == CSTR_EQUAL) {
+      int i=0;
+
+      pos = pos + sizeof(delimsW)/sizeof(WCHAR);
+      while (*pos && *pos != ' ') {
+        delims[i++] = *pos;
+        pos++;
+      }
+      if (*pos==' ' && *(pos+1)==0) delims[i++] = *pos;
+      delims[i++] = 0; /* Null terminate the delims */
+      WINE_TRACE("Found delims as '%s'\n", wine_dbgstr_w(delims));
+
+    /* Save the tokens being requested */
+    } else if (CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE | SORT_STRINGSORT,
+                       pos, sizeof(tokensW)/sizeof(WCHAR),
+                       tokensW, sizeof(tokensW)/sizeof(WCHAR)) == CSTR_EQUAL) {
+      int i=0;
+
+      pos = pos + sizeof(tokensW)/sizeof(WCHAR);
+      while (*pos && *pos != ' ') {
+        tokens[i++] = *pos;
+        pos++;
+      }
+      tokens[i++] = 0; /* Null terminate the tokens */
+      WINE_FIXME("Found tokens as '%s'\n", wine_dbgstr_w(tokens));
+
+    } else {
+      WINE_WARN("Unexpected data in optionsroot: '%s'\n", wine_dbgstr_w(pos));
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+/*****************************************************************************
+ * WCMD_add_dirstowalk
+ *
+ * When recursing through directories (for /r), we need to add to the list of
+ * directories still to walk, any subdirectories of the one we are processing.
+ *
+ * Parameters
+ *  options    [I] The remaining list of directories still to process
+ *
+ * Note this routine inserts the subdirectories found between the entry being
+ * processed, and any other directory still to be processed, mimicing what
+ * Windows does
+ */
+static void WCMD_add_dirstowalk(DIRECTORY_STACK *dirsToWalk) {
+  DIRECTORY_STACK *remainingDirs = dirsToWalk;
+  WCHAR fullitem[MAX_PATH];
+  WIN32_FIND_DATAW fd;
+  HANDLE hff;
+
+  /* Build a generic search and add all directories on the list of directories
+     still to walk                                                             */
+  strcpyW(fullitem, dirsToWalk->dirName);
+  strcatW(fullitem, slashstarW);
+  hff = FindFirstFileW(fullitem, &fd);
+  if (hff != INVALID_HANDLE_VALUE) {
+    do {
+      WINE_TRACE("Looking for subdirectories\n");
+      if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+          (strcmpW(fd.cFileName, dotdotW) != 0) &&
+          (strcmpW(fd.cFileName, dotW) != 0))
+      {
+        /* Allocate memory, add to list */
+        DIRECTORY_STACK *toWalk = HeapAlloc(GetProcessHeap(), 0, sizeof(DIRECTORY_STACK));
+        WINE_TRACE("(%p->%p)\n", remainingDirs, remainingDirs->next);
+        toWalk->next = remainingDirs->next;
+        remainingDirs->next = toWalk;
+        remainingDirs = toWalk;
+        toWalk->dirName = HeapAlloc(GetProcessHeap(), 0,
+                                    sizeof(WCHAR) *
+                                    (strlenW(dirsToWalk->dirName) + 2 + strlenW(fd.cFileName)));
+        strcpyW(toWalk->dirName, dirsToWalk->dirName);
+        strcatW(toWalk->dirName, slashW);
+        strcatW(toWalk->dirName, fd.cFileName);
+        WINE_TRACE("Added to stack %s (%p->%p)\n", wine_dbgstr_w(toWalk->dirName),
+                   toWalk, toWalk->next);
+      }
+    } while (FindNextFileW(hff, &fd) != 0);
+    WINE_TRACE("Finished adding all subdirectories\n");
+    FindClose (hff);
+  }
+}
+
+/**************************************************************************
+ * WCMD_parse_line
+ *
+ * When parsing file or string contents (for /f), once the string to parse
+ * has been identified, handle the various options and call the do part
+ * if appropriate.
+ *
+ * Parameters:
+ *  cmdStart     [I]    - Identifies the list of commands making up the
+ *                           for loop body (especially if brackets in use)
+ *  firstCmd     [I]    - The textual start of the command after the DO
+ *                           which is within the first item of cmdStart
+ *  cmdEnd       [O]    - Identifies where to continue after the DO
+ *  variable     [I]    - The variable identified on the for line
+ *  buffer       [I]    - The string to parse
+ *  doExecuted   [O]    - Set to TRUE if the DO is ever executed once
+ *  forf_skip    [I/O]  - How many lines to skip first
+ *  forf_eol     [I]    - The 'end of line' (comment) character
+ *  forf_delims  [I]    - The delimiters to use when breaking the string apart
+ */
+static void WCMD_parse_line(CMD_LIST    *cmdStart,
+                            const WCHAR *firstCmd,
+                            CMD_LIST   **cmdEnd,
+                            const WCHAR *variable,
+                            WCHAR       *buffer,
+                            BOOL        *doExecuted,
+                            int         *forf_skip,
+                            WCHAR        forf_eol,
+                            WCHAR       *forf_delims) {
+
+  WCHAR *parm, *where;
+
+  /* Skip lines if requested */
+  if (*forf_skip) {
+    (*forf_skip)--;
+    return;
+  }
+
+  /* Extract the parameter */
+  parm = WCMD_parameter_with_delims(buffer, 0, &where, NULL, FALSE, FALSE, forf_delims);
+  WINE_TRACE("Parsed parameter: %s from %s\n", wine_dbgstr_w(parm),
+             wine_dbgstr_w(buffer));
+
+  if (where && where[0] != forf_eol) {
+    CMD_LIST *thisCmdStart = cmdStart;
+    *doExecuted = TRUE;
+    WCMD_part_execute(&thisCmdStart, firstCmd, variable, parm, FALSE, TRUE);
+    *cmdEnd = thisCmdStart;
+  }
+
+}
+
+/**************************************************************************
+ * WCMD_forf_getinputhandle
+ *
+ * Return a file handle which can be used for reading the input lines,
+ * either to a specific file (which may be quote delimited as we have to
+ * read the parameters in raw mode) or to a command which we need to
+ * execute. The command being executed runs in its own shell and stores
+ * its data in a temporary file.
+ *
+ * Parameters:
+ *  usebackq     [I]    - Indicates whether usebackq is in effect or not
+ *  itemStr      [I]    - The item to be handled, either a filename or
+ *                           whole command string to execute
+ *  iscmd        [I]    - Identifies whether this is a command or not
+ *
+ * Returns a file handle which can be used to read the input lines from.
+ */
+HANDLE WCMD_forf_getinputhandle(BOOL usebackq, WCHAR *itemstr, BOOL iscmd) {
+  WCHAR  temp_str[MAX_PATH];
+  WCHAR  temp_file[MAX_PATH];
+  WCHAR  temp_cmd[MAXSTRING];
+  HANDLE hinput = INVALID_HANDLE_VALUE;
+  static const WCHAR redirOutW[]  = {'>','%','s','\0'};
+  static const WCHAR cmdW[]       = {'C','M','D','\0'};
+  static const WCHAR cmdslashcW[] = {'C','M','D','.','E','X','E',' ',
+                                     '/','C',' ','"','%','s','"','\0'};
+
+  /* Remove leading and trailing character */
+  if ((iscmd && (itemstr[0] == '`' && usebackq)) ||
+      (iscmd && (itemstr[0] == '\'' && !usebackq)) ||
+      (!iscmd && (itemstr[0] == '"' && usebackq)))
+  {
+    itemstr[strlenW(itemstr)-1] = 0x00;
+    itemstr++;
+  }
+
+  if (iscmd) {
+    /* Get temp filename */
+    GetTempPathW(sizeof(temp_str)/sizeof(WCHAR), temp_str);
+    GetTempFileNameW(temp_str, cmdW, 0, temp_file);
+
+    /* Redirect output to the temporary file */
+    wsprintfW(temp_str, redirOutW, temp_file);
+    wsprintfW(temp_cmd, cmdslashcW, itemstr);
+    WINE_TRACE("Issuing '%s' with redirs '%s'\n",
+               wine_dbgstr_w(temp_cmd), wine_dbgstr_w(temp_str));
+    WCMD_execute (temp_cmd, temp_str, NULL, NULL, NULL, FALSE);
+
+    /* Open the file, read line by line and process */
+    hinput = CreateFileW(temp_file, GENERIC_READ, FILE_SHARE_READ,
+                        NULL, OPEN_EXISTING, FILE_FLAG_DELETE_ON_CLOSE, NULL);
+
+  } else {
+    /* Open the file, read line by line and process */
+    WINE_TRACE("Reading input to parse from '%s'\n", wine_dbgstr_w(itemstr));
+    hinput = CreateFileW(itemstr, GENERIC_READ, FILE_SHARE_READ,
+                        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  }
+  return hinput;
+}
+
 /**************************************************************************
  * WCMD_for
  *
@@ -1536,7 +1814,6 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
   int thisDepth;
   WCHAR optionsRoot[MAX_PATH];
   DIRECTORY_STACK *dirsToWalk = NULL;
-
   BOOL   expandDirs  = FALSE;
   BOOL   useNumbers  = FALSE;
   BOOL   doFileset   = FALSE;
@@ -1546,6 +1823,11 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
   int    itemNum;
   CMD_LIST *thisCmdStart;
   int    parameterNo = 0;
+  WCHAR  forf_eol = 0;
+  int    forf_skip = 0;
+  WCHAR  forf_delims[256];
+  WCHAR  forf_tokens[MAXSTRING];
+  BOOL   forf_usebackq = FALSE;
 
   /* Handle optional qualifiers (multiple are allowed) */
   WCHAR *thisArg = WCMD_parameter(p, parameterNo++, NULL, NULL, FALSE, FALSE);
@@ -1579,10 +1861,6 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
               if (thisArg && *thisArg != '/' && *thisArg != '%') {
                   parameterNo++;
                   strcpyW(optionsRoot, thisArg);
-                  if (!doRecurse) {
-                      static unsigned int once;
-                      if (!once++) WINE_FIXME("/F needs to handle options\n");
-                  }
               }
               break;
           }
@@ -1600,8 +1878,17 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
       return;
   }
 
+  /* With for /f parse the options if provided */
+  if (doFileset) {
+    if (!WCMD_parse_forf_options(optionsRoot, &forf_eol, &forf_skip,
+                                 forf_delims, forf_tokens, &forf_usebackq))
+    {
+      WCMD_output_stderr (WCMD_LoadMessage(WCMD_SYNTAXERR));
+      return;
+    }
+
   /* Set up the list of directories to recurse if we are going to */
-  if (doRecurse) {
+  } else if (doRecurse) {
        /* Allocate memory, add to list */
        dirsToWalk = HeapAlloc(GetProcessHeap(), 0, sizeof(DIRECTORY_STACK));
        dirsToWalk->next = NULL;
@@ -1657,7 +1944,6 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
   /* Loop repeatedly per-directory we are potentially walking, when in for /r
      mode, or once for the rest of the time.                                  */
   do {
-    WCHAR fullitem[MAX_PATH];
 
     /* Save away the starting position for the commands (and offset for the
        first one)                                                           */
@@ -1667,41 +1953,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
 
     /* If we are recursing directories (ie /R), add all sub directories now, then
        prefix the root when searching for the item */
-    if (dirsToWalk) {
-      DIRECTORY_STACK *remainingDirs = dirsToWalk;
-
-      /* Build a generic search and add all directories on the list of directories
-         still to walk                                                             */
-      strcpyW(fullitem, dirsToWalk->dirName);
-      strcatW(fullitem, slashstarW);
-      hff = FindFirstFileW(fullitem, &fd);
-      if (hff != INVALID_HANDLE_VALUE) {
-        do {
-          WINE_TRACE("Looking for subdirectories\n");
-          if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
-              (strcmpW(fd.cFileName, dotdotW) != 0) &&
-              (strcmpW(fd.cFileName, dotW) != 0))
-          {
-            /* Allocate memory, add to list */
-            DIRECTORY_STACK *toWalk = HeapAlloc(GetProcessHeap(), 0, sizeof(DIRECTORY_STACK));
-            WINE_TRACE("(%p->%p)\n", remainingDirs, remainingDirs->next);
-            toWalk->next = remainingDirs->next;
-            remainingDirs->next = toWalk;
-            remainingDirs = toWalk;
-            toWalk->dirName = HeapAlloc(GetProcessHeap(), 0,
-                                        sizeof(WCHAR) *
-                                        (strlenW(dirsToWalk->dirName) + 2 + strlenW(fd.cFileName)));
-            strcpyW(toWalk->dirName, dirsToWalk->dirName);
-            strcatW(toWalk->dirName, slashW);
-            strcatW(toWalk->dirName, fd.cFileName);
-            WINE_TRACE("Added to stack %s (%p->%p)\n", wine_dbgstr_w(toWalk->dirName),
-                       toWalk, toWalk->next);
-          }
-        } while (FindNextFileW(hff, &fd) != 0);
-        WINE_TRACE("Finished adding all subdirectories\n");
-        FindClose (hff);
-      }
-    }
+    if (dirsToWalk) WCMD_add_dirstowalk(dirsToWalk);
 
     thisSet = setStart;
     /* Loop through all set entries */
@@ -1712,6 +1964,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
       /* Loop through all entries on the same line */
       WCHAR *item;
       WCHAR *itemStart;
+      WCHAR buffer[MAXSTRING];
 
       WINE_TRACE("Processing for set %p\n", thisSet);
       i = 0;
@@ -1784,42 +2037,28 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
             /* else ignore them! */
 
         /* Filesets - either a list of files, or a command to run and parse the output */
-        } else if (doFileset && *itemStart != '"') {
+        } else if (doFileset && ((!forf_usebackq && *itemStart != '"') ||
+                                 (forf_usebackq && *itemStart != '\''))) {
 
             HANDLE input;
-            WCHAR temp_file[MAX_PATH];
+            WCHAR *itemparm;
 
             WINE_TRACE("Processing for filespec from item %d '%s'\n", itemNum,
                        wine_dbgstr_w(item));
 
             /* If backquote or single quote, we need to launch that command
                and parse the results - use a temporary file                 */
-            if (*itemStart == '`' || *itemStart == '\'') {
+            if ((forf_usebackq && *itemStart == '`') ||
+                (!forf_usebackq && *itemStart == '\'')) {
 
-                WCHAR temp_path[MAX_PATH], temp_cmd[MAXSTRING];
-                static const WCHAR redirOut[] = {'>','%','s','\0'};
-                static const WCHAR cmdW[]     = {'C','M','D','\0'};
-
-                /* Remove trailing character */
-                itemStart[strlenW(itemStart)-1] = 0x00;
-
-                /* Get temp filename */
-                GetTempPathW(sizeof(temp_path)/sizeof(WCHAR), temp_path);
-                GetTempFileNameW(temp_path, cmdW, 0, temp_file);
-
-                /* Execute program and redirect output */
-                wsprintfW(temp_cmd, redirOut, (itemStart+1), temp_file);
-                WCMD_execute (itemStart, temp_cmd, NULL, NULL, NULL, FALSE);
-
-                /* Open the file, read line by line and process */
-                input = CreateFileW(temp_file, GENERIC_READ, FILE_SHARE_READ,
-                                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+              /* Use itemstart because the command is the whole set, not just the first token */
+              itemparm = itemStart;
             } else {
 
-                /* Open the file, read line by line and process */
-                input = CreateFileW(item, GENERIC_READ, FILE_SHARE_READ,
-                                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+              /* Use item because the file to process is just the first item in the set */
+              itemparm = item;
             }
+            input = WCMD_forf_getinputhandle(forf_usebackq, itemparm, (itemparm==itemStart));
 
             /* Process the input file */
             if (input == INVALID_HANDLE_VALUE) {
@@ -1830,55 +2069,42 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
 
             } else {
 
-              WCHAR buffer[MAXSTRING];
-              WCHAR *where, *parm;
-
+              /* Read line by line until end of file */
               while (WCMD_fgets(buffer, sizeof(buffer)/sizeof(WCHAR), input)) {
-
-                /* Skip blank lines*/
-                parm = WCMD_parameter (buffer, 0, &where, NULL, FALSE, FALSE);
-                WINE_TRACE("Parsed parameter: %s from %s\n", wine_dbgstr_w(parm),
-                           wine_dbgstr_w(buffer));
-
-                if (where) {
-                    /* FIXME: The following should be moved into its own routine and
-                       reused for the string literal parsing below                  */
-                    thisCmdStart = cmdStart;
-                    doExecuted = TRUE;
-                    WCMD_part_execute(&thisCmdStart, firstCmd, variable, parm, FALSE, TRUE);
-                    cmdEnd = thisCmdStart;
-                }
-
+                WCMD_parse_line(cmdStart, firstCmd, &cmdEnd, variable, buffer, &doExecuted,
+                                &forf_skip, forf_eol, forf_delims);
                 buffer[0] = 0;
-
               }
               CloseHandle (input);
             }
 
-            /* Delete the temporary file */
-            if (*itemStart == '`' || *itemStart == '\'') {
-                DeleteFileW(temp_file);
+            /* When we have processed the item as a whole command, abort future set processing */
+            if (itemparm==itemStart) {
+              thisSet = NULL;
+              break;
             }
 
         /* Filesets - A string literal */
-        } else if (doFileset && *itemStart == '"') {
-            WCHAR buffer[MAXSTRING];
-            WCHAR *where, *parm;
+        } else if (doFileset && ((!forf_usebackq && *itemStart == '"') ||
+                                 (forf_usebackq && *itemStart == '\''))) {
 
-            /* Skip blank lines, and re-extract parameter now string has quotes removed */
-            strcpyW(buffer, item);
-            parm = WCMD_parameter (buffer, 0, &where, NULL, FALSE, FALSE);
-            WINE_TRACE("Parsed parameter: %s from %s\n", wine_dbgstr_w(parm),
-                         wine_dbgstr_w(buffer));
+          /* Remove leading and trailing character, ready to parse with delims= delimiters
+             Note that the last quote is removed from the set and the string terminates
+             there to mimic windows                                                        */
+          WCHAR *strend = strrchrW(itemStart, forf_usebackq?'\'':'"');
+          if (strend) {
+            *strend = 0x00;
+            itemStart++;
+          }
 
-            if (where) {
-                /* FIXME: The following should be moved into its own routine and
-                   reused for the string literal parsing below                  */
-                thisCmdStart = cmdStart;
-                doExecuted = TRUE;
-                WCMD_part_execute(&thisCmdStart, firstCmd, variable, parm, FALSE, TRUE);
-                cmdEnd = thisCmdStart;
-            }
+          /* Copy the item away from the global buffer used by WCMD_parameter */
+          strcpyW(buffer, itemStart);
+          WCMD_parse_line(cmdStart, firstCmd, &cmdEnd, variable, buffer, &doExecuted,
+                            &forf_skip, forf_eol, forf_delims);
+
+          /* Only one string can be supplied in the whole set, abort future set processing */
+          thisSet = NULL;
+          break;
         }
 
         WINE_TRACE("Post-command, cmdEnd = %p\n", cmdEnd);
@@ -1886,7 +2112,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
       }
 
       /* Move onto the next set line */
-      thisSet = thisSet->nextcommand;
+      if (thisSet) thisSet = thisSet->nextcommand;
     }
 
     /* If /L is provided, now run the for loop */

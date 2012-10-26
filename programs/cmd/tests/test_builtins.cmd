@@ -607,7 +607,7 @@ if exist foo (
 cd .. & rd foobar
 
 echo ------------ Testing if/else ------------
-echo if/else should work with blocks
+echo --- if/else should work with blocks
 if 0 == 0 (
   echo if seems to work
 ) else (
@@ -623,19 +623,22 @@ if /c==/c (
 ) else (
   echo parameter detection seems to be broken
 )
-echo Testing case sensitivity with and without /i option
+
+echo --- case sensitivity with and without /i option
 if bar==BAR echo if does not default to case sensitivity
 if not bar==BAR echo if seems to default to case sensitivity
 if /i foo==FOO echo if /i seems to work
 if /i not foo==FOO echo if /i seems to be broken
 if /I foo==FOO echo if /I seems to work
 if /I not foo==FOO echo if /I seems to be broken
-echo Testing string comparisons
+
+echo --- string comparisons
 if abc == abc  (echo equal) else echo non equal
 if abc =="abc" (echo equal) else echo non equal
 if "abc"== abc (echo equal) else echo non equal
 if "abc"== "abc" (echo equal) else echo non equal
-echo Testing tabs handling
+
+echo --- tabs handling
 if@tab@1==1 echo doom
 if @tab@1==1 echo doom
 if 1==1 (echo doom) else@tab@echo quake
@@ -643,6 +646,150 @@ if@tab@not @tab@1==@tab@0 @tab@echo lol
 if 1==0@tab@(echo doom) else echo quake
 if 1==0 (echo doom)@tab@else echo quake
 if 1==0 (echo doom) else@tab@echo quake
+
+echo --- comparison operators
+rem NT4 misevaluates conditionals in for loops so we have to use subroutines as workarounds
+rem Imbricated for loops parameters are currently not expanded correctly; this prevents usage of simpler imbricated for loops in tests
+echo ------ for strings
+rem NT4 stops processing of the whole batch file as soon as it finds a
+rem comparison operator non fully uppercased, such as lss instead of LSS, so we
+rem can't test those here.
+if LSS LSS LSSfoo (echo LSS string can be used as operand for LSS comparison)
+if LSS LSS LSS (echo bar)
+if 1.1 LSS 1.10 (echo floats are handled as strings)
+if "9" LSS "10" (echo numbers in quotes recognized!) else echo numbers in quotes are handled as strings
+if not "-1" LSS "1" (echo negative numbers as well) else echo NT4
+if /i foo LSS FoOc echo if /i seems to work for LSS
+if /I not foo LSS FOOb echo if /I seems to be broken for LSS
+set STR_PARMS=A B AB BA AA
+for %%i in (%STR_PARMS%) do call :LSStest %%i A
+for %%i in (%STR_PARMS%) do call :LSStest %%i B
+for %%i in (%STR_PARMS%) do call :LSStest %%i AB
+for %%i in (%STR_PARMS%) do call :LSStest %%i BA
+for %%i in (%STR_PARMS%) do call :LSStest %%i AA
+if b LSS B (echo b LSS B) else echo NT4
+if /I b LSS B echo b LSS B insensitive
+if b LSS A echo b LSS A
+if /I b LSS A echo b LSS A insensitive
+if a LSS B (echo a LSS B) else echo NT4
+if /I a LSS B echo a LSS B insensitive
+if A LSS b echo A LSS b
+if /I A LSS b echo A LSS b insensitive
+for %%i in (%STR_PARMS%) do call :LEQtest %%i A
+for %%i in (%STR_PARMS%) do call :LEQtest %%i B
+for %%i in (%STR_PARMS%) do call :LEQtest %%i AB
+for %%i in (%STR_PARMS%) do call :LEQtest %%i BA
+for %%i in (%STR_PARMS%) do call :LEQtest %%i AA
+if b LEQ B (echo b LEQ B) else echo NT4
+if /I b LEQ B echo b LEQ B insensitive
+if b LEQ A echo b LEQ A
+if /I b LEQ A echo b LEQ A insensitive
+if a LEQ B (echo a LEQ B) else echo NT4
+if /I a LEQ B echo a LEQ B insensitive
+if A LEQ b echo A LEQ b
+if /I A LEQ b echo A LEQ b insensitive
+for %%i in (%STR_PARMS%) do call :EQUtest %%i A
+for %%i in (%STR_PARMS%) do call :EQUtest %%i B
+for %%i in (%STR_PARMS%) do call :EQUtest %%i AB
+for %%i in (%STR_PARMS%) do call :EQUtest %%i BA
+for %%i in (%STR_PARMS%) do call :EQUtest %%i AA
+if /I A EQU a echo A EQU a insensitive
+for %%i in (%STR_PARMS%) do call :NEQtest %%i A
+for %%i in (%STR_PARMS%) do call :NEQtest %%i B
+for %%i in (%STR_PARMS%) do call :NEQtest %%i AB
+for %%i in (%STR_PARMS%) do call :NEQtest %%i BA
+for %%i in (%STR_PARMS%) do call :NEQtest %%i AA
+for %%i in (%STR_PARMS%) do call :GEQtest %%i A
+for %%i in (%STR_PARMS%) do call :GEQtest %%i B
+for %%i in (%STR_PARMS%) do call :GEQtest %%i AB
+for %%i in (%STR_PARMS%) do call :GEQtest %%i BA
+for %%i in (%STR_PARMS%) do call :GEQtest %%i AA
+for %%i in (%STR_PARMS%) do call :GTRtest %%i A
+for %%i in (%STR_PARMS%) do call :GTRtest %%i B
+for %%i in (%STR_PARMS%) do call :GTRtest %%i AB
+for %%i in (%STR_PARMS%) do call :GTRtest %%i BA
+for %%i in (%STR_PARMS%) do call :GTRtest %%i AA
+echo ------ for numbers
+if -1 LSS 1 (echo negative numbers handled)
+if not -1 LSS -10 (echo negative numbers handled)
+if not 9 LSS 010 (echo octal handled)
+if not -010 LSS -8 (echo also in negative form)
+if 4 LSS 0x5 (echo hexa handled)
+if not -1 LSS -0x1A (echo also in negative form)
+if 11 LSS 101 (echo 11 LSS 101)
+set INT_PARMS=0 1 10 9
+for %%i in (%INT_PARMS%) do call :LSStest %%i 0
+for %%i in (%INT_PARMS%) do call :LSStest %%i 1
+for %%i in (%INT_PARMS%) do call :LSStest %%i 10
+for %%i in (%INT_PARMS%) do call :LSStest %%i 9
+for %%i in (%INT_PARMS%) do call :LEQtest %%i 0
+for %%i in (%INT_PARMS%) do call :LEQtest %%i 1
+for %%i in (%INT_PARMS%) do call :LEQtest %%i 10
+for %%i in (%INT_PARMS%) do call :LEQtest %%i 9
+for %%i in (%INT_PARMS%) do call :EQUtest %%i 0
+for %%i in (%INT_PARMS%) do call :EQUtest %%i 1
+for %%i in (%INT_PARMS%) do call :EQUtest %%i 10
+for %%i in (%INT_PARMS%) do call :EQUtest %%i 9
+if 011 EQU 9 (echo octal ok)
+if 0xA1 EQU 161 (echo hexa ok)
+if 0xA1 EQU "161" (echo hexa should be be recognized) else (echo string/hexa compare ok)
+if "0xA1" EQU 161 (echo hexa should be be recognized) else (echo string/hexa compare ok)
+for %%i in (%INT_PARMS%) do call :NEQtest %%i 0
+for %%i in (%INT_PARMS%) do call :NEQtest %%i 1
+for %%i in (%INT_PARMS%) do call :NEQtest %%i 10
+for %%i in (%INT_PARMS%) do call :NEQtest %%i 9
+for %%i in (%INT_PARMS%) do call :GEQtest %%i 0
+for %%i in (%INT_PARMS%) do call :GEQtest %%i 1
+for %%i in (%INT_PARMS%) do call :GEQtest %%i 10
+for %%i in (%INT_PARMS%) do call :GEQtest %%i 9
+for %%i in (%INT_PARMS%) do call :GTRtest %%i 0
+for %%i in (%INT_PARMS%) do call :GTRtest %%i 1
+for %%i in (%INT_PARMS%) do call :GTRtest %%i 10
+for %%i in (%INT_PARMS%) do call :GTRtest %%i 9
+echo ------ for numbers and stringified numbers
+if not "1" EQU 1 (echo strings and integers not equal) else echo foo
+if not 1 EQU "1" (echo strings and integers not equal) else echo foo
+if '1' EQU 1 echo '1' EQU 1
+if 1 EQU '1' echo 1 EQU '1'
+if not "1" GEQ 1 (echo foo) else echo bar
+if "10" GEQ "1" echo "10" GEQ "1"
+if '1' GEQ 1 (echo '1' GEQ 1) else echo NT4
+if 1 GEQ "1" echo 1 GEQ "1"
+if "1" GEQ "1" echo "1" GEQ "1"
+if '1' GEQ "1" echo '1' GEQ "1"
+if "10" GEQ "1" echo "10" GEQ "1"
+if not 1 GEQ '1' (echo non NT4) else echo 1 GEQ '1'
+for %%i in ("1" '1') do call :GEQtest %%i '1'
+if "10" GEQ '1' (echo "10" GEQ '1') else echo foo
+if 1 GEQ "10" (echo 1 GEQ "10") else echo foo
+if "1" GEQ "10" (echo 1 GEQ "10") else echo foo
+if '1' GEQ "10" (echo '1' GEQ "10") else echo foo
+if "10" GEQ "10" (echo "10" GEQ "10")
+goto :endIfCompOpsSubroutines
+
+rem IF subroutines helpers
+:LSStest
+if %1 LSS %2 echo %1 LSS %2
+goto :eof
+:LEQtest
+if %1 LEQ %2 echo %1 LEQ %2
+goto :eof
+:EQUtest
+if %1 EQU %2 echo %1 EQU %2
+goto :eof
+:NEQtest
+if %1 NEQ %2 echo %1 NEQ %2
+goto :eof
+:GEQtest
+if %1 GEQ %2 echo %1 GEQ %2
+goto :eof
+:GTRtest
+if %1 GTR %2 echo %1 GTR %2
+goto :eof
+
+:endIfCompOpsSubroutines
+set STR_PARMS=
+set INT_PARMS=
 
 echo ------------ Testing for ------------
 echo --- plain FOR
@@ -964,11 +1111,22 @@ set var=
 echo --- for /F
 mkdir foobar & cd foobar
 echo ------ string argument
+rem NT4 does not support usebackq
 for /F %%i in ("a b c") do echo %%i
+for /f usebackq %%i in ('a b c') do echo %%i>output_file
+if not exist output_file (echo no output) else (type output_file & del output_file)
 for /f %%i in ("a ") do echo %%i
+for /f usebackq %%i in ('a ') do echo %%i>output_file
+if not exist output_file (echo no output) else (type output_file & del output_file)
 for /f %%i in ("a") do echo %%i
+for /f usebackq %%i in ('a') do echo %%i>output_file
+if not exist output_file (echo no output) else (type output_file & del output_file)
 fOr /f %%i in (" a") do echo %%i
+for /f usebackq %%i in (' a') do echo %%i>output_file
+if not exist output_file (echo no output) else (type output_file & del output_file)
 for /f %%i in (" a ") do echo %%i
+for /f usebackq %%i in (' a ') do echo %%i>output_file
+if not exist output_file (echo no output) else (type output_file & del output_file)
 echo ------ fileset argument
 echo --------- basic blank handling
 echo a b c>foo
@@ -1000,14 +1158,33 @@ echo.>> bar
 echo kkk>>bar
 for /f %%k in (foo bar) do echo %%k
 for /f %%k in (bar foo) do echo %%k
-rem echo ------ command argument
-rem Not implemented on NT4
-rem FIXME: Not testable right now in wine: not implemented and would need
+echo ------ command argument
+rem Not implemented on NT4, need to skip it as no way to get output otherwise
+if "%CD%"=="" goto :SkipFORFcmdNT4
+for /f %%i in ('echo.Passed1') do echo %%i
+for /f "usebackq" %%i in (`echo.Passed2`) do echo %%i
+for /f usebackq %%i in (`echo.Passed3`) do echo %%i
+goto :ContinueFORF
+:SkipFORFcmdNT4
+for /l %%i in (1,1,3) do echo Missing functionality - Broken%%i
+:ContinueFORF
+rem FIXME: Rest not testable right now in wine: not implemented and would need
 rem preliminary grep-like program implementation (e.g. like findstr or fc) even
 rem for a simple todo_wine test
 rem (for /f "usebackq" %%i in (`echo z a b`) do echo %%i) || echo not supported
 rem (for /f usebackq %%i in (`echo z a b`) do echo %%i) || echo not supported
 echo ------ eol option
+if "%CD%"=="" goto :SkipFORFeolNT4
+echo Line one>foo
+echo and Line two>>foo
+echo Line three>>foo
+for /f "eol=L" %%i in (foo) do echo %%i
+for /f "eol=a" %%i in (foo) do echo %%i
+del foo
+goto :ContinueFORFeol
+:SkipFORFeolNT4
+for /l %%i in (1,1,3) do echo Broken NT4 functionality%%i
+:ContinueFORFeol
 for /f "eol=@" %%i in ("    ad") do echo %%i
 for /f "eol=@" %%i in (" z@y") do echo %%i
 for /f "eol=|" %%i in ("a|d") do echo %%i
@@ -1031,6 +1208,10 @@ for /f "skip=2" %%i in (foo) do echo %%i
 for /f "skip=3" %%i in (foo) do echo %%i > output_file
 if not exist output_file (echo no output) else (del output_file)
 for /f "skip=4" %%i in (foo) do echo %%i > output_file
+if not exist output_file (echo no output) else (del output_file)
+for /f "skip=02" %%i in (foo) do echo %%i
+for /f "skip=0x2" %%i in (foo) do echo %%i
+for /f "skip=1" %%i in ("skipme") do echo %%i > output_file
 if not exist output_file (echo no output) else (del output_file)
 cd ..
 rd /s/q foobar
@@ -1743,7 +1924,7 @@ if errorlevel 1 echo Incorrect errorlevel
 call :CheckExist file1
 cd ..
 
-rem Simple single file copy, destination supplied as non existant directory
+rem Simple single file copy, destination supplied as nonexistent directory
 copy file1 dir2\ >nul 2>&1
 if not errorlevel 1 echo Incorrect errorlevel
 call :CheckNotExist dir2 dir2\file1
@@ -1767,7 +1948,7 @@ if errorlevel 1 echo Incorrect errorlevel
 call :CheckExist file1 file2 file3
 cd ..
 
-rem Simple wildcarded file copy, destination supplied as non existant directory
+rem Simple wildcarded file copy, destination supplied as nonexistent directory
 copy file? dir2\ >nul 2>&1
 if not errorlevel 1 echo Incorrect errorlevel
 call :CheckNotExist dir2 dir2\file1 dir2\file2 dir2\file3
@@ -1923,7 +2104,7 @@ rem All 2 have eof's, plus an extra = 6 + 12 + eof
 copy /b file1_plus_eof + file3_plus_eof file123_mixed_copy6 /a >nul 2>&1
 call :CheckFileSize file123_mixed_copy6 19
 
-rem One file has EOF, but doesnt get an extra one, ie 6
+rem One file has EOF, but doesn't get an extra one, i.e. 6
 copy /b file1_plus_eof file123_mixed_copy7 /a >nul 2>&1
 call :CheckFileSize file123_mixed_copy7 6
 

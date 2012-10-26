@@ -41,11 +41,11 @@ static void _expect_ref(IUnknown* obj, ULONG ref, int line)
 static IDWriteFactory *factory;
 
 static const WCHAR tahomaW[] = {'T','a','h','o','m','a',0};
+static const WCHAR blahW[]  = {'B','l','a','h','!',0};
 
 static void test_CreateFontFromLOGFONT(void)
 {
     static const WCHAR tahomaspW[] = {'T','a','h','o','m','a',' ',0};
-    static const WCHAR blahW[]  = {'B','l','a','h','!',0};
     IDWriteGdiInterop *interop;
     DWRITE_FONT_WEIGHT weight;
     DWRITE_FONT_STYLE style;
@@ -523,6 +523,53 @@ todo_wine
     IDWriteGdiInterop_Release(interop);
 }
 
+static void test_system_fontcollection(void)
+{
+    IDWriteFontCollection *collection, *coll2;
+    IDWriteFontFamily *family;
+    HRESULT hr;
+    UINT32 i;
+    BOOL ret;
+
+    hr = IDWriteFactory_GetSystemFontCollection(factory, &collection, FALSE);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    hr = IDWriteFactory_GetSystemFontCollection(factory, &coll2, FALSE);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(coll2 == collection, "got %p, was %p\n", coll2, collection);
+    IDWriteFontCollection_Release(coll2);
+
+    hr = IDWriteFactory_GetSystemFontCollection(factory, &coll2, TRUE);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(coll2 == collection, "got %p, was %p\n", coll2, collection);
+    IDWriteFontCollection_Release(coll2);
+
+    i = IDWriteFontCollection_GetFontFamilyCount(collection);
+    ok(i, "got %u\n", i);
+
+    /* invalid index */
+    family = (void*)0xdeadbeef;
+    hr = IDWriteFontCollection_GetFontFamily(collection, i, &family);
+    ok(hr == E_FAIL, "got 0x%08x\n", hr);
+    ok(family == NULL, "got %p\n", family);
+
+    ret = FALSE;
+    i = (UINT32)-1;
+    hr = IDWriteFontCollection_FindFamilyName(collection, tahomaW, &i, &ret);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(ret, "got %d\n", ret);
+    ok(i != (UINT32)-1, "got %u\n", i);
+
+    ret = TRUE;
+    i = 0;
+    hr = IDWriteFontCollection_FindFamilyName(collection, blahW, &i, &ret);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(!ret, "got %d\n", ret);
+    ok(i == (UINT32)-1, "got %u\n", i);
+
+    IDWriteFontCollection_Release(collection);
+}
+
 START_TEST(font)
 {
     HRESULT hr;
@@ -541,6 +588,7 @@ START_TEST(font)
     test_GetFamilyNames();
     test_CreateFontFace();
     test_GetMetrics();
+    test_system_fontcollection();
 
     IDWriteFactory_Release(factory);
 }

@@ -1243,11 +1243,8 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
             if (size != data_size)
                 WARN("Returned size %u does not match expected one %u\n", size, data_size);
 
-            if (nb_materials > 2)
-            {
+            if (nb_materials > 1)
                 FIXME("Only one material per mesh supported, first one applies to all faces\n");
-                nb_materials = 1;
-            }
 
             while (SUCCEEDED(hr = IDirectXFileData_GetNextObject(pData2, &child)) && (i < nb_materials))
             {
@@ -1256,10 +1253,19 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
                 LPDIRECT3DRMMATERIAL2 material;
                 LPDIRECTXFILEOBJECT material_child;
 
+                if (i >= 1)
+                {
+                    /* FIXME: Only handle first material but enum all of them */
+                    IDirectXFileObject_Release(child);
+                    i++;
+                    continue;
+                }
+
                 hr = IDirectXFileObject_QueryInterface(child, &IID_IDirectXFileData, (void **)&data);
                 if (FAILED(hr))
                 {
                     hr = IDirectXFileObject_QueryInterface(child, &IID_IDirectXFileDataReference, (void **)&reference);
+                    IDirectXFileObject_Release(child);
                     if (FAILED(hr))
                         goto end;
 
@@ -1267,6 +1273,10 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
                     IDirectXFileDataReference_Release(reference);
                     if (FAILED(hr))
                         goto end;
+                }
+                else
+                {
+                    IDirectXFileObject_Release(child);
                 }
 
                 hr = Direct3DRMMaterial_create(&material);
@@ -1357,9 +1367,14 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
                 i++;
             }
             if (hr == S_OK)
+            {
+                IDirectXFileObject_Release(child);
                 WARN("Found more sub-objects than expected\n");
+            }
             else if (hr != DXFILEERR_NOMOREOBJECTS)
+            {
                 goto end;
+            }
             hr = S_OK;
         }
         else
@@ -1404,7 +1419,7 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
                 D3DVECTOR a, b;
 
                 D3DRMVectorSubtract(&a, &This->pVertices[faces_vertex_idx_ptr[2]], &This->pVertices[faces_vertex_idx_ptr[1]]);
-                D3DRMVectorSubtract(&a, &This->pVertices[faces_vertex_idx_ptr[1]], &This->pVertices[faces_vertex_idx_ptr[0]]);
+                D3DRMVectorSubtract(&b, &This->pVertices[faces_vertex_idx_ptr[0]], &This->pVertices[faces_vertex_idx_ptr[1]]);
                 D3DRMVectorCrossProduct(&face_normal, &a, &b);
                 D3DRMVectorNormalize(&face_normal);
             }
@@ -2048,6 +2063,7 @@ static HRESULT WINAPI IDirect3DRMMeshBuilder3Impl_CreateMesh(IDirect3DRMMeshBuil
     IDirect3DRMMeshBuilderImpl *This = impl_from_IDirect3DRMMeshBuilder3(iface);
     HRESULT hr;
     D3DRMGROUPINDEX group;
+    ULONG vertex_per_face = 0;
 
     TRACE("(%p)->(%p)\n", This, mesh);
 
@@ -2074,10 +2090,27 @@ static HRESULT WINAPI IDirect3DRMMeshBuilder3Impl_CreateMesh(IDirect3DRMMeshBuil
         }
         out_ptr = face_data;
 
-        /* Put only vertex indices */
+        /* If all faces have the same number of vertex, set vertex_per_face */
         for (i = 0; i < This->nb_faces; i++)
         {
-            DWORD nb_indices = *out_ptr++ = *in_ptr++;
+            if (vertex_per_face && (vertex_per_face != *in_ptr))
+                break;
+            vertex_per_face = *in_ptr;
+            in_ptr += 1 + *in_ptr * 2;
+        }
+        if (i != This->nb_faces)
+            vertex_per_face = 0;
+
+        /* Put only vertex indices */
+        in_ptr = This->pFaceData;
+        for (i = 0; i < This->nb_faces; i++)
+        {
+            DWORD nb_indices = *in_ptr++;
+
+            /* Don't put nb indices when vertex_per_face is set */
+            if (vertex_per_face)
+                *out_ptr++ = nb_indices;
+
             for (j = 0; j < nb_indices; j++)
             {
                 *out_ptr++ = *in_ptr++;
@@ -2086,7 +2119,7 @@ static HRESULT WINAPI IDirect3DRMMeshBuilder3Impl_CreateMesh(IDirect3DRMMeshBuil
             }
         }
 
-        hr = IDirect3DRMMesh_AddGroup(*mesh, This->nb_vertices, This->nb_faces, 0, face_data, &group);
+        hr = IDirect3DRMMesh_AddGroup(*mesh, This->nb_vertices, This->nb_faces, vertex_per_face, face_data, &group);
         HeapFree(GetProcessHeap(), 0, face_data);
         if (SUCCEEDED(hr))
         {

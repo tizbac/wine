@@ -1330,10 +1330,7 @@ static HICON CURSORICON_LoadFromFile( LPCWSTR filename,
     }
 
     dir = (const CURSORICONFILEDIR*) bits;
-    if ( filesize < sizeof(*dir) )
-        goto end;
-
-    if ( filesize < (sizeof(*dir) + sizeof(dir->idEntries[0])*(dir->idCount-1)) )
+    if ( filesize < FIELD_OFFSET( CURSORICONFILEDIR, idEntries[dir->idCount] ))
         goto end;
 
     if ( fCursor )

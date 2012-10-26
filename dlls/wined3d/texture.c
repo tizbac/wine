@@ -720,7 +720,7 @@ static void texture2d_sub_resource_cleanup(struct wined3d_resource *sub_resource
      * surface doesn't try and release it. */
     surface_set_texture_name(surface, 0, TRUE);
     surface_set_texture_name(surface, 0, FALSE);
-    surface_set_texture_target(surface, 0);
+    surface_set_texture_target(surface, 0, 0);
     surface_set_container(surface, WINED3D_CONTAINER_NONE, NULL);
     wined3d_surface_decref(surface);
 }
@@ -859,8 +859,8 @@ static HRESULT cubetexture_init(struct wined3d_texture *texture, UINT edge_lengt
             UINT idx = j * texture->level_count + i;
             struct wined3d_surface *surface;
 
-            if (FAILED(hr = device->device_parent->ops->create_texture_surface(device->device_parent, parent,
-                    tmp_w, tmp_w, format_id, usage, pool, i /* Level */, j, &surface)))
+            if (FAILED(hr = device->device_parent->ops->create_texture_surface(device->device_parent,
+                    parent, tmp_w, tmp_w, format_id, usage, pool, idx, &surface)))
             {
                 FIXME("(%p) Failed to create surface, hr %#x.\n", texture, hr);
                 wined3d_texture_cleanup(texture);
@@ -868,7 +868,7 @@ static HRESULT cubetexture_init(struct wined3d_texture *texture, UINT edge_lengt
             }
 
             surface_set_container(surface, WINED3D_CONTAINER_TEXTURE, texture);
-            surface_set_texture_target(surface, cube_targets[j]);
+            surface_set_texture_target(surface, cube_targets[j], i);
             texture->sub_resources[idx] = &surface->resource;
             TRACE("Created surface level %u @ %p.\n", i, surface);
         }
@@ -1014,8 +1014,8 @@ static HRESULT texture_init(struct wined3d_texture *texture, UINT width, UINT he
         struct wined3d_surface *surface;
 
         /* Use the callback to create the texture surface. */
-        if (FAILED(hr = device->device_parent->ops->create_texture_surface(device->device_parent, parent,
-                tmp_w, tmp_h, format->id, usage, pool, i, 0, &surface)))
+        if (FAILED(hr = device->device_parent->ops->create_texture_surface(device->device_parent,
+                parent, tmp_w, tmp_h, format->id, usage, pool, i, &surface)))
         {
             FIXME("Failed to create surface %p, hr %#x\n", texture, hr);
             wined3d_texture_cleanup(texture);
@@ -1023,7 +1023,7 @@ static HRESULT texture_init(struct wined3d_texture *texture, UINT width, UINT he
         }
 
         surface_set_container(surface, WINED3D_CONTAINER_TEXTURE, texture);
-        surface_set_texture_target(surface, texture->target);
+        surface_set_texture_target(surface, texture->target, i);
         texture->sub_resources[i] = &surface->resource;
         TRACE("Created surface level %u @ %p.\n", i, surface);
         /* Calculate the next mipmap level. */

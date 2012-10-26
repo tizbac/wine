@@ -347,10 +347,7 @@ static DWORD MIDI_mciReadMTrk(WINE_MCIMIDI* wmm, MCI_MIDITRACK* mmt)
 	switch (LOWORD(mmt->dwEventData)) {
 	case 0x02FF:
 	case 0x03FF:
-	    /* position after meta data header */
-	    mmioSeek(wmm->hFile, mmt->dwIndex + HIWORD(mmt->dwEventData), SEEK_SET);
 	    len = mmt->wEventLength - HIWORD(mmt->dwEventData);
-
 	    if (len >= sizeof(buf)) {
 		WARN("Buffer for text is too small (%u are needed)\n", len);
 		len = sizeof(buf) - 1;
@@ -361,20 +358,20 @@ static DWORD MIDI_mciReadMTrk(WINE_MCIMIDI* wmm, MCI_MIDITRACK* mmt)
 		case 0x02:
 		    if (wmm->lpstrCopyright) {
 			WARN("Two copyright notices (%s|%s)\n", debugstr_w(wmm->lpstrCopyright), buf);
-		    } else {
-                        len = MultiByteToWideChar( CP_ACP, 0, buf, -1, NULL, 0 );
-                        wmm->lpstrCopyright = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) );
-                        MultiByteToWideChar( CP_ACP, 0, buf, -1, wmm->lpstrCopyright, len );
+			HeapFree(GetProcessHeap(), 0, wmm->lpstrCopyright);
 		    }
+		    len = MultiByteToWideChar( CP_ACP, 0, buf, -1, NULL, 0 );
+		    wmm->lpstrCopyright = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) );
+		    MultiByteToWideChar( CP_ACP, 0, buf, -1, wmm->lpstrCopyright, len );
 		    break;
 		case 0x03:
 		    if (wmm->lpstrName) {
 			WARN("Two names (%s|%s)\n", debugstr_w(wmm->lpstrName), buf);
-		    } else {
-                        len = MultiByteToWideChar( CP_ACP, 0, buf, -1, NULL, 0 );
-                        wmm->lpstrName = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) );
-                        MultiByteToWideChar( CP_ACP, 0, buf, -1, wmm->lpstrName, len );
-		    }
+			HeapFree(GetProcessHeap(), 0, wmm->lpstrName);
+		    } /* last name or name from last track wins */
+		    len = MultiByteToWideChar( CP_ACP, 0, buf, -1, NULL, 0 );
+		    wmm->lpstrName = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) );
+		    MultiByteToWideChar( CP_ACP, 0, buf, -1, wmm->lpstrName, len );
 		    break;
 		}
 	    }
@@ -491,10 +488,10 @@ static DWORD MIDI_mciReadMThd(WINE_MCIMIDI* wmm, DWORD dwOffset)
 	return MCIERR_INVALID_FILE;
     }
 
-    if (wmm->nTracks & 0x8000) {
-	/* this shouldn't be a problem... */
-	WARN("Ouch !! Implementation limitation to 32k tracks per MIDI file is overflowed\n");
-	wmm->nTracks = 0x7FFF;
+    if (wmm->nTracks > 0x80) {
+	/* wTrackNr is 7 bits only */
+	FIXME("Truncating MIDI file with %u tracks\n", wmm->nTracks);
+	wmm->nTracks = 0x80;
     }
 
     if ((wmm->tracks = HeapAlloc(GetProcessHeap(), 0, sizeof(MCI_MIDITRACK) * wmm->nTracks)) == NULL) {
@@ -1331,13 +1328,14 @@ static DWORD MIDI_mciStatus(WINE_MCIMIDI* wmm, DWORD dwFlags, LPMCI_STATUS_PARMS
 	case MCI_STATUS_LENGTH:
 	    if ((dwFlags & MCI_TRACK) && wmm->wFormat == 2) {
 		if (lpParms->dwTrack >= wmm->nTracks)
-		    return MCIERR_BAD_INTEGER;
+		    return MCIERR_OUTOFRANGE;
 		/* FIXME: this is wrong if there is a tempo change inside the file */
 		lpParms->dwReturn = MIDI_ConvertPulseToMS(wmm, wmm->tracks[lpParms->dwTrack].dwLength);
 	    } else {
 		lpParms->dwReturn = MIDI_GetMThdLengthMS(wmm);
 	    }
 	    lpParms->dwReturn = MIDI_ConvertMSToTimeFormat(wmm, lpParms->dwReturn);
+	    /* FIXME: ret = MCI_COLONIZED4_RETURN if SMPTE */
 	    TRACE("MCI_STATUS_LENGTH => %lu\n", lpParms->dwReturn);
 	    break;
 	case MCI_STATUS_MODE:
@@ -1355,9 +1353,10 @@ static DWORD MIDI_mciStatus(WINE_MCIMIDI* wmm, DWORD dwFlags, LPMCI_STATUS_PARMS
 	    TRACE("MCI_STATUS_NUMBER_OF_TRACKS => %lu\n", lpParms->dwReturn);
 	    break;
 	case MCI_STATUS_POSITION:
-	    /* FIXME: do I need to use MCI_TRACK ? */
+	    /* FIXME: check MCI_TRACK == 1 if set */
 	    lpParms->dwReturn = MIDI_ConvertMSToTimeFormat(wmm,
 							   (dwFlags & MCI_STATUS_START) ? 0 : wmm->dwPositionMS);
+	    /* FIXME: ret = MCI_COLONIZED4_RETURN if SMPTE */
 	    TRACE("MCI_STATUS_POSITION %s => %lu\n",
 		  (dwFlags & MCI_STATUS_START) ? "start" : "current", lpParms->dwReturn);
 	    break;
@@ -1375,7 +1374,7 @@ static DWORD MIDI_mciStatus(WINE_MCIMIDI* wmm, DWORD dwFlags, LPMCI_STATUS_PARMS
 	case MCI_SEQ_STATUS_DIVTYPE:
 	    TRACE("MCI_SEQ_STATUS_DIVTYPE !\n");
 	    if (wmm->nDivision > 0x8000) {
-		switch (wmm->nDivision) {
+		switch (HIBYTE(wmm->nDivision)) {
 		case 0xE8:	lpParms->dwReturn = MCI_SEQ_DIV_SMPTE_24;	break;	/* -24 */
 		case 0xE7:	lpParms->dwReturn = MCI_SEQ_DIV_SMPTE_25;	break;	/* -25 */
 		case 0xE3:	lpParms->dwReturn = MCI_SEQ_DIV_SMPTE_30DROP;	break;	/* -29 */ /* is the MCI constant correct ? */
@@ -1390,11 +1389,13 @@ static DWORD MIDI_mciStatus(WINE_MCIMIDI* wmm, DWORD dwFlags, LPMCI_STATUS_PARMS
 	    break;
 	case MCI_SEQ_STATUS_MASTER:
 	    TRACE("MCI_SEQ_STATUS_MASTER !\n");
-	    lpParms->dwReturn = 0;
+	    lpParms->dwReturn = MAKEMCIRESOURCE(MCI_SEQ_NONE, MCI_SEQ_NONE_S);
+	    ret = MCI_RESOURCE_RETURNED;
 	    break;
 	case MCI_SEQ_STATUS_SLAVE:
 	    TRACE("MCI_SEQ_STATUS_SLAVE !\n");
-	    lpParms->dwReturn = 0;
+	    lpParms->dwReturn = MAKEMCIRESOURCE(MCI_SEQ_FILE, MCI_SEQ_FILE_S);
+	    ret = MCI_RESOURCE_RETURNED;
 	    break;
 	case MCI_SEQ_STATUS_OFFSET:
 	    TRACE("MCI_SEQ_STATUS_OFFSET !\n");
@@ -1415,11 +1416,10 @@ static DWORD MIDI_mciStatus(WINE_MCIMIDI* wmm, DWORD dwFlags, LPMCI_STATUS_PARMS
 	    break;
 	default:
 	    FIXME("Unknown command %08X !\n", lpParms->dwItem);
-	    return MCIERR_UNRECOGNIZED_COMMAND;
+	    return MCIERR_UNSUPPORTED_FUNCTION;
 	}
     } else {
-	WARN("No Status-Item!\n");
-	return MCIERR_UNRECOGNIZED_COMMAND;
+	return MCIERR_MISSING_PARAMETER;
     }
     if ((dwFlags & MCI_NOTIFY) && HRESULT_CODE(ret)==0)
 	MIDI_mciNotify(lpParms->dwCallback, wmm, MCI_NOTIFY_SUCCESSFUL);
@@ -1521,7 +1521,7 @@ static DWORD MIDI_mciInfo(WINE_MCIMIDI* wmm, DWORD dwFlags, LPMCI_INFO_PARMSW lp
     case MCI_INFO_NAME:         str = wmm->lpstrName; break;
     default:
 	WARN("Don't know this info command (%u)\n", dwFlags);
-	return MCIERR_UNRECOGNIZED_COMMAND;
+	return MCIERR_MISSING_PARAMETER; /* not MCIERR_FLAGS_... */
     }
     if (!ret) {
 	if (lpParms->dwRetSize) {
@@ -1541,32 +1541,32 @@ static DWORD MIDI_mciInfo(WINE_MCIMIDI* wmm, DWORD dwFlags, LPMCI_INFO_PARMSW lp
  */
 static DWORD MIDI_mciSeek(WINE_MCIMIDI* wmm, DWORD dwFlags, LPMCI_SEEK_PARMS lpParms)
 {
-    DWORD		ret = 0;
+    DWORD		position;
 
     TRACE("(%d, %08X, %p);\n", wmm->wDevID, dwFlags, lpParms);
 
-    if (lpParms == NULL) {
-	ret = MCIERR_NULL_PARAMETER_BLOCK;
+    if (lpParms == NULL) 	return MCIERR_NULL_PARAMETER_BLOCK;
+
+    position = dwFlags & (MCI_SEEK_TO_START|MCI_SEEK_TO_END|MCI_TO);
+    if (!position)		return MCIERR_MISSING_PARAMETER;
+    if (position&(position-1))	return MCIERR_FLAGS_NOT_COMPATIBLE;
+
+    MIDI_mciStop(wmm, MCI_WAIT, 0);
+
+    if (dwFlags & MCI_TO) { /* FIXME: compare with length */
+        wmm->dwPositionMS = MIDI_ConvertTimeFormatToMS(wmm, lpParms->dwTo);
+    } else if (dwFlags & MCI_SEEK_TO_START) {
+        wmm->dwPositionMS = 0;
     } else {
-	MIDI_mciStop(wmm, MCI_WAIT, 0);
-
-	if (dwFlags & MCI_SEEK_TO_START) {
-	    wmm->dwPositionMS = 0;
-	} else if (dwFlags & MCI_SEEK_TO_END) {
-	    wmm->dwPositionMS = 0xFFFFFFFF; /* FIXME */
-	} else if (dwFlags & MCI_TO) {
-	    wmm->dwPositionMS = MIDI_ConvertTimeFormatToMS(wmm, lpParms->dwTo);
-	} else {
-	    WARN("dwFlag doesn't tell where to seek to...\n");
-	    return MCIERR_MISSING_PARAMETER;
-	}
-
-	TRACE("Seeking to position=%u ms\n", wmm->dwPositionMS);
-
-	if (dwFlags & MCI_NOTIFY)
-	    MIDI_mciNotify(lpParms->dwCallback, wmm, MCI_NOTIFY_SUCCESSFUL);
+        wmm->dwPositionMS = 0xFFFFFFFF; /* FIXME */
     }
-    return ret;
+
+    TRACE("Seeking to position=%u ms\n", wmm->dwPositionMS);
+
+    if (dwFlags & MCI_NOTIFY)
+        MIDI_mciNotify(lpParms->dwCallback, wmm, MCI_NOTIFY_SUCCESSFUL);
+
+    return 0;
 }
 
 /*======================================================================*

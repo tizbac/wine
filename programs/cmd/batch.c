@@ -113,6 +113,7 @@ void WCMD_batch (WCHAR *file, WCHAR *command, BOOL called, WCHAR *startLabel, HA
   HeapFree(GetProcessHeap(), 0, context->batchfileW);
   LocalFree (context);
   if ((prev_context != NULL) && (!called)) {
+    WINE_TRACE("Batch completed, but was not 'called' so skipping outer batch too\n");
     prev_context -> skip_rest = TRUE;
     context = prev_context;
   }
@@ -120,9 +121,10 @@ void WCMD_batch (WCHAR *file, WCHAR *command, BOOL called, WCHAR *startLabel, HA
 }
 
 /*******************************************************************
- * WCMD_parameter
+ * WCMD_parameter_with_delims
  *
- * Extracts a delimited parameter from an input string
+ * Extracts a delimited parameter from an input string, providing
+ * the delimiters characters to use
  *
  * PARAMS
  *  s     [I] input string, non NULL
@@ -134,6 +136,7 @@ void WCMD_batch (WCHAR *file, WCHAR *command, BOOL called, WCHAR *startLabel, HA
  *  wholecmdline [I] True to indicate this routine is being used to parse the
  *                   command line, and special logic for arg0->1 transition
  *                   needs to be applied.
+ *  delims[I] The delimiter characters to use
  *
  * RETURNS
  *  Success: The nth delimited parameter found in s
@@ -149,10 +152,9 @@ void WCMD_batch (WCHAR *file, WCHAR *command, BOOL called, WCHAR *startLabel, HA
  *  other API calls, e.g. c:\"a b"\c is returned as c:\a b\c. However, some commands
  *  need to preserve the exact syntax (echo, for, etc) hence the raw option.
  */
-WCHAR *WCMD_parameter (WCHAR *s, int n, WCHAR **start, WCHAR **end, BOOL raw,
-                       BOOL wholecmdline)
+WCHAR *WCMD_parameter_with_delims (WCHAR *s, int n, WCHAR **start, WCHAR **end,
+                                   BOOL raw, BOOL wholecmdline, const WCHAR *delims)
 {
-    static const WCHAR defaultDelims[] = { ' ', '\t', ',', '=', ';', '\0' };
     int curParamNb = 0;
     static WCHAR param[MAX_PATH];
     WCHAR *p = s, *begin;
@@ -164,7 +166,7 @@ WCHAR *WCMD_parameter (WCHAR *s, int n, WCHAR **start, WCHAR **end, BOOL raw,
     while (TRUE) {
 
         /* Absorb repeated word delimiters until we get to the next token (or the end!) */
-        while (*p && (strchrW(defaultDelims, *p) != NULL))
+        while (*p && (strchrW(delims, *p) != NULL))
             p++;
         if (*p == '\0') return param;
 
@@ -178,7 +180,7 @@ WCHAR *WCMD_parameter (WCHAR *s, int n, WCHAR **start, WCHAR **end, BOOL raw,
         /* Loop character by character, but just need to special case quotes */
         while (*p) {
             /* Once we have found a delimiter, break */
-            if (strchrW(defaultDelims, *p) != NULL) break;
+            if (strchrW(delims, *p) != NULL) break;
 
             /* Very odd special case - Seems as if a ( acts as a delimiter which is
                not swallowed but is effective only when it comes between the program
@@ -217,6 +219,20 @@ WCHAR *WCMD_parameter (WCHAR *s, int n, WCHAR **start, WCHAR **end, BOOL raw,
     }
 }
 
+/*******************************************************************
+ * WCMD_parameter
+ *
+ * Extracts a delimited parameter from an input string, using a
+ * default set of delimiter characters. For parameters, see the main
+ * function above.
+ */
+WCHAR *WCMD_parameter (WCHAR *s, int n, WCHAR **start, WCHAR **end, BOOL raw,
+                       BOOL wholecmdline)
+{
+  static const WCHAR defaultDelims[] = { ' ', '\t', ',', '=', ';', '\0' };
+  return WCMD_parameter_with_delims (s, n, start, end, raw, wholecmdline, defaultDelims);
+}
+
 /****************************************************************************
  * WCMD_fgets
  *
@@ -234,31 +250,53 @@ WCHAR *WCMD_fgets(WCHAR *buf, DWORD noChars, HANDLE h)
 {
   DWORD charsRead;
   BOOL status;
-  LARGE_INTEGER filepos;
   DWORD i;
 
   /* We can't use the native f* functions because of the filename syntax differences
      between DOS and Unix. Also need to lose the LF (or CRLF) from the line. */
 
   if (!WCMD_is_console_handle(h)) {
-    /* Save current file position */
-    filepos.QuadPart = 0;
-    SetFilePointerEx(h, filepos, &filepos, FILE_CURRENT);
+      LARGE_INTEGER filepos;
+      char *bufA;
+      UINT cp;
+      const char *p;
+
+      cp = GetConsoleCP();
+      bufA = HeapAlloc(GetProcessHeap(), 0, noChars);
+      if (!bufA) return NULL;
+
+      /* Save current file position */
+      filepos.QuadPart = 0;
+      SetFilePointerEx(h, filepos, &filepos, FILE_CURRENT);
+
+      status = ReadFile(h, bufA, noChars, &charsRead, NULL);
+      if (!status || charsRead == 0) {
+          HeapFree(GetProcessHeap(), 0, bufA);
+          return NULL;
+      }
+
+      /* Find first EOL */
+      for (p = bufA; p < (bufA + charsRead); p = CharNextExA(cp, p, 0)) {
+          if (*p == '\n' || *p == '\r')
+              break;
+      }
+
+      /* Sets file pointer to the start of the next line, if any */
+      filepos.QuadPart += p - bufA + 1 + (*p == '\r' ? 1 : 0);
+      SetFilePointerEx(h, filepos, NULL, FILE_BEGIN);
+
+      i = MultiByteToWideChar(cp, 0, bufA, p - bufA, buf, noChars);
+      HeapFree(GetProcessHeap(), 0, bufA);
   }
+  else {
+      status = WCMD_ReadFile(h, buf, noChars, &charsRead);
+      if (!status || charsRead == 0) return NULL;
 
-  status = WCMD_ReadFile(h, buf, noChars, &charsRead);
-  if (!status || charsRead == 0) return NULL;
-
-  /* Find first EOL */
-  for (i = 0; i < charsRead; i++) {
-    if (buf[i] == '\n' || buf[i] == '\r')
-      break;
-  }
-
-  if (!WCMD_is_console_handle(h) && i != charsRead) {
-    /* Sets file pointer to the start of the next line, if any */
-    filepos.QuadPart += i + 1 + (buf[i] == '\r' ? 1 : 0);
-    SetFilePointerEx(h, filepos, NULL, FILE_BEGIN);
+      /* Find first EOL */
+      for (i = 0; i < charsRead; i++) {
+          if (buf[i] == '\n' || buf[i] == '\r')
+              break;
+      }
   }
 
   /* Truncate at EOL (or end of buffer) */

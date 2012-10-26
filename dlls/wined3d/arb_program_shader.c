@@ -39,6 +39,16 @@ WINE_DEFAULT_DEBUG_CHANNEL(d3d_shader);
 WINE_DECLARE_DEBUG_CHANNEL(d3d_constants);
 WINE_DECLARE_DEBUG_CHANNEL(d3d);
 
+static BOOL shader_is_pshader_version(enum wined3d_shader_type type)
+{
+    return type == WINED3D_SHADER_TYPE_PIXEL;
+}
+
+static BOOL shader_is_vshader_version(enum wined3d_shader_type type)
+{
+    return type == WINED3D_SHADER_TYPE_VERTEX;
+}
+
 /* Extract a line. Note that this modifies the source string. */
 static char *get_line(char **ptr)
 {
@@ -316,6 +326,8 @@ struct shader_arb_priv
     unsigned int highest_dirty_ps_const, highest_dirty_vs_const;
     char *vshader_const_dirty, *pshader_const_dirty;
     const struct wined3d_context *last_context;
+
+    const struct fragment_pipeline *fragment_pipe;
 };
 
 /* GL locking for state handlers is done by the caller. */
@@ -4156,6 +4168,7 @@ static GLuint shader_arb_generate_vshader(const struct wined3d_shader *shader,
 {
     const struct arb_vshader_private *shader_data = shader->backend_data;
     const struct wined3d_shader_reg_maps *reg_maps = &shader->reg_maps;
+    struct shader_arb_priv *priv = shader->device->shader_priv;
     const struct wined3d_shader_lconst *lconst;
     const DWORD *function = shader->function;
     GLuint ret;
@@ -4248,11 +4261,10 @@ static GLuint shader_arb_generate_vshader(const struct wined3d_shader *shader,
      */
     if (!gl_info->supported[NV_VERTEX_PROGRAM])
     {
-        struct wined3d_device *device = shader->device;
         const char *color_init = arb_get_helper_value(WINED3D_SHADER_TYPE_VERTEX, ARB_0001);
         shader_addline(buffer, "MOV result.color.secondary, %s;\n", color_init);
 
-        if (gl_info->quirks & WINED3D_QUIRK_SET_TEXCOORD_W && !device->frag_pipe->ffp_proj_control)
+        if (gl_info->quirks & WINED3D_QUIRK_SET_TEXCOORD_W && !priv->fragment_pipe->ffp_proj_control)
         {
             int i;
             const char *one = arb_get_helper_value(WINED3D_SHADER_TYPE_VERTEX, ARB_ONE);
@@ -4866,9 +4878,17 @@ static const struct wine_rb_functions sig_tree_functions =
     sig_tree_compare
 };
 
-static HRESULT shader_arb_alloc(struct wined3d_device *device)
+static HRESULT shader_arb_alloc(struct wined3d_device *device, const struct fragment_pipeline *fragment_pipe)
 {
     struct shader_arb_priv *priv = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*priv));
+    HRESULT hr;
+
+    if (FAILED(hr = fragment_pipe->alloc_private(device)))
+    {
+        ERR("Failed to initialize fragment pipe, hr %#x.\n", hr);
+        HeapFree(GetProcessHeap(), 0, priv);
+        return hr;
+    }
 
     priv->vshader_const_dirty = HeapAlloc(GetProcessHeap(), 0,
             sizeof(*priv->vshader_const_dirty) * device->d3d_vshader_constantF);
@@ -4889,12 +4909,14 @@ static HRESULT shader_arb_alloc(struct wined3d_device *device)
         ERR("RB tree init failed\n");
         goto fail;
     }
+    priv->fragment_pipe = fragment_pipe;
     device->shader_priv = priv;
     return WINED3D_OK;
 
 fail:
     HeapFree(GetProcessHeap(), 0, priv->pshader_const_dirty);
     HeapFree(GetProcessHeap(), 0, priv->vshader_const_dirty);
+    fragment_pipe->free_private(device);
     HeapFree(GetProcessHeap(), 0, priv);
     return E_OUTOFMEMORY;
 }
@@ -4938,6 +4960,7 @@ static void shader_arb_free(struct wined3d_device *device)
     wine_rb_destroy(&priv->signature_tree, release_signature, NULL);
     HeapFree(GetProcessHeap(), 0, priv->pshader_const_dirty);
     HeapFree(GetProcessHeap(), 0, priv->vshader_const_dirty);
+    priv->fragment_pipe->free_private(device);
     HeapFree(GetProcessHeap(), 0, device->shader_priv);
 }
 
@@ -5579,6 +5602,21 @@ static void shader_arb_handle_instruction(const struct wined3d_shader_instructio
     shader_arb_add_instruction_modifiers(ins);
 }
 
+static void shader_arb_enable_fragment_pipe(void *shader_priv,
+        const struct wined3d_gl_info *gl_info, BOOL enable)
+{
+    struct shader_arb_priv *priv = shader_priv;
+
+    priv->fragment_pipe->enable_extension(gl_info, enable);
+}
+
+static BOOL shader_arb_has_ffp_proj_control(void *shader_priv)
+{
+    struct shader_arb_priv *priv = shader_priv;
+
+    return priv->fragment_pipe->ffp_proj_control;
+}
+
 const struct wined3d_shader_backend_ops arb_program_shader_backend =
 {
     shader_arb_handle_instruction,
@@ -5595,6 +5633,8 @@ const struct wined3d_shader_backend_ops arb_program_shader_backend =
     shader_arb_context_destroyed,
     shader_arb_get_caps,
     shader_arb_color_fixup_supported,
+    shader_arb_enable_fragment_pipe,
+    shader_arb_has_ffp_proj_control,
 };
 
 /* ARB_fragment_program fixed function pipeline replacement definitions */
@@ -5608,7 +5648,6 @@ struct arbfp_ffp_desc
 {
     struct ffp_frag_desc parent;
     GLuint shader;
-    unsigned int num_textures_used;
 };
 
 /* Context activation and GL locking are done by the caller. */
@@ -5930,7 +5969,6 @@ static void gen_ffp_instr(struct wined3d_shader_buffer *buffer, unsigned int sta
 {
     const char *dstmask, *dstreg, *arg0, *arg1, *arg2;
     unsigned int mul = 1;
-    BOOL mul_final_dest = FALSE;
 
     if(color && alpha) dstmask = "";
     else if(color) dstmask = ".xyz";
@@ -5962,11 +6000,6 @@ static void gen_ffp_instr(struct wined3d_shader_buffer *buffer, unsigned int sta
             /* FALLTHROUGH */
         case WINED3D_TOP_MODULATE_2X:
             mul *= 2;
-            if (!strcmp(dstreg, "result.color"))
-            {
-                dstreg = "ret";
-                mul_final_dest = TRUE;
-            }
             /* FALLTHROUGH */
         case WINED3D_TOP_MODULATE:
             shader_addline(buffer, "MUL %s%s, %s, %s;\n", dstreg, dstmask, arg1, arg2);
@@ -5974,11 +6007,6 @@ static void gen_ffp_instr(struct wined3d_shader_buffer *buffer, unsigned int sta
 
         case WINED3D_TOP_ADD_SIGNED_2X:
             mul = 2;
-            if (!strcmp(dstreg, "result.color"))
-            {
-                dstreg = "ret";
-                mul_final_dest = TRUE;
-            }
             /* FALLTHROUGH */
         case WINED3D_TOP_ADD_SIGNED:
             shader_addline(buffer, "SUB arg2, %s, const.w;\n", arg2);
@@ -6039,11 +6067,6 @@ static void gen_ffp_instr(struct wined3d_shader_buffer *buffer, unsigned int sta
 
         case WINED3D_TOP_DOTPRODUCT3:
             mul = 4;
-            if (!strcmp(dstreg, "result.color"))
-            {
-                dstreg = "ret";
-                mul_final_dest = TRUE;
-            }
             shader_addline(buffer, "SUB arg1, %s, const.w;\n", arg1);
             shader_addline(buffer, "SUB arg2, %s, const.w;\n", arg2);
             shader_addline(buffer, "DP3_SAT %s%s, arg1, arg2;\n", dstreg, dstmask);
@@ -6067,11 +6090,10 @@ static void gen_ffp_instr(struct wined3d_shader_buffer *buffer, unsigned int sta
             FIXME("Unhandled texture op %08x\n", op);
     }
 
-    if(mul == 2) {
-        shader_addline(buffer, "MUL_SAT %s%s, %s, const.y;\n", mul_final_dest ? "result.color" : dstreg, dstmask, dstreg);
-    } else if(mul == 4) {
-        shader_addline(buffer, "MUL_SAT %s%s, %s, const.z;\n", mul_final_dest ? "result.color" : dstreg, dstmask, dstreg);
-    }
+    if (mul == 2)
+        shader_addline(buffer, "MUL_SAT %s%s, %s, const.y;\n", dstreg, dstmask, dstreg);
+    else if (mul == 4)
+        shader_addline(buffer, "MUL_SAT %s%s, %s, const.z;\n", dstreg, dstmask, dstreg);
 }
 
 static GLuint gen_arbfp_ffp_shader(const struct ffp_frag_settings *settings, const struct wined3d_gl_info *gl_info)
@@ -6410,13 +6432,6 @@ static void fragment_prog_arbfp(struct wined3d_context *context, const struct wi
             {
                 ERR("Out of memory\n");
                 return;
-            }
-            new_desc->num_textures_used = 0;
-            for (i = 0; i < gl_info->limits.texture_stages; ++i)
-            {
-                if (settings.op[i].cop == WINED3D_TOP_DISABLE)
-                    break;
-                new_desc->num_textures_used = i;
             }
 
             memcpy(&new_desc->parent.settings, &settings, sizeof(settings));
