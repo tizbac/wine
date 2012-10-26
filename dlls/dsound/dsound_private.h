@@ -20,8 +20,8 @@
  */
 
 /* Linux does not support better timing than 10ms */
-#define DS_TIME_RES 1  /* Resolution of multimedia timer */
-#define DS_TIME_DEL 1  /* Delay of multimedia timer callback, and duration of HEL fragment */
+#define DS_TIME_RES 2  /* Resolution of multimedia timer */
+#define DS_TIME_DEL 10  /* Delay of multimedia timer callback, and duration of HEL fragment */
 
 #include "wingdi.h"
 #include "mmdeviceapi.h"
@@ -31,10 +31,6 @@
 #include "wine/list.h"
 
 extern int ds_hel_buflen DECLSPEC_HIDDEN;
-extern int ds_snd_queue_max DECLSPEC_HIDDEN;
-extern int ds_snd_shadow_maxsize DECLSPEC_HIDDEN;
-extern int ds_default_sample_rate DECLSPEC_HIDDEN;
-extern int ds_default_bits_per_sample DECLSPEC_HIDDEN;
 
 /*****************************************************************************
  * Predeclare the interface implementation structures
@@ -71,17 +67,17 @@ struct DirectSoundDevice
 
     GUID                        guid;
     DSCAPS                      drvcaps;
-    DWORD                       priolevel;
+    DWORD                       priolevel, sleeptime;
     PWAVEFORMATEX               pwfx, primary_pwfx;
     LPBYTE                      buffer;
-    DWORD                       writelead, buflen, aclen, fraglen, state, playpos, pad;
+    DWORD                       writelead, buflen, aclen, fraglen, playpos, pad, stopped;
     int                         nrofbuffers;
     IDirectSoundBufferImpl**    buffers;
     RTL_RWLOCK                  buffer_list_lock;
     CRITICAL_SECTION            mixlock;
     IDirectSoundBufferImpl     *primary;
     DWORD                       speaker_config;
-    float *mix_buffer, *tmp_buffer;
+    float *tmp_buffer;
     DWORD                       tmp_buffer_len, mix_buffer_len;
 
     DSVOLUMEPAN                 volpan;
@@ -94,7 +90,6 @@ struct DirectSoundDevice
 
     IMMDevice *mmdevice;
     IAudioClient *client;
-    IAudioClock *clock;
     IAudioStreamVolume *volume;
     IAudioRenderClient *render;
 
@@ -203,14 +198,11 @@ HRESULT IDirectSoundImpl_Create(IUnknown *outer_unk, REFIID riid, void **ppv, BO
 
 /* primary.c */
 
-HRESULT DSOUND_PrimaryCreate(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT DSOUND_PrimaryDestroy(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT DSOUND_PrimaryPlay(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT DSOUND_PrimaryStop(DirectSoundDevice *device) DECLSPEC_HIDDEN;
-HRESULT DSOUND_PrimaryGetPosition(DirectSoundDevice *device, LPDWORD playpos, LPDWORD writepos) DECLSPEC_HIDDEN;
 LPWAVEFORMATEX DSOUND_CopyFormat(LPCWAVEFORMATEX wfex) DECLSPEC_HIDDEN;
 HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave) DECLSPEC_HIDDEN;
-HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT primarybuffer_create(DirectSoundDevice *device, IDirectSoundBufferImpl **ppdsb,
     const DSBUFFERDESC *dsbd) DECLSPEC_HIDDEN;
 void primarybuffer_destroy(IDirectSoundBufferImpl *This) DECLSPEC_HIDDEN;

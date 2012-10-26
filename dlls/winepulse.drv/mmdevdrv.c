@@ -101,6 +101,8 @@ BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, void *reserved)
         }
         DisableThreadLibraryCalls(dll);
     } else if (reason == DLL_PROCESS_DETACH) {
+        if (pulse_thread)
+           SetThreadPriority(pulse_thread, 0);
         if (pulse_ctx) {
            pa_context_disconnect(pulse_ctx);
            pa_context_unref(pulse_ctx);
@@ -557,11 +559,7 @@ static void pulse_latency_callback(pa_stream *s, void *userdata)
 
 static void pulse_started_callback(pa_stream *s, void *userdata)
 {
-    ACImpl *This = userdata;
-
     TRACE("(Re)started playing\n");
-    if (This->event)
-        SetEvent(This->event);
 }
 
 static void pulse_rd_loop(ACImpl *This, size_t bytes)
@@ -1824,7 +1822,7 @@ static HRESULT WINAPI AudioRenderClient_ReleaseBuffer(
 {
     ACImpl *This = impl_from_IAudioRenderClient(iface);
     UINT32 written_bytes = written_frames * pa_frame_size(&This->ss);
-    UINT32 period;
+//    UINT32 period;
 
     TRACE("(%p)->(%u, %x)\n", This, written_frames, flags);
 
@@ -1860,10 +1858,10 @@ static HRESULT WINAPI AudioRenderClient_ReleaseBuffer(
     TRACE("Released %u, pad %zu\n", written_frames, This->pad / pa_frame_size(&This->ss));
     assert(This->pad <= This->bufsize_bytes);
 
-    period = pa_stream_get_buffer_attr(This->stream)->minreq;
+//    period = pa_stream_get_buffer_attr(This->stream)->minreq;
     /* Require a minimum of 3 periods filled, if possible */
-    if (This->event && This->pad + period <= This->bufsize_bytes && This->pad < period * 3)
-        SetEvent(This->event);
+//    if (This->event && This->pad + period <= This->bufsize_bytes && This->pad < period * 3)
+//        SetEvent(This->event);
     pthread_mutex_unlock(&pulse_lock);
     return S_OK;
 }

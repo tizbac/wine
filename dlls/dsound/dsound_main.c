@@ -29,7 +29,6 @@
  *      Handle static buffers - put those in hardware, non-static not in hardware
  *      Hardware DuplicateSoundBuffer
  *      Proper volume calculation for 3d buffers
- *      Remove DS_HEL_FRAGS and use mixer fragment length for it
  */
 
 #include <stdarg.h>
@@ -91,10 +90,7 @@ GUID                    DSOUND_capture_guids[MAXWAVEDRIVERS];
 WCHAR wine_vxd_drv[] = { 'w','i','n','e','m','m','.','v','x','d', 0 };
 
 /* All default settings, you most likely don't want to touch these, see wiki on UsefulRegistryKeys */
-int ds_hel_buflen = 32768 * 2;
-int ds_snd_queue_max = 4;
-int ds_default_sample_rate = 48000;
-int ds_default_bits_per_sample = 16;
+int ds_hel_buflen = 32768;
 static HINSTANCE instance;
 
 /*
@@ -147,23 +143,10 @@ void setup_dsound_options(void)
     if (!get_config_key( hkey, appkey, "HelBuflen", buffer, MAX_PATH ))
         ds_hel_buflen = atoi(buffer);
 
-    if (!get_config_key( hkey, appkey, "SndQueueMax", buffer, MAX_PATH ))
-        ds_snd_queue_max = atoi(buffer);
-
-
-    if (!get_config_key( hkey, appkey, "DefaultSampleRate", buffer, MAX_PATH ))
-        ds_default_sample_rate = atoi(buffer);
-
-    if (!get_config_key( hkey, appkey, "DefaultBitsPerSample", buffer, MAX_PATH ))
-        ds_default_bits_per_sample = atoi(buffer);
-
     if (appkey) RegCloseKey( appkey );
     if (hkey) RegCloseKey( hkey );
 
     TRACE("ds_hel_buflen = %d\n", ds_hel_buflen);
-    TRACE("ds_snd_queue_max = %d\n", ds_snd_queue_max);
-    TRACE("ds_default_sample_rate = %d\n", ds_default_sample_rate);
-    TRACE("ds_default_bits_per_sample = %d\n", ds_default_bits_per_sample);
 }
 
 static const char * get_device_id(LPCGUID pGuid)

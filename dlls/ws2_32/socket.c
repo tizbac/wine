@@ -157,6 +157,8 @@
 # include "wsnwlink.h"
 #endif
 
+#undef IP_UNICAST_IF
+#define IP_UNICAST_IF 50
 
 #if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)  || defined(__DragonFly__)
 # define sipx_network    sipx_addr.x_net
