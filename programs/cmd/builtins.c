@@ -104,6 +104,7 @@ static const WCHAR onW[]  = {'O','N','\0'};
 static const WCHAR offW[] = {'O','F','F','\0'};
 static const WCHAR parmY[] = {'/','Y','\0'};
 static const WCHAR parmNoY[] = {'/','-','Y','\0'};
+static const WCHAR eqeqW[]   = {'=','=','\0'};
 
 static HINSTANCE hinst;
 struct env_stack *saved_environment;
@@ -393,6 +394,7 @@ static BOOL WCMD_AppendEOF(WCHAR *filename)
       SetFilePointer (h, 0, NULL, FILE_END);
       if (!WriteFile(h, &eof, 1, NULL, NULL)) {
         WINE_ERR("Failed to append EOF to %s (%d)\n", wine_dbgstr_w(filename), GetLastError());
+        CloseHandle(h);
         return FALSE;
       }
       CloseHandle(h);
@@ -429,6 +431,7 @@ static BOOL WCMD_ManualCopy(WCHAR *srcname, WCHAR *dstname, BOOL ascii, BOOL app
                       append?OPEN_EXISTING:CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (out == NULL) {
       WINE_ERR("Failed to open %s (%d)\n", wine_dbgstr_w(dstname), GetLastError());
+      CloseHandle(in);
       return FALSE;
     }
 
@@ -541,7 +544,7 @@ void WCMD_copy(WCHAR * args) {
   opt_d = opt_v = opt_n = opt_z = opt_y = opt_noty = FALSE;
 
   /* Walk through all args, building up a list of files to process */
-  thisparam = WCMD_parameter(args, argno++, &rawarg, NULL, TRUE, FALSE);
+  thisparam = WCMD_parameter(args, argno++, &rawarg, TRUE, FALSE);
   while (*(thisparam)) {
     WCHAR *pos1, *pos2;
     BOOL inquotes;
@@ -599,7 +602,7 @@ void WCMD_copy(WCHAR * args) {
       }
 
       /* This parameter was purely switches, get the next one */
-      thisparam = WCMD_parameter(args, argno++, &rawarg, NULL, TRUE, FALSE);
+      thisparam = WCMD_parameter(args, argno++, &rawarg, TRUE, FALSE);
       continue;
     }
 
@@ -624,7 +627,7 @@ void WCMD_copy(WCHAR * args) {
       /* Move to next thing to process */
       thisparam++;
       if (*thisparam == 0x00)
-        thisparam = WCMD_parameter(args, argno++, &rawarg, NULL, TRUE, FALSE);
+        thisparam = WCMD_parameter(args, argno++, &rawarg, TRUE, FALSE);
       continue;
     }
 
@@ -681,7 +684,7 @@ void WCMD_copy(WCHAR * args) {
       thisparam = pos1;
       continue;
     } else {
-      thisparam = WCMD_parameter(args, argno++, &rawarg, NULL, TRUE, FALSE);
+      thisparam = WCMD_parameter(args, argno++, &rawarg, TRUE, FALSE);
     }
   }
 
@@ -1019,7 +1022,7 @@ void WCMD_create_dir (WCHAR *args) {
     }
     /* Loop through all args */
     while (TRUE) {
-        WCHAR *thisArg = WCMD_parameter(args, argno++, &argN, NULL, FALSE, FALSE);
+        WCHAR *thisArg = WCMD_parameter(args, argno++, &argN, FALSE, FALSE);
         if (!argN) break;
         if (!create_full_path(thisArg)) {
             WCMD_print_error ();
@@ -1324,7 +1327,7 @@ BOOL WCMD_delete (WCHAR *args) {
         WCHAR *thisArg;
 
         argN = NULL;
-        thisArg = WCMD_parameter (args, argno, &argN, NULL, FALSE, FALSE);
+        thisArg = WCMD_parameter (args, argno, &argN, FALSE, FALSE);
         if (!argN)
             break;       /* no more parameters */
         if (argN[0] == '/')
@@ -1715,7 +1718,7 @@ static void WCMD_parse_line(CMD_LIST    *cmdStart,
   }
 
   /* Extract the parameter */
-  parm = WCMD_parameter_with_delims(buffer, 0, &where, NULL, FALSE, FALSE, forf_delims);
+  parm = WCMD_parameter_with_delims(buffer, 0, &where, FALSE, FALSE, forf_delims);
   WINE_TRACE("Parsed parameter: %s from %s\n", wine_dbgstr_w(parm),
              wine_dbgstr_w(buffer));
 
@@ -1745,7 +1748,7 @@ static void WCMD_parse_line(CMD_LIST    *cmdStart,
  *
  * Returns a file handle which can be used to read the input lines from.
  */
-HANDLE WCMD_forf_getinputhandle(BOOL usebackq, WCHAR *itemstr, BOOL iscmd) {
+static HANDLE WCMD_forf_getinputhandle(BOOL usebackq, WCHAR *itemstr, BOOL iscmd) {
   WCHAR  temp_str[MAX_PATH];
   WCHAR  temp_file[MAX_PATH];
   WCHAR  temp_cmd[MAXSTRING];
@@ -1830,7 +1833,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
   BOOL   forf_usebackq = FALSE;
 
   /* Handle optional qualifiers (multiple are allowed) */
-  WCHAR *thisArg = WCMD_parameter(p, parameterNo++, NULL, NULL, FALSE, FALSE);
+  WCHAR *thisArg = WCMD_parameter(p, parameterNo++, NULL, FALSE, FALSE);
 
   optionsRoot[0] = 0;
   while (thisArg && *thisArg == '/') {
@@ -1854,7 +1857,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
 
               /* Retrieve next parameter to see if is root/options (raw form required
                  with for /f, or unquoted in for /r)                                  */
-              thisArg = WCMD_parameter(p, parameterNo, NULL, NULL, doFileset, FALSE);
+              thisArg = WCMD_parameter(p, parameterNo, NULL, doFileset, FALSE);
 
               /* Next parm is either qualifier, path/options or variable -
                  only care about it if it is the path/options              */
@@ -1869,7 +1872,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
       }
 
       /* Step to next token */
-      thisArg = WCMD_parameter(p, parameterNo++, NULL, NULL, FALSE, FALSE);
+      thisArg = WCMD_parameter(p, parameterNo++, NULL, FALSE, FALSE);
   }
 
   /* Ensure line continues with variable */
@@ -1903,7 +1906,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
   WINE_TRACE("Variable identified as %s\n", wine_dbgstr_w(variable));
 
   /* Ensure line continues with IN */
-  thisArg = WCMD_parameter(p, parameterNo++, NULL, NULL, FALSE, FALSE);
+  thisArg = WCMD_parameter(p, parameterNo++, NULL, FALSE, FALSE);
   if (!thisArg
        || !(CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE | SORT_STRINGSORT,
                            thisArg, sizeof(inW)/sizeof(inW[0]), inW,
@@ -1968,7 +1971,7 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
 
       WINE_TRACE("Processing for set %p\n", thisSet);
       i = 0;
-      while (*(item = WCMD_parameter (thisSet->command, i, &itemStart, NULL, TRUE, FALSE))) {
+      while (*(item = WCMD_parameter (thisSet->command, i, &itemStart, TRUE, FALSE))) {
 
         /*
          * If the parameter within the set has a wildcard then search for matching files
@@ -2332,6 +2335,97 @@ void WCMD_popd (void) {
     LocalFree (temp);
 }
 
+/*******************************************************************
+ * evaluate_if_comparison
+ *
+ * Evaluates an "if" comparison operation
+ *
+ * PARAMS
+ *  leftOperand     [I] left operand, non NULL
+ *  operator        [I] "if" binary comparison operator, non NULL
+ *  rightOperand    [I] right operand, non NULL
+ *  caseInsensitive [I] 0 for case sensitive comparison, anything else for insensitive
+ *
+ * RETURNS
+ *  Success:  1 if operator applied to the operands evaluates to TRUE
+ *            0 if operator applied to the operands evaluates to FALSE
+ *  Failure: -1 if operator is not recognized
+ */
+static int evaluate_if_comparison(const WCHAR *leftOperand, const WCHAR *operator,
+                                  const WCHAR *rightOperand, int caseInsensitive)
+{
+    WCHAR *endptr_leftOp, *endptr_rightOp;
+    long int leftOperand_int, rightOperand_int;
+    BOOL int_operands;
+    static const WCHAR lssW[]  = {'l','s','s','\0'};
+    static const WCHAR leqW[]  = {'l','e','q','\0'};
+    static const WCHAR equW[]  = {'e','q','u','\0'};
+    static const WCHAR neqW[]  = {'n','e','q','\0'};
+    static const WCHAR geqW[]  = {'g','e','q','\0'};
+    static const WCHAR gtrW[]  = {'g','t','r','\0'};
+
+    /* == is a special case, as it always compares strings */
+    if (!lstrcmpiW(operator, eqeqW))
+        return caseInsensitive ? lstrcmpiW(leftOperand, rightOperand) == 0
+                               : lstrcmpW (leftOperand, rightOperand) == 0;
+
+    /* Check if we have plain integers (in decimal, octal or hexadecimal notation) */
+    leftOperand_int = strtolW(leftOperand, &endptr_leftOp, 0);
+    rightOperand_int = strtolW(rightOperand, &endptr_rightOp, 0);
+    int_operands = (!*endptr_leftOp) && (!*endptr_rightOp);
+
+    /* Perform actual (integer or string) comparison */
+    if (!lstrcmpiW(operator, lssW)) {
+        if (int_operands)
+            return leftOperand_int < rightOperand_int;
+        else
+            return caseInsensitive ? lstrcmpiW(leftOperand, rightOperand) < 0
+                                   : lstrcmpW (leftOperand, rightOperand) < 0;
+    }
+
+    if (!lstrcmpiW(operator, leqW)) {
+        if (int_operands)
+            return leftOperand_int <= rightOperand_int;
+        else
+            return caseInsensitive ? lstrcmpiW(leftOperand, rightOperand) <= 0
+                                   : lstrcmpW (leftOperand, rightOperand) <= 0;
+    }
+
+    if (!lstrcmpiW(operator, equW)) {
+        if (int_operands)
+            return leftOperand_int == rightOperand_int;
+        else
+            return caseInsensitive ? lstrcmpiW(leftOperand, rightOperand) == 0
+                                   : lstrcmpW (leftOperand, rightOperand) == 0;
+    }
+
+    if (!lstrcmpiW(operator, neqW)) {
+        if (int_operands)
+            return leftOperand_int != rightOperand_int;
+        else
+            return caseInsensitive ? lstrcmpiW(leftOperand, rightOperand) != 0
+                                   : lstrcmpW (leftOperand, rightOperand) != 0;
+    }
+
+    if (!lstrcmpiW(operator, geqW)) {
+        if (int_operands)
+            return leftOperand_int >= rightOperand_int;
+        else
+            return caseInsensitive ? lstrcmpiW(leftOperand, rightOperand) >= 0
+                                   : lstrcmpW (leftOperand, rightOperand) >= 0;
+    }
+
+    if (!lstrcmpiW(operator, gtrW)) {
+        if (int_operands)
+            return leftOperand_int > rightOperand_int;
+        else
+            return caseInsensitive ? lstrcmpiW(leftOperand, rightOperand) > 0
+                                   : lstrcmpW (leftOperand, rightOperand) > 0;
+    }
+
+    return -1;
+}
+
 /****************************************************************************
  * WCMD_if
  *
@@ -2346,17 +2440,15 @@ void WCMD_popd (void) {
  *
  * FIXME: Much more syntax checking needed!
  */
-
-void WCMD_if (WCHAR *p, CMD_LIST **cmdList) {
-
+void WCMD_if (WCHAR *p, CMD_LIST **cmdList)
+{
   int negate; /* Negate condition */
   int test;   /* Condition evaluation result */
-  WCHAR condition[MAX_PATH], *command, *s;
+  WCHAR condition[MAX_PATH], *command;
   static const WCHAR notW[]    = {'n','o','t','\0'};
   static const WCHAR errlvlW[] = {'e','r','r','o','r','l','e','v','e','l','\0'};
   static const WCHAR existW[]  = {'e','x','i','s','t','\0'};
   static const WCHAR defdW[]   = {'d','e','f','i','n','e','d','\0'};
-  static const WCHAR eqeqW[]   = {'=','=','\0'};
   static const WCHAR parmI[]   = {'/','I','\0'};
   int caseInsensitive = (strstrW(quals, parmI) != NULL);
 
@@ -2365,49 +2457,63 @@ void WCMD_if (WCHAR *p, CMD_LIST **cmdList) {
   WINE_TRACE("Condition: %s\n", wine_dbgstr_w(condition));
 
   if (!lstrcmpiW (condition, errlvlW)) {
-    WCHAR *param = WCMD_parameter(p, 1+negate, NULL, NULL, FALSE, FALSE);
+    WCHAR *param = WCMD_parameter(p, 1+negate, NULL, FALSE, FALSE);
     WCHAR *endptr;
     long int param_int = strtolW(param, &endptr, 10);
-    if (*endptr) {
-      WCMD_output_stderr(WCMD_LoadMessage(WCMD_SYNTAXERR));
-      return;
-    }
+    if (*endptr) goto syntax_err;
     test = ((long int)errorlevel >= param_int);
-    WCMD_parameter(p, 2+negate, &command, NULL, FALSE, FALSE);
+    WCMD_parameter(p, 2+negate, &command, FALSE, FALSE);
   }
   else if (!lstrcmpiW (condition, existW)) {
-    test = (GetFileAttributesW(WCMD_parameter(p, 1+negate, NULL, NULL, FALSE, FALSE))
+    test = (GetFileAttributesW(WCMD_parameter(p, 1+negate, NULL, FALSE, FALSE))
              != INVALID_FILE_ATTRIBUTES);
-    WCMD_parameter(p, 2+negate, &command, NULL, FALSE, FALSE);
+    WCMD_parameter(p, 2+negate, &command, FALSE, FALSE);
   }
   else if (!lstrcmpiW (condition, defdW)) {
-    test = (GetEnvironmentVariableW(WCMD_parameter(p, 1+negate, NULL, NULL, FALSE, FALSE),
+    test = (GetEnvironmentVariableW(WCMD_parameter(p, 1+negate, NULL, FALSE, FALSE),
                                     NULL, 0) > 0);
-    WCMD_parameter(p, 2+negate, &command, NULL, FALSE, FALSE);
+    WCMD_parameter(p, 2+negate, &command, FALSE, FALSE);
   }
-  else if ((s = strstrW (p, eqeqW))) {
-    /* We need to get potential surrounding double quotes, so param1/2 can't be used */
-    WCHAR *leftPart, *leftPartEnd, *rightPart, *rightPartEnd;
-    s += 2;
-    WCMD_parameter(p, 0+negate+caseInsensitive, &leftPart, &leftPartEnd, FALSE, FALSE);
-    WCMD_parameter(p, 1+negate+caseInsensitive, &rightPart, &rightPartEnd, FALSE, FALSE);
-    test = caseInsensitive
-            ? (CompareStringW(LOCALE_SYSTEM_DEFAULT, NORM_IGNORECASE,
-                              leftPart, leftPartEnd-leftPart+1,
-                              rightPart, rightPartEnd-rightPart+1) == CSTR_EQUAL)
-            : (CompareStringW(LOCALE_SYSTEM_DEFAULT, 0,
-                              leftPart, leftPartEnd-leftPart+1,
-                              rightPart, rightPartEnd-rightPart+1) == CSTR_EQUAL);
-    WCMD_parameter(s, 1, &command, NULL, FALSE, FALSE);
-  }
-  else {
-    WCMD_output_stderr(WCMD_LoadMessage(WCMD_SYNTAXERR));
-    return;
+  else { /* comparison operation */
+    WCHAR leftOperand[MAXSTRING], rightOperand[MAXSTRING], operator[MAXSTRING];
+    WCHAR *paramStart;
+
+    strcpyW(leftOperand, WCMD_parameter(p, negate+caseInsensitive, &paramStart, TRUE, FALSE));
+    if (!*leftOperand)
+      goto syntax_err;
+
+    /* Note: '==' can't be returned by WCMD_parameter since '=' is a separator */
+    p = paramStart + strlenW(leftOperand);
+    while (*p == ' ' || *p == '\t')
+      p++;
+
+    if (!strncmpW(p, eqeqW, strlenW(eqeqW)))
+      strcpyW(operator, eqeqW);
+    else {
+      strcpyW(operator, WCMD_parameter(p, 0, &paramStart, FALSE, FALSE));
+      if (!*operator) goto syntax_err;
+    }
+    p += strlenW(operator);
+
+    strcpyW(rightOperand, WCMD_parameter(p, 0, &paramStart, TRUE, FALSE));
+    if (!*rightOperand)
+      goto syntax_err;
+
+    test = evaluate_if_comparison(leftOperand, operator, rightOperand, caseInsensitive);
+    if (test == -1)
+      goto syntax_err;
+
+    p = paramStart + strlenW(rightOperand);
+    WCMD_parameter(p, 0, &command, FALSE, FALSE);
   }
 
   /* Process rest of IF statement which is on the same line
      Note: This may process all or some of the cmdList (eg a GOTO) */
   WCMD_part_execute(cmdList, command, NULL, NULL, TRUE, (test != negate));
+  return;
+
+syntax_err:
+  WCMD_output_stderr(WCMD_LoadMessage(WCMD_SYNTAXERR));
 }
 
 /****************************************************************************
@@ -2573,7 +2679,7 @@ void WCMD_remove_dir (WCHAR *args) {
 
   /* Loop through all args */
   while (argN) {
-    WCHAR *thisArg = WCMD_parameter (args, argno++, &argN, NULL, FALSE, FALSE);
+    WCHAR *thisArg = WCMD_parameter (args, argno++, &argN, FALSE, FALSE);
     if (argN && argN[0] != '/') {
       WINE_TRACE("rd: Processing arg %s (quals:%s)\n", wine_dbgstr_w(thisArg),
                  wine_dbgstr_w(quals));
@@ -3345,7 +3451,7 @@ void WCMD_type (WCHAR *args) {
   /* Loop through all args */
   errorlevel = 0;
   while (argN) {
-    WCHAR *thisArg = WCMD_parameter (args, argno++, &argN, NULL, FALSE, FALSE);
+    WCHAR *thisArg = WCMD_parameter (args, argno++, &argN, FALSE, FALSE);
 
     HANDLE h;
     WCHAR buffer[512];
@@ -3439,7 +3545,7 @@ void WCMD_more (WCHAR *args) {
     WCMD_enter_paged_mode(moreStrPage);
 
     while (argN) {
-      WCHAR *thisArg = WCMD_parameter (args, argno++, &argN, NULL, FALSE, FALSE);
+      WCHAR *thisArg = WCMD_parameter (args, argno++, &argN, FALSE, FALSE);
       HANDLE h;
 
       if (!argN) break;

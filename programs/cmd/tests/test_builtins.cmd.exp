@@ -441,97 +441,97 @@ quake
 --- comparison operators
 ------ for strings
 LSS string can be used as operand for LSS comparison
-@todo_wine@floats are handled as strings
-@todo_wine@numbers in quotes are handled as strings
-@todo_wine@negative numbers as well@or_broken@NT4
-@todo_wine@if /i seems to work for LSS
-@todo_wine@A LSS B
-@todo_wine@AB LSS B
-@todo_wine@AA LSS B
-@todo_wine@A LSS AB
-@todo_wine@AA LSS AB
-@todo_wine@A LSS BA
-@todo_wine@B LSS BA
-@todo_wine@AB LSS BA
-@todo_wine@AA LSS BA
-@todo_wine@A LSS AA
-@todo_wine@b LSS B@or_broken@NT4
-@todo_wine@a LSS B@or_broken@NT4
-@todo_wine@a LSS B insensitive
-@todo_wine@A LSS b
-@todo_wine@A LSS b insensitive
-@todo_wine@A LEQ A
-@todo_wine@A LEQ B
-@todo_wine@B LEQ B
-@todo_wine@AB LEQ B
-@todo_wine@AA LEQ B
-@todo_wine@A LEQ AB
-@todo_wine@AB LEQ AB
-@todo_wine@AA LEQ AB
-@todo_wine@A LEQ BA
-@todo_wine@B LEQ BA
-@todo_wine@AB LEQ BA
-@todo_wine@BA LEQ BA
-@todo_wine@AA LEQ BA
-@todo_wine@A LEQ AA
-@todo_wine@AA LEQ AA
-@todo_wine@b LEQ B@or_broken@NT4
-@todo_wine@b LEQ B insensitive
-@todo_wine@a LEQ B@or_broken@NT4
-@todo_wine@a LEQ B insensitive
-@todo_wine@A LEQ b
-@todo_wine@A LEQ b insensitive
-@todo_wine@A EQU A
-@todo_wine@B EQU B
-@todo_wine@AB EQU AB
-@todo_wine@BA EQU BA
-@todo_wine@AA EQU AA
-@todo_wine@A EQU a insensitive
-@todo_wine@B NEQ A
-@todo_wine@AB NEQ A
-@todo_wine@BA NEQ A
-@todo_wine@AA NEQ A
-@todo_wine@A NEQ B
-@todo_wine@AB NEQ B
-@todo_wine@BA NEQ B
-@todo_wine@AA NEQ B
-@todo_wine@A NEQ AB
-@todo_wine@B NEQ AB
-@todo_wine@BA NEQ AB
-@todo_wine@AA NEQ AB
-@todo_wine@A NEQ BA
-@todo_wine@B NEQ BA
-@todo_wine@AB NEQ BA
-@todo_wine@AA NEQ BA
-@todo_wine@A NEQ AA
-@todo_wine@B NEQ AA
-@todo_wine@AB NEQ AA
-@todo_wine@BA NEQ AA
-@todo_wine@A GEQ A
-@todo_wine@B GEQ A
-@todo_wine@AB GEQ A
-@todo_wine@BA GEQ A
-@todo_wine@AA GEQ A
-@todo_wine@B GEQ B
-@todo_wine@BA GEQ B
-@todo_wine@B GEQ AB
-@todo_wine@AB GEQ AB
-@todo_wine@BA GEQ AB
-@todo_wine@BA GEQ BA
-@todo_wine@B GEQ AA
-@todo_wine@AB GEQ AA
-@todo_wine@BA GEQ AA
-@todo_wine@AA GEQ AA
-@todo_wine@B GTR A
-@todo_wine@AB GTR A
-@todo_wine@BA GTR A
-@todo_wine@AA GTR A
-@todo_wine@BA GTR B
-@todo_wine@B GTR AB
-@todo_wine@BA GTR AB
-@todo_wine@B GTR AA
-@todo_wine@AB GTR AA
-@todo_wine@BA GTR AA
+floats are handled as strings
+numbers in quotes are handled as strings
+negative numbers as well@or_broken@NT4
+if /i seems to work for LSS
+A LSS B
+AB LSS B
+AA LSS B
+A LSS AB
+AA LSS AB
+A LSS BA
+B LSS BA
+AB LSS BA
+AA LSS BA
+A LSS AA
+b LSS B@or_broken@NT4
+a LSS B@or_broken@NT4
+a LSS B insensitive
+A LSS b
+A LSS b insensitive
+A LEQ A
+A LEQ B
+B LEQ B
+AB LEQ B
+AA LEQ B
+A LEQ AB
+AB LEQ AB
+AA LEQ AB
+A LEQ BA
+B LEQ BA
+AB LEQ BA
+BA LEQ BA
+AA LEQ BA
+A LEQ AA
+AA LEQ AA
+b LEQ B@or_broken@NT4
+b LEQ B insensitive
+a LEQ B@or_broken@NT4
+a LEQ B insensitive
+A LEQ b
+A LEQ b insensitive
+A EQU A
+B EQU B
+AB EQU AB
+BA EQU BA
+AA EQU AA
+A EQU a insensitive
+B NEQ A
+AB NEQ A
+BA NEQ A
+AA NEQ A
+A NEQ B
+AB NEQ B
+BA NEQ B
+AA NEQ B
+A NEQ AB
+B NEQ AB
+BA NEQ AB
+AA NEQ AB
+A NEQ BA
+B NEQ BA
+AB NEQ BA
+AA NEQ BA
+A NEQ AA
+B NEQ AA
+AB NEQ AA
+BA NEQ AA
+A GEQ A
+B GEQ A
+AB GEQ A
+BA GEQ A
+AA GEQ A
+B GEQ B
+BA GEQ B
+B GEQ AB
+AB GEQ AB
+BA GEQ AB
+BA GEQ BA
+B GEQ AA
+AB GEQ AA
+BA GEQ AA
+AA GEQ AA
+B GTR A
+AB GTR A
+BA GTR A
+AA GTR A
+BA GTR B
+B GTR AB
+BA GTR AB
+B GTR AA
+AB GTR AA
+BA GTR AA
 ------ for numbers
 negative numbers handled
 negative numbers handled
@@ -540,75 +540,75 @@ also in negative form
 hexa handled
 also in negative form
 11 LSS 101
-@todo_wine@0 LSS 1
-@todo_wine@0 LSS 10
-@todo_wine@1 LSS 10
-@todo_wine@9 LSS 10
-@todo_wine@0 LSS 9
-@todo_wine@1 LSS 9
-@todo_wine@0 LEQ 0
-@todo_wine@0 LEQ 1
-@todo_wine@1 LEQ 1
-@todo_wine@0 LEQ 10
-@todo_wine@1 LEQ 10
-@todo_wine@10 LEQ 10
-@todo_wine@9 LEQ 10
-@todo_wine@0 LEQ 9
-@todo_wine@1 LEQ 9
-@todo_wine@9 LEQ 9
-@todo_wine@0 EQU 0
-@todo_wine@1 EQU 1
-@todo_wine@10 EQU 10
-@todo_wine@9 EQU 9
-@todo_wine@octal ok
-@todo_wine@hexa ok
-@todo_wine@string/hexa compare ok
-@todo_wine@string/hexa compare ok
-@todo_wine@1 NEQ 0
-@todo_wine@10 NEQ 0
-@todo_wine@9 NEQ 0
-@todo_wine@0 NEQ 1
-@todo_wine@10 NEQ 1
-@todo_wine@9 NEQ 1
-@todo_wine@0 NEQ 10
-@todo_wine@1 NEQ 10
-@todo_wine@9 NEQ 10
-@todo_wine@0 NEQ 9
-@todo_wine@1 NEQ 9
-@todo_wine@10 NEQ 9
-@todo_wine@0 GEQ 0
-@todo_wine@1 GEQ 0
-@todo_wine@10 GEQ 0
-@todo_wine@9 GEQ 0
-@todo_wine@1 GEQ 1
-@todo_wine@10 GEQ 1
-@todo_wine@9 GEQ 1
-@todo_wine@10 GEQ 10
-@todo_wine@10 GEQ 9
-@todo_wine@9 GEQ 9
-@todo_wine@1 GTR 0
-@todo_wine@10 GTR 0
-@todo_wine@9 GTR 0
-@todo_wine@10 GTR 1
-@todo_wine@9 GTR 1
-@todo_wine@10 GTR 9
+0 LSS 1
+0 LSS 10
+1 LSS 10
+9 LSS 10
+0 LSS 9
+1 LSS 9
+0 LEQ 0
+0 LEQ 1
+1 LEQ 1
+0 LEQ 10
+1 LEQ 10
+10 LEQ 10
+9 LEQ 10
+0 LEQ 9
+1 LEQ 9
+9 LEQ 9
+0 EQU 0
+1 EQU 1
+10 EQU 10
+9 EQU 9
+octal ok
+hexa ok
+string/hexa compare ok
+string/hexa compare ok
+1 NEQ 0
+10 NEQ 0
+9 NEQ 0
+0 NEQ 1
+10 NEQ 1
+9 NEQ 1
+0 NEQ 10
+1 NEQ 10
+9 NEQ 10
+0 NEQ 9
+1 NEQ 9
+10 NEQ 9
+0 GEQ 0
+1 GEQ 0
+10 GEQ 0
+9 GEQ 0
+1 GEQ 1
+10 GEQ 1
+9 GEQ 1
+10 GEQ 10
+10 GEQ 9
+9 GEQ 9
+1 GTR 0
+10 GTR 0
+9 GTR 0
+10 GTR 1
+9 GTR 1
+10 GTR 9
 ------ for numbers and stringified numbers
 strings and integers not equal
 strings and integers not equal
 foo
-@todo_wine@"10" GEQ "1"
-@todo_wine@'1' GEQ 1@or_broken@NT4
-@todo_wine@1 GEQ "1"
-@todo_wine@"1" GEQ "1"
-@todo_wine@'1' GEQ "1"
-@todo_wine@"10" GEQ "1"
-@todo_wine@non NT4@or_broken@1 GEQ '1'
-@todo_wine@'1' GEQ '1'
-@todo_wine@foo
-@todo_wine@1 GEQ "10"
-@todo_wine@foo
-@todo_wine@'1' GEQ "10"
-@todo_wine@"10" GEQ "10"
+"10" GEQ "1"
+'1' GEQ 1@or_broken@NT4
+1 GEQ "1"
+"1" GEQ "1"
+'1' GEQ "1"
+"10" GEQ "1"
+non NT4@or_broken@1 GEQ '1'
+'1' GEQ '1'
+foo
+1 GEQ "10"
+foo
+'1' GEQ "10"
+"10" GEQ "10"
 ------------ Testing for ------------
 --- plain FOR
 A

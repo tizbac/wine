@@ -6934,12 +6934,11 @@ static void srgbtexture_test(IDirect3DDevice9 *device)
      * texture stage state to render a quad using that texture.  The resulting
      * color components should be 0x36 (~ 0.21), per this formula:
      *    linear_color = ((srgb_color + 0.055) / 1.055) ^ 2.4
-     * This is true where srgb_color > 0.04045.
-     */
+     * This is true where srgb_color > 0.04045. */
+    struct IDirect3DTexture9 *texture = NULL;
+    struct IDirect3DSurface9 *surface = NULL;
     IDirect3D9 *d3d = NULL;
     HRESULT hr;
-    LPDIRECT3DTEXTURE9 texture = NULL;
-    LPDIRECT3DSURFACE9 surface = NULL;
     D3DLOCKED_RECT lr;
     DWORD color;
     float quad[] = {
@@ -7015,14 +7014,14 @@ out:
 static void shademode_test(IDirect3DDevice9 *device)
 {
     /* Render a quad and try all of the different fixed function shading models. */
+    struct IDirect3DVertexBuffer9 *vb_strip = NULL;
+    struct IDirect3DVertexBuffer9 *vb_list = NULL;
     HRESULT hr;
     DWORD color0, color1;
     DWORD color0_gouraud = 0, color1_gouraud = 0;
     DWORD shademode = D3DSHADE_FLAT;
     DWORD primtype = D3DPT_TRIANGLESTRIP;
     LPVOID data = NULL;
-    LPDIRECT3DVERTEXBUFFER9 vb_strip = NULL;
-    LPDIRECT3DVERTEXBUFFER9 vb_list = NULL;
     UINT i, j;
     struct vertex quad_strip[] =
     {

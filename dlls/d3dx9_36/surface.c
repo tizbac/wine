@@ -460,11 +460,7 @@ static HRESULT save_dds_surface_to_memory(ID3DXBuffer **dst_buffer, IDirect3DSur
     if (FAILED(hr)) return hr;
 
     pixel_format = get_format_info(src_desc.Format);
-    if (pixel_format->type != FORMAT_ARGB)
-    {
-        FIXME("Unsupported pixel format %#x\n", src_desc.Format);
-        return E_NOTIMPL;
-    }
+    if (pixel_format->type == FORMAT_UNKNOWN) return E_NOTIMPL;
 
     file_size = calculate_dds_file_size(src_desc.Format, src_desc.Width, src_desc.Height, 1, 1, 1);
 
@@ -504,8 +500,8 @@ static HRESULT save_dds_surface_to_memory(ID3DXBuffer **dst_buffer, IDirect3DSur
     volume.width = src_desc.Width;
     volume.height = src_desc.Height;
     volume.depth = 1;
-    copy_simple_data(locked_rect.pBits, locked_rect.Pitch, 0, &volume, pixel_format,
-        pixels, dst_pitch, 0, &volume, pixel_format, 0);
+    copy_pixels(locked_rect.pBits, locked_rect.Pitch, 0, pixels, dst_pitch, 0,
+        &volume, pixel_format);
 
     IDirect3DSurface9_UnlockRect(src_surface);
 
@@ -1355,16 +1351,47 @@ static void format_from_vec4(const struct pixel_format_desc *format, const struc
 }
 
 /************************************************************
- * copy_simple_data
+ * copy_pixels
+ *
+ * Copies the source buffer to the destination buffer.
+ * Works for any pixel format.
+ * The source and the destination must be block-aligned.
+ */
+void copy_pixels(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch,
+        BYTE *dst, UINT dst_row_pitch, UINT dst_slice_pitch, const struct volume *size,
+        const struct pixel_format_desc *format)
+{
+    UINT row, slice;
+    BYTE *dst_addr;
+    const BYTE *src_addr;
+    UINT row_block_count = (size->width + format->block_width - 1) / format->block_width;
+    UINT row_count = (size->height + format->block_height - 1) / format->block_height;
+
+    for (slice = 0; slice < size->depth; slice++)
+    {
+        src_addr = src + slice * src_slice_pitch;
+        dst_addr = dst + slice * dst_slice_pitch;
+
+        for (row = 0; row < row_count; row++)
+        {
+            memcpy(dst_addr, src_addr, row_block_count * format->block_byte_count);
+            src_addr += src_row_pitch;
+            dst_addr += dst_row_pitch;
+        }
+    }
+}
+
+/************************************************************
+ * convert_argb_pixels
  *
  * Copies the source buffer to the destination buffer, performing
  * any necessary format conversion and color keying.
  * Pixels outsize the source rect are blacked out.
  * Works only for ARGB formats with 1 - 4 bytes per pixel.
  */
-void copy_simple_data(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch, struct volume *src_size,
+void convert_argb_pixels(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch, const struct volume *src_size,
         const struct pixel_format_desc *src_format, BYTE *dst, UINT dst_row_pitch, UINT dst_slice_pitch,
-        struct volume *dst_size, const struct pixel_format_desc *dst_format, D3DCOLOR color_key)
+        const struct volume *dst_size, const struct pixel_format_desc *dst_format, D3DCOLOR color_key)
 {
     struct argb_conversion_info conv_info, ck_conv_info;
     const struct pixel_format_desc *ck_format = NULL;
@@ -1454,16 +1481,16 @@ void copy_simple_data(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch,
 }
 
 /************************************************************
- * point_filter_simple_data
+ * point_filter_argb_pixels
  *
  * Copies the source buffer to the destination buffer, performing
  * any necessary format conversion, color keying and stretching
  * using a point filter.
  * Works only for ARGB formats with 1 - 4 bytes per pixel.
  */
-void point_filter_simple_data(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch, struct volume *src_size,
+void point_filter_argb_pixels(const BYTE *src, UINT src_row_pitch, UINT src_slice_pitch, const struct volume *src_size,
         const struct pixel_format_desc *src_format, BYTE *dst, UINT dst_row_pitch, UINT dst_slice_pitch,
-        struct volume *dst_size, const struct pixel_format_desc *dst_format, D3DCOLOR color_key)
+        const struct volume *dst_size, const struct pixel_format_desc *dst_format, D3DCOLOR color_key)
 {
     struct argb_conversion_info conv_info, ck_conv_info;
     const struct pixel_format_desc *ck_format = NULL;
@@ -1584,7 +1611,6 @@ HRESULT WINAPI D3DXLoadSurfaceFromMemory(IDirect3DSurface9 *dst_surface,
     D3DSURFACE_DESC surfdesc;
     D3DLOCKED_RECT lockrect;
     struct volume src_size, dst_size;
-    HRESULT hr;
 
     TRACE("(%p, %p, %s, %p, %#x, %u, %p, %s %#x, 0x%08x)\n",
             dst_surface, dst_palette, wine_dbgstr_rect(dst_rect), src_memory, src_format,
@@ -1642,14 +1668,9 @@ HRESULT WINAPI D3DXLoadSurfaceFromMemory(IDirect3DSurface9 *dst_surface,
 
     if (src_format == surfdesc.Format
             && dst_size.width == src_size.width
-            && dst_size.height == src_size.height) /* Simple copy. */
+            && dst_size.height == src_size.height
+            && color_key == 0) /* Simple copy. */
     {
-        UINT row_block_count = ((src_size.width + srcformatdesc->block_width - 1) / srcformatdesc->block_width);
-        UINT row_count = (src_size.height + srcformatdesc->block_height - 1) / srcformatdesc->block_height;
-        const BYTE *src_addr;
-        BYTE *dst_addr;
-        UINT row;
-
         if (src_rect->left & (srcformatdesc->block_width - 1)
                 || src_rect->top & (srcformatdesc->block_height - 1)
                 || (src_rect->right & (srcformatdesc->block_width - 1)
@@ -1661,20 +1682,11 @@ HRESULT WINAPI D3DXLoadSurfaceFromMemory(IDirect3DSurface9 *dst_surface,
             return D3DXERR_INVALIDDATA;
         }
 
-        if (FAILED(hr = IDirect3DSurface9_LockRect(dst_surface, &lockrect, dst_rect, 0)))
+        if (FAILED(IDirect3DSurface9_LockRect(dst_surface, &lockrect, dst_rect, 0)))
             return D3DXERR_INVALIDDATA;
 
-        src_addr = src_memory;
-        src_addr += (src_rect->top / srcformatdesc->block_height) * src_pitch;
-        src_addr += (src_rect->left / srcformatdesc->block_width) * srcformatdesc->block_byte_count;
-        dst_addr = lockrect.pBits;
-
-        for (row = 0; row < row_count; ++row)
-        {
-            memcpy(dst_addr, src_addr, row_block_count * srcformatdesc->block_byte_count);
-            src_addr += src_pitch;
-            dst_addr += lockrect.Pitch;
-        }
+        copy_pixels(src_memory, src_pitch, 0, lockrect.pBits, lockrect.Pitch, 0,
+                &src_size, srcformatdesc);
 
         IDirect3DSurface9_UnlockRect(dst_surface);
     }
@@ -1691,7 +1703,7 @@ HRESULT WINAPI D3DXLoadSurfaceFromMemory(IDirect3DSurface9 *dst_surface,
 
         if ((filter & 0xf) == D3DX_FILTER_NONE)
         {
-            copy_simple_data(src_memory, src_pitch, 0, &src_size, srcformatdesc,
+            convert_argb_pixels(src_memory, src_pitch, 0, &src_size, srcformatdesc,
                     lockrect.pBits, lockrect.Pitch, 0, &dst_size, destformatdesc, color_key);
         }
         else /* if ((filter & 0xf) == D3DX_FILTER_POINT) */
@@ -1701,7 +1713,7 @@ HRESULT WINAPI D3DXLoadSurfaceFromMemory(IDirect3DSurface9 *dst_surface,
 
             /* Always apply a point filter until D3DX_FILTER_LINEAR,
              * D3DX_FILTER_TRIANGLE and D3DX_FILTER_BOX are implemented. */
-            point_filter_simple_data(src_memory, src_pitch, 0, &src_size, srcformatdesc,
+            point_filter_argb_pixels(src_memory, src_pitch, 0, &src_size, srcformatdesc,
                     lockrect.pBits, lockrect.Pitch, 0, &dst_size, destformatdesc, color_key);
         }
 
@@ -1976,7 +1988,7 @@ HRESULT WINAPI D3DXSaveSurfaceToFileInMemory(ID3DXBuffer **dst_buffer, D3DXIMAGE
             hr = IDirect3DSurface9_LockRect(src_surface, &locked_rect, src_rect, D3DLOCK_READONLY);
             if (SUCCEEDED(hr))
             {
-                copy_simple_data(locked_rect.pBits, locked_rect.Pitch, 0, &size, src_format_desc,
+                convert_argb_pixels(locked_rect.pBits, locked_rect.Pitch, 0, &size, src_format_desc,
                     dst_data, dst_pitch, 0, &size, dst_format_desc, 0);
                 IDirect3DSurface9_UnlockRect(src_surface);
             }

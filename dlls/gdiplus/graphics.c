@@ -2133,6 +2133,38 @@ end:
     return stat;
 }
 
+void get_log_fontW(const GpFont *font, GpGraphics *graphics, LOGFONTW *lf)
+{
+    REAL height;
+
+    if (font->unit == UnitPixel)
+    {
+        height = units_to_pixels(font->emSize, graphics->unit, graphics->yres);
+    }
+    else
+    {
+        if (graphics->unit == UnitDisplay || graphics->unit == UnitPixel)
+            height = units_to_pixels(font->emSize, font->unit, graphics->xres);
+        else
+            height = units_to_pixels(font->emSize, font->unit, graphics->yres);
+    }
+
+    lf->lfHeight = -(height + 0.5);
+    lf->lfWidth = 0;
+    lf->lfEscapement = 0;
+    lf->lfOrientation = 0;
+    lf->lfWeight = font->otm.otmTextMetrics.tmWeight;
+    lf->lfItalic = font->otm.otmTextMetrics.tmItalic ? 1 : 0;
+    lf->lfUnderline = font->otm.otmTextMetrics.tmUnderlined ? 1 : 0;
+    lf->lfStrikeOut = font->otm.otmTextMetrics.tmStruckOut ? 1 : 0;
+    lf->lfCharSet = font->otm.otmTextMetrics.tmCharSet;
+    lf->lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf->lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf->lfQuality = DEFAULT_QUALITY;
+    lf->lfPitchAndFamily = 0;
+    strcpyW(lf->lfFaceName, font->family->FamilyName);
+}
+
 static void get_font_hfont(GpGraphics *graphics, GDIPCONST GpFont *font,
                            GDIPCONST GpStringFormat *format, HFONT *hfont)
 {
@@ -2153,8 +2185,6 @@ static void get_font_hfont(GpGraphics *graphics, GDIPCONST GpFont *font,
         unit_scale = units_scale(font->unit, graphics->unit, res);
 
         font_height = font->emSize * unit_scale;
-        if (graphics->unit != UnitDisplay)
-            font_height /= graphics->scale;
     }
 
     pt[0].X = 0.0;
@@ -5134,9 +5164,9 @@ GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics,
     scaled_rect.Height = rect->Height * args.rel_height;
 
     if ((format_flags & StringFormatFlagsNoClip) ||
-        scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
+        scaled_rect.Width >= 1 << 23 || scaled_rect.Width < 0.5) scaled_rect.Width = 1 << 23;
     if ((format_flags & StringFormatFlagsNoClip) ||
-        scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
+        scaled_rect.Height >= 1 << 23 || scaled_rect.Height < 0.5) scaled_rect.Height = 1 << 23;
 
     if (scaled_rect.Width >= 0.5)
     {
@@ -5144,8 +5174,8 @@ GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics,
         if (scaled_rect.Width < 0.5) return Ok; /* doesn't fit */
     }
 
-    if (scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
-    if (scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
+    if (scaled_rect.Width >= 1 << 23 || scaled_rect.Width < 0.5) scaled_rect.Width = 1 << 23;
+    if (scaled_rect.Height >= 1 << 23 || scaled_rect.Height < 0.5) scaled_rect.Height = 1 << 23;
 
     get_font_hfont(graphics, font, format, &gdifont);
     oldfont = SelectObject(hdc, gdifont);
@@ -5313,9 +5343,9 @@ GpStatus WINGDIPAPI GdipDrawString(GpGraphics *graphics, GDIPCONST WCHAR *string
     scaled_rect.Height = rel_height * rect->Height;
 
     if ((format_flags & StringFormatFlagsNoClip) ||
-        scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
+        scaled_rect.Width >= 1 << 23 || scaled_rect.Width < 0.5) scaled_rect.Width = 1 << 23;
     if ((format_flags & StringFormatFlagsNoClip) ||
-        scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
+        scaled_rect.Height >= 1 << 23 || scaled_rect.Height < 0.5) scaled_rect.Height = 1 << 23;
 
     if (scaled_rect.Width >= 0.5)
     {
@@ -5323,11 +5353,11 @@ GpStatus WINGDIPAPI GdipDrawString(GpGraphics *graphics, GDIPCONST WCHAR *string
         if (scaled_rect.Width < 0.5) return Ok; /* doesn't fit */
     }
 
-    if (scaled_rect.Width >= INT_MAX || scaled_rect.Width < 0.5) scaled_rect.Width = (REAL)(1 << 23);
-    if (scaled_rect.Height >= INT_MAX || scaled_rect.Height < 0.5) scaled_rect.Height = (REAL)(1 << 23);
+    if (scaled_rect.Width >= 1 << 23 || scaled_rect.Width < 0.5) scaled_rect.Width = 1 << 23;
+    if (scaled_rect.Height >= 1 << 23 || scaled_rect.Height < 0.5) scaled_rect.Height = 1 << 23;
 
     if (!(format_flags & StringFormatFlagsNoClip) &&
-        gdip_round(scaled_rect.Width) != 0 && gdip_round(scaled_rect.Height) != 0)
+        scaled_rect.Width != 1 << 23 && scaled_rect.Height != 1 << 23)
     {
         /* FIXME: If only the width or only the height is 0, we should probably still clip */
         rgn = CreatePolygonRgn(corners, 4, ALTERNATE);

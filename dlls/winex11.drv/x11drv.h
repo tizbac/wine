@@ -114,6 +114,13 @@ typedef struct
     int           exposures;   /* count of graphics exposures operations */
 } X11DRV_PDEVICE;
 
+struct x11drv_gamma_ramp
+{
+    WORD red[256];
+    WORD green[256];
+    WORD blue[256];
+};
+
 static inline X11DRV_PDEVICE *get_x11drv_dev( PHYSDEV dev )
 {
     return (X11DRV_PDEVICE *)dev;
@@ -551,6 +558,7 @@ struct x11drv_win_data
     BOOL        iconic : 1;     /* is window in iconic state? */
     BOOL        embedded : 1;   /* is window an XEMBED client? */
     BOOL        shaped : 1;     /* is window using a custom region shape? */
+    BOOL        layered : 1;    /* is window layered and with valid attributes? */
     int         wm_state;       /* current value of the WM_STATE property */
     DWORD       net_wm_state;   /* bit mask of active x11drv_net_wm_state values */
     Window      embedder;       /* window id of embedder */

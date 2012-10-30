@@ -2903,7 +2903,11 @@ static BOOL peek_message( MSG *msg, HWND hwnd, UINT first, UINT last, UINT flags
                     handle_internal_message( info.msg.hwnd, info.msg.message,
                                              info.msg.wParam, info.msg.lParam );
                     /* if this is a nested call return right away */
-                    if (first == info.msg.message && last == info.msg.message) return FALSE;
+                    if (first == info.msg.message && last == info.msg.message)
+                    {
+                        HeapFree( GetProcessHeap(), 0, buffer );
+                        return FALSE;
+                    }
                 }
                 else
                     peek_message( msg, info.msg.hwnd, info.msg.message,
@@ -3682,8 +3686,8 @@ BOOL WINAPI DECLSPEC_HOTPATCH PeekMessageW( MSG *msg_out, HWND hwnd, UINT first,
 
     if (!peek_message( &msg, hwnd, first, last, flags, 0 ))
     {
-        if (flags & PM_NOYIELD) flush_window_surfaces( FALSE );
-        else wow_handlers.wait_message( 0, NULL, 0, 0, 0 );
+        flush_window_surfaces( !(flags & PM_NOYIELD) );
+        if (!(flags & PM_NOYIELD)) wow_handlers.wait_message( 0, NULL, 0, 0, 0 );
         return FALSE;
     }
 
@@ -3739,6 +3743,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetMessageW( MSG *msg, HWND hwnd, UINT first, UINT
 
     while (!peek_message( msg, hwnd, first, last, PM_REMOVE | (mask << 16), mask ))
     {
+        flush_window_surfaces( TRUE );
         wow_handlers.wait_message( 1, &server_queue, INFINITE, mask, 0 );
     }
 
@@ -4071,6 +4076,7 @@ DWORD WINAPI MsgWaitForMultipleObjectsEx( DWORD count, CONST HANDLE *pHandles,
     for (i = 0; i < count; i++) handles[i] = pHandles[i];
     handles[count] = get_server_queue_handle();
 
+    flush_window_surfaces( TRUE );
     return wow_handlers.wait_message( count+1, handles, timeout, mask, flags );
 }
 

@@ -1558,6 +1558,71 @@ NTSTATUS WINAPI NtSetVolumeInformationFile(
 	return 0;
 }
 
+static NTSTATUS set_file_times( int fd, const LARGE_INTEGER *mtime, const LARGE_INTEGER *atime )
+{
+    NTSTATUS status = STATUS_SUCCESS;
+
+#ifdef HAVE_FUTIMENS
+    struct timespec tv[2];
+
+    tv[0].tv_sec = tv[1].tv_sec = 0;
+    tv[0].tv_nsec = tv[1].tv_nsec = UTIME_OMIT;
+    if (atime->QuadPart)
+    {
+        tv[0].tv_sec = atime->QuadPart / 10000000 - SECS_1601_TO_1970;
+        tv[0].tv_nsec = (atime->QuadPart % 10000000) * 100;
+    }
+    if (mtime->QuadPart)
+    {
+        tv[1].tv_sec = mtime->QuadPart / 10000000 - SECS_1601_TO_1970;
+        tv[1].tv_nsec = (mtime->QuadPart % 10000000) * 100;
+    }
+    if (futimens( fd, tv ) == -1) status = FILE_GetNtStatus();
+
+#elif defined(HAVE_FUTIMES) || defined(HAVE_FUTIMESAT)
+    struct timeval tv[2];
+    struct stat st;
+
+    if (!atime->QuadPart || !mtime->QuadPart)
+    {
+
+        tv[0].tv_sec = tv[0].tv_usec = 0;
+        tv[1].tv_sec = tv[1].tv_usec = 0;
+        if (!fstat( fd, &st ))
+        {
+            tv[0].tv_sec = st.st_atime;
+            tv[1].tv_sec = st.st_mtime;
+#ifdef HAVE_STRUCT_STAT_ST_ATIM
+            tv[0].tv_usec = st.st_atim.tv_nsec / 1000;
+#endif
+#ifdef HAVE_STRUCT_STAT_ST_MTIM
+            tv[1].tv_usec = st.st_mtim.tv_nsec / 1000;
+#endif
+        }
+    }
+    if (atime->QuadPart)
+    {
+        tv[0].tv_sec = atime->QuadPart / 10000000 - SECS_1601_TO_1970;
+        tv[0].tv_usec = (atime->QuadPart % 10000000) / 10;
+    }
+    if (mtime->QuadPart)
+    {
+        tv[1].tv_sec = mtime->QuadPart / 10000000 - SECS_1601_TO_1970;
+        tv[1].tv_usec = (mtime->QuadPart % 10000000) / 10;
+    }
+#ifdef HAVE_FUTIMES
+    if (futimes( fd, tv ) == -1) status = FILE_GetNtStatus();
+#elif defined(HAVE_FUTIMESAT)
+    if (futimesat( fd, NULL, tv ) == -1) status = FILE_GetNtStatus();
+#endif
+
+#else  /* HAVE_FUTIMES || HAVE_FUTIMESAT */
+    FIXME( "setting file times not supported\n" );
+    status = STATUS_NOT_IMPLEMENTED;
+#endif
+    return status;
+}
+
 static inline void get_file_times( const struct stat *st, LARGE_INTEGER *mtime, LARGE_INTEGER *ctime,
                                    LARGE_INTEGER *atime, LARGE_INTEGER *creation )
 {
@@ -2047,36 +2112,7 @@ NTSTATUS WINAPI NtSetInformationFile(HANDLE handle, PIO_STATUS_BLOCK io,
                 return io->u.Status;
 
             if (info->LastAccessTime.QuadPart || info->LastWriteTime.QuadPart)
-            {
-                struct timeval tv[2];
-
-                if (!info->LastAccessTime.QuadPart || !info->LastWriteTime.QuadPart)
-                {
-
-                    tv[0].tv_sec = tv[0].tv_usec = 0;
-                    tv[1].tv_sec = tv[1].tv_usec = 0;
-                    if (!fstat( fd, &st ))
-                    {
-                        tv[0].tv_sec = st.st_atime;
-                        tv[1].tv_sec = st.st_mtime;
-                    }
-                }
-                if (info->LastAccessTime.QuadPart)
-                {
-                    ULONGLONG sec = info->LastAccessTime.QuadPart / 10000000;
-                    UINT nsec = info->LastAccessTime.QuadPart % 10000000;
-                    tv[0].tv_sec = sec - SECS_1601_TO_1970;
-                    tv[0].tv_usec = nsec / 10;
-                }
-                if (info->LastWriteTime.QuadPart)
-                {
-                    ULONGLONG sec = info->LastWriteTime.QuadPart / 10000000;
-                    UINT nsec = info->LastWriteTime.QuadPart % 10000000;
-                    tv[1].tv_sec = sec - SECS_1601_TO_1970;
-                    tv[1].tv_usec = nsec / 10;
-                }
-                if (futimes( fd, tv ) == -1) io->u.Status = FILE_GetNtStatus();
-            }
+                io->u.Status = set_file_times( fd, &info->LastAccessTime, &info->LastWriteTime );
 
             if (io->u.Status == STATUS_SUCCESS && info->FileAttributes)
             {
@@ -2857,7 +2893,7 @@ NTSTATUS WINAPI NtCancelIoFileEx( HANDLE hFile, PIO_STATUS_BLOCK iosb, PIO_STATU
      * of the queued APC, but not yet run. This is needed to ensure proper
      * clean-up of allocated data.
      */
-    timeout.u.LowPart = timeout.u.HighPart = 0;
+    timeout.QuadPart = 0;
     NtDelayExecution( TRUE, &timeout );
     return io_status->u.Status;
 }
@@ -2889,7 +2925,7 @@ NTSTATUS WINAPI NtCancelIoFile( HANDLE hFile, PIO_STATUS_BLOCK io_status )
      * of the queued APC, but not yet run. This is needed to ensure proper
      * clean-up of allocated data.
      */
-    timeout.u.LowPart = timeout.u.HighPart = 0;
+    timeout.QuadPart = 0;
     NtDelayExecution( TRUE, &timeout );
     return io_status->u.Status;
 }
