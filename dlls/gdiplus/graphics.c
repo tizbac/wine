@@ -2350,62 +2350,43 @@ GpStatus WINGDIPAPI GdipCreateFromHWNDICM(HWND hwnd, GpGraphics **graphics)
 GpStatus WINGDIPAPI GdipCreateMetafileFromEmf(HENHMETAFILE hemf, BOOL delete,
     GpMetafile **metafile)
 {
-    IStream *stream = NULL;
-    UINT read;
-    ENHMETAHEADER *copy;
-    GpStatus retval = Ok;
+    ENHMETAHEADER header;
+    MetafileType metafile_type;
 
     TRACE("(%p,%i,%p)\n", hemf, delete, metafile);
 
     if(!hemf || !metafile)
         return InvalidParameter;
 
-    read = GetEnhMetaFileBits(hemf, 0, NULL);
-    copy = GdipAlloc(read);
-    GetEnhMetaFileBits(hemf, read, (BYTE *)copy);
+    if (GetEnhMetaFileHeader(hemf, sizeof(header), &header) == 0)
+        return GenericError;
 
-    if(CreateStreamOnHGlobal(copy, TRUE, &stream) != S_OK){
-        ERR("could not make stream\n");
-        GdipFree(copy);
-        retval = GenericError;
-        goto err;
-    }
+    metafile_type = METAFILE_GetEmfType(hemf);
+
+    if (metafile_type == MetafileTypeInvalid)
+        return GenericError;
 
     *metafile = GdipAlloc(sizeof(GpMetafile));
-    if(!*metafile){
-        retval = OutOfMemory;
-        goto err;
-    }
-
-    if(OleLoadPicture(stream, 0, FALSE, &IID_IPicture,
-        (LPVOID*) &((*metafile)->image.picture)) != S_OK)
-    {
-        retval = GenericError;
-        goto err;
-    }
-
+    if (!*metafile)
+        return OutOfMemory;
 
     (*metafile)->image.type = ImageTypeMetafile;
-    memcpy(&(*metafile)->image.format, &ImageFormatWMF, sizeof(GUID));
-    (*metafile)->image.palette = NULL;
-    (*metafile)->image.xres = (REAL)copy->szlDevice.cx;
-    (*metafile)->image.yres = (REAL)copy->szlDevice.cy;
-    (*metafile)->bounds.X = (REAL)copy->rclBounds.left;
-    (*metafile)->bounds.Y = (REAL)copy->rclBounds.top;
-    (*metafile)->bounds.Width = (REAL)(copy->rclBounds.right - copy->rclBounds.left);
-    (*metafile)->bounds.Height = (REAL)(copy->rclBounds.bottom - copy->rclBounds.top);
+    (*metafile)->image.format = ImageFormatEMF;
+    (*metafile)->image.frame_count = 1;
+    (*metafile)->image.xres = (REAL)header.szlDevice.cx;
+    (*metafile)->image.yres = (REAL)header.szlDevice.cy;
+    (*metafile)->bounds.X = (REAL)header.rclBounds.left;
+    (*metafile)->bounds.Y = (REAL)header.rclBounds.top;
+    (*metafile)->bounds.Width = (REAL)(header.rclBounds.right - header.rclBounds.left);
+    (*metafile)->bounds.Height = (REAL)(header.rclBounds.bottom - header.rclBounds.top);
     (*metafile)->unit = UnitPixel;
-
-    if(delete)
-        DeleteEnhMetaFile(hemf);
+    (*metafile)->metafile_type = metafile_type;
+    (*metafile)->hemf = hemf;
+    (*metafile)->preserve_hemf = !delete;
 
     TRACE("<-- %p\n", *metafile);
 
-err:
-    if (retval != Ok)
-        GdipFree(*metafile);
-    IStream_Release(stream);
-    return retval;
+    return Ok;
 }
 
 GpStatus WINGDIPAPI GdipCreateMetafileFromWmf(HMETAFILE hwmf, BOOL delete,
@@ -2431,7 +2412,8 @@ GpStatus WINGDIPAPI GdipCreateMetafileFromWmf(HMETAFILE hwmf, BOOL delete,
     hemf = SetWinMetaFileBits(read, copy, NULL, NULL);
     GdipFree(copy);
 
-    retval = GdipCreateMetafileFromEmf(hemf, FALSE, metafile);
+    /* FIXME: We should store and use hwmf instead of converting to hemf */
+    retval = GdipCreateMetafileFromEmf(hemf, TRUE, metafile);
 
     if (retval == Ok)
     {
@@ -2443,9 +2425,13 @@ GpStatus WINGDIPAPI GdipCreateMetafileFromWmf(HMETAFILE hwmf, BOOL delete,
                                            placeable->BoundingBox.Left);
         (*metafile)->bounds.Height = (REAL)(placeable->BoundingBox.Bottom -
                                             placeable->BoundingBox.Top);
+        (*metafile)->metafile_type = MetafileTypeWmfPlaceable;
+        (*metafile)->image.format = ImageFormatWMF;
 
         if (delete) DeleteMetaFile(hwmf);
     }
+    else
+        DeleteEnhMetaFile(hemf);
     return retval;
 }
 
@@ -3085,6 +3071,13 @@ GpStatus WINGDIPAPI GdipDrawImagePointsI(GpGraphics *graphics, GpImage *image,
     return GdipDrawImagePoints(graphics, image, ptf, count);
 }
 
+static BOOL CALLBACK play_metafile_proc(EmfPlusRecordType record_type, unsigned int flags,
+    unsigned int dataSize, const unsigned char *pStr, void *userdata)
+{
+    GdipPlayMetafileRecord(userdata, record_type, flags, dataSize, pStr);
+    return TRUE;
+}
+
 GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image,
      GDIPCONST GpPointF *points, INT count, REAL srcx, REAL srcy, REAL srcwidth,
      REAL srcheight, GpUnit srcUnit, GDIPCONST GpImageAttributes* imageAttributes,
@@ -3379,10 +3372,22 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
                 DeleteObject(hbitmap);
         }
     }
+    else if (image->type == ImageTypeMetafile && ((GpMetafile*)image)->hemf)
+    {
+        GpRectF rc;
+
+        rc.X = srcx;
+        rc.Y = srcy;
+        rc.Width = srcwidth;
+        rc.Height = srcheight;
+
+        return GdipEnumerateMetafileSrcRectDestPoints(graphics, (GpMetafile*)image,
+            points, count, &rc, srcUnit, play_metafile_proc, image, imageAttributes);
+    }
     else
     {
-        ERR("GpImage with no IPicture or HBITMAP?!\n");
-        return NotImplemented;
+        WARN("GpImage with nothing we can draw (metafile in wrong state?)\n");
+        return InvalidParameter;
     }
 
     return Ok;

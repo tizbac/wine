@@ -1,5 +1,5 @@
 /*
- * Copyright 2005 Jacek Caban
+ * Copyright 2012 Jacek Caban for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,16 +16,11 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-/* @makedep: urlmon.rgs */
-1 WINE_REGISTRY urlmon.rgs
+#define ID_AXINSTALL_WARNING_DLG    1000
+#define ID_AXINSTALL_LOCATION       1001
+#define ID_AXINSTALL_INSTALL_BTN    1002
+#define ID_AXINSTALL_ICON           1003
 
-/* @makedep: urlmon.inf */
-REGINST REGINST urlmon.inf
-
-#define WINE_FILENAME_STR "urlmon.dll"
-#define WINE_FILEVERSION 6,0,2800,1485
-#define WINE_FILEVERSION_STR "6.0.2800.1485"
-#define WINE_PRODUCTVERSION 6,0,2800,1485
-#define WINE_PRODUCTVERSION_STR "6.0.2800.1485"
-
-#include "wine/wine_common_ver.rc"
+#define IDS_AXINSTALL_FAILURE       1100
+#define IDS_AXINSTALL_INSTALLN      1101
+#define IDS_AXINSTALL_INSTALL       1102

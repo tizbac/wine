@@ -1036,12 +1036,12 @@ static void lfsz_calc_hash(LFANDSIZE *plfsz)
 /**********************************************************************
  *	     xrenderdrv_SelectFont
  */
-static HFONT xrenderdrv_SelectFont( PHYSDEV dev, HFONT hfont )
+static HFONT xrenderdrv_SelectFont( PHYSDEV dev, HFONT hfont, UINT *aa_flags )
 {
     LFANDSIZE lfsz;
     struct xrender_physdev *physdev = get_xrender_dev( dev );
     PHYSDEV next = GET_NEXT_PHYSDEV( dev, pSelectFont );
-    HFONT ret = next->funcs->pSelectFont( next, hfont );
+    HFONT ret = next->funcs->pSelectFont( next, hfont, aa_flags );
 
     if (!ret) return 0;
 
@@ -1405,9 +1405,9 @@ static void UploadGlyph(struct xrender_physdev *physDev, int glyph, AA_Type form
 
 	pXRenderAddGlyphs(gdi_display, formatEntry->glyphset, &gid, &gi, 1,
                           buflen ? buf : zero, buflen ? buflen : sizeof(zero));
-	HeapFree(GetProcessHeap(), 0, buf);
     }
 
+    HeapFree(GetProcessHeap(), 0, buf);
     formatEntry->gis[glyph] = gi;
 }
 

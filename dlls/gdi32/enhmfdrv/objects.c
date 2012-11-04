@@ -277,7 +277,7 @@ static BOOL EMFDRV_CreateFontIndirect(PHYSDEV dev, HFONT hFont )
 /***********************************************************************
  *           EMFDRV_SelectFont
  */
-HFONT EMFDRV_SelectFont( PHYSDEV dev, HFONT hFont )
+HFONT EMFDRV_SelectFont( PHYSDEV dev, HFONT hFont, UINT *aa_flags )
 {
     EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE*)dev;
     EMRSELECTOBJECT emr;
@@ -314,8 +314,9 @@ HFONT EMFDRV_SelectFont( PHYSDEV dev, HFONT hFont )
     if(!EMFDRV_WriteRecord( dev, &emr.emr ))
         return 0;
 done:
+    *aa_flags = GGO_BITMAP;  /* no point in anti-aliasing on metafiles */
     dev = GET_NEXT_PHYSDEV( dev, pSelectFont );
-    dev->funcs->pSelectFont( dev, hFont );
+    dev->funcs->pSelectFont( dev, hFont, aa_flags );
     return hFont;
 }
 
