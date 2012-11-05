@@ -782,6 +782,13 @@ struct vs_compile_args {
     WORD                        swizzle_map;   /* MAX_ATTRIBS, 16 */
 };
 
+enum wined3d_shader_mode
+{
+    WINED3D_SHADER_MODE_NONE,
+    WINED3D_SHADER_MODE_FFP,
+    WINED3D_SHADER_MODE_SHADER,
+};
+
 struct wined3d_context;
 struct wined3d_state;
 struct fragment_pipeline;
@@ -789,7 +796,8 @@ struct fragment_pipeline;
 struct wined3d_shader_backend_ops
 {
     void (*shader_handle_instruction)(const struct wined3d_shader_instruction *);
-    void (*shader_select)(const struct wined3d_context *context, BOOL usePS, BOOL useVS);
+    void (*shader_select)(const struct wined3d_context *context, enum wined3d_shader_mode vertex_mode,
+            enum wined3d_shader_mode fragment_mode);
     void (*shader_select_depth_blt)(void *shader_priv, const struct wined3d_gl_info *gl_info,
             enum tex_types tex_type, const SIZE *ds_mask_size);
     void (*shader_deselect_depth_blt)(void *shader_priv, const struct wined3d_gl_info *gl_info);
@@ -804,7 +812,6 @@ struct wined3d_shader_backend_ops
     void (*shader_context_destroyed)(void *shader_priv, const struct wined3d_context *context);
     void (*shader_get_caps)(const struct wined3d_gl_info *gl_info, struct shader_caps *caps);
     BOOL (*shader_color_fixup_supported)(struct color_fixup_desc fixup);
-    void (*shader_enable_fragment_pipe)(void *shader_priv, const struct wined3d_gl_info *gl_info, BOOL enable);
     BOOL (*shader_has_ffp_proj_control)(void *shader_priv);
 };
 
@@ -1084,21 +1091,23 @@ struct wined3d_context
     DWORD                   tid;    /* Thread ID which owns this context at the moment */
 
     /* Stores some information about the context state for optimization */
-    WORD render_offscreen : 1;
-    WORD last_was_rhw : 1;              /* true iff last draw_primitive was in xyzrhw mode */
-    WORD last_was_pshader : 1;
-    WORD last_was_vshader : 1;
-    WORD namedArraysLoaded : 1;
-    WORD numberedArraysLoaded : 1;
-    WORD last_was_blit : 1;
-    WORD last_was_ckey : 1;
-    WORD fog_coord : 1;
-    WORD fog_enabled : 1;
-    WORD num_untracked_materials : 2;   /* Max value 2 */
-    WORD current : 1;
-    WORD destroyed : 1;
-    WORD valid : 1;
-    WORD padding : 1;
+    DWORD render_offscreen : 1;
+    DWORD last_was_rhw : 1;             /* true iff last draw_primitive was in xyzrhw mode */
+    DWORD last_was_pshader : 1;
+    DWORD last_was_vshader : 1;
+    DWORD namedArraysLoaded : 1;
+    DWORD numberedArraysLoaded : 1;
+    DWORD last_was_blit : 1;
+    DWORD last_was_ckey : 1;
+    DWORD fog_coord : 1;
+    DWORD fog_enabled : 1;
+    DWORD num_untracked_materials : 2;  /* Max value 2 */
+    DWORD current : 1;
+    DWORD destroyed : 1;
+    DWORD valid : 1;
+    DWORD select_shader : 1;
+    DWORD load_constants : 1;
+    DWORD padding : 15;
     BYTE texShaderBumpMap;              /* MAX_TEXTURES, 8 */
     BYTE lastWasPow2Texture;            /* MAX_TEXTURES, 8 */
     DWORD                   numbered_array_mask;
