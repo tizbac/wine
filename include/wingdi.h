@@ -1459,11 +1459,6 @@ typedef struct
 #define TT_AVAILABLE        0x0001
 #define TT_ENABLED          0x0002
 
-#ifdef __WINESRC__
-#define WINE_TT_SUBPIXEL_RENDERING_ENABLED 0x4000
-#define WINE_TT_HINTER_ENABLED 0x8000
-#endif
-
 #define TT_PRIM_LINE    1
 #define TT_PRIM_QSPLINE 2
 #define TT_PRIM_CSPLINE 3
@@ -3766,6 +3761,9 @@ WINGDIAPI BOOL        WINAPI PolyTextOutW(HDC,const POLYTEXTW*,INT);
 #define WGL_SWAP_UNDERLAY13 (1 << 28)
 #define WGL_SWAP_UNDERLAY14 (1 << 29)
 #define WGL_SWAP_UNDERLAY15 (1 << 30)
+
+#define WGL_FONT_LINES      0
+#define WGL_FONT_POLYGONS   1
 
 /* WGL prototypes */
 WINGDIAPI HGLRC   WINAPI wglCreateContext(HDC);

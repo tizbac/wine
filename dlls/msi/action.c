@@ -1982,8 +1982,7 @@ UINT MSI_SetFeatureStates(MSIPACKAGE *package)
             continue;
         }
         TRACE("nobody wants component %s\n", debugstr_w(component->Component));
-        if (component->anyAbsent &&
-            (component->Installed == INSTALLSTATE_LOCAL || component->Installed == INSTALLSTATE_SOURCE))
+        if (component->anyAbsent && component->ComponentId)
         {
             component->Action = INSTALLSTATE_ABSENT;
             component->ActionRequest = INSTALLSTATE_ABSENT;
@@ -4721,27 +4720,27 @@ static UINT ACTION_RemoveIniValues( MSIPACKAGE *package )
 
 static void register_dll( const WCHAR *dll, BOOL unregister )
 {
-    HMODULE hmod;
+    static const WCHAR regW[] =
+        {'r','e','g','s','v','r','3','2','.','e','x','e',' ','\"','%','s','\"',0};
+    static const WCHAR unregW[] =
+        {'r','e','g','s','v','r','3','2','.','e','x','e',' ','/','u',' ','\"','%','s','\"',0};
+    PROCESS_INFORMATION pi;
+    STARTUPINFOW si;
+    WCHAR *cmd;
 
-    hmod = LoadLibraryExW( dll, 0, LOAD_WITH_ALTERED_SEARCH_PATH );
-    if (hmod)
+    if (!(cmd = msi_alloc( strlenW(dll) * sizeof(WCHAR) + sizeof(unregW) ))) return;
+
+    if (unregister) sprintfW( cmd, unregW, dll );
+    else sprintfW( cmd, regW, dll );
+
+    memset( &si, 0, sizeof(STARTUPINFOW) );
+    if (CreateProcessW( NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi ))
     {
-        HRESULT (WINAPI *func_ptr)( void );
-        const char *func = unregister ? "DllUnregisterServer" : "DllRegisterServer";
-
-        func_ptr = (void *)GetProcAddress( hmod, func );
-        if (func_ptr)
-        {
-            HRESULT hr = func_ptr();
-            if (FAILED( hr ))
-                WARN("failed to register dll 0x%08x\n", hr);
-        }
-        else
-            WARN("entry point %s not found\n", func);
-        FreeLibrary( hmod );
-        return;
+        CloseHandle( pi.hThread );
+        msi_dialog_check_messages( pi.hProcess );
+        CloseHandle( pi.hProcess );
     }
-    WARN("failed to load library %u\n", GetLastError());
+    msi_free( cmd );
 }
 
 static UINT ITERATE_SelfRegModules(MSIRECORD *row, LPVOID param)
@@ -7721,7 +7720,7 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     static const WCHAR szDisableRollback[] = {'D','I','S','A','B','L','E','R','O','L','L','B','A','C','K',0};
     static const WCHAR szAction[] = {'A','C','T','I','O','N',0};
     static const WCHAR szInstall[] = {'I','N','S','T','A','L','L',0};
-    WCHAR *reinstall = NULL;
+    WCHAR *reinstall, *remove;
     BOOL ui_exists;
     UINT rc;
 
@@ -7772,9 +7771,11 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     msi_apply_transforms( package );
     msi_apply_patches( package );
 
-    if (!szCommandLine && msi_get_property_int( package->db, szInstalled, 0 ))
+    remove = msi_dup_property( package->db, szRemove );
+    reinstall = msi_dup_property( package->db, szReinstall );
+    if (msi_get_property_int( package->db, szInstalled, 0 ) && !remove && !reinstall)
     {
-        TRACE("setting reinstall property\n");
+        TRACE("setting REINSTALL property to ALL\n");
         msi_set_property( package->db, szReinstall, szAll, -1 );
     }
 
@@ -7826,12 +7827,13 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     /* finish up running custom actions */
     ACTION_FinishCustomActions(package);
 
-    if (package->need_rollback && !(reinstall = msi_dup_property( package->db, szReinstall )))
+    if (package->need_rollback && !reinstall)
     {
         WARN("installation failed, running rollback script\n");
         execute_script( package, SCRIPT_ROLLBACK );
     }
     msi_free( reinstall );
+    msi_free( remove );
 
     if (rc == ERROR_SUCCESS && package->need_reboot_at_end)
         return ERROR_SUCCESS_REBOOT_REQUIRED;

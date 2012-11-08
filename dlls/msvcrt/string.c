@@ -291,7 +291,8 @@ double CDECL MSVCRT_strtod_l( const char *str, char **end, MSVCRT__locale_t loca
     int exp=0, sign=1;
     const char *p;
     double ret;
-    BOOL found_digit = FALSE;
+    long double lret=1, expcnt = 10;
+    BOOL found_digit = FALSE, negexp;
 
     if (!MSVCRT_CHECK_PMT(str != NULL)) return 0;
 
@@ -378,10 +379,16 @@ double CDECL MSVCRT_strtod_l( const char *str, char **end, MSVCRT__locale_t loca
     _control87(MSVCRT__EM_DENORMAL|MSVCRT__EM_INVALID|MSVCRT__EM_ZERODIVIDE
             |MSVCRT__EM_OVERFLOW|MSVCRT__EM_UNDERFLOW|MSVCRT__EM_INEXACT, 0xffffffff);
 
-    if(exp>0)
-        ret = (double)sign*d*pow(10, exp);
-    else
-        ret = (double)sign*d/pow(10, -exp);
+    negexp = (exp < 0);
+    if(negexp)
+        exp = -exp;
+    while(exp) {
+        if(exp & 1)
+            lret *= expcnt;
+        exp /= 2;
+        expcnt = expcnt*expcnt;
+    }
+    ret = (long double)sign * (negexp ? d/lret : d*lret);
 
     _control87(fpcontrol, 0xffffffff);
 
@@ -514,13 +521,13 @@ int CDECL MSVCRT__atoflt_l( MSVCRT__CRT_FLOAT *value, char *str, MSVCRT__locale_
             |MSVCRT__EM_OVERFLOW|MSVCRT__EM_UNDERFLOW|MSVCRT__EM_INEXACT, 0xffffffff);
 
     if(exp>0)
-        value->f = (float)sign*d*powf(10, exp);
+        value->f = (double)sign*d*pow(10, exp);
     else
-        value->f = (float)sign*d/powf(10, -exp);
+        value->f = (double)sign*d/pow(10, -exp);
 
     _control87(fpcontrol, 0xffffffff);
 
-    if((d && value->f==0.0) || isinf(value->f))
+    if((d && value->f>-MSVCRT_FLT_MIN && value->f<MSVCRT_FLT_MIN) || isinf(value->f))
         ret = exp > 0 ? MSVCRT__OVERFLOW : MSVCRT__UNDERFLOW;
 
     return ret;

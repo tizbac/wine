@@ -63,7 +63,7 @@ static void ReleaseDirectDraw(void)
 
 static void MipMapCreationTest(void)
 {
-    LPDIRECTDRAWSURFACE lpDDSMipMapTest;
+    IDirectDrawSurface *lpDDSMipMapTest;
     DDSURFACEDESC ddsd;
     HRESULT rc;
 
@@ -215,8 +215,8 @@ static void MipMapCreationTest(void)
 
 static void SrcColorKey32BlitTest(void)
 {
-    LPDIRECTDRAWSURFACE lpSrc;
-    LPDIRECTDRAWSURFACE lpDst;
+    IDirectDrawSurface *lpSrc;
+    IDirectDrawSurface *lpDst;
     DDSURFACEDESC ddsd, ddsd2, ddsd3;
     DDCOLORKEY DDColorKey;
     LPDWORD lpData;
@@ -738,7 +738,7 @@ static void SrcColorKey32BlitTest(void)
 
 static void QueryInterface(void)
 {
-    LPDIRECTDRAWSURFACE dsurface;
+    IDirectDrawSurface *dsurface;
     DDSURFACEDESC surface;
     LPVOID object;
     HRESULT ret;
@@ -776,8 +776,8 @@ static ULONG getref(IUnknown *iface)
 
 static void GetDDInterface_1(void)
 {
-    LPDIRECTDRAWSURFACE dsurface;
-    LPDIRECTDRAWSURFACE2 dsurface2;
+    IDirectDrawSurface2 *dsurface2;
+    IDirectDrawSurface *dsurface;
     DDSURFACEDESC surface;
     HRESULT ret;
     IDirectDraw2 *dd2;
@@ -840,8 +840,8 @@ static void GetDDInterface_1(void)
 
 static void GetDDInterface_2(void)
 {
-    LPDIRECTDRAWSURFACE dsurface;
-    LPDIRECTDRAWSURFACE2 dsurface2;
+    IDirectDrawSurface2 *dsurface2;
+    IDirectDrawSurface *dsurface;
     DDSURFACEDESC surface;
     HRESULT ret;
     IDirectDraw2 *dd2;
@@ -902,7 +902,7 @@ static void GetDDInterface_2(void)
 static void GetDDInterface_4(void)
 {
     IDirectDrawSurface4 *dsurface4;
-    LPDIRECTDRAWSURFACE2 dsurface2;
+    IDirectDrawSurface2 *dsurface2;
     DDSURFACEDESC2 surface;
     HRESULT ret;
     IDirectDraw2 *dd2;
@@ -2504,7 +2504,7 @@ static void CompressedTest(void)
 
 static void SizeTest(void)
 {
-    LPDIRECTDRAWSURFACE dsurface = NULL;
+    IDirectDrawSurface *dsurface = NULL;
     DDSURFACEDESC desc;
     HRESULT ret;
     HWND window = CreateWindow( "static", "ddraw_test", WS_OVERLAPPEDWINDOW, 100, 100, 160, 160, NULL, NULL, NULL, NULL );
@@ -2807,7 +2807,7 @@ static void BltParamTest(void)
 static void PaletteTest(void)
 {
     HRESULT hr;
-    LPDIRECTDRAWSURFACE lpSurf = NULL;
+    IDirectDrawSurface *lpSurf = NULL;
     IDirectDrawSurface *backbuffer = NULL;
     DDSCAPS ddscaps;
     DDSURFACEDESC ddsd;
