@@ -152,6 +152,8 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
     REFERENCE_TIME prebuf_rt;
     WAVEFORMATEX *wfx = NULL;
     HRESULT hres;
+    REFERENCE_TIME period;
+    DWORD period_ms;
 
     TRACE("(%p, %d)\n", device, forcewave);
 
@@ -192,14 +194,15 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
     prebuf_rt = (10000000 * (UINT64)prebuf_frames) / device->pwfx->nSamplesPerSec;
 
     hres = IAudioClient_Initialize(device->client,
-            AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST,
-            prebuf_rt, 0, device->pwfx, NULL);
+            AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST |
+            AUDCLNT_STREAMFLAGS_EVENTCALLBACK, prebuf_rt, 0, device->pwfx, NULL);
     if(FAILED(hres)){
         IAudioClient_Release(device->client);
         device->client = NULL;
         WARN("Initialize failed: %08x\n", hres);
         return hres;
     }
+    IAudioClient_SetEventHandle(device->client, device->sleepev);
 
     hres = IAudioClient_GetService(device->client, &IID_IAudioRenderClient,
             (void**)&device->render);
@@ -233,6 +236,19 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
         WARN("GetService failed: %08x\n", hres);
         return hres;
     }
+    /* Now kick off the timer so the event fires periodically */
+    IAudioClient_Start(device->client);
+
+    IAudioClient_GetStreamLatency(device->client, &period);
+    period_ms = (period + 9999) / 10000;
+    TRACE("period %u ms fraglen %u prebuf %u\n", period_ms, device->fraglen, device->prebuf);
+
+    if (period_ms <= 15)
+        device->sleeptime = period_ms * 5 / 2;
+    else
+        device->sleeptime = period_ms * 3 / 2;
+    if (device->sleeptime < 10)
+        device->sleeptime = 10;
 
     return S_OK;
 }
@@ -379,7 +395,7 @@ HRESULT DSOUND_PrimaryPlay(DirectSoundDevice *device)
     TRACE("(%p)\n", device);
 
     hr = IAudioClient_Start(device->client);
-    if(FAILED(hr)){
+    if(FAILED(hr) && hr != AUDCLNT_E_NOT_STOPPED){
         WARN("Start failed: %08x\n", hr);
         return hr;
     }
