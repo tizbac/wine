@@ -33,6 +33,7 @@ typedef struct {
     IDirect3DRMTexture2 IDirect3DRMTexture2_iface;
     IDirect3DRMTexture3 IDirect3DRMTexture3_iface;
     LONG ref;
+    DWORD app_data;
 } IDirect3DRMTextureImpl;
 
 static inline IDirect3DRMTextureImpl *impl_from_IDirect3DRMTexture2(IDirect3DRMTexture2 *iface)
@@ -128,18 +129,22 @@ static HRESULT WINAPI IDirect3DRMTexture2Impl_DeleteDestroyCallback(IDirect3DRMT
 }
 
 static HRESULT WINAPI IDirect3DRMTexture2Impl_SetAppData(IDirect3DRMTexture2* iface,
-                                                          DWORD data)
+                                                         DWORD data)
 {
-    FIXME("(%p)->(%u): stub\n", iface, data);
+    IDirect3DRMTextureImpl *This = impl_from_IDirect3DRMTexture2(iface);
 
-    return E_NOTIMPL;
+    TRACE("(%p)->(%u)\n", iface, data);
+
+    return IDirect3DRMTexture3_SetAppData(&This->IDirect3DRMTexture3_iface, data);
 }
 
 static DWORD WINAPI IDirect3DRMTexture2Impl_GetAppData(IDirect3DRMTexture2* iface)
 {
-    FIXME("(%p)->(): stub\n", iface);
+    IDirect3DRMTextureImpl *This = impl_from_IDirect3DRMTexture2(iface);
 
-    return 0;
+    TRACE("(%p)->()\n", iface);
+
+    return IDirect3DRMTexture3_GetAppData(&This->IDirect3DRMTexture3_iface);
 }
 
 static HRESULT WINAPI IDirect3DRMTexture2Impl_SetName(IDirect3DRMTexture2* iface, LPCSTR name)
@@ -177,7 +182,8 @@ static HRESULT WINAPI IDirect3DRMTexture2Impl_InitFromFile(IDirect3DRMTexture2* 
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI IDirect3DRMTexture2Impl_InitFromSurface(IDirect3DRMTexture2* iface, LPDIRECTDRAWSURFACE surface)
+static HRESULT WINAPI IDirect3DRMTexture2Impl_InitFromSurface(IDirect3DRMTexture2 *iface,
+        IDirectDrawSurface *surface)
 {
     IDirect3DRMTextureImpl *This = impl_from_IDirect3DRMTexture2(iface);
 
@@ -492,18 +498,24 @@ static HRESULT WINAPI IDirect3DRMTexture3Impl_DeleteDestroyCallback(IDirect3DRMT
 }
 
 static HRESULT WINAPI IDirect3DRMTexture3Impl_SetAppData(IDirect3DRMTexture3* iface,
-                                                          DWORD data)
+                                                         DWORD data)
 {
-    FIXME("(%p)->(%u): stub\n", iface, data);
+    IDirect3DRMTextureImpl *This = impl_from_IDirect3DRMTexture3(iface);
 
-    return E_NOTIMPL;
+    TRACE("(%p)->(%u)\n", iface, data);
+
+    This->app_data = data;
+
+    return D3DRM_OK;
 }
 
 static DWORD WINAPI IDirect3DRMTexture3Impl_GetAppData(IDirect3DRMTexture3* iface)
 {
-    FIXME("(%p)->(): stub\n", iface);
+    IDirect3DRMTextureImpl *This = impl_from_IDirect3DRMTexture3(iface);
 
-    return 0;
+    TRACE("(%p)->()\n", iface);
+
+    return This->app_data;
 }
 
 static HRESULT WINAPI IDirect3DRMTexture3Impl_SetName(IDirect3DRMTexture3* iface, LPCSTR name)
@@ -547,7 +559,8 @@ static HRESULT WINAPI IDirect3DRMTexture3Impl_InitFromFile(IDirect3DRMTexture3* 
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI IDirect3DRMTexture3Impl_InitFromSurface(IDirect3DRMTexture3* iface, LPDIRECTDRAWSURFACE surface)
+static HRESULT WINAPI IDirect3DRMTexture3Impl_InitFromSurface(IDirect3DRMTexture3 *iface,
+        IDirectDrawSurface *surface)
 {
     IDirect3DRMTextureImpl *This = impl_from_IDirect3DRMTexture3(iface);
 
@@ -737,7 +750,8 @@ static HRESULT WINAPI IDirect3DRMTexture3Impl_GenerateMIPMap(IDirect3DRMTexture3
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI IDirect3DRMTexture3Impl_GetSurface(IDirect3DRMTexture3* iface, DWORD flags, LPDIRECTDRAWSURFACE* surface)
+static HRESULT WINAPI IDirect3DRMTexture3Impl_GetSurface(IDirect3DRMTexture3 *iface,
+        DWORD flags, IDirectDrawSurface **surface)
 {
     IDirect3DRMTextureImpl *This = impl_from_IDirect3DRMTexture3(iface);
 

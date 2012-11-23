@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2009 Henri Verbeet for CodeWeavers
+ * Copyright 2008-2012 Henri Verbeet for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -212,7 +212,7 @@ static void STDMETHODCALLTYPE d3d10_device_IASetVertexBuffers(ID3D10Device *ifac
     {
         struct d3d10_buffer *buffer = unsafe_impl_from_ID3D10Buffer(buffers[i]);
 
-        wined3d_device_set_stream_source(This->wined3d_device, start_slot,
+        wined3d_device_set_stream_source(This->wined3d_device, start_slot + i,
                 buffer ? buffer->wined3d_buffer : NULL, offsets[i], strides[i]);
     }
 }
@@ -260,8 +260,12 @@ static void STDMETHODCALLTYPE d3d10_device_GSSetConstantBuffers(ID3D10Device *if
 
 static void STDMETHODCALLTYPE d3d10_device_GSSetShader(ID3D10Device *iface, ID3D10GeometryShader *shader)
 {
-    if (shader) FIXME("iface %p, shader %p stub!\n", iface, shader);
-    else WARN("iface %p, shader %p stub!\n", iface, shader);
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+    struct d3d10_geometry_shader *gs = unsafe_impl_from_ID3D10GeometryShader(shader);
+
+    TRACE("iface %p, shader %p.\n", iface, shader);
+
+    wined3d_device_set_geometry_shader(device->wined3d_device, gs ? gs->wined3d_shader : NULL);
 }
 
 static void STDMETHODCALLTYPE d3d10_device_IASetPrimitiveTopology(ID3D10Device *iface,
@@ -387,7 +391,17 @@ static void STDMETHODCALLTYPE d3d10_device_RSSetViewports(ID3D10Device *iface,
 static void STDMETHODCALLTYPE d3d10_device_RSSetScissorRects(ID3D10Device *iface,
         UINT rect_count, const D3D10_RECT *rects)
 {
-    FIXME("iface %p, rect_count %u, rects %p\n", iface, rect_count, rects);
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+
+    TRACE("iface %p, rect_count %u, rects %p.\n", iface, rect_count, rects);
+
+    if (rect_count > 1)
+        FIXME("Multiple scissor rects not implemented.\n");
+
+    if (!rect_count)
+        return;
+
+    wined3d_device_set_scissor_rect(device->wined3d_device, rects);
 }
 
 static void STDMETHODCALLTYPE d3d10_device_CopySubresourceRegion(ID3D10Device *iface,
@@ -465,7 +479,21 @@ static void STDMETHODCALLTYPE d3d10_device_PSGetShaderResources(ID3D10Device *if
 
 static void STDMETHODCALLTYPE d3d10_device_PSGetShader(ID3D10Device *iface, ID3D10PixelShader **shader)
 {
-    FIXME("iface %p, shader %p stub!\n", iface, shader);
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+    struct d3d10_pixel_shader *shader_impl;
+    struct wined3d_shader *wined3d_shader;
+
+    TRACE("iface %p, shader %p.\n", iface, shader);
+
+    if (!(wined3d_shader = wined3d_device_get_pixel_shader(device->wined3d_device)))
+    {
+        *shader = NULL;
+        return;
+    }
+
+    shader_impl = wined3d_shader_get_parent(wined3d_shader);
+    *shader = &shader_impl->ID3D10PixelShader_iface;
+    ID3D10PixelShader_AddRef(*shader);
 }
 
 static void STDMETHODCALLTYPE d3d10_device_PSGetSamplers(ID3D10Device *iface,
@@ -477,7 +505,21 @@ static void STDMETHODCALLTYPE d3d10_device_PSGetSamplers(ID3D10Device *iface,
 
 static void STDMETHODCALLTYPE d3d10_device_VSGetShader(ID3D10Device *iface, ID3D10VertexShader **shader)
 {
-    FIXME("iface %p, shader %p stub!\n", iface, shader);
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+    struct d3d10_vertex_shader *shader_impl;
+    struct wined3d_shader *wined3d_shader;
+
+    TRACE("iface %p, shader %p.\n", iface, shader);
+
+    if (!(wined3d_shader = wined3d_device_get_vertex_shader(device->wined3d_device)))
+    {
+        *shader = NULL;
+        return;
+    }
+
+    shader_impl = wined3d_shader_get_parent(wined3d_shader);
+    *shader = &shader_impl->ID3D10VertexShader_iface;
+    ID3D10VertexShader_AddRef(*shader);
 }
 
 static void STDMETHODCALLTYPE d3d10_device_PSGetConstantBuffers(ID3D10Device *iface,
@@ -495,14 +537,55 @@ static void STDMETHODCALLTYPE d3d10_device_IAGetInputLayout(ID3D10Device *iface,
 static void STDMETHODCALLTYPE d3d10_device_IAGetVertexBuffers(ID3D10Device *iface,
         UINT start_slot, UINT buffer_count, ID3D10Buffer **buffers, UINT *strides, UINT *offsets)
 {
-    FIXME("iface %p, start_slot %u, buffer_count %u, buffers %p, strides %p, offsets %p stub!\n",
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+    unsigned int i;
+
+    TRACE("iface %p, start_slot %u, buffer_count %u, buffers %p, strides %p, offsets %p.\n",
             iface, start_slot, buffer_count, buffers, strides, offsets);
+
+    for (i = 0; i < buffer_count; ++i)
+    {
+        struct wined3d_buffer *wined3d_buffer;
+        struct d3d10_buffer *buffer_impl;
+
+        if (FAILED(wined3d_device_get_stream_source(device->wined3d_device, start_slot + i,
+                &wined3d_buffer, &offsets[i], &strides[i])))
+            ERR("Failed to get vertex buffer.\n");
+
+        if (!wined3d_buffer)
+        {
+            buffers[i] = NULL;
+            continue;
+        }
+
+        buffer_impl = wined3d_buffer_get_parent(wined3d_buffer);
+        buffers[i] = &buffer_impl->ID3D10Buffer_iface;
+        ID3D10Buffer_AddRef(buffers[i]);
+    }
 }
 
 static void STDMETHODCALLTYPE d3d10_device_IAGetIndexBuffer(ID3D10Device *iface,
         ID3D10Buffer **buffer, DXGI_FORMAT *format, UINT *offset)
 {
-    FIXME("iface %p, buffer %p, format %p, offset %p stub!\n", iface, buffer, format, offset);
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+    enum wined3d_format_id wined3d_format;
+    struct wined3d_buffer *wined3d_buffer;
+    struct d3d10_buffer *buffer_impl;
+
+    TRACE("iface %p, buffer %p, format %p, offset %p.\n", iface, buffer, format, offset);
+
+    wined3d_buffer = wined3d_device_get_index_buffer(device->wined3d_device, &wined3d_format);
+    *format = dxgi_format_from_wined3dformat(wined3d_format);
+    *offset = 0; /* FIXME */
+    if (!wined3d_buffer)
+    {
+        *buffer = NULL;
+        return;
+    }
+
+    buffer_impl = wined3d_buffer_get_parent(wined3d_buffer);
+    *buffer = &buffer_impl->ID3D10Buffer_iface;
+    ID3D10Buffer_AddRef(*buffer);
 }
 
 static void STDMETHODCALLTYPE d3d10_device_GSGetConstantBuffers(ID3D10Device *iface,
@@ -514,7 +597,21 @@ static void STDMETHODCALLTYPE d3d10_device_GSGetConstantBuffers(ID3D10Device *if
 
 static void STDMETHODCALLTYPE d3d10_device_GSGetShader(ID3D10Device *iface, ID3D10GeometryShader **shader)
 {
-    FIXME("iface %p, shader %p stub!\n", iface, shader);
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+    struct d3d10_geometry_shader *shader_impl;
+    struct wined3d_shader *wined3d_shader;
+
+    TRACE("iface %p, shader %p.\n", iface, shader);
+
+    if (!(wined3d_shader = wined3d_device_get_geometry_shader(device->wined3d_device)))
+    {
+        *shader = NULL;
+        return;
+    }
+
+    shader_impl = wined3d_shader_get_parent(wined3d_shader);
+    *shader = &shader_impl->ID3D10GeometryShader_iface;
+    ID3D10GeometryShader_AddRef(*shader);
 }
 
 static void STDMETHODCALLTYPE d3d10_device_IAGetPrimitiveTopology(ID3D10Device *iface,
@@ -645,7 +742,22 @@ static void STDMETHODCALLTYPE d3d10_device_RSGetViewports(ID3D10Device *iface,
 
 static void STDMETHODCALLTYPE d3d10_device_RSGetScissorRects(ID3D10Device *iface, UINT *rect_count, D3D10_RECT *rects)
 {
-    FIXME("iface %p, rect_count %p, rects %p stub!\n", iface, rect_count, rects);
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
+
+    TRACE("iface %p, rect_count %p, rects %p.\n", iface, rect_count, rects);
+
+    if (!rects)
+    {
+        *rect_count = 1;
+        return;
+    }
+
+    if (!*rect_count)
+        return;
+
+    wined3d_device_get_scissor_rect(device->wined3d_device, rects);
+    if (*rect_count > 1)
+        memset(&rects[1], 0, (*rect_count - 1) * sizeof(*rects));
 }
 
 static HRESULT STDMETHODCALLTYPE d3d10_device_GetDeviceRemovedReason(ID3D10Device *iface)

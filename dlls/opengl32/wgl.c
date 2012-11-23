@@ -47,8 +47,6 @@ static HMODULE opengl32_handle;
 
 extern struct opengl_funcs null_opengl_funcs;
 
-const GLubyte * WINAPI wine_glGetString( GLenum name );
-
 /* handle management */
 
 #define MAX_WGL_HANDLES 1024
@@ -691,7 +689,7 @@ static int compar(const void *elt_a, const void *elt_b) {
 static BOOL is_extension_supported(const char* extension)
 {
     const struct opengl_funcs *funcs = NtCurrentTeb()->glTable;
-    const char *gl_ext_string = (const char*)wine_glGetString(GL_EXTENSIONS);
+    const char *gl_ext_string = (const char*)glGetString(GL_EXTENSIONS);
 
     TRACE("Checking for extension '%s'\n", extension);
 
@@ -738,79 +736,50 @@ static BOOL is_extension_supported(const char* extension)
 /***********************************************************************
  *		wglGetProcAddress (OPENGL32.@)
  */
-PROC WINAPI wglGetProcAddress(LPCSTR lpszProc)
+PROC WINAPI wglGetProcAddress( LPCSTR name )
 {
-  struct opengl_funcs *funcs = NtCurrentTeb()->glTable;
-  void **func_ptr;
-  void *local_func;
-  OpenGL_extension  ext;
-  const OpenGL_extension *ext_ret;
-  struct wgl_handle *context = get_current_context_ptr();
+    struct opengl_funcs *funcs = NtCurrentTeb()->glTable;
+    void **func_ptr;
+    OpenGL_extension  ext;
+    const OpenGL_extension *ext_ret;
 
-  TRACE("(%s)\n", lpszProc);
+    if (!name) return NULL;
 
-  if (lpszProc == NULL)
-    return NULL;
-
-  /* Without an active context opengl32 doesn't know to what
-   * driver it has to dispatch wglGetProcAddress.
-   */
-  if (!context)
-  {
-    WARN("No active WGL context found\n");
-    return NULL;
-  }
-
-  /* Search in the thunks to find the real name of the extension */
-  ext.name = lpszProc;
-  ext_ret = bsearch(&ext, extension_registry, extension_registry_size,
-                    sizeof(OpenGL_extension), compar);
-  if (!ext_ret)
-  {
-      WARN("Extension '%s' not defined in opengl32.dll's function table!\n", lpszProc);
-      return NULL;
-  }
-
-  func_ptr = (void **)&funcs->ext + (ext_ret - extension_registry);
-  if (!*func_ptr)
-  {
-    /* Check if the GL extension required by the function is available */
-    if(!is_extension_supported(ext_ret->extension)) {
-        WARN("Extension '%s' required by function '%s' not supported!\n", ext_ret->extension, lpszProc);
+    /* Without an active context opengl32 doesn't know to what
+     * driver it has to dispatch wglGetProcAddress.
+     */
+    if (!get_current_context_ptr())
+    {
+        WARN("No active WGL context found\n");
+        return NULL;
     }
 
-    local_func = context->funcs->wgl.p_wglGetProcAddress( ext_ret->name );
-
-    /* After that, look at the extensions defined in the Linux OpenGL library */
-    if (local_func == NULL) {
-      char buf[256];
-      void *ret = NULL;
-
-      /* Remove the last 3 letters (EXT, ARB, ...).
-
-	 I know that some extensions have more than 3 letters (MESA, NV,
-	 INTEL, ...), but this is only a stop-gap measure to fix buggy
-	 OpenGL drivers (moreover, it is only useful for old 1.0 apps
-	 that query the glBindTextureEXT extension).
-      */
-      memcpy(buf, ext_ret->name, strlen(ext_ret->name) - 3);
-      buf[strlen(ext_ret->name) - 3] = '\0';
-      TRACE("Extension not found in the Linux OpenGL library, checking against libGL bug with %s..\n", buf);
-
-      ret = GetProcAddress(opengl32_handle, buf);
-      if (ret != NULL) {
-        TRACE("Found function in main OpenGL library (%p)!\n", ret);
-      } else {
-        WARN("Did not find function %s (%s) in your OpenGL library!\n", lpszProc, ext_ret->name);
-      }
-
-      return ret;
+    ext.name = name;
+    ext_ret = bsearch(&ext, extension_registry, extension_registry_size, sizeof(ext), compar);
+    if (!ext_ret)
+    {
+        WARN("Function %s unknown\n", name);
+        return NULL;
     }
-    *func_ptr = local_func;
-  }
 
-  TRACE("returning function (%p)\n", ext_ret->func);
-  return ext_ret->func;
+    func_ptr = (void **)&funcs->ext + (ext_ret - extension_registry);
+    if (!*func_ptr)
+    {
+        void *driver_func = funcs->wgl.p_wglGetProcAddress( name );
+
+        if (!is_extension_supported(ext_ret->extension))
+            WARN("Extension %s required for %s not supported\n", ext_ret->extension, name);
+
+        if (driver_func == NULL)
+        {
+            WARN("Function %s not supported by driver\n", name);
+            return NULL;
+        }
+        *func_ptr = driver_func;
+    }
+
+    TRACE("returning %s -> %p\n", name, ext_ret->func);
+    return ext_ret->func;
 }
 
 /***********************************************************************
@@ -1246,6 +1215,7 @@ typedef void (WINAPI *_GLUfuncptr)(void);
 
 static GLUtesselator * (WINAPI *pgluNewTess)(void);
 static void (WINAPI *pgluDeleteTess)(GLUtesselator *tess);
+static void (WINAPI *pgluTessNormal)(GLUtesselator *tess, GLdouble x, GLdouble y, GLdouble z);
 static void (WINAPI *pgluTessBeginPolygon)(GLUtesselator *tess, void *polygon_data);
 static void (WINAPI *pgluTessEndPolygon)(GLUtesselator *tess);
 static void (WINAPI *pgluTessCallback)(GLUtesselator *tess, GLenum which, _GLUfuncptr fn);
@@ -1273,6 +1243,7 @@ static HMODULE load_libglu(void)
     LOAD_FUNCPTR(gluNewTess);
     LOAD_FUNCPTR(gluDeleteTess);
     LOAD_FUNCPTR(gluTessBeginContour);
+    LOAD_FUNCPTR(gluTessNormal);
     LOAD_FUNCPTR(gluTessBeginPolygon);
     LOAD_FUNCPTR(gluTessCallback);
     LOAD_FUNCPTR(gluTessEndContour);
@@ -1473,9 +1444,13 @@ static BOOL wglUseFontOutlines_common(HDC hdc,
         }
 
         funcs->gl.p_glNewList(listBase++, GL_COMPILE);
-        funcs->gl.p_glFrontFace(GL_CW);
+        funcs->gl.p_glFrontFace(GL_CCW);
         if(format == WGL_FONT_POLYGONS)
+        {
+            funcs->gl.p_glNormal3d(0.0, 0.0, 1.0);
+            pgluTessNormal(tess, 0, 0, 1);
             pgluTessBeginPolygon(tess, NULL);
+        }
 
         while(!vertices)
         {
@@ -1653,7 +1628,7 @@ BOOL WINAPI wglUseFontOutlinesW(HDC hdc,
 /***********************************************************************
  *              glDebugEntry (OPENGL32.@)
  */
-GLint WINAPI wine_glDebugEntry( GLint unknown1, GLint unknown2 )
+GLint WINAPI glDebugEntry( GLint unknown1, GLint unknown2 )
 {
     return 0;
 }
@@ -1721,7 +1696,7 @@ static GLubyte *filter_extensions( const char *extensions )
 /***********************************************************************
  *              glGetString (OPENGL32.@)
  */
-const GLubyte * WINAPI wine_glGetString( GLenum name )
+const GLubyte * WINAPI glGetString( GLenum name )
 {
     const struct opengl_funcs *funcs = NtCurrentTeb()->glTable;
     const GLubyte *ret = funcs->gl.p_glGetString( name );

@@ -69,6 +69,7 @@ struct DirectSoundDevice
     DSCAPS                      drvcaps;
     DWORD                       priolevel, sleeptime;
     PWAVEFORMATEX               pwfx, primary_pwfx;
+    UINT                        timerID, playing_offs_bytes, in_mmdev_bytes, prebuf;
     LPBYTE                      buffer;
     DWORD                       writelead, buflen, aclen, fraglen, playpos, pad, stopped;
     int                         nrofbuffers;
@@ -203,6 +204,7 @@ HRESULT DSOUND_PrimaryPlay(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT DSOUND_PrimaryStop(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 LPWAVEFORMATEX DSOUND_CopyFormat(LPCWAVEFORMATEX wfex) DECLSPEC_HIDDEN;
 HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave) DECLSPEC_HIDDEN;
+HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT primarybuffer_create(DirectSoundDevice *device, IDirectSoundBufferImpl **ppdsb,
     const DSBUFFERDESC *dsbd) DECLSPEC_HIDDEN;
 void primarybuffer_destroy(IDirectSoundBufferImpl *This) DECLSPEC_HIDDEN;

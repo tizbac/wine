@@ -68,7 +68,7 @@ void WCMD_batch (WCHAR *file, WCHAR *command, BOOL called, WCHAR *startLabel, HA
   prev_context = context;
   context = LocalAlloc (LMEM_FIXED, sizeof (BATCH_CONTEXT));
   context -> h = h;
-  context->batchfileW = WCMD_strdupW(file);
+  context->batchfileW = heap_strdupW(file);
   context -> command = command;
   memset(context -> shift_count, 0x00, sizeof(context -> shift_count));
   context -> prev_context = prev_context;
@@ -110,7 +110,7 @@ void WCMD_batch (WCHAR *file, WCHAR *command, BOOL called, WCHAR *startLabel, HA
  *	to the caller's caller.
  */
 
-  HeapFree(GetProcessHeap(), 0, context->batchfileW);
+  heap_free(context->batchfileW);
   LocalFree (context);
   if ((prev_context != NULL) && (!called)) {
     WINE_TRACE("Batch completed, but was not 'called' so skipping outer batch too\n");
@@ -257,8 +257,7 @@ WCHAR *WCMD_fgets(WCHAR *buf, DWORD noChars, HANDLE h)
       const char *p;
 
       cp = GetConsoleCP();
-      bufA = HeapAlloc(GetProcessHeap(), 0, noChars);
-      if (!bufA) return NULL;
+      bufA = heap_alloc(noChars);
 
       /* Save current file position */
       filepos.QuadPart = 0;
@@ -266,7 +265,7 @@ WCHAR *WCMD_fgets(WCHAR *buf, DWORD noChars, HANDLE h)
 
       status = ReadFile(h, bufA, noChars, &charsRead, NULL);
       if (!status || charsRead == 0) {
-          HeapFree(GetProcessHeap(), 0, bufA);
+          heap_free(bufA);
           return NULL;
       }
 
@@ -281,7 +280,7 @@ WCHAR *WCMD_fgets(WCHAR *buf, DWORD noChars, HANDLE h)
       SetFilePointerEx(h, filepos, NULL, FILE_BEGIN);
 
       i = MultiByteToWideChar(cp, 0, bufA, p - bufA, buf, noChars);
-      HeapFree(GetProcessHeap(), 0, bufA);
+      heap_free(bufA);
   }
   else {
       status = WCMD_ReadFile(h, buf, noChars, &charsRead);

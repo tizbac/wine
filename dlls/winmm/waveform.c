@@ -379,6 +379,29 @@ static inline void WINMM_NotifyClient(WINMM_CBInfo *info, WORD msg, DWORD_PTR pa
         msg, info->user, param1, param2);
 }
 
+static MMRESULT hr2mmr(HRESULT hr)
+{
+    switch(hr){
+    case S_OK:
+    case AUDCLNT_E_NOT_STOPPED:
+        return MMSYSERR_NOERROR;
+    case AUDCLNT_E_UNSUPPORTED_FORMAT:
+        return WAVERR_BADFORMAT;
+    case AUDCLNT_E_DEVICE_IN_USE:
+        return MMSYSERR_ALLOCATED;
+    case AUDCLNT_E_ENDPOINT_CREATE_FAILED:
+        return MMSYSERR_NOTENABLED;
+    case E_OUTOFMEMORY:
+        return MMSYSERR_NOMEM;
+    case E_POINTER:
+    case E_INVALIDARG:
+        return MMSYSERR_INVALPARAM;
+    case AUDCLNT_E_DEVICE_INVALIDATED: /* DSERR_BUFFERLOST */
+    default:
+        return FAILED(hr) ? MMSYSERR_ERROR : MMSYSERR_NOERROR;
+    }
+}
+
 static HRESULT WINMM_GetFriendlyName(IMMDevice *device, WCHAR *out,
         UINT outlen)
 {
@@ -897,8 +920,8 @@ static MMRESULT WINMM_MapDevice(WINMM_OpenInfo *info, BOOL is_out)
 static LRESULT WINMM_OpenDevice(WINMM_Device *device, WINMM_MMDevice *mmdevice,
         WINMM_OpenInfo *info)
 {
-    WAVEFORMATEX *closer_fmt = NULL, fmt, *passed_fmt;
-    LRESULT ret = MMSYSERR_ERROR;
+    WAVEFORMATEX fmt, *passed_fmt;
+    LRESULT ret = MMSYSERR_NOMEM;
     HRESULT hr;
 
     hr = IMMDeviceEnumerator_GetDevice(g_devenum, mmdevice->dev_id,
@@ -907,13 +930,18 @@ static LRESULT WINMM_OpenDevice(WINMM_Device *device, WINMM_MMDevice *mmdevice,
         WARN("Device %s (%s) unavailable: %08x\n",
                 wine_dbgstr_w(mmdevice->dev_id),
                 wine_dbgstr_w(mmdevice->out_caps.szPname), hr);
+        ret = MMSYSERR_NODRIVER;
         goto error;
     }
 
+    /* this is where winexyz.drv opens the audio device */
     hr = IMMDevice_Activate(device->device, &IID_IAudioClient,
             CLSCTX_INPROC_SERVER, NULL, (void**)&device->client);
     if(FAILED(hr)){
         WARN("Activate failed: %08x\n", hr);
+        ret = hr2mmr(hr);
+        if(ret == MMSYSERR_ERROR)
+            ret = MMSYSERR_NOTENABLED;
         goto error;
     }
 
@@ -939,20 +967,14 @@ static LRESULT WINMM_OpenDevice(WINMM_Device *device, WINMM_MMDevice *mmdevice,
     }else
         passed_fmt = info->format;
 
-    hr = IAudioClient_IsFormatSupported(device->client,
-            AUDCLNT_SHAREMODE_SHARED, passed_fmt, &closer_fmt);
-    if(closer_fmt)
-        CoTaskMemFree(closer_fmt);
-    if(FAILED(hr) && hr != AUDCLNT_E_UNSUPPORTED_FORMAT){
-        WARN("IsFormatSupported failed: %08x\n", hr);
-        goto error;
-    }
-    if(hr == S_FALSE || hr == AUDCLNT_E_UNSUPPORTED_FORMAT){
-        ret = WAVERR_BADFORMAT;
-        goto error;
-    }
     if(info->flags & WAVE_FORMAT_QUERY){
-        ret = MMSYSERR_NOERROR;
+        WAVEFORMATEX *closer_fmt = NULL;
+
+        hr = IAudioClient_IsFormatSupported(device->client,
+                AUDCLNT_SHAREMODE_SHARED, passed_fmt, &closer_fmt);
+        if(closer_fmt)
+            CoTaskMemFree(closer_fmt);
+        ret = hr == S_FALSE ? WAVERR_BADFORMAT : hr2mmr(hr);
         goto error;
     }
 
@@ -961,7 +983,9 @@ static LRESULT WINMM_OpenDevice(WINMM_Device *device, WINMM_MMDevice *mmdevice,
             AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_NOPERSIST,
             10 * 100000, 50000, passed_fmt, &device->parent->session);
     if(FAILED(hr)){
-        WARN("Initialize failed: %08x\n", hr);
+        if(hr != AUDCLNT_E_UNSUPPORTED_FORMAT)
+            WARN("Initialize failed: %08x\n", hr);
+        ret = hr2mmr(hr);
         goto error;
     }
 
@@ -1038,7 +1062,7 @@ static LRESULT WOD_Open(WINMM_OpenInfo *info)
 {
     WINMM_MMDevice *mmdevice;
     WINMM_Device *device = NULL;
-    LRESULT ret = MMSYSERR_ERROR;
+    LRESULT ret;
     HRESULT hr;
 
     TRACE("(%u, %p, %08x)\n", info->req_device, info, info->flags);
@@ -1111,7 +1135,7 @@ static LRESULT WID_Open(WINMM_OpenInfo *info)
 {
     WINMM_MMDevice *mmdevice;
     WINMM_Device *device = NULL;
-    LRESULT ret = MMSYSERR_ERROR;
+    LRESULT ret;
     HRESULT hr;
 
     TRACE("(%u, %p, %08x)\n", info->req_device, info, info->flags);
@@ -1702,7 +1726,7 @@ exit:
     }
 }
 
-static HRESULT WINMM_BeginPlaying(WINMM_Device *device)
+static MMRESULT WINMM_BeginPlaying(WINMM_Device *device)
 {
     HRESULT hr;
 
@@ -1719,11 +1743,11 @@ static HRESULT WINMM_BeginPlaying(WINMM_Device *device)
         if(FAILED(hr) && hr != AUDCLNT_E_NOT_STOPPED){
             device->stopped = TRUE;
             WARN("Start failed: %08x\n", hr);
-            return hr;
+            return MMSYSERR_ERROR;
         }
     }
 
-    return S_OK;
+    return MMSYSERR_NOERROR;
 }
 
 static LRESULT WINMM_Pause(HWAVE hwave)
@@ -2378,7 +2402,7 @@ UINT WINAPI waveOutGetDevCapsW(UINT_PTR uDeviceID, LPWAVEOUTCAPSW lpCaps,
 
     hr = WINMM_InitMMDevices();
     if(FAILED(hr))
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if (lpCaps == NULL)	return MMSYSERR_INVALPARAM;
 
@@ -2474,7 +2498,7 @@ MMRESULT WINAPI waveOutOpen(LPHWAVEOUT lphWaveOut, UINT uDeviceID,
             dwCallback, dwInstance, dwFlags);
 
     if(!WINMM_StartDevicesThread())
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if(!lphWaveOut && !(dwFlags & WAVE_FORMAT_QUERY))
         return MMSYSERR_INVALPARAM;
@@ -2577,7 +2601,7 @@ UINT WINAPI waveOutUnprepareHeader(HWAVEOUT hWaveOut,
 UINT WINAPI waveOutWrite(HWAVEOUT hWaveOut, WAVEHDR *header, UINT uSize)
 {
     WINMM_Device *device;
-    HRESULT hr;
+    MMRESULT mr;
 
     TRACE("(%p, %p, %u)\n", hWaveOut, header, uSize);
 
@@ -2598,7 +2622,6 @@ UINT WINAPI waveOutWrite(HWAVEOUT hWaveOut, WAVEHDR *header, UINT uSize)
 
     if(device->acm_handle){
         ACMSTREAMHEADER *ash = (ACMSTREAMHEADER*)header->reserved;
-        MMRESULT mr;
 
         ash->cbSrcLength = header->dwBufferLength;
         mr = acmStreamConvert(device->acm_handle, ash, 0);
@@ -2625,15 +2648,11 @@ UINT WINAPI waveOutWrite(HWAVEOUT hWaveOut, WAVEHDR *header, UINT uSize)
     header->dwFlags &= ~WHDR_DONE;
     header->dwFlags |= WHDR_INQUEUE;
 
-    hr = WINMM_BeginPlaying(device);
-    if(FAILED(hr)){
-        LeaveCriticalSection(&device->lock);
-        return MMSYSERR_ERROR;
-    }
+    mr = WINMM_BeginPlaying(device);
 
     LeaveCriticalSection(&device->lock);
 
-    return MMSYSERR_NOERROR;
+    return mr;
 }
 
 /**************************************************************************
@@ -2683,7 +2702,7 @@ UINT WINAPI waveOutReset(HWAVEOUT hWaveOut)
 UINT WINAPI waveOutRestart(HWAVEOUT hWaveOut)
 {
     WINMM_Device *device;
-    HRESULT hr;
+    MMRESULT mr;
 
     TRACE("(%p)\n", hWaveOut);
 
@@ -2694,15 +2713,11 @@ UINT WINAPI waveOutRestart(HWAVEOUT hWaveOut)
 
     device->stopped = TRUE;
 
-    hr = WINMM_BeginPlaying(device);
-    if(FAILED(hr)){
-        LeaveCriticalSection(&device->lock);
-        return MMSYSERR_ERROR;
-    }
+    mr = WINMM_BeginPlaying(device);
 
     LeaveCriticalSection(&device->lock);
 
-    return MMSYSERR_NOERROR;
+    return mr;
 }
 
 /**************************************************************************
@@ -2948,7 +2963,7 @@ static UINT get_device_interface(UINT msg, BOOL is_out, UINT index, WCHAR *out, 
     WINMM_QueryInterfaceInfo info;
 
     if(!WINMM_StartDevicesThread())
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     info.is_out = is_out;
     info.index = index;
@@ -3030,7 +3045,7 @@ UINT WINAPI waveInGetDevCapsW(UINT_PTR uDeviceID, LPWAVEINCAPSW lpCaps, UINT uSi
 
     hr = WINMM_InitMMDevices();
     if(FAILED(hr))
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if(!lpCaps)
         return MMSYSERR_INVALPARAM;
@@ -3105,7 +3120,7 @@ MMRESULT WINAPI waveInOpen(HWAVEIN* lphWaveIn, UINT uDeviceID,
             dwCallback, dwInstance, dwFlags);
 
     if(!WINMM_StartDevicesThread())
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if(!lphWaveIn && !(dwFlags & WAVE_FORMAT_QUERY))
         return MMSYSERR_INVALPARAM;
@@ -3255,7 +3270,7 @@ UINT WINAPI waveInReset(HWAVEIN hWaveIn)
 UINT WINAPI waveInStart(HWAVEIN hWaveIn)
 {
     WINMM_Device *device;
-    HRESULT hr;
+    MMRESULT mr;
 
     TRACE("(%p)\n", hWaveIn);
 
@@ -3264,15 +3279,11 @@ UINT WINAPI waveInStart(HWAVEIN hWaveIn)
     if(!WINMM_ValidateAndLock(device))
         return MMSYSERR_INVALHANDLE;
 
-    hr = WINMM_BeginPlaying(device);
-    if(FAILED(hr)){
-        LeaveCriticalSection(&device->lock);
-        return MMSYSERR_ERROR;
-    }
+    mr = WINMM_BeginPlaying(device);
 
     LeaveCriticalSection(&device->lock);
 
-    return MMSYSERR_NOERROR;
+    return mr;
 }
 
 /**************************************************************************
@@ -3458,7 +3469,7 @@ UINT WINAPI mixerGetDevCapsW(UINT_PTR uDeviceID, LPMIXERCAPSW lpCaps, UINT uSize
 
     hr = WINMM_InitMMDevices();
     if(FAILED(hr))
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if(!lpCaps)
         return MMSYSERR_INVALPARAM;
@@ -3503,7 +3514,7 @@ UINT WINAPI mixerOpen(LPHMIXER lphMix, UINT uDeviceID, DWORD_PTR dwCallback,
 
     hr = WINMM_InitMMDevices();
     if(FAILED(hr))
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if(!lphMix)
         return MMSYSERR_INVALPARAM;
@@ -3552,7 +3563,7 @@ UINT WINAPI mixerGetID(HMIXEROBJ hmix, LPUINT lpid, DWORD fdwID)
 
     hr = WINMM_InitMMDevices();
     if(FAILED(hr))
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if(!lpid)
         return MMSYSERR_INVALPARAM;
@@ -3580,7 +3591,7 @@ UINT WINAPI mixerGetControlDetailsW(HMIXEROBJ hmix, LPMIXERCONTROLDETAILS lpmcdW
 
     hr = WINMM_InitMMDevices();
     if(FAILED(hr))
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if(!lpmcdW)
         return MMSYSERR_INVALPARAM;
@@ -3767,7 +3778,7 @@ UINT WINAPI mixerGetLineControlsW(HMIXEROBJ hmix, LPMIXERLINECONTROLSW lpmlcW,
 
     hr = WINMM_InitMMDevices();
     if(FAILED(hr))
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if(fdwControls & ~(MIXER_GETLINECONTROLSF_ALL |
                 MIXER_GETLINECONTROLSF_ONEBYID |
@@ -3985,7 +3996,7 @@ UINT WINAPI mixerGetLineInfoW(HMIXEROBJ hmix, LPMIXERLINEW lpmliW, DWORD fdwInfo
 
     hr = WINMM_InitMMDevices();
     if(FAILED(hr))
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if(!lpmliW || lpmliW->cbStruct < sizeof(MIXERLINEW))
         return MMSYSERR_INVALPARAM;
@@ -4111,7 +4122,7 @@ UINT WINAPI mixerSetControlDetails(HMIXEROBJ hmix, LPMIXERCONTROLDETAILS lpmcd,
     TRACE("(%p, %p, %x)\n", hmix, lpmcd, fdwDetails);
 
     if(!WINMM_StartDevicesThread())
-        return MMSYSERR_ERROR;
+        return MMSYSERR_NODRIVER;
 
     if((fdwDetails & MIXER_SETCONTROLDETAILSF_QUERYMASK) ==
             MIXER_SETCONTROLDETAILSF_CUSTOM)

@@ -248,17 +248,48 @@ void server_release(server_t *server)
     if(server->cert_chain)
         CertFreeCertificateChain(server->cert_chain);
     heap_free(server->name);
+    heap_free(server->scheme_host_port);
     heap_free(server);
 }
 
-server_t *get_server(const WCHAR *name, INTERNET_PORT port, BOOL do_create)
+static BOOL process_host_port(server_t *server)
+{
+    BOOL default_port;
+    size_t name_len;
+    WCHAR *buf;
+
+    static const WCHAR httpW[] = {'h','t','t','p',0};
+    static const WCHAR httpsW[] = {'h','t','t','p','s',0};
+    static const WCHAR formatW[] = {'%','s',':','/','/','%','s',':','%','u',0};
+
+    name_len = strlenW(server->name);
+    buf = heap_alloc((name_len + 10 /* strlen("://:<port>") */)*sizeof(WCHAR) + sizeof(httpsW));
+    if(!buf)
+        return FALSE;
+
+    sprintfW(buf, formatW, server->is_https ? httpsW : httpW, server->name, server->port);
+    server->scheme_host_port = buf;
+
+    server->host_port = server->scheme_host_port + 7 /* strlen("http://") */;
+    if(server->is_https)
+        server->host_port++;
+
+    default_port = server->port == (server->is_https ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT);
+    server->canon_host_port = default_port ? server->name : server->host_port;
+    return TRUE;
+}
+
+server_t *get_server(const WCHAR *name, INTERNET_PORT port, BOOL is_https, BOOL do_create)
 {
     server_t *iter, *server = NULL;
+
+    if(port == INTERNET_INVALID_PORT_NUMBER)
+        port = is_https ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT;
 
     EnterCriticalSection(&connection_pool_cs);
 
     LIST_FOR_EACH_ENTRY(iter, &connection_pool, server_t, entry) {
-        if(iter->port == port && !strcmpW(iter->name, name)) {
+        if(iter->port == port && !strcmpW(iter->name, name) && iter->is_https == is_https) {
             server = iter;
             server_addref(server);
             break;
@@ -270,9 +301,10 @@ server_t *get_server(const WCHAR *name, INTERNET_PORT port, BOOL do_create)
         if(server) {
             server->ref = 2; /* list reference and return */
             server->port = port;
+            server->is_https = is_https;
             list_init(&server->conn_pool);
             server->name = heap_strdupW(name);
-            if(server->name) {
+            if(server->name && process_host_port(server)) {
                 list_add_head(&connection_pool, &server->entry);
             }else {
                 heap_free(server);
@@ -1647,41 +1679,25 @@ static BOOL HTTP_InsertAuthorization( http_request_t *request, struct HttpAuthIn
     return TRUE;
 }
 
-static WCHAR *HTTP_BuildProxyRequestUrl(http_request_t *req)
+static WCHAR *build_proxy_path_url(http_request_t *req)
 {
-    static const WCHAR slash[] = { '/',0 };
-    static const WCHAR format[] = { 'h','t','t','p',':','/','/','%','s',':','%','u',0 };
-    static const WCHAR formatSSL[] = { 'h','t','t','p','s',':','/','/','%','s',':','%','u',0 };
-    http_session_t *session = req->session;
-    WCHAR new_location[INTERNET_MAX_URL_LENGTH], *url;
-    DWORD size;
+    DWORD size, len;
+    WCHAR *url;
 
-    size = sizeof(new_location);
-    if (HTTP_HttpQueryInfoW(req, HTTP_QUERY_LOCATION, new_location, &size, NULL) == ERROR_SUCCESS)
-    {
-        URL_COMPONENTSW UrlComponents;
+    len = strlenW(req->server->scheme_host_port);
+    size = len + strlenW(req->path) + 1;
+    if(*req->path != '/')
+        size++;
+    url = heap_alloc(size * sizeof(WCHAR));
+    if(!url)
+        return NULL;
 
-        if (!(url = heap_alloc(size + sizeof(WCHAR)))) return NULL;
-        strcpyW( url, new_location );
+    memcpy(url, req->server->scheme_host_port, len*sizeof(WCHAR));
+    if(*req->path != '/')
+        url[len++] = '/';
 
-        ZeroMemory(&UrlComponents,sizeof(URL_COMPONENTSW));
-        if(InternetCrackUrlW(url, 0, 0, &UrlComponents)) goto done;
-        heap_free(url);
-    }
+    strcpyW(url+len, req->path);
 
-    size = 16; /* "https://" + sizeof(port#) + ":/\0" */
-    size += strlenW( session->hostName ) + strlenW( req->path );
-
-    if (!(url = heap_alloc(size * sizeof(WCHAR)))) return NULL;
-
-    if (req->hdr.dwFlags & INTERNET_FLAG_SECURE)
-        sprintfW( url, formatSSL, session->hostName, session->hostPort );
-    else
-        sprintfW( url, format, session->hostName, session->hostPort );
-    if (req->path[0] != '/') strcatW( url, slash );
-    strcatW( url, req->path );
-
-done:
     TRACE("url=%s\n", debugstr_w(url));
     return url;
 }
@@ -1722,15 +1738,11 @@ static BOOL HTTP_DealWithProxy(appinfo_t *hIC, http_session_t *session, http_req
     if( !request->path )
         request->path = szNul;
 
-    if(UrlComponents.nPort == INTERNET_INVALID_PORT_NUMBER)
-        UrlComponents.nPort = INTERNET_DEFAULT_HTTP_PORT;
-
-    new_server = get_server(UrlComponents.lpszHostName, UrlComponents.nPort, TRUE);
+    new_server = get_server(UrlComponents.lpszHostName, UrlComponents.nPort, UrlComponents.nScheme == INTERNET_SCHEME_HTTPS, TRUE);
     if(!new_server)
         return FALSE;
 
-    server_release(request->server);
-    request->server = new_server;
+    request->proxy = new_server;
 
     TRACE("proxy server=%s port=%d\n", debugstr_w(new_server->name), new_server->port);
     return TRUE;
@@ -1738,7 +1750,7 @@ static BOOL HTTP_DealWithProxy(appinfo_t *hIC, http_session_t *session, http_req
 
 static DWORD HTTP_ResolveName(http_request_t *request)
 {
-    server_t *server = request->server;
+    server_t *server = request->proxy ? request->proxy : request->server;
     socklen_t addr_len;
     void *addr;
 
@@ -1829,6 +1841,8 @@ static void HTTPREQ_Destroy(object_header_t *hdr)
 
     if(request->server)
         server_release(request->server);
+    if(request->proxy)
+        server_release(request->proxy);
 
     heap_free(request->path);
     heap_free(request->verb);
@@ -1936,7 +1950,6 @@ static DWORD HTTPREQ_QueryOption(object_header_t *hdr, DWORD option, void *buffe
     switch(option) {
     case INTERNET_OPTION_DIAGNOSTIC_SOCKET_INFO:
     {
-        http_session_t *session = req->session;
         INTERNET_DIAGNOSTIC_SOCKET_INFO *info = buffer;
 
         FIXME("INTERNET_DIAGNOSTIC_SOCKET_INFO stub\n");
@@ -1950,11 +1963,11 @@ static DWORD HTTPREQ_QueryOption(object_header_t *hdr, DWORD option, void *buffe
         info->Socket = 0;
         /* FIXME: get source port from req->netConnection */
         info->SourcePort = 0;
-        info->DestPort = session->hostPort;
+        info->DestPort = req->server->port;
         info->Flags = 0;
         if (HTTP_KeepAlive(req))
             info->Flags |= IDSI_FLAG_KEEP_ALIVE;
-        if (session->appInfo->proxy && session->appInfo->proxy[0] != 0)
+        if (req->proxy)
             info->Flags |= IDSI_FLAG_PROXY;
         if (req->netconn->useSSL)
             info->Flags |= IDSI_FLAG_SECURE;
@@ -2145,7 +2158,7 @@ static DWORD HTTPREQ_QueryOption(object_header_t *hdr, DWORD option, void *buffe
          * INTERNET_REQFLAG_CACHE_WRITE_DISABLED
          */
 
-        if(req->session->appInfo->proxy)
+        if(req->proxy)
             flags |= INTERNET_REQFLAG_VIA_PROXY;
         if(!req->rawHeaders)
             flags |= INTERNET_REQFLAG_NO_HEADERS;
@@ -3162,7 +3175,6 @@ static DWORD HTTP_HttpOpenRequestW(http_session_t *session,
 {
     appinfo_t *hIC = session->appInfo;
     http_request_t *request;
-    INTERNET_PORT port;
     DWORD len, res = ERROR_SUCCESS;
 
     TRACE("-->\n");
@@ -3189,11 +3201,7 @@ static DWORD HTTP_HttpOpenRequestW(http_session_t *session,
     request->session = session;
     list_add_head( &session->hdr.children, &request->hdr.entry );
 
-    port = session->hostPort;
-    if(port == INTERNET_INVALID_PORT_NUMBER)
-        port = dwFlags & INTERNET_FLAG_SECURE ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT;
-
-    request->server = get_server(session->hostName, port, TRUE);
+    request->server = get_server(session->hostName, session->hostPort, (dwFlags & INTERNET_FLAG_SECURE) != 0, TRUE);
     if(!request->server) {
         WININET_Release(&request->hdr);
         return ERROR_OUTOFMEMORY;
@@ -3244,27 +3252,7 @@ static DWORD HTTP_HttpOpenRequestW(http_session_t *session,
     request->verb = heap_strdupW(lpszVerb && *lpszVerb ? lpszVerb : szGET);
     request->version = heap_strdupW(lpszVersion ? lpszVersion : g_szHttp1_1);
 
-    if (session->hostPort != INTERNET_INVALID_PORT_NUMBER &&
-        session->hostPort != INTERNET_DEFAULT_HTTP_PORT &&
-        session->hostPort != INTERNET_DEFAULT_HTTPS_PORT)
-    {
-        WCHAR *host_name;
-
-        static const WCHAR host_formatW[] = {'%','s',':','%','u',0};
-
-        host_name = heap_alloc((strlenW(session->hostName) + 7 /* length of ":65535" + 1 */) * sizeof(WCHAR));
-        if (!host_name) {
-            res = ERROR_OUTOFMEMORY;
-            goto lend;
-        }
-
-        sprintfW(host_name, host_formatW, session->hostName, session->hostPort);
-        HTTP_ProcessHeader(request, hostW, host_name, HTTP_ADDREQ_FLAG_ADD | HTTP_ADDHDR_FLAG_REQ);
-        heap_free(host_name);
-    }
-    else
-        HTTP_ProcessHeader(request, hostW, session->hostName,
-                HTTP_ADDREQ_FLAG_ADD | HTTP_ADDHDR_FLAG_REQ);
+    HTTP_ProcessHeader(request, hostW, request->server->canon_host_port, HTTP_ADDREQ_FLAG_ADD | HTTP_ADDHDR_FLAG_REQ);
 
     if (session->hostPort == INTERNET_INVALID_PORT_NUMBER)
         session->hostPort = (dwFlags & INTERNET_FLAG_SECURE ?
@@ -3278,7 +3266,6 @@ static DWORD HTTP_HttpOpenRequestW(http_session_t *session,
                           INTERNET_STATUS_HANDLE_CREATED, &request->hdr.hInternet,
                           sizeof(HINTERNET));
 
-lend:
     TRACE("<-- %u (%p)\n", res, request);
 
     if(res != ERROR_SUCCESS) {
@@ -3933,8 +3920,6 @@ static LPWSTR HTTP_GetRedirectURL(http_request_t *request, LPCWSTR lpszUrl)
 static DWORD HTTP_HandleRedirect(http_request_t *request, LPCWSTR lpszUrl)
 {
     http_session_t *session = request->session;
-    appinfo_t *hIC = session->appInfo;
-    BOOL using_proxy = hIC->proxy && hIC->proxy[0];
     WCHAR path[INTERNET_MAX_PATH_LENGTH];
     int index;
 
@@ -4020,10 +4005,10 @@ static DWORD HTTP_HandleRedirect(http_request_t *request, LPCWSTR lpszUrl)
 
         reset_data_stream(request);
 
-        if(!using_proxy && (strcmpiW(request->server->name, hostName) || request->server->port != urlComponents.nPort)) {
+        if(strcmpiW(request->server->name, hostName) || request->server->port != urlComponents.nPort) {
             server_t *new_server;
 
-            new_server = get_server(hostName, urlComponents.nPort, TRUE);
+            new_server = get_server(hostName, urlComponents.nPort, urlComponents.nScheme == INTERNET_SCHEME_HTTPS, TRUE);
             server_release(request->server);
             request->server = new_server;
         }
@@ -4084,23 +4069,19 @@ static LPWSTR HTTP_build_req( LPCWSTR *list, int len )
 
 static DWORD HTTP_SecureProxyConnect(http_request_t *request)
 {
-    LPWSTR lpszPath;
+    server_t *server = request->server;
     LPWSTR requestString;
     INT len;
     INT cnt;
     INT responseLen;
     char *ascii_req;
     DWORD res;
-    static const WCHAR szConnect[] = {'C','O','N','N','E','C','T',0};
-    static const WCHAR szFormat[] = {'%','s',':','%','u',0};
-    http_session_t *session = request->session;
+
+    static const WCHAR connectW[] = {'C','O','N','N','E','C','T',0};
 
     TRACE("\n");
 
-    lpszPath = heap_alloc((lstrlenW( session->hostName ) + 13)*sizeof(WCHAR));
-    sprintfW( lpszPath, szFormat, session->hostName, session->hostPort );
-    requestString = HTTP_BuildHeaderRequestString( request, szConnect, lpszPath, g_szHttp1_1 );
-    heap_free( lpszPath );
+    requestString = HTTP_BuildHeaderRequestString( request, connectW, server->host_port, g_szHttp1_1 );
 
     len = WideCharToMultiByte( CP_ACP, 0, requestString, -1,
                                 NULL, 0, NULL, NULL );
@@ -4712,12 +4693,15 @@ static DWORD open_http_connection(http_request_t *request, BOOL *reusing)
         return ERROR_SUCCESS;
     }
 
+    TRACE("connecting to %s, proxy %s\n", debugstr_w(request->server->name),
+          request->proxy ? debugstr_w(request->proxy->name) : "(null)");
+
     INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                           INTERNET_STATUS_CONNECTING_TO_SERVER,
                           request->server->addr_str,
                           strlen(request->server->addr_str)+1);
 
-    res = create_netconn(is_https, request->server, request->security_flags,
+    res = create_netconn(is_https, request->proxy ? request->proxy : request->server, request->security_flags,
                          (request->hdr.ErrorMask & INTERNET_ERROR_MASK_COMBINED_SEC_CERT) != 0,
                          request->connect_timeout, &netconn);
     if(res != ERROR_SUCCESS) {
@@ -4738,10 +4722,10 @@ static DWORD open_http_connection(http_request_t *request, BOOL *reusing)
          * behaviour to be more correct and to not cause any incompatibilities
          * because using a secure connection through a proxy server is a rare
          * case that would be hard for anyone to depend on */
-        if(request->session->appInfo->proxy)
+        if(request->proxy)
             res = HTTP_SecureProxyConnect(request);
         if(res == ERROR_SUCCESS)
-            res = NETCON_secure_connect(request->netconn);
+            res = NETCON_secure_connect(request->netconn, request->server);
     }
 
     if(res != ERROR_SUCCESS) {
@@ -4853,9 +4837,9 @@ static DWORD HTTP_HttpSendRequestW(http_request_t *request, LPCWSTR lpszHeaders,
         if (!(request->hdr.dwFlags & INTERNET_FLAG_NO_COOKIES))
             HTTP_InsertCookies(request);
 
-        if (request->session->appInfo->proxy && request->session->appInfo->proxy[0])
+        if (request->proxy)
         {
-            WCHAR *url = HTTP_BuildProxyRequestUrl(request);
+            WCHAR *url = build_proxy_path_url(request);
             requestString = HTTP_BuildHeaderRequestString(request, request->verb, url, request->version);
             heap_free(url);
         }

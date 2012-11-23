@@ -65,7 +65,7 @@ const struct wined3d_matrix identity =
 
 /* Note that except for WINED3DPT_POINTLIST and WINED3DPT_LINELIST these
  * actually have the same values in GL and D3D. */
-static GLenum gl_primitive_type_from_d3d(enum wined3d_primitive_type primitive_type)
+GLenum gl_primitive_type_from_d3d(enum wined3d_primitive_type primitive_type)
 {
     switch(primitive_type)
     {
@@ -2236,10 +2236,12 @@ void CDECL wined3d_device_set_index_buffer(struct wined3d_device *device,
     }
 }
 
-struct wined3d_buffer * CDECL wined3d_device_get_index_buffer(const struct wined3d_device *device)
+struct wined3d_buffer * CDECL wined3d_device_get_index_buffer(const struct wined3d_device *device,
+        enum wined3d_format_id *format)
 {
-    TRACE("device %p.\n", device);
+    TRACE("device %p, format %p.\n", device, format);
 
+    *format = device->stateBlock->state.index_format;
     return device->stateBlock->state.index_buffer;
 }
 
@@ -2991,6 +2993,32 @@ HRESULT CDECL wined3d_device_get_ps_consts_f(const struct wined3d_device *device
     memcpy(constants, &device->stateBlock->state.ps_consts_f[start_register * 4], count * sizeof(float) * 4);
 
     return WINED3D_OK;
+}
+
+void CDECL wined3d_device_set_geometry_shader(struct wined3d_device *device, struct wined3d_shader *shader)
+{
+    struct wined3d_shader *prev = device->updateStateBlock->state.geometry_shader;
+
+    TRACE("device %p, shader %p.\n", device, shader);
+
+    if (shader)
+        wined3d_shader_incref(shader);
+    if (prev)
+        wined3d_shader_decref(prev);
+
+    device->updateStateBlock->state.geometry_shader = shader;
+
+    if (device->isRecordingState || shader == prev)
+        return;
+
+    device_invalidate_state(device, STATE_GEOMETRY_SHADER);
+}
+
+struct wined3d_shader * CDECL wined3d_device_get_geometry_shader(const struct wined3d_device *device)
+{
+    TRACE("device %p.\n", device);
+
+    return device->stateBlock->state.geometry_shader;
 }
 
 /* Context activation is done by the caller. */
@@ -4505,13 +4533,6 @@ HRESULT CDECL wined3d_device_set_render_target(struct wined3d_device *device,
         return WINED3DERR_INVALIDCALL;
     }
 
-    prev = device->fb.render_targets[render_target_idx];
-    if (render_target == prev)
-    {
-        TRACE("Trying to do a NOP SetRenderTarget operation.\n");
-        return WINED3D_OK;
-    }
-
     /* Render target 0 can't be set to NULL. */
     if (!render_target && !render_target_idx)
     {
@@ -4525,6 +4546,33 @@ HRESULT CDECL wined3d_device_set_render_target(struct wined3d_device *device,
         return WINED3DERR_INVALIDCALL;
     }
 
+    /* Set the viewport and scissor rectangles, if requested. Tests show that
+     * stateblock recording is ignored, the change goes directly into the
+     * primary stateblock. */
+    if (!render_target_idx && set_viewport)
+    {
+        struct wined3d_state *state = &device->stateBlock->state;
+
+        state->viewport.x = 0;
+        state->viewport.y = 0;
+        state->viewport.width = render_target->resource.width;
+        state->viewport.height = render_target->resource.height;
+        state->viewport.min_z = 0.0f;
+        state->viewport.max_z = 1.0f;
+        device_invalidate_state(device, STATE_VIEWPORT);
+
+        state->scissor_rect.top = 0;
+        state->scissor_rect.left = 0;
+        state->scissor_rect.right = render_target->resource.width;
+        state->scissor_rect.bottom = render_target->resource.height;
+        device_invalidate_state(device, STATE_SCISSORRECT);
+    }
+
+
+    prev = device->fb.render_targets[render_target_idx];
+    if (render_target == prev)
+        return WINED3D_OK;
+
     if (render_target)
         wined3d_surface_incref(render_target);
     device->fb.render_targets[render_target_idx] = render_target;
@@ -4532,27 +4580,6 @@ HRESULT CDECL wined3d_device_set_render_target(struct wined3d_device *device,
      * from seeing the surface as still in use. */
     if (prev)
         wined3d_surface_decref(prev);
-
-    /* Render target 0 is special. */
-    if (!render_target_idx && set_viewport)
-    {
-        /* Set the viewport and scissor rectangles, if requested. Tests show
-         * that stateblock recording is ignored, the change goes directly
-         * into the primary stateblock. */
-        device->stateBlock->state.viewport.height = device->fb.render_targets[0]->resource.height;
-        device->stateBlock->state.viewport.width  = device->fb.render_targets[0]->resource.width;
-        device->stateBlock->state.viewport.x      = 0;
-        device->stateBlock->state.viewport.y      = 0;
-        device->stateBlock->state.viewport.max_z  = 1.0f;
-        device->stateBlock->state.viewport.min_z  = 0.0f;
-        device_invalidate_state(device, STATE_VIEWPORT);
-
-        device->stateBlock->state.scissor_rect.top = 0;
-        device->stateBlock->state.scissor_rect.left = 0;
-        device->stateBlock->state.scissor_rect.right = device->stateBlock->state.viewport.width;
-        device->stateBlock->state.scissor_rect.bottom = device->stateBlock->state.viewport.height;
-        device_invalidate_state(device, STATE_SCISSORRECT);
-    }
 
     device_invalidate_state(device, STATE_FRAMEBUFFER);
 
@@ -4949,15 +4976,15 @@ static HRESULT create_primary_opengl_context(struct wined3d_device *device, stru
 /* Do not call while under the GL lock. */
 HRESULT CDECL wined3d_device_reset(struct wined3d_device *device,
         const struct wined3d_swapchain_desc *swapchain_desc, const struct wined3d_display_mode *mode,
-        wined3d_device_reset_cb callback)
+        wined3d_device_reset_cb callback, BOOL reset_state)
 {
     struct wined3d_resource *resource, *cursor;
     struct wined3d_swapchain *swapchain;
     struct wined3d_display_mode m;
     BOOL DisplayModeChanged = FALSE;
     BOOL update_desc = FALSE;
+    HRESULT hr = WINED3D_OK;
     unsigned int i;
-    HRESULT hr;
 
     TRACE("device %p, swapchain_desc %p, mode %p, callback %p.\n", device, swapchain_desc, mode, callback);
 
@@ -4967,7 +4994,9 @@ HRESULT CDECL wined3d_device_reset(struct wined3d_device *device,
         return WINED3DERR_INVALIDCALL;
     }
 
-    stateblock_unbind_resources(device->stateBlock);
+    if (reset_state)
+        stateblock_unbind_resources(device->stateBlock);
+
     if (device->fb.render_targets)
     {
         if (swapchain->back_buffers && swapchain->back_buffers[0])
@@ -4987,11 +5016,14 @@ HRESULT CDECL wined3d_device_reset(struct wined3d_device *device,
         device->onscreen_depth_stencil = NULL;
     }
 
-    LIST_FOR_EACH_ENTRY_SAFE(resource, cursor, &device->resources, struct wined3d_resource, resource_list_entry)
+    if (reset_state)
     {
-        TRACE("Enumerating resource %p.\n", resource);
-        if (FAILED(hr = callback(resource)))
-            return hr;
+        LIST_FOR_EACH_ENTRY_SAFE(resource, cursor, &device->resources, struct wined3d_resource, resource_list_entry)
+        {
+            TRACE("Enumerating resource %p.\n", resource);
+            if (FAILED(hr = callback(resource)))
+                return hr;
+        }
     }
 
     /* Is it necessary to recreate the gl context? Actually every setting can be changed
@@ -5042,8 +5074,6 @@ HRESULT CDECL wined3d_device_reset(struct wined3d_device *device,
 
     if (swapchain_desc->enable_auto_depth_stencil && !device->auto_depth_stencil)
     {
-        HRESULT hr;
-
         TRACE("Creating the depth stencil buffer\n");
 
         if (FAILED(hr = device->device_parent->ops->create_swapchain_surface(device->device_parent,
@@ -5197,28 +5227,49 @@ HRESULT CDECL wined3d_device_reset(struct wined3d_device *device,
         device->exStyle = exStyle;
     }
 
-    TRACE("Resetting stateblock.\n");
-    wined3d_stateblock_decref(device->updateStateBlock);
-    wined3d_stateblock_decref(device->stateBlock);
+    if (reset_state)
+    {
+        TRACE("Resetting stateblock.\n");
+        wined3d_stateblock_decref(device->updateStateBlock);
+        wined3d_stateblock_decref(device->stateBlock);
 
-    if (device->d3d_initialized)
-        delete_opengl_contexts(device, swapchain);
+        if (device->d3d_initialized)
+            delete_opengl_contexts(device, swapchain);
 
-    /* Note: No parent needed for initial internal stateblock */
-    hr = wined3d_stateblock_create(device, WINED3D_SBT_INIT, &device->stateBlock);
-    if (FAILED(hr))
-        ERR("Resetting the stateblock failed with error %#x.\n", hr);
+        /* Note: No parent needed for initial internal stateblock */
+        hr = wined3d_stateblock_create(device, WINED3D_SBT_INIT, &device->stateBlock);
+        if (FAILED(hr))
+            ERR("Resetting the stateblock failed with error %#x.\n", hr);
+        else
+            TRACE("Created stateblock %p.\n", device->stateBlock);
+        device->updateStateBlock = device->stateBlock;
+        wined3d_stateblock_incref(device->updateStateBlock);
+
+        stateblock_init_default_state(device->stateBlock);
+    }
     else
-        TRACE("Created stateblock %p.\n", device->stateBlock);
-    device->updateStateBlock = device->stateBlock;
-    wined3d_stateblock_incref(device->updateStateBlock);
+    {
+        struct wined3d_surface *rt = device->fb.render_targets[0];
+        struct wined3d_state *state = &device->stateBlock->state;
 
-    stateblock_init_default_state(device->stateBlock);
+        /* Note the min_z / max_z is not reset. */
+        state->viewport.x = 0;
+        state->viewport.y = 0;
+        state->viewport.width = rt->resource.width;
+        state->viewport.height = rt->resource.height;
+        device_invalidate_state(device, STATE_VIEWPORT);
+
+        state->scissor_rect.top = 0;
+        state->scissor_rect.left = 0;
+        state->scissor_rect.right = rt->resource.width;
+        state->scissor_rect.bottom = rt->resource.height;
+        device_invalidate_state(device, STATE_SCISSORRECT);
+    }
 
     swapchain_update_render_to_fbo(swapchain);
     swapchain_update_draw_bindings(swapchain);
 
-    if (device->d3d_initialized)
+    if (reset_state && device->d3d_initialized)
         hr = create_primary_opengl_context(device, swapchain);
 
     /* All done. There is no need to reload resources or shaders, this will happen automatically on the

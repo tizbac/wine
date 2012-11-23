@@ -306,6 +306,7 @@ static HRESULT WINAPI IDirectSound8Impl_SetCooperativeLevel(IDirectSound8 *iface
 {
     IDirectSoundImpl *This = impl_from_IDirectSound8(iface);
     DirectSoundDevice *device = This->device;
+    DWORD oldlevel;
     HRESULT hr = S_OK;
 
     TRACE("(%p,%p,%s)\n", This, hwnd, dumpCooperativeLevel(level));
@@ -322,10 +323,15 @@ static HRESULT WINAPI IDirectSound8Impl_SetCooperativeLevel(IDirectSound8 *iface
 
     RtlAcquireResourceExclusive(&device->buffer_list_lock, TRUE);
     EnterCriticalSection(&device->mixlock);
-    if ((level == DSSCL_WRITEPRIMARY) != (device->priolevel == DSSCL_WRITEPRIMARY))
+    oldlevel = device->priolevel;
+    device->priolevel = level;
+    if ((level == DSSCL_WRITEPRIMARY) != (oldlevel == DSSCL_WRITEPRIMARY)) {
         hr = DSOUND_ReopenDevice(device, level == DSSCL_WRITEPRIMARY);
-    if (SUCCEEDED(hr))
-        device->priolevel = level;
+        if (FAILED(hr))
+            device->priolevel = oldlevel;
+        else
+            DSOUND_PrimaryOpen(device);
+    }
     LeaveCriticalSection(&device->mixlock);
     RtlReleaseResource(&device->buffer_list_lock);
     return hr;
@@ -620,20 +626,24 @@ static HRESULT DirectSoundDevice_Create(DirectSoundDevice ** ppDevice)
     device->guid = GUID_NULL;
 
     /* Set default wave format (may need it for waveOutOpen) */
+    device->pwfx = HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(WAVEFORMATEXTENSIBLE));
     device->primary_pwfx = HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(WAVEFORMATEXTENSIBLE));
-    if (!device->primary_pwfx) {
+    if (!device->pwfx || !device->primary_pwfx) {
         WARN("out of memory\n");
+        HeapFree(GetProcessHeap(),0,device->primary_pwfx);
+        HeapFree(GetProcessHeap(),0,device->pwfx);
         HeapFree(GetProcessHeap(),0,device);
         return DSERR_OUTOFMEMORY;
     }
 
     device->primary_pwfx->wFormatTag = WAVE_FORMAT_PCM;
-    device->primary_pwfx->nSamplesPerSec = 22050;
-    device->primary_pwfx->wBitsPerSample = 8;
+    device->pwfx->nSamplesPerSec = 22050;
+    device->pwfx->wBitsPerSample = 8;
     device->primary_pwfx->nChannels = 2;
     device->primary_pwfx->nBlockAlign = 2;
     device->primary_pwfx->nAvgBytesPerSec = 44100;
     device->primary_pwfx->cbSize = 0;
+    memcpy(device->primary_pwfx, device->pwfx, sizeof(*device->pwfx));
 
     InitializeCriticalSection(&(device->mixlock));
     device->mixlock.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": DirectSoundDevice.mixlock");

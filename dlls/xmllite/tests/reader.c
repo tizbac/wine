@@ -351,6 +351,7 @@ static void test_reader_create(void)
     IXmlReader *reader;
     IUnknown *input;
     DtdProcessing dtd;
+    XmlNodeType nodetype;
 
     /* crashes native */
     if (0)
@@ -363,6 +364,11 @@ static void test_reader_create(void)
     ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
 
     test_read_state(reader, XmlReadState_Closed, -1, FALSE);
+
+    nodetype = XmlNodeType_Element;
+    hr = IXmlReader_GetNodeType(reader, &nodetype);
+    ok(hr == S_FALSE, "got %08x\n", hr);
+    ok(nodetype == XmlNodeType_None, "got %d\n", nodetype);
 
     dtd = 2;
     hr = IXmlReader_GetProperty(reader, XmlReaderProperty_DtdProcessing, (LONG_PTR*)&dtd);
@@ -402,7 +408,8 @@ static void test_readerinput(void)
     IXmlReaderInput *reader_input;
     IXmlReader *reader, *reader2;
     IUnknown *obj, *input;
-    IStream *stream;
+    IStream *stream, *stream2;
+    XmlNodeType nodetype;
     HRESULT hr;
     LONG ref;
 
@@ -420,13 +427,19 @@ static void test_readerinput(void)
     hr = pCreateXmlReaderInputWithEncodingName((IUnknown*)stream, NULL, NULL, FALSE, NULL, &reader_input);
     ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
 
+    hr = IUnknown_QueryInterface(reader_input, &IID_IStream, (void**)&stream2);
+    ok(hr == E_NOINTERFACE, "Expected S_OK, got %08x\n", hr);
+
+    hr = IUnknown_QueryInterface(reader_input, &IID_ISequentialStream, (void**)&stream2);
+    ok(hr == E_NOINTERFACE, "Expected S_OK, got %08x\n", hr);
+
     /* IXmlReaderInput grabs a stream reference */
     ref = IStream_AddRef(stream);
     ok(ref == 3, "Expected 3, got %d\n", ref);
     IStream_Release(stream);
 
     /* try ::SetInput() with valid IXmlReaderInput */
-    hr = pCreateXmlReader(&IID_IXmlReader, (LPVOID*)&reader, NULL);
+    hr = pCreateXmlReader(&IID_IXmlReader, (void**)&reader, NULL);
     ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
 
     ref = IUnknown_AddRef(reader_input);
@@ -437,6 +450,11 @@ static void test_readerinput(void)
     ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
 
     test_read_state(reader, XmlReadState_Initial, -1, FALSE);
+
+    nodetype = XmlNodeType_Element;
+    hr = IXmlReader_GetNodeType(reader, &nodetype);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(nodetype == XmlNodeType_None, "got %d\n", nodetype);
 
     /* IXmlReader grabs a IXmlReaderInput reference */
     ref = IUnknown_AddRef(reader_input);
@@ -545,15 +563,24 @@ static void test_readerinput(void)
 static void test_reader_state(void)
 {
     IXmlReader *reader;
+    XmlNodeType nodetype;
     HRESULT hr;
 
-    hr = pCreateXmlReader(&IID_IXmlReader, (LPVOID*)&reader, NULL);
+    hr = pCreateXmlReader(&IID_IXmlReader, (void**)&reader, NULL);
     ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
 
     /* invalid arguments */
     hr = IXmlReader_GetProperty(reader, XmlReaderProperty_ReadState, NULL);
     ok(hr == E_INVALIDARG, "Expected E_INVALIDARG, got %08x\n", hr);
 
+    /* attempt to read on closed reader */
+    test_read_state(reader, XmlReadState_Closed, -1, 0);
+if (0)
+{
+    /* newer versions crash here, probably cause no input was set */
+    hr = IXmlReader_Read(reader, &nodetype);
+    ok(hr == S_FALSE, "got %08x\n", hr);
+}
     IXmlReader_Release(reader);
 }
 

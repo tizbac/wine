@@ -153,7 +153,8 @@ void __thiscall basic_string_char__Eos(basic_string_char *this, MSVCP_size_t len
 
 void basic_string_char_clear(basic_string_char *this)
 {
-    basic_string_char__Eos(this, 0);
+    if(this->ptr)
+        basic_string_char__Eos(this, 0);
 }
 
 /* ?_Tidy@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AAEX_N@Z */
@@ -165,7 +166,7 @@ void __thiscall basic_string_char__Tidy(basic_string_char *this, MSVCP_bool buil
 
     if(!this->ptr || !built);
     else if(!this->ptr[-1] || (unsigned char)this->ptr[-1]==FROZEN)
-        MSVCP_allocator_char_deallocate(NULL, this->ptr, this->res+2);
+        MSVCP_allocator_char_deallocate(NULL, this->ptr-1, this->res+2);
     else
         this->ptr[-1]--;
 
@@ -235,7 +236,8 @@ void __thiscall basic_string_char__Split(basic_string_char *this)
     len = this->size;
     basic_string_char__Tidy(this, TRUE);
     if(basic_string_char__Grow(this, len, FALSE)) {
-        char_traits_char__Copy_s(this->ptr, this->res, ptr, len);
+        if(ptr)
+            char_traits_char__Copy_s(this->ptr, this->res, ptr, len);
         basic_string_char__Eos(this, len);
     }
 }
@@ -258,9 +260,8 @@ void __thiscall basic_string_char__Copy(basic_string_char *this, MSVCP_size_t co
 {
     TRACE("%p %lu\n", this, copy_len);
 
-    if(!basic_string_char__Grow(this, copy_len, FALSE))
+    if(!basic_string_char__Grow(this, copy_len, TRUE))
         return;
-    basic_string_char__Eos(this, copy_len);
 }
 
 /* ?_Pdif@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@CAIPBD0@Z */
@@ -344,8 +345,8 @@ basic_string_char* __thiscall basic_string_char_assign_substr(
         basic_string_char_erase(this, pos+len, basic_string_char_npos);
         basic_string_char_erase(this, 0, pos);
     } else if(basic_string_char__Grow(this, len, FALSE)) {
-        char_traits_char__Copy_s(this->ptr, this->res,
-                assign->ptr+pos, len);
+        if(assign->ptr)
+            char_traits_char__Copy_s(this->ptr, this->res, assign->ptr+pos, len);
         basic_string_char__Eos(this, len);
     }
 
@@ -892,7 +893,7 @@ MSVCP_size_t __thiscall basic_string_char_rfind_cstr_substr(
     if(pos > this->size-len+1)
         pos = this->size-len+1;
     end = this->ptr;
-    for(p=end+pos-1; p>=end; p--) {
+    for(p=end+pos; p>=end; p--) {
         if(*p==*find && !char_traits_char_compare(p, find, len))
             return p-this->ptr;
     }
@@ -1148,8 +1149,9 @@ basic_string_char* __thiscall basic_string_char_append_substr(basic_string_char 
         _Xlen();
 
     if(basic_string_char__Grow(this, this->size+count, FALSE)) {
-        char_traits_char__Copy_s(this->ptr+this->size,
-                this->res-this->size, append->ptr+offset, count);
+        if(append->ptr)
+            char_traits_char__Copy_s(this->ptr+this->size, this->res-this->size,
+                    append->ptr+offset, count);
         basic_string_char__Eos(this, this->size+count);
     }
 
@@ -1390,7 +1392,8 @@ basic_string_char* __thiscall basic_string_char_replace_cstr_len(basic_string_ch
             memmove(ptr+off+size, ptr+off+str_len, (str_len-size)*sizeof(char));
     }
 
-    basic_string_char__Eos(this, this->size-len+str_len);
+    if(this->ptr)
+        basic_string_char__Eos(this, this->size-len+str_len);
     return this;
 }
 
@@ -1666,7 +1669,7 @@ DEFINE_THISCALL_WRAPPER(basic_string_char_c_str, 4)
 const char* __thiscall basic_string_char_c_str(const basic_string_char *this)
 {
     TRACE("%p\n", this);
-    return this->ptr;
+    return this->ptr ? this->ptr : basic_string_char__Nullstr();
 }
 
 /* ?size@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QBEIXZ */
@@ -1761,7 +1764,8 @@ MSVCP_size_t __thiscall basic_string_char_copy(const basic_string_char *this,
         _Xran();
     if(count > this->size-off)
         count = this->size-off;
-    char_traits_char__Copy_s(dest, count, this->ptr+off, count);
+    if(this->ptr)
+        char_traits_char__Copy_s(dest, count, this->ptr+off, count);
     return count;
 }
 
@@ -1784,7 +1788,7 @@ static wchar_t* char_traits_wchar__Move_s(wchar_t *dest,
         return dest;
     }
 
-    return memmove(dest, src, count);
+    return memmove(dest, src, count * sizeof(WCHAR));
 }
 
 static wchar_t* char_traits_wchar__Copy_s(wchar_t *dest,
@@ -1797,7 +1801,7 @@ static wchar_t* char_traits_wchar__Copy_s(wchar_t *dest,
         return dest;
     }
 
-    return memcpy(dest, src, count);
+    return memcpy(dest, src, count * sizeof(wchar_t));
 }
 
 static MSVCP_size_t char_traits_wchar_length(const wchar_t *str)
@@ -1864,7 +1868,8 @@ void __thiscall basic_string_wchar__Eos(basic_string_wchar *this, MSVCP_size_t l
 
 void basic_string_wchar_clear(basic_string_wchar *this)
 {
-    basic_string_wchar__Eos(this, 0);
+    if(this->ptr)
+        basic_string_wchar__Eos(this, 0);
 }
 
 /* ?_Tidy@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@AAEX_N@Z */
@@ -1876,7 +1881,7 @@ void __thiscall basic_string_wchar__Tidy(basic_string_wchar *this, MSVCP_bool bu
 
     if(!this->ptr || !built);
     else if(!this->ptr[-1] || (unsigned short)this->ptr[-1]==FROZEN)
-        MSVCP_allocator_wchar_deallocate(NULL, this->ptr, this->res+2);
+        MSVCP_allocator_wchar_deallocate(NULL, this->ptr-1, this->res+2);
     else
         this->ptr[-1]--;
 
@@ -1946,7 +1951,8 @@ void __thiscall basic_string_wchar__Split(basic_string_wchar *this)
     len = this->size;
     basic_string_wchar__Tidy(this, TRUE);
     if(basic_string_wchar__Grow(this, len, FALSE)) {
-        char_traits_wchar__Copy_s(this->ptr, this->res, ptr, len);
+        if(ptr)
+            char_traits_wchar__Copy_s(this->ptr, this->res, ptr, len);
         basic_string_wchar__Eos(this, len);
     }
 }
@@ -1969,9 +1975,8 @@ void __thiscall basic_string_wchar__Copy(basic_string_wchar *this, MSVCP_size_t 
 {
     TRACE("%p %lu\n", this, copy_len);
 
-    if(!basic_string_wchar__Grow(this, copy_len, FALSE))
+    if(!basic_string_wchar__Grow(this, copy_len, TRUE))
         return;
-    basic_string_wchar__Eos(this, copy_len);
 }
 
 /* ?_Pdif@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@CAIPBG0@Z */
@@ -2055,8 +2060,9 @@ basic_string_wchar* __thiscall basic_string_wchar_assign_substr(
         basic_string_wchar_erase(this, pos+len, basic_string_wchar_npos);
         basic_string_wchar_erase(this, 0, pos);
     } else if(basic_string_wchar__Grow(this, len, FALSE)) {
-        char_traits_wchar__Copy_s(this->ptr, this->res,
-                assign->ptr+pos, len);
+        if(assign->ptr)
+            char_traits_wchar__Copy_s(this->ptr, this->res,
+                    assign->ptr+pos, len);
         basic_string_wchar__Eos(this, len);
     }
 
@@ -2602,7 +2608,7 @@ MSVCP_size_t __thiscall basic_string_wchar_rfind_cstr_substr(
     if(pos > this->size-len+1)
         pos = this->size-len+1;
     end = this->ptr;
-    for(p=end+pos-1; p>=end; p--) {
+    for(p=end+pos; p>=end; p--) {
         if(*p==*find && !char_traits_wchar_compare(p, find, len))
             return p-this->ptr;
     }
@@ -2858,8 +2864,9 @@ basic_string_wchar* __thiscall basic_string_wchar_append_substr(basic_string_wch
         _Xlen();
 
     if(basic_string_wchar__Grow(this, this->size+count, FALSE)) {
-        char_traits_wchar__Copy_s(this->ptr+this->size,
-                this->res-this->size, append->ptr+offset, count);
+        if(append->ptr)
+            char_traits_wchar__Copy_s(this->ptr+this->size, this->res-this->size,
+                    append->ptr+offset, count);
         basic_string_wchar__Eos(this, this->size+count);
     }
 
@@ -3100,7 +3107,8 @@ basic_string_wchar* __thiscall basic_string_wchar_replace_cstr_len(basic_string_
             memmove(ptr+off+size, ptr+off+str_len, (str_len-size)*sizeof(char));
     }
 
-    basic_string_wchar__Eos(this, this->size-len+str_len);
+    if(this->ptr)
+        basic_string_wchar__Eos(this, this->size-len+str_len);
     return this;
 }
 
@@ -3376,7 +3384,7 @@ DEFINE_THISCALL_WRAPPER(basic_string_wchar_c_str, 4)
 const wchar_t* __thiscall basic_string_wchar_c_str(const basic_string_wchar *this)
 {
     TRACE("%p\n", this);
-    return this->ptr;
+    return this->ptr ? this->ptr : basic_string_wchar__Nullstr();
 }
 
 /* ?size@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QBEIXZ */
@@ -3471,7 +3479,8 @@ MSVCP_size_t __thiscall basic_string_wchar_copy(const basic_string_wchar *this,
         _Xran();
     if(count > this->size-off)
         count = this->size-off;
-    char_traits_wchar__Copy_s(dest, count, this->ptr+off, count);
+    if(this->ptr)
+        char_traits_wchar__Copy_s(dest, count, this->ptr+off, count);
     return count;
 }
 

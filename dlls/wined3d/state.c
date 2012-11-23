@@ -3761,6 +3761,11 @@ void apply_pixelshader(struct wined3d_context *context, const struct wined3d_sta
     context->load_constants = 1;
 }
 
+static void state_geometry_shader(struct wined3d_context *context, const struct wined3d_state *state, DWORD state_id)
+{
+    context->select_shader = 1;
+}
+
 static void shader_bumpenvmat(struct wined3d_context *context, const struct wined3d_state *state, DWORD state_id)
 {
     DWORD stage = (state_id - STATE_TEXTURESTAGE(0, 0)) / (WINED3D_HIGHEST_TEXTURE_STATE + 1);
@@ -4923,6 +4928,20 @@ static void psorigin(struct wined3d_context *context, const struct wined3d_state
     }
 }
 
+void state_srgbwrite(struct wined3d_context *context, const struct wined3d_state *state, DWORD state_id)
+{
+    const struct wined3d_gl_info *gl_info = context->gl_info;
+    const struct wined3d_surface *rt = state->fb->render_targets[0];
+
+    TRACE("context %p, state %p, state_id %#x.\n", context, state, state_id);
+
+    if (state->render_states[WINED3D_RS_SRGBWRITEENABLE]
+            && rt->resource.format->flags & WINED3DFMT_FLAG_SRGB_WRITE)
+        gl_info->gl_ops.gl.p_glEnable(GL_FRAMEBUFFER_SRGB);
+    else
+        gl_info->gl_ops.gl.p_glDisable(GL_FRAMEBUFFER_SRGB);
+}
+
 const struct StateEntryTemplate misc_state_template[] = {
     { STATE_RENDER(WINED3D_RS_SRCBLEND),                  { STATE_RENDER(WINED3D_RS_ALPHABLENDENABLE),          NULL                }, WINED3D_GL_EXT_NONE             },
     { STATE_RENDER(WINED3D_RS_DESTBLEND),                 { STATE_RENDER(WINED3D_RS_ALPHABLENDENABLE),          NULL                }, WINED3D_GL_EXT_NONE             },
@@ -5116,6 +5135,7 @@ const struct StateEntryTemplate misc_state_template[] = {
     { STATE_BASEVERTEXINDEX,                              { STATE_STREAMSRC,                                    NULL,               }, WINED3D_GL_EXT_NONE             },
     { STATE_FRAMEBUFFER,                                  { STATE_FRAMEBUFFER,                                  context_state_fb    }, WINED3D_GL_EXT_NONE             },
     { STATE_PIXELSHADER,                                  { STATE_PIXELSHADER,                                  context_state_drawbuf},WINED3D_GL_EXT_NONE             },
+    { STATE_GEOMETRY_SHADER,                              { STATE_GEOMETRY_SHADER,                              state_geometry_shader}, WINED3D_GL_EXT_NONE             },
     {0 /* Terminate */,                                   { 0,                                                  0                   }, WINED3D_GL_EXT_NONE             },
 };
 
@@ -5776,6 +5796,7 @@ static void validate_state_table(struct StateEntry *state_table)
         STATE_VERTEXSHADERCONSTANT,
         STATE_PIXELSHADERCONSTANT,
         STATE_VSHADER,
+        STATE_GEOMETRY_SHADER,
         STATE_PIXELSHADER,
         STATE_VIEWPORT,
         STATE_SCISSORRECT,

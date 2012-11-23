@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include <share.h>
+#include <locale.h>
 
 #include "msvcp.h"
 #include "windef.h"
@@ -64,20 +65,22 @@ typedef enum {
 typedef struct {
     basic_streambuf_char base;
     codecvt_char *cvt;
-    char putback;
-    MSVCP_bool wrotesome;
+    int state0;
     int state;
+    basic_string_char *str;
     MSVCP_bool close;
+    locale loc;
     FILE *file;
 } basic_filebuf_char;
 
 typedef struct {
     basic_streambuf_wchar base;
     codecvt_wchar *cvt;
-    wchar_t putback;
-    MSVCP_bool wrotesome;
+    int state0;
     int state;
+    basic_string_char *str;
     MSVCP_bool close;
+    locale loc;
     FILE *file;
 } basic_filebuf_wchar;
 
@@ -272,9 +275,9 @@ typedef enum {
 
 typedef struct {
     basic_streambuf_char base;
-    streamsize minsize;
     char *endsave;
     char *seekhigh;
+    streamsize minsize;
     int strmode;
     void* (__cdecl *palloc)(MSVCP_size_t);
     void (__cdecl *pfree)(void*);
@@ -731,7 +734,7 @@ void __asm_dummy_vtables(void) {
             VTABLE_ADD_FUNC(basic_filebuf_char_seekpos)
             VTABLE_ADD_FUNC(basic_filebuf_char_setbuf)
             VTABLE_ADD_FUNC(basic_filebuf_char_sync)
-            VTABLE_ADD_FUNC(basic_filebuf_char_imbue));
+            VTABLE_ADD_FUNC(basic_streambuf_char_imbue));
     __ASM_VTABLE(basic_filebuf_wchar,
             VTABLE_ADD_FUNC(basic_filebuf_wchar_vector_dtor)
             VTABLE_ADD_FUNC(basic_filebuf_wchar_overflow)
@@ -745,7 +748,7 @@ void __asm_dummy_vtables(void) {
             VTABLE_ADD_FUNC(basic_filebuf_wchar_seekpos)
             VTABLE_ADD_FUNC(basic_filebuf_wchar_setbuf)
             VTABLE_ADD_FUNC(basic_filebuf_wchar_sync)
-            VTABLE_ADD_FUNC(basic_filebuf_wchar_imbue));
+            VTABLE_ADD_FUNC(basic_streambuf_wchar_imbue));
     __ASM_VTABLE(basic_filebuf_short,
             VTABLE_ADD_FUNC(basic_filebuf_wchar_vector_dtor)
             VTABLE_ADD_FUNC(basic_filebuf_wchar_overflow)
@@ -759,7 +762,7 @@ void __asm_dummy_vtables(void) {
             VTABLE_ADD_FUNC(basic_filebuf_wchar_seekpos)
             VTABLE_ADD_FUNC(basic_filebuf_short_setbuf)
             VTABLE_ADD_FUNC(basic_filebuf_wchar_sync)
-            VTABLE_ADD_FUNC(basic_filebuf_short_imbue));
+            VTABLE_ADD_FUNC(basic_streambuf_wchar_imbue));
     __ASM_VTABLE(basic_stringbuf_char,
             VTABLE_ADD_FUNC(basic_stringbuf_char_vector_dtor)
             VTABLE_ADD_FUNC(basic_stringbuf_char_overflow)
@@ -1516,6 +1519,15 @@ streamsize __thiscall basic_streambuf_char_sputn(basic_streambuf_char *this, con
     return call_basic_streambuf_char_xsputn(this, ptr, count);
 }
 
+/* ?getloc@?$basic_streambuf@DU?$char_traits@D@std@@@std@@QAE?AVlocale@2@XZ */
+/* ?getloc@?$basic_streambuf@DU?$char_traits@D@std@@@std@@QEAA?AVlocale@2@XZ */
+DEFINE_THISCALL_WRAPPER(basic_streambuf_char_getloc, 8)
+locale* __thiscall basic_streambuf_char_getloc(basic_streambuf_char *this, locale *ret)
+{
+    TRACE("(%p %p)\n", this, ret);
+    return locale_copy_ctor(ret, &this->loc);
+}
+
 /* ?setp@?$basic_streambuf@_WU?$char_traits@_W@std@@@std@@IAEXPA_W00@Z */
 /* ?setp@?$basic_streambuf@_WU?$char_traits@_W@std@@@std@@IEAAXPEA_W00@Z */
 /* ?setp@?$basic_streambuf@GU?$char_traits@G@std@@@std@@IAEXPAG00@Z */
@@ -1580,7 +1592,6 @@ static basic_streambuf_wchar* basic_streambuf_wchar_ctor_uninitialized(basic_str
 {
     TRACE("(%p %d)\n", this, uninitialized);
     this->vtable = &MSVCP_basic_streambuf_wchar_vtable;
-    mutex_ctor(&this->lock);
     return this;
 }
 
@@ -1602,7 +1613,6 @@ static basic_streambuf_wchar* basic_streambuf_wchar_ctor(basic_streambuf_wchar *
     TRACE("(%p)\n", this);
 
     this->vtable = &MSVCP_basic_streambuf_wchar_vtable;
-    mutex_ctor(&this->lock);
     locale_ctor(&this->loc);
     basic_streambuf_wchar__Init_empty(this);
 
@@ -1629,7 +1639,6 @@ void __thiscall basic_streambuf_wchar_dtor(basic_streambuf_wchar *this)
 {
     TRACE("(%p)\n", this);
 
-    mutex_dtor(&this->lock);
     locale_dtor(&this->loc);
 }
 
@@ -1724,7 +1733,6 @@ void __thiscall basic_streambuf_wchar__Init(basic_streambuf_wchar *this, wchar_t
 static void basic_streambuf_wchar__Lock(basic_streambuf_wchar *this)
 {
     TRACE("(%p)\n", this);
-    mutex_lock(&this->lock);
 }
 
 /* ?_Pnavail@?$basic_streambuf@_WU?$char_traits@_W@std@@@std@@IBEHXZ */
@@ -1835,7 +1843,6 @@ static streamsize basic_streambuf_wchar__Sgetn_s(basic_streambuf_wchar *this, wc
 static void basic_streambuf_wchar__Unlock(basic_streambuf_wchar *this)
 {
     TRACE("(%p)\n", this);
-    mutex_unlock(&this->lock);
 }
 
 /* ?eback@?$basic_streambuf@_WU?$char_traits@_W@std@@@std@@IBEPA_WXZ */
@@ -2281,6 +2288,15 @@ streamsize __thiscall basic_streambuf_wchar_sputn(basic_streambuf_wchar *this, c
     return call_basic_streambuf_wchar_xsputn(this, ptr, count);
 }
 
+/* ?getloc@?$basic_streambuf@_WU?$char_traits@_W@std@@@std@@QAE?AVlocale@2@XZ */
+/* ?getloc@?$basic_streambuf@_WU?$char_traits@_W@std@@@std@@QEAA?AVlocale@2@XZ */
+DEFINE_THISCALL_WRAPPER(basic_streambuf_wchar_getloc, 8)
+locale* __thiscall basic_streambuf_wchar_getloc(basic_streambuf_wchar *this, locale *ret)
+{
+    TRACE("(%p %p)\n", this, ret);
+    return locale_copy_ctor(ret, &this->loc);
+}
+
 /* ?_Stinit@?1??_Init@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IAEXPAU_iobuf@@W4_Initfl@23@@Z@4HA */
 /* ?_Stinit@?1??_Init@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IEAAXPEAU_iobuf@@W4_Initfl@23@@Z@4HA */
 int basic_filebuf_char__Init__Stinit = 0;
@@ -2293,8 +2309,9 @@ void __thiscall basic_filebuf_char__Init(basic_filebuf_char *this, FILE *file, b
     TRACE("(%p %p %d)\n", this, file, which);
 
     this->cvt = NULL;
-    this->wrotesome = FALSE;
+    this->state0 = basic_filebuf_char__Init__Stinit;
     this->state = basic_filebuf_char__Init__Stinit;
+    this->str = NULL;
     this->close = (which == INITFL_open);
     this->file = file;
 
@@ -2304,57 +2321,20 @@ void __thiscall basic_filebuf_char__Init(basic_filebuf_char *this, FILE *file, b
                 &file->_cnt, &file->_base, &file->_ptr, &file->_cnt);
 }
 
-/* ?_Initcvt@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IAEXPAV?$codecvt@DDH@2@@Z */
-/* ?_Initcvt@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IEAAXPEAV?$codecvt@DDH@2@@Z */
-static void basic_filebuf_char__Initcvt(basic_filebuf_char *this, codecvt_char *cvt)
-{
-    TRACE("(%p %p)\n", this, cvt);
-
-    if(codecvt_base_always_noconv(&cvt->base)) {
-        this->cvt = NULL;
-    }else {
-        basic_streambuf_char__Init_empty(&this->base);
-        this->cvt = cvt;
-    }
-}
-
-/* ?_Endwrite@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IAE_NXZ */
-/* ?_Endwrite@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IEAA_NXZ */
-static MSVCP_bool basic_filebuf_char__Endwrite(basic_filebuf_char *this)
+/* ?_Initcvt@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IAEXXZ */
+/* ?_Initcvt@?$basic_filebuf@DU?$char_traits@D@std@@@std@@IEAAXXZ */
+DEFINE_THISCALL_WRAPPER(basic_filebuf_char__Initcvt, 4)
+void __thiscall basic_filebuf_char__Initcvt(basic_filebuf_char *this)
 {
     TRACE("(%p)\n", this);
 
-    if(!this->wrotesome || !this->cvt)
-        return TRUE;
-
-
-    if(call_basic_streambuf_char_overflow(&this->base, EOF) == EOF)
-        return FALSE;
-
-    while(1) {
-        /* TODO: check if we need a dynamic buffer here */
-        char buf[128];
-        char *next;
-        int ret;
-
-        ret = codecvt_char_unshift(this->cvt, &this->state, buf, buf+sizeof(buf), &next);
-        switch(ret) {
-        case CODECVT_ok:
-            this->wrotesome = FALSE;
-            /* fall through */
-        case CODECVT_partial:
-            if(!fwrite(buf, next-buf, 1, this->file))
-                return FALSE;
-            if(this->wrotesome)
-                break;
-            /* fall through */
-        case CODECVT_noconv:
-            if(call_basic_streambuf_char_overflow(&this->base, EOF) == EOF)
-                return FALSE;
-            return TRUE;
-        default:
-            return FALSE;
-        }
+    this->cvt = codecvt_char_use_facet(&this->base.loc);
+    locale__Addfac(&this->loc, &this->cvt->base.facet, codecvt_char_id.id, LC_CTYPE);
+    if(codecvt_base_always_noconv(&this->cvt->base)) {
+        this->cvt = NULL;
+    }else {
+        this->str = MSVCRT_operator_new(sizeof(basic_string_char));
+        basic_string_char_ctor(this->str);
     }
 }
 
@@ -2367,14 +2347,8 @@ basic_filebuf_char* __thiscall basic_filebuf_char_close(basic_filebuf_char *this
 
     TRACE("(%p)\n", this);
 
-    if(!this->file)
+    if(!this->file || fclose(this->file))
         return NULL;
-
-    /* TODO: handle exceptions */
-    if(!basic_filebuf_char__Endwrite(this))
-        ret = NULL;
-    if(fclose(this->file))
-        ret  = NULL;
 
     basic_filebuf_char__Init(this, NULL, INITFL_close);
     return ret;
@@ -2390,6 +2364,7 @@ basic_filebuf_char* __thiscall basic_filebuf_char_ctor_file(basic_filebuf_char *
     basic_streambuf_char_ctor(&this->base);
     this->base.vtable = &MSVCP_basic_filebuf_char_vtable;
 
+    locale_ctor(&this->loc);
     basic_filebuf_char__Init(this, file, INITFL_new);
     return this;
 }
@@ -2409,8 +2384,9 @@ basic_filebuf_char* __thiscall basic_filebuf_char_ctor_uninitialized(basic_fileb
 {
     TRACE("(%p %d)\n", this, uninitialized);
 
-    basic_streambuf_char_ctor(&this->base);
+    basic_streambuf_char_ctor_uninitialized(&this->base, 0);
     this->base.vtable = &MSVCP_basic_filebuf_char_vtable;
+    locale_ctor(&this->loc);
     return this;
 }
 
@@ -2423,6 +2399,11 @@ void __thiscall basic_filebuf_char_dtor(basic_filebuf_char *this)
 
     if(this->close)
         basic_filebuf_char_close(this);
+    if(this->str) {
+        basic_string_char_dtor(this->str);
+        MSVCRT_operator_delete(this->str);
+    }
+    locale_dtor(&this->loc);
     basic_streambuf_char_dtor(&this->base);
 }
 
@@ -2550,7 +2531,7 @@ static basic_filebuf_char* basic_filebuf_char_open_wchar(basic_filebuf_char *thi
         return NULL;
 
     basic_filebuf_char__Init(this, f, INITFL_open);
-    basic_filebuf_char__Initcvt(this, codecvt_char_use_facet(&this->base.loc));
+    basic_filebuf_char__Initcvt(this);
     return this;
 }
 
@@ -2590,10 +2571,9 @@ basic_filebuf_char* __thiscall basic_filebuf_char_open_mode(basic_filebuf_char *
 DEFINE_THISCALL_WRAPPER(basic_filebuf_char_overflow, 8)
 int __thiscall basic_filebuf_char_overflow(basic_filebuf_char *this, int c)
 {
-    char buf[8], *dyn_buf;
-    char ch = c, *to_next;
+    char *ptr, ch = c, *to_next;
     const char *from_next;
-    int ret, max_size;
+    int ret;
 
 
     TRACE("(%p %d)\n", this, c);
@@ -2607,48 +2587,23 @@ int __thiscall basic_filebuf_char_overflow(basic_filebuf_char *this, int c)
         return fwrite(&ch, sizeof(char), 1, this->file) ? c : EOF;
 
     from_next = &ch;
-    do {
-        ret = codecvt_char_out(this->cvt, &this->state, from_next, &ch+1,
-                &from_next, buf, buf+sizeof(buf), &to_next);
-
-        switch(ret) {
-        case CODECVT_partial:
-            if(to_next == buf)
-                break;
-            /* fall through */
-        case CODECVT_ok:
-            if(!fwrite(buf, to_next-buf, 1, this->file))
-                return EOF;
-            if(ret == CODECVT_partial)
-                continue;
-            return c;
-        case CODECVT_noconv:
-            return fwrite(&ch, sizeof(char), 1, this->file) ? c : EOF;
-        default:
-            return EOF;
-        }
-
-        break;
-    } while(1);
-
-    max_size = codecvt_base_max_length(&this->cvt->base);
-    dyn_buf = malloc(max_size);
-    if(!dyn_buf)
-        return EOF;
-
-    ret = codecvt_char_out(this->cvt, &this->state, from_next, &ch+1,
-            &from_next, dyn_buf, dyn_buf+max_size, &to_next);
+    basic_string_char_clear(this->str);
+    basic_string_char_append_len_ch(this->str, 8, '\0');
+    ptr = this->str->ptr;
+    ret = codecvt_char_out(this->cvt, &this->state, from_next, &ch+1, &from_next,
+            ptr, ptr+basic_string_char_length(this->str), &to_next);
 
     switch(ret) {
-    case CODECVT_ok:
-        ret = fwrite(dyn_buf, to_next-dyn_buf, 1, this->file);
-        free(dyn_buf);
-        return ret ? c : EOF;
     case CODECVT_partial:
-        ERR("buffer should be big enough to store all output\n");
-        /* fall through */
+        if(from_next == &ch)
+            return EOF;
+    case CODECVT_ok:
+        if(!fwrite(ptr, to_next-ptr, 1, this->file))
+            return EOF;
+        return c;
+    case CODECVT_noconv:
+        return fwrite(&ch, sizeof(char), 1, this->file) ? c : EOF;
     default:
-        free(dyn_buf);
         return EOF;
     }
 }
@@ -2667,8 +2622,25 @@ int __thiscall basic_filebuf_char_pbackfail(basic_filebuf_char *this, int c)
             && (c==EOF || (int)(unsigned char)basic_streambuf_char_gptr(&this->base)[-1]==c)) {
         basic_streambuf_char__Gndec(&this->base);
         return c==EOF ? !c : c;
-    }else if(c!=EOF && !this->cvt) {
+    }else if(c == EOF) {
+        return EOF;
+    }else if(!this->cvt) {
         return ungetc(c, this->file);
+    }else if(basic_string_char_length(this->str)) {
+        char *b, *e, *cur;
+
+        e = this->str->ptr;
+        b = e+this->str->size-1;
+        for(cur = b; cur>=e; cur--) {
+            if(ungetc(*cur, this->file) == EOF) {
+                for(; cur<=b; cur++)
+                    fgetc(this->file);
+                return EOF;
+            }
+        }
+        basic_string_char_clear(this->str);
+        this->state = this->state0;
+        return c;
     }
 
     return EOF;
@@ -2679,9 +2651,9 @@ int __thiscall basic_filebuf_char_pbackfail(basic_filebuf_char *this, int c)
 DEFINE_THISCALL_WRAPPER(basic_filebuf_char_uflow, 4)
 int __thiscall basic_filebuf_char_uflow(basic_filebuf_char *this)
 {
-    char ch, buf[128], *to_next;
+    char ch, *to_next;
     const char *buf_next;
-    int c, i;
+    int c;
 
     TRACE("(%p)\n", this);
 
@@ -2695,33 +2667,28 @@ int __thiscall basic_filebuf_char_uflow(basic_filebuf_char *this)
     if(!this->cvt || c==EOF)
         return c;
 
-    buf_next = buf;
-    for(i=0; i < sizeof(buf)/sizeof(buf[0]); i++) {
-        buf[i] = c;
+    basic_string_char_clear(this->str);
+    this->state0 = this->state;
+    while(1) {
+        basic_string_char_append_ch(this->str, c);
+        this->state = this->state0;
 
-        switch(codecvt_char_in(this->cvt, &this->state, buf_next,
-                    buf+i+1, &buf_next, &ch, &ch+1, &to_next)) {
+        switch(codecvt_char_in(this->cvt, &this->state, this->str->ptr,
+                    this->str->ptr+this->str->size, &buf_next, &ch, &ch+1, &to_next)) {
         case CODECVT_partial:
-        case CODECVT_ok:
-            if(to_next == &ch) {
-                c = fgetc(this->file);
-                if(c == EOF)
-                    return EOF;
-                continue;
-            }
-
-            for(i--; i>=buf_next-buf; i--)
-                ungetc(buf[i], this->file);
-            return ch;
+            break;
         case CODECVT_noconv:
-            return (unsigned char)buf[0];
+            return (unsigned char)this->str->ptr[0];
+        case CODECVT_ok:
+            return (unsigned char)ch;
         default:
             return EOF;
         }
-    }
 
-    FIXME("buffer is too small\n");
-    return EOF;
+        c = fgetc(this->file);
+        if(c == EOF)
+            return EOF;
+    }
 }
 
 /* ?underflow@?$basic_filebuf@DU?$char_traits@D@std@@@std@@MAEHXZ */
@@ -2752,8 +2719,7 @@ fpos_int* __thiscall basic_filebuf_char_seekoff(basic_filebuf_char *this,
 
     TRACE("(%p %p %ld %d %d)\n", this, ret, off, way, mode);
 
-    if(!basic_filebuf_char_is_open(this) || !basic_filebuf_char__Endwrite(this)
-            || fseek(this->file, off, way)) {
+    if(!basic_filebuf_char_is_open(this) || fseek(this->file, off, way)) {
         ret->off = -1;
         ret->pos = 0;
         ret->state = 0;
@@ -2777,8 +2743,7 @@ fpos_int* __thiscall basic_filebuf_char_seekpos(basic_filebuf_char *this,
 
     TRACE("(%p %p %s %d)\n", this, ret, debugstr_fpos_int(&pos), mode);
 
-    if(!basic_filebuf_char_is_open(this) || !basic_filebuf_char__Endwrite(this)
-            || fseek(this->file, (LONG)pos.pos, SEEK_SET)
+    if(!basic_filebuf_char_is_open(this) || fseek(this->file, (LONG)pos.pos, SEEK_SET)
             || (pos.off && fseek(this->file, pos.off, SEEK_CUR))) {
         ret->off = -1;
         ret->pos = 0;
@@ -2825,15 +2790,6 @@ int __thiscall basic_filebuf_char_sync(basic_filebuf_char *this)
     return fflush(this->file);
 }
 
-/* ?imbue@?$basic_filebuf@DU?$char_traits@D@std@@@std@@MAEXABVlocale@2@@Z */
-/* ?imbue@?$basic_filebuf@DU?$char_traits@D@std@@@std@@MEAAXAEBVlocale@2@@Z */
-DEFINE_THISCALL_WRAPPER(basic_filebuf_char_imbue, 8)
-void __thiscall basic_filebuf_char_imbue(basic_filebuf_char *this, const locale *loc)
-{
-    TRACE("(%p %p)\n", this, loc);
-    basic_filebuf_char__Initcvt(this, codecvt_char_use_facet(loc));
-}
-
 /* ?_Stinit@?1??_Init@?$basic_filebuf@GU?$char_traits@G@std@@@std@@IAEXPAU_iobuf@@W4_Initfl@23@@Z@4HA */
 /* ?_Stinit@?1??_Init@?$basic_filebuf@GU?$char_traits@G@std@@@std@@IEAAXPEAU_iobuf@@W4_Initfl@23@@Z@4HA */
 int basic_filebuf_short__Init__Stinit = 0;
@@ -2845,8 +2801,9 @@ static void basic_filebuf_wchar__Init(basic_filebuf_wchar *this, FILE *file, bas
     TRACE("(%p %p %d)\n", this, file, which);
 
     this->cvt = NULL;
-    this->wrotesome = FALSE;
-    this->state = 0;
+    this->state0 = basic_filebuf_short__Init__Stinit;
+    this->state = basic_filebuf_short__Init__Stinit;
+    this->str = NULL;
     this->close = (which == INITFL_open);
     this->file = file;
 
@@ -2861,68 +2818,29 @@ void __thiscall basic_filebuf_short__Init(basic_filebuf_wchar *this, FILE *file,
     TRACE("(%p %p %d)\n", this, file, which);
 
     this->cvt = NULL;
-    this->wrotesome = FALSE;
+    this->state0 = basic_filebuf_short__Init__Stinit;
     this->state = basic_filebuf_short__Init__Stinit;
+    this->str = NULL;
     this->close = (which == INITFL_open);
     this->file = file;
 
     basic_streambuf_wchar__Init_empty(&this->base);
 }
 
-/* ?_Initcvt@?$basic_filebuf@_WU?$char_traits@_W@std@@@std@@IAEXPAV?$codecvt@_WDH@2@@Z */
-/* ?_Initcvt@?$basic_filebuf@_WU?$char_traits@_W@std@@@std@@IEAAXPEAV?$codecvt@_WDH@2@@Z */
-/* ?_Initcvt@?$basic_filebuf@GU?$char_traits@G@std@@@std@@IAEXPAV?$codecvt@GDH@2@@Z */
-/* ?_Initcvt@?$basic_filebuf@GU?$char_traits@G@std@@@std@@IEAAXPEAV?$codecvt@GDH@2@@Z */
-static void basic_filebuf_wchar__Initcvt(basic_filebuf_wchar *this, codecvt_wchar *cvt)
-{
-    TRACE("(%p %p)\n", this, cvt);
-
-    if(codecvt_base_always_noconv(&cvt->base)) {
-        this->cvt = NULL;
-    }else {
-        basic_streambuf_wchar__Init_empty(&this->base);
-        this->cvt = cvt;
-    }
-}
-
-/* ?_Endwrite@?$basic_filebuf@_WU?$char_traits@_W@std@@@std@@IAE_NXZ */
-/* ?_Endwrite@?$basic_filebuf@_WU?$char_traits@_W@std@@@std@@IEAA_NXZ */
-/* ?_Endwrite@?$basic_filebuf@GU?$char_traits@G@std@@@std@@IAE_NXZ */
-/* ?_Endwrite@?$basic_filebuf@GU?$char_traits@G@std@@@std@@IEAA_NXZ */
-static MSVCP_bool basic_filebuf_wchar__Endwrite(basic_filebuf_wchar *this)
+/* ?_Initcvt@?$basic_filebuf@GU?$char_traits@G@std@@@std@@IAEXXZ */
+/* ?_Initcvt@?$basic_filebuf@GU?$char_traits@G@std@@@std@@IEAAXXZ */
+DEFINE_THISCALL_WRAPPER(basic_filebuf_wchar__Initcvt, 4)
+void __thiscall basic_filebuf_wchar__Initcvt(basic_filebuf_wchar *this)
 {
     TRACE("(%p)\n", this);
 
-    if(!this->wrotesome || !this->cvt)
-        return TRUE;
-
-    if(call_basic_streambuf_wchar_overflow(&this->base, WEOF) == WEOF)
-        return FALSE;
-
-    while(1) {
-        /* TODO: check if we need a dynamic buffer here */
-        char buf[128];
-        char *next;
-        int ret;
-
-        ret = codecvt_wchar_unshift(this->cvt, &this->state, buf, buf+sizeof(buf), &next);
-        switch(ret) {
-        case CODECVT_ok:
-            this->wrotesome = FALSE;
-            /* fall through */
-        case CODECVT_partial:
-            if(!fwrite(buf, next-buf, 1, this->file))
-                return FALSE;
-            if(this->wrotesome)
-                break;
-            /* fall through */
-        case CODECVT_noconv:
-            if(call_basic_streambuf_wchar_overflow(&this->base, WEOF) == WEOF)
-                return FALSE;
-            return TRUE;
-        default:
-            return FALSE;
-        }
+    this->cvt = codecvt_short_use_facet(&this->base.loc);
+    locale__Addfac(&this->loc, &this->cvt->base.facet, codecvt_short_id.id, LC_CTYPE);
+    if(codecvt_base_always_noconv(&this->cvt->base)) {
+        this->cvt = NULL;
+    }else {
+        this->str = MSVCRT_operator_new(sizeof(basic_string_char));
+        basic_string_char_ctor(this->str);
     }
 }
 
@@ -2937,14 +2855,8 @@ basic_filebuf_wchar* __thiscall basic_filebuf_wchar_close(basic_filebuf_wchar *t
 
     TRACE("(%p)\n", this);
 
-    if(!this->file)
+    if(!this->file || fclose(this->file))
         return NULL;
-
-    /* TODO: handle exceptions */
-    if(!basic_filebuf_wchar__Endwrite(this))
-        ret = NULL;
-    if(fclose(this->file))
-        ret  = NULL;
 
     basic_filebuf_wchar__Init(this, NULL, INITFL_close);
     return ret;
@@ -2959,6 +2871,7 @@ static basic_filebuf_wchar* basic_filebuf_wchar_ctor_file(basic_filebuf_wchar *t
     basic_streambuf_wchar_ctor(&this->base);
     this->base.vtable = &MSVCP_basic_filebuf_wchar_vtable;
 
+    locale_ctor(&this->loc);
     basic_filebuf_wchar__Init(this, file, INITFL_new);
     return this;
 }
@@ -2973,6 +2886,7 @@ basic_filebuf_wchar* __thiscall basic_filebuf_short_ctor_file(basic_filebuf_wcha
     basic_streambuf_short_ctor(&this->base);
     this->base.vtable = &MSVCP_basic_filebuf_short_vtable;
 
+    locale_ctor(&this->loc);
     basic_filebuf_short__Init(this, file, INITFL_new);
     return this;
 }
@@ -2999,8 +2913,9 @@ basic_filebuf_wchar* __thiscall basic_filebuf_short_ctor_uninitialized(basic_fil
 {
     TRACE("(%p %d)\n", this, uninitialized);
 
-    basic_streambuf_short_ctor(&this->base);
+    basic_streambuf_short_ctor_uninitialized(&this->base, 0);
     this->base.vtable = &MSVCP_basic_filebuf_short_vtable;
+    locale_ctor(&this->loc);
     return this;
 }
 
@@ -3015,6 +2930,11 @@ void __thiscall basic_filebuf_wchar_dtor(basic_filebuf_wchar *this)
 
     if(this->close)
         basic_filebuf_wchar_close(this);
+    if(this->str) {
+        basic_string_char_dtor(this->str);
+        MSVCRT_operator_delete(this->str);
+    }
+    locale_dtor(&this->loc);
     basic_streambuf_wchar_dtor(&this->base);
 }
 
@@ -3066,7 +2986,7 @@ static basic_filebuf_wchar* basic_filebuf_wchar_open_wchar(basic_filebuf_wchar *
         return NULL;
 
     basic_filebuf_wchar__Init(this, f, INITFL_open);
-    basic_filebuf_wchar__Initcvt(this, codecvt_wchar_use_facet(&this->base.loc));
+    basic_filebuf_wchar__Initcvt(this);
     return this;
 }
 
@@ -3108,10 +3028,9 @@ basic_filebuf_wchar* __thiscall basic_filebuf_wchar_open_mode(basic_filebuf_wcha
 DEFINE_THISCALL_WRAPPER(basic_filebuf_wchar_overflow, 8)
 unsigned short __thiscall basic_filebuf_wchar_overflow(basic_filebuf_wchar *this, unsigned short c)
 {
-    char buf[8], *dyn_buf, *to_next;
+    char *ptr, *to_next;
     wchar_t ch = c;
     const wchar_t *from_next;
-    int max_size;
     unsigned short ret;
 
 
@@ -3126,48 +3045,24 @@ unsigned short __thiscall basic_filebuf_wchar_overflow(basic_filebuf_wchar *this
         return fwrite(&ch, sizeof(wchar_t), 1, this->file) ? c : WEOF;
 
     from_next = &ch;
-    do {
-        ret = codecvt_wchar_out(this->cvt, &this->state, from_next, &ch+1,
-                &from_next, buf, buf+sizeof(buf), &to_next);
-
-        switch(ret) {
-        case CODECVT_partial:
-            if(to_next == buf)
-                break;
-            /* fall through */
-        case CODECVT_ok:
-            if(!fwrite(buf, to_next-buf, 1, this->file))
-                return WEOF;
-            if(ret == CODECVT_partial)
-                continue;
-            return c;
-        case CODECVT_noconv:
-            return fwrite(&ch, sizeof(wchar_t), 1, this->file) ? c : WEOF;
-        default:
-            return WEOF;
-        }
-
-        break;
-    } while(1);
-
-    max_size = codecvt_base_max_length(&this->cvt->base);
-    dyn_buf = malloc(max_size);
-    if(!dyn_buf)
-        return WEOF;
-
-    ret = codecvt_wchar_out(this->cvt, &this->state, from_next, &ch+1,
-            &from_next, dyn_buf, dyn_buf+max_size, &to_next);
+    basic_string_char_clear(this->str);
+    basic_string_char_append_len_ch(this->str, 8, '\0');
+    ptr = this->str->ptr;
+    ret = codecvt_wchar_out(this->cvt, &this->state, &ch, &ch+1, &from_next,
+            ptr, ptr+basic_string_char_length(this->str), &to_next);
 
     switch(ret) {
-    case CODECVT_ok:
-        ret = fwrite(dyn_buf, to_next-dyn_buf, 1, this->file);
-        free(dyn_buf);
-        return ret ? c : WEOF;
     case CODECVT_partial:
-        ERR("buffer should be big enough to store all output\n");
+        if(from_next == &ch)
+            return WEOF;
         /* fall through */
+    case CODECVT_ok:
+        if(!fwrite(ptr, to_next-ptr, 1, this->file))
+            return WEOF;
+        return c;
+    case CODECVT_noconv:
+        return fwrite(&ch, sizeof(wchar_t), 1, this->file) ? c : WEOF;
     default:
-        free(dyn_buf);
         return WEOF;
     }
 }
@@ -3188,11 +3083,24 @@ unsigned short __thiscall basic_filebuf_wchar_pbackfail(basic_filebuf_wchar *thi
             && (c==WEOF || basic_streambuf_wchar_gptr(&this->base)[-1]==c)) {
         basic_streambuf_wchar__Gndec(&this->base);
         return c==WEOF ? !c : c;
-    }else if(c!=WEOF && !this->cvt) {
+    }else if(c == WEOF) {
+        return WEOF;
+    }else if(!this->cvt) {
         return ungetwc(c, this->file);
-    }else if(c!=WEOF && basic_streambuf_wchar_gptr(&this->base)!=&this->putback) {
-        this->putback = c;
-        basic_streambuf_wchar_setg(&this->base, &this->putback, &this->putback, &this->putback+1);
+    }else if(basic_string_char_length(this->str)) {
+        char *b, *e, *cur;
+
+        e = this->str->ptr;
+        b = e+this->str->size-1;
+        for(cur = b; cur>=e; cur--) {
+            if(ungetc(*cur, this->file) == EOF) {
+                for(; cur<=b; cur++)
+                    fgetc(this->file);
+                return WEOF;
+            }
+        }
+        basic_string_char_clear(this->str);
+        this->state = this->state0;
         return c;
     }
 
@@ -3207,9 +3115,8 @@ DEFINE_THISCALL_WRAPPER(basic_filebuf_wchar_uflow, 4)
 unsigned short __thiscall basic_filebuf_wchar_uflow(basic_filebuf_wchar *this)
 {
     wchar_t ch, *to_next;
-    char buf[128];
     const char *buf_next;
-    int c, i;
+    int c;
 
     TRACE("(%p)\n", this);
 
@@ -3222,35 +3129,28 @@ unsigned short __thiscall basic_filebuf_wchar_uflow(basic_filebuf_wchar *this)
     if(!this->cvt)
         return fgetwc(this->file);
 
-    buf_next = buf;
-    for(i=0; i < sizeof(buf)/sizeof(buf[0]); i++) {
+    basic_string_char_clear(this->str);
+    this->state0 = this->state;
+    while(1) {
         if((c = fgetc(this->file)) == EOF)
             return WEOF;
-        buf[i] = c;
+        basic_string_char_append_ch(this->str, c);
+        this->state = this->state0;
 
-        switch(codecvt_wchar_in(this->cvt, &this->state, buf_next,
-                    buf+i+1, &buf_next, &ch, &ch+1, &to_next)) {
+        switch(codecvt_wchar_in(this->cvt, &this->state, this->str->ptr,
+                    this->str->ptr+this->str->size, &buf_next, &ch, &ch+1, &to_next)) {
         case CODECVT_partial:
-        case CODECVT_ok:
-            if(to_next == &ch)
-                continue;
-
-            for(i--; i>=buf_next-buf; i--)
-                ungetc(buf[i], this->file);
-            return ch;
+            break;
         case CODECVT_noconv:
-            if(i+1 < sizeof(wchar_t))
-                continue;
-
-            memcpy(&ch, buf, sizeof(wchar_t));
-            return ch;
+            if(this->str->size < sizeof(unsigned short)/sizeof(char))
+                break;
+            return *(unsigned short*)this->str->ptr;
+        case CODECVT_ok:
+            return (unsigned short)ch;
         default:
             return WEOF;
         }
     }
-
-    FIXME("buffer is too small\n");
-    return WEOF;
 }
 
 /* ?underflow@?$basic_filebuf@_WU?$char_traits@_W@std@@@std@@MAEGXZ */
@@ -3285,15 +3185,7 @@ fpos_int* __thiscall basic_filebuf_wchar_seekoff(basic_filebuf_wchar *this,
 
     TRACE("(%p %p %ld %d %d)\n", this, ret, off, way, mode);
 
-    if(basic_streambuf_wchar_gptr(&this->base) == &this->putback) {
-        if(way == SEEKDIR_cur)
-            off -= sizeof(wchar_t);
-
-        basic_streambuf_wchar_setg(&this->base, &this->putback, &this->putback+1, &this->putback+1);
-    }
-
-    if(!basic_filebuf_wchar_is_open(this) || !basic_filebuf_wchar__Endwrite(this)
-            || fseek(this->file, off, way)) {
+    if(!basic_filebuf_wchar_is_open(this) || fseek(this->file, off, way)) {
         ret->off = -1;
         ret->pos = 0;
         ret->state = 0;
@@ -3319,17 +3211,13 @@ fpos_int* __thiscall basic_filebuf_wchar_seekpos(basic_filebuf_wchar *this,
 
     TRACE("(%p %p %s %d)\n", this, ret, debugstr_fpos_int(&pos), mode);
 
-    if(!basic_filebuf_wchar_is_open(this) || !basic_filebuf_wchar__Endwrite(this)
-            || fseek(this->file, (LONG)pos.pos, SEEK_SET)
+    if(!basic_filebuf_wchar_is_open(this) || fseek(this->file, (LONG)pos.pos, SEEK_SET)
             || (pos.off && fseek(this->file, pos.off, SEEK_CUR))) {
         ret->off = -1;
         ret->pos = 0;
         ret->state = 0;
         return ret;
     }
-
-    if(basic_streambuf_wchar_gptr(&this->base) == &this->putback)
-        basic_streambuf_wchar_setg(&this->base, &this->putback, &this->putback+1, &this->putback+1);
 
     fgetpos(this->file, &fpos);
     ret->off = 0;
@@ -3389,27 +3277,12 @@ int __thiscall basic_filebuf_wchar_sync(basic_filebuf_wchar *this)
     return fflush(this->file);
 }
 
-/* ?imbue@?$basic_filebuf@_WU?$char_traits@_W@std@@@std@@MAEXABVlocale@2@@Z */
-/* ?imbue@?$basic_filebuf@_WU?$char_traits@_W@std@@@std@@MEAAXAEBVlocale@2@@Z */
-DEFINE_THISCALL_WRAPPER(basic_filebuf_wchar_imbue, 8)
-void __thiscall basic_filebuf_wchar_imbue(basic_filebuf_wchar *this, const locale *loc)
-{
-    TRACE("(%p %p)\n", this, loc);
-    basic_filebuf_wchar__Initcvt(this, codecvt_wchar_use_facet(loc));
-}
-
-/* ?imbue@?$basic_filebuf@GU?$char_traits@G@std@@@std@@MAEXABVlocale@2@@Z */
-/* ?imbue@?$basic_filebuf@GU?$char_traits@G@std@@@std@@MEAAXAEBVlocale@2@@Z */
-DEFINE_THISCALL_WRAPPER(basic_filebuf_short_imbue, 8)
-void __thiscall basic_filebuf_short_imbue(basic_filebuf_wchar *this, const locale *loc)
-{
-    TRACE("(%p %p)\n", this, loc);
-    basic_filebuf_wchar__Initcvt(this, codecvt_short_use_facet(loc));
-}
-
 /* ?_Getstate@?$basic_stringbuf@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AAEHH@Z */
 /* ?_Getstate@?$basic_stringbuf@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AEAAHH@Z */
-static int basic_stringbuf_char__Getstate(basic_stringbuf_char *this, IOSB_openmode mode)
+/* ?_Mode@?$basic_stringbuf@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AAEHH@Z */
+/* ?_Mode@?$basic_stringbuf@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AEAAHH@Z */
+DEFINE_THISCALL_WRAPPER(basic_stringbuf_char__Getstate, 8)
+int __thiscall basic_stringbuf_char__Getstate(basic_stringbuf_char *this, IOSB_openmode mode)
 {
     int state = 0;
 
@@ -3775,7 +3648,10 @@ basic_string_char* __thiscall basic_stringbuf_char_str_get(const basic_stringbuf
 /* ?_Getstate@?$basic_stringbuf@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@AEAAHH@Z */
 /* ?_Getstate@?$basic_stringbuf@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@AAEHH@Z */
 /* ?_Getstate@?$basic_stringbuf@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@AEAAHH@Z */
-static int basic_stringbuf_wchar__Getstate(basic_stringbuf_wchar *this, IOSB_openmode mode)
+/* ?_Mode@?$basic_stringbuf@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@AAEHH@Z */
+/* ?_Mode@?$basic_stringbuf@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@AEAAHH@Z */
+DEFINE_THISCALL_WRAPPER(basic_stringbuf_wchar__Getstate, 8)
+int __thiscall basic_stringbuf_wchar__Getstate(basic_stringbuf_wchar *this, IOSB_openmode mode)
 {
     int state = 0;
 
@@ -4184,6 +4060,7 @@ ios_base* __thiscall ios_base_ctor(ios_base *this)
 {
     TRACE("(%p)\n", this);
     this->vtable = &MSVCP_ios_base_vtable;
+    locale_ctor_uninitialized(&this->loc, 0);
     return this;
 }
 
@@ -4240,10 +4117,7 @@ void CDECL ios_base_Tidy(ios_base *this)
 static void ios_base_Ios_base_dtor(ios_base *obj)
 {
     TRACE("(%p)\n", obj);
-    if(obj->loc) {
-        locale_dtor(obj->loc);
-        MSVCRT_operator_delete(obj->loc);
-    }
+    locale_dtor(&obj->loc);
     ios_base_Tidy(obj);
 }
 
@@ -4426,7 +4300,7 @@ ios_base* __thiscall ios_base_copyfmt(ios_base *this, const ios_base *rhs)
         this->fmtfl = rhs->fmtfl;
         this->prec = rhs->prec;
         this->wide = rhs->wide;
-        locale_operator_assign(this->loc, rhs->loc);
+        locale_operator_assign(&this->loc, &rhs->loc);
 
         for(event_cur=rhs->calls; event_cur; event_cur=event_cur->next)
             ios_base_register_callback(this, event_cur->event_handler, event_cur->index);
@@ -4501,8 +4375,7 @@ void __thiscall ios_base__Init(ios_base *this)
     this->wide = 0;
     this->arr = NULL;
     this->calls = NULL;
-    this->loc = MSVCRT_operator_new(sizeof(locale));
-    locale_ctor(this->loc);
+    locale_ctor(&this->loc);
 }
 
 /* ?bad@ios_base@std@@QBE_NXZ */
@@ -4551,7 +4424,7 @@ DEFINE_THISCALL_WRAPPER(ios_base_getloc, 8)
 locale* __thiscall ios_base_getloc(const ios_base *this, locale *ret)
 {
     TRACE("(%p)\n", this);
-    return locale_copy_ctor(ret, this->loc);
+    return locale_copy_ctor(ret, &this->loc);
 }
 
 /* ?good@ios_base@std@@QBE_NXZ */
@@ -4569,8 +4442,8 @@ DEFINE_THISCALL_WRAPPER(ios_base_imbue, 12)
 locale* __thiscall ios_base_imbue(ios_base *this, locale *ret, const locale *loc)
 {
     TRACE("(%p %p)\n", this, loc);
-    *ret = *this->loc;
-    locale_copy_ctor(this->loc, loc);
+    *ret = this->loc;
+    locale_copy_ctor(&this->loc, loc);
     return ret;
 }
 
@@ -5214,14 +5087,15 @@ static inline basic_ostream_char* basic_ostream_char_from_basic_ios(basic_ios_ch
     return (basic_ostream_char*)((char*)ptr-basic_ostream_char_vbtable[1]);
 }
 
-/* ??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QAE@PAV?$basic_streambuf@DU?$char_traits@D@std@@@1@_N@Z */
-/* ??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAA@PEAV?$basic_streambuf@DU?$char_traits@D@std@@@1@_N@Z */
-static basic_ostream_char* basic_ostream_char_ctor(basic_ostream_char *this,
-        basic_streambuf_char *strbuf, MSVCP_bool isstd, MSVCP_bool virt_init)
+/* ??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QAE@PAV?$basic_streambuf@DU?$char_traits@D@std@@@1@_N1@Z */
+/* ??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAA@PEAV?$basic_streambuf@DU?$char_traits@D@std@@@1@_N1@Z */
+DEFINE_THISCALL_WRAPPER(basic_ostream_char_ctor, 20)
+basic_ostream_char* __thiscall basic_ostream_char_ctor(basic_ostream_char *this,
+        basic_streambuf_char *strbuf, MSVCP_bool isstd, MSVCP_bool init, MSVCP_bool virt_init)
 {
     basic_ios_char *base;
 
-    TRACE("(%p %p %d %d)\n", this, strbuf, isstd, virt_init);
+    TRACE("(%p %p %d %d %d)\n", this, strbuf, isstd, init, virt_init);
 
     if(virt_init) {
         this->vbtable = basic_ostream_char_vbtable;
@@ -5232,18 +5106,20 @@ static basic_ostream_char* basic_ostream_char_ctor(basic_ostream_char *this,
     }
 
     base->base.vtable = &MSVCP_basic_ostream_char_vtable;
-    basic_ios_char_init(base, strbuf, isstd);
+    if(init)
+        basic_ios_char_init(base, strbuf, isstd);
     return this;
 }
 
-/* ??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QAE@W4_Uninitialized@1@_N@Z */
-/* ??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAA@W4_Uninitialized@1@_N@Z */
-static basic_ostream_char* basic_ostream_char_ctor_uninitialized(basic_ostream_char *this,
-        int uninitialized, MSVCP_bool addstd, MSVCP_bool virt_init)
+/* ??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QAE@W4_Uninitialized@1@@Z */
+/* ??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAA@W4_Uninitialized@1@@Z */
+DEFINE_THISCALL_WRAPPER(basic_ostream_char_ctor_uninitialized, 12)
+basic_ostream_char* __thiscall basic_ostream_char_ctor_uninitialized(basic_ostream_char *this,
+        int uninitialized, MSVCP_bool virt_init)
 {
     basic_ios_char *base;
 
-    TRACE("(%p %d %x)\n", this, uninitialized, addstd);
+    TRACE("(%p %d)\n", this, uninitialized);
 
     if(virt_init) {
         this->vbtable = basic_ostream_char_vbtable;
@@ -5254,8 +5130,7 @@ static basic_ostream_char* basic_ostream_char_ctor_uninitialized(basic_ostream_c
     }
 
     base->base.vtable = &MSVCP_basic_ostream_char_vtable;
-    if(addstd)
-        ios_base_Addstd(&base->base);
+    ios_base_Addstd(&base->base);
     return this;
 }
 
@@ -5960,14 +5835,15 @@ static inline basic_ostream_wchar* basic_ostream_wchar_from_basic_ios(basic_ios_
     return (basic_ostream_wchar*)((char*)ptr-basic_ostream_wchar_vbtable[1]);
 }
 
-/* ??0?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QAE@PAV?$basic_streambuf@_WU?$char_traits@_W@std@@@1@_N@Z */
-/* ??0?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QEAA@PEAV?$basic_streambuf@_WU?$char_traits@_W@std@@@1@_N@Z */
-static basic_ostream_wchar* basic_ostream_wchar_ctor(basic_ostream_wchar *this,
-        basic_streambuf_wchar *strbuf, MSVCP_bool isstd, MSVCP_bool virt_init)
+/* ??0?$basic_ostream@GU?$char_traits@G@std@@@std@@QAE@PAV?$basic_streambuf@GU?$char_traits@G@std@@@1@_N1@Z */
+/* ??0?$basic_ostream@GU?$char_traits@G@std@@@std@@QEAA@PEAV?$basic_streambuf@GU?$char_traits@G@std@@@1@_N1@Z */
+DEFINE_THISCALL_WRAPPER(basic_ostream_short_ctor, 20)
+basic_ostream_wchar* __thiscall basic_ostream_short_ctor(basic_ostream_wchar *this,
+        basic_streambuf_wchar *strbuf, MSVCP_bool isstd, MSVCP_bool init, MSVCP_bool virt_init)
 {
     basic_ios_wchar *base;
 
-    TRACE("(%p %p %d %d)\n", this, strbuf, isstd, virt_init);
+    TRACE("(%p %p %d %d %d)\n", this, strbuf, isstd, init, virt_init);
 
     if(virt_init) {
         this->vbtable = basic_ostream_wchar_vbtable;
@@ -5977,29 +5853,21 @@ static basic_ostream_wchar* basic_ostream_wchar_ctor(basic_ostream_wchar *this,
         base = basic_ostream_wchar_get_basic_ios(this);
     }
 
-    base->base.vtable = &MSVCP_basic_ostream_wchar_vtable;
-    basic_ios_wchar_init(base, strbuf, isstd);
+    base->base.vtable = &MSVCP_basic_ostream_short_vtable;
+    if(init)
+        basic_ios_wchar_init(base, strbuf, isstd);
     return this;
 }
 
-/* ??0?$basic_ostream@GU?$char_traits@G@std@@@std@@QAE@PAV?$basic_streambuf@GU?$char_traits@G@std@@@1@_N@Z */
-/* ??0?$basic_ostream@GU?$char_traits@G@std@@@std@@QEAA@PEAV?$basic_streambuf@GU?$char_traits@G@std@@@1@_N@Z */
-static basic_ostream_wchar* basic_ostream_short_ctor(basic_ostream_wchar *this,
-        basic_streambuf_wchar *strbuf, MSVCP_bool isstd, MSVCP_bool virt_init)
-{
-    basic_ostream_wchar_ctor(this, strbuf, isstd, virt_init);
-    basic_ostream_wchar_get_basic_ios(this)->base.vtable = &MSVCP_basic_ostream_short_vtable;
-    return this;
-}
-
-/* ??0?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QAE@W4_Uninitialized@1@_N@Z */
-/* ??0?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QEAA@W4_Uninitialized@1@_N@Z */
-static basic_ostream_wchar* basic_ostream_wchar_ctor_uninitialized(basic_ostream_wchar *this,
-        int uninitialized, MSVCP_bool addstd, MSVCP_bool virt_init)
+/* ??0?$basic_ostream@GU?$char_traits@G@std@@@std@@QAE@W4_Uninitialized@1@@Z */
+/* ??0?$basic_ostream@GU?$char_traits@G@std@@@std@@QEAA@W4_Uninitialized@1@@Z */
+DEFINE_THISCALL_WRAPPER(basic_ostream_short_ctor_uninitialized, 12)
+basic_ostream_wchar* __thiscall basic_ostream_short_ctor_uninitialized(basic_ostream_wchar *this,
+        int uninitialized, MSVCP_bool virt_init)
 {
     basic_ios_wchar *base;
 
-    TRACE("(%p %d %x)\n", this, uninitialized, addstd);
+    TRACE("(%p %d)\n", this, uninitialized);
 
     if(virt_init) {
         this->vbtable = basic_ostream_wchar_vbtable;
@@ -6009,9 +5877,8 @@ static basic_ostream_wchar* basic_ostream_wchar_ctor_uninitialized(basic_ostream
         base = basic_ostream_wchar_get_basic_ios(this);
     }
 
-    base->base.vtable = &MSVCP_basic_ostream_wchar_vtable;
-    if(addstd)
-        ios_base_Addstd(&base->base);
+    base->base.vtable = &MSVCP_basic_ostream_short_vtable;
+    ios_base_Addstd(&base->base);
     return this;
 }
 
@@ -6889,12 +6756,7 @@ static MSVCP_bool basic_istream_char__Ipfx(basic_istream_char *this, MSVCP_bool 
 
             for(ch = basic_streambuf_char_sgetc(strbuf); ;
                     ch = basic_streambuf_char_snextc(strbuf)) {
-                if(ch == EOF) {
-                    basic_ios_char_setstate(base, IOSTATE_eofbit);
-                    break;
-                }
-
-                if(!ctype_char_is_ch(ctype, _SPACE|_BLANK, ch))
+                if(ch==EOF || !ctype_char_is_ch(ctype, _SPACE|_BLANK, ch))
                     break;
             }
         }
@@ -7402,14 +7264,7 @@ basic_istream_char* __thiscall basic_istream_char_seekg(basic_istream_char *this
         fpos_int ret;
 
         basic_streambuf_char_pubseekoff(strbuf, &ret, off, dir, OPENMODE_in);
-
-        if(ret.off==-1 && ret.pos==0 && ret.state==0)
-            basic_ios_char_setstate(base, IOSTATE_failbit);
-        else
-            basic_ios_char_clear(base, IOSTATE_goodbit);
-        return this;
-    }else
-        basic_ios_char_clear(base, IOSTATE_goodbit);
+    }
 
     return this;
 }
@@ -7428,14 +7283,7 @@ basic_istream_char* __thiscall basic_istream_char_seekg_fpos(basic_istream_char 
         fpos_int ret;
 
         basic_streambuf_char_pubseekpos(strbuf, &ret, pos, OPENMODE_in);
-
-        if(ret.off==-1 && ret.pos==0 && ret.state==0)
-            basic_ios_char_setstate(base, IOSTATE_failbit);
-        else
-            basic_ios_char_clear(base, IOSTATE_goodbit);
-        return this;
-    }else
-        basic_ios_char_clear(base, IOSTATE_goodbit);
+    }
 
     return this;
 }
@@ -7769,9 +7617,9 @@ basic_istream_char* __cdecl basic_istream_char_getline_bstr_delim(
 
     TRACE("(%p %p %c)\n", istream, str, delim);
 
+    basic_string_char_clear(str);
     if(basic_istream_char_sentry_create(istream, TRUE)) {
         basic_streambuf_char *strbuf = basic_ios_char_rdbuf_get(base);
-        basic_string_char_clear(str);
 
         c = basic_streambuf_char_sgetc(strbuf);
         for(; c!=(unsigned char)delim && c!=EOF; c = basic_streambuf_char_snextc(strbuf))
@@ -8118,12 +7966,7 @@ static MSVCP_bool basic_istream_wchar__Ipfx(basic_istream_wchar *this, MSVCP_boo
 
             for(ch = basic_streambuf_wchar_sgetc(strbuf); ;
                     ch = basic_streambuf_wchar_snextc(strbuf)) {
-                if(ch == WEOF) {
-                    basic_ios_wchar_setstate(base, IOSTATE_eofbit);
-                    break;
-                }
-
-                if(!ctype_wchar_is_ch(ctype, _SPACE|_BLANK, ch))
+                if(ch==WEOF || !ctype_wchar_is_ch(ctype, _SPACE|_BLANK, ch))
                     break;
             }
         }
@@ -8673,14 +8516,7 @@ basic_istream_wchar* __thiscall basic_istream_wchar_seekg(basic_istream_wchar *t
         fpos_int ret;
 
         basic_streambuf_wchar_pubseekoff(strbuf, &ret, off, dir, OPENMODE_in);
-
-        if(ret.off==-1 && ret.pos==0 && ret.state==0)
-            basic_ios_wchar_setstate(base, IOSTATE_failbit);
-        else
-            basic_ios_wchar_clear(base, IOSTATE_goodbit);
-        return this;
-    }else
-        basic_ios_wchar_clear(base, IOSTATE_goodbit);
+    }
 
     return this;
 }
@@ -8701,14 +8537,7 @@ basic_istream_wchar* __thiscall basic_istream_wchar_seekg_fpos(basic_istream_wch
         fpos_int ret;
 
         basic_streambuf_wchar_pubseekpos(strbuf, &ret, pos, OPENMODE_in);
-
-        if(ret.off==-1 && ret.pos==0 && ret.state==0)
-            basic_ios_wchar_setstate(base, IOSTATE_failbit);
-        else
-            basic_ios_wchar_clear(base, IOSTATE_goodbit);
-        return this;
-    }else
-        basic_ios_wchar_clear(base, IOSTATE_goodbit);
+    }
 
     return this;
 }
@@ -9080,9 +8909,9 @@ basic_istream_wchar* __cdecl basic_istream_wchar_getline_bstr_delim(
 
     TRACE("(%p %p %c)\n", istream, str, delim);
 
+    basic_string_wchar_clear(str);
     if(basic_istream_wchar_sentry_create(istream, TRUE)) {
         basic_streambuf_wchar *strbuf = basic_ios_wchar_rdbuf_get(base);
-        basic_string_wchar_clear(str);
 
         c = basic_streambuf_wchar_sgetc(strbuf);
         for(; c!=delim && c!=WEOF; c = basic_streambuf_wchar_snextc(strbuf))
@@ -9315,7 +9144,7 @@ basic_iostream_char* __thiscall basic_iostream_char_ctor(basic_iostream_char *th
     basic_ios->base.vtable = &MSVCP_basic_iostream_char_vtable;
 
     basic_istream_char_ctor(&this->base1, strbuf, FALSE, FALSE);
-    basic_ostream_char_ctor_uninitialized(&this->base2, 0, FALSE, FALSE);
+    basic_ostream_char_ctor(&this->base2, NULL, FALSE, FALSE, FALSE);
     return this;
 }
 
@@ -9393,7 +9222,7 @@ static basic_iostream_wchar* basic_iostream_wchar_ctor(basic_iostream_wchar *thi
     }
 
     basic_istream_wchar_ctor(&this->base1, strbuf, FALSE, FALSE);
-    basic_ostream_wchar_ctor_uninitialized(&this->base2, 0, FALSE, FALSE);
+    basic_ostream_short_ctor(&this->base2, NULL, FALSE, FALSE, FALSE);
 
     basic_ios->base.vtable = &MSVCP_basic_iostream_wchar_vtable;
     return this;
@@ -9487,7 +9316,7 @@ basic_ofstream_char* __thiscall basic_ofstream_char_ctor(basic_ofstream_char *th
     }
 
     basic_filebuf_char_ctor(&this->filebuf);
-    basic_ostream_char_ctor(&this->base, &this->filebuf.base, FALSE, FALSE);
+    basic_ostream_char_ctor(&this->base, &this->filebuf.base, FALSE, TRUE, FALSE);
     basic_ios->base.vtable = &MSVCP_basic_ofstream_char_vtable;
     return this;
 }
@@ -9510,7 +9339,7 @@ static basic_ofstream_char* basic_ofstream_char_ctor_file(
     }
 
     basic_filebuf_char_ctor_file(&this->filebuf, file);
-    basic_ostream_char_ctor(&this->base, &this->filebuf.base, FALSE, FALSE);
+    basic_ostream_char_ctor(&this->base, &this->filebuf.base, FALSE, TRUE, FALSE);
     basic_ios->base.vtable = &MSVCP_basic_ofstream_char_vtable;
     return this;
 }
@@ -9670,7 +9499,7 @@ static basic_ofstream_wchar* basic_ofstream_wchar_ctor(basic_ofstream_wchar *thi
     }
 
     basic_filebuf_wchar_ctor(&this->filebuf);
-    basic_ostream_wchar_ctor(&this->base, &this->filebuf.base, FALSE, FALSE);
+    basic_ostream_short_ctor(&this->base, &this->filebuf.base, FALSE, TRUE, FALSE);
     basic_ios->base.vtable = &MSVCP_basic_ofstream_wchar_vtable;
     return this;
 }
@@ -9703,7 +9532,7 @@ static basic_ofstream_wchar* basic_ofstream_wchar_ctor_file(
     }
 
     basic_filebuf_wchar_ctor_file(&this->filebuf, file);
-    basic_ostream_wchar_ctor(&this->base, &this->filebuf.base, FALSE, FALSE);
+    basic_ostream_short_ctor(&this->base, &this->filebuf.base, FALSE, TRUE, FALSE);
     basic_ios->base.vtable = &MSVCP_basic_ofstream_wchar_vtable;
     return this;
 }
@@ -10683,7 +10512,7 @@ basic_ostringstream_char* __thiscall basic_ostringstream_char_ctor_str(basic_ost
     }
 
     basic_stringbuf_char_ctor_str(&this->strbuf, str, mode|OPENMODE_out);
-    basic_ostream_char_ctor(&this->base, &this->strbuf.base, FALSE, FALSE);
+    basic_ostream_char_ctor(&this->base, &this->strbuf.base, FALSE, TRUE, FALSE);
     basic_ios->base.vtable = &MSVCP_basic_ostringstream_char_vtable;
     return this;
 }
@@ -10707,7 +10536,7 @@ basic_ostringstream_char* __thiscall basic_ostringstream_char_ctor_mode(
     }
 
     basic_stringbuf_char_ctor_mode(&this->strbuf, mode|OPENMODE_out);
-    basic_ostream_char_ctor(&this->base, &this->strbuf.base, FALSE, FALSE);
+    basic_ostream_char_ctor(&this->base, &this->strbuf.base, FALSE, TRUE, FALSE);
     basic_ios->base.vtable = &MSVCP_basic_ostringstream_char_vtable;
     return this;
 }
@@ -10823,7 +10652,7 @@ static basic_ostringstream_wchar* basic_ostringstream_wchar_ctor_str(basic_ostri
     }
 
     basic_stringbuf_wchar_ctor_str(&this->strbuf, str, mode|OPENMODE_out);
-    basic_ostream_wchar_ctor(&this->base, &this->strbuf.base, FALSE, FALSE);
+    basic_ostream_short_ctor(&this->base, &this->strbuf.base, FALSE, TRUE, FALSE);
     basic_ios->base.vtable = &MSVCP_basic_ostringstream_wchar_vtable;
     return this;
 }
@@ -10857,7 +10686,7 @@ static basic_ostringstream_wchar* basic_ostringstream_wchar_ctor_mode(
     }
 
     basic_stringbuf_wchar_ctor_mode(&this->strbuf, mode|OPENMODE_out);
-    basic_ostream_wchar_ctor(&this->base, &this->strbuf.base, FALSE, FALSE);
+    basic_ostream_short_ctor(&this->base, &this->strbuf.base, FALSE, TRUE, FALSE);
     basic_ios->base.vtable = &MSVCP_basic_ostringstream_wchar_vtable;
     return this;
 }
@@ -11927,7 +11756,7 @@ ostrstream* __thiscall ostrstream_ctor(ostrstream *this, char *buf, streamsize s
 
     strstreambuf_ctor_get_put(&this->buf, buf, size,
             buf && (mode & OPENMODE_app) ? buf+strlen(buf) : buf);
-    basic_ostream_char_ctor(&this->base, &this->buf.base, FALSE, FALSE);
+    basic_ostream_char_ctor(&this->base, &this->buf.base, FALSE, TRUE, FALSE);
     basic_ios->base.vtable = &MSVCP_ostrstream_vtable;
     return this;
 }
@@ -12435,31 +12264,31 @@ void init_io(void *base)
     basic_istream_wchar_ctor(&wcin.obj, &filebuf_wchar_stdin.base, FALSE/*FIXME*/, TRUE);
 
     basic_filebuf_char_ctor_file(&filebuf_char_stdout, stdout);
-    basic_ostream_char_ctor(&cout.obj, &filebuf_char_stdout.base, FALSE/*FIXME*/, TRUE);
+    basic_ostream_char_ctor(&cout.obj, &filebuf_char_stdout.base, FALSE/*FIXME*/, TRUE, TRUE);
 
     basic_filebuf_short_ctor_file(&filebuf_short_stdout, stdout);
-    basic_ostream_short_ctor(&ucout.obj, &filebuf_short_stdout.base, FALSE/*FIXME*/, TRUE);
+    basic_ostream_short_ctor(&ucout.obj, &filebuf_short_stdout.base, FALSE/*FIXME*/, TRUE, TRUE);
 
     basic_filebuf_wchar_ctor_file(&filebuf_wchar_stdout, stdout);
-    basic_ostream_wchar_ctor(&wcout.obj, &filebuf_wchar_stdout.base, FALSE/*FIXME*/, TRUE);
+    basic_ostream_short_ctor(&wcout.obj, &filebuf_wchar_stdout.base, FALSE/*FIXME*/, TRUE, TRUE);
 
     basic_filebuf_char_ctor_file(&filebuf_char_stderr, stderr);
-    basic_ostream_char_ctor(&cerr.obj, &filebuf_char_stderr.base, FALSE/*FIXME*/, TRUE);
+    basic_ostream_char_ctor(&cerr.obj, &filebuf_char_stderr.base, FALSE/*FIXME*/, TRUE, TRUE);
 
     basic_filebuf_short_ctor_file(&filebuf_short_stderr, stderr);
-    basic_ostream_short_ctor(&ucerr.obj, &filebuf_short_stderr.base, FALSE/*FIXME*/, TRUE);
+    basic_ostream_short_ctor(&ucerr.obj, &filebuf_short_stderr.base, FALSE/*FIXME*/, TRUE, TRUE);
 
     basic_filebuf_wchar_ctor_file(&filebuf_wchar_stderr, stderr);
-    basic_ostream_wchar_ctor(&wcerr.obj, &filebuf_wchar_stderr.base, FALSE/*FIXME*/, TRUE);
+    basic_ostream_short_ctor(&wcerr.obj, &filebuf_wchar_stderr.base, FALSE/*FIXME*/, TRUE, TRUE);
 
     basic_filebuf_char_ctor_file(&filebuf_char_log, stderr);
-    basic_ostream_char_ctor(&clog.obj, &filebuf_char_log.base, FALSE/*FIXME*/, TRUE);
+    basic_ostream_char_ctor(&clog.obj, &filebuf_char_log.base, FALSE/*FIXME*/, TRUE, TRUE);
 
     basic_filebuf_short_ctor_file(&filebuf_short_log, stderr);
-    basic_ostream_short_ctor(&uclog.obj, &filebuf_short_log.base, FALSE/*FIXME*/, TRUE);
+    basic_ostream_short_ctor(&uclog.obj, &filebuf_short_log.base, FALSE/*FIXME*/, TRUE, TRUE);
 
     basic_filebuf_wchar_ctor_file(&filebuf_wchar_log, stderr);
-    basic_ostream_wchar_ctor(&wclog.obj, &filebuf_wchar_log.base, FALSE/*FIXME*/, TRUE);
+    basic_ostream_short_ctor(&wclog.obj, &filebuf_wchar_log.base, FALSE/*FIXME*/, TRUE, TRUE);
 }
 
 void free_io(void)

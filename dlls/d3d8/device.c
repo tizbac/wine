@@ -545,13 +545,12 @@ static HRESULT WINAPI d3d8_device_CreateAdditionalSwapChain(IDirect3DDevice8 *if
     struct d3d8_device *device = impl_from_IDirect3DDevice8(iface);
     struct wined3d_swapchain_desc desc;
     struct d3d8_swapchain *object;
-    HRESULT hr;
 
     TRACE("iface %p, present_parameters %p, swapchain %p.\n",
             iface, present_parameters, swapchain);
 
     wined3d_swapchain_desc_from_present_parameters(&desc, present_parameters);
-    if (SUCCEEDED(hr = d3d8_swapchain_create(device, &desc, &object)))
+    if (SUCCEEDED(d3d8_swapchain_create(device, &desc, &object)))
         *swapchain = &object->IDirect3DSwapChain8_iface;
     present_parameters_from_wined3d_swapchain_desc(present_parameters, &desc);
 
@@ -597,7 +596,8 @@ static HRESULT WINAPI d3d8_device_Reset(IDirect3DDevice8 *iface,
 
     wined3d_mutex_lock();
     wined3d_swapchain_desc_from_present_parameters(&swapchain_desc, present_parameters);
-    if (SUCCEEDED(hr = wined3d_device_reset(device->wined3d_device, &swapchain_desc, NULL, reset_enum_callback)))
+    if (SUCCEEDED(hr = wined3d_device_reset(device->wined3d_device, &swapchain_desc,
+            NULL, reset_enum_callback, TRUE)))
     {
         wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_POINTSIZE_MIN, 0);
         device->lost = FALSE;
@@ -2302,6 +2302,7 @@ static HRESULT WINAPI d3d8_device_GetIndices(IDirect3DDevice8 *iface,
         IDirect3DIndexBuffer8 **buffer, UINT *base_vertex_index)
 {
     struct d3d8_device *device = impl_from_IDirect3DDevice8(iface);
+    enum wined3d_format_id wined3d_format;
     struct wined3d_buffer *wined3d_buffer;
     struct d3d8_indexbuffer *buffer_impl;
 
@@ -2313,7 +2314,7 @@ static HRESULT WINAPI d3d8_device_GetIndices(IDirect3DDevice8 *iface,
     /* The case from UINT to INT is safe because d3d8 will never set negative values */
     wined3d_mutex_lock();
     *base_vertex_index = wined3d_device_get_base_vertex_index(device->wined3d_device);
-    if ((wined3d_buffer = wined3d_device_get_index_buffer(device->wined3d_device)))
+    if ((wined3d_buffer = wined3d_device_get_index_buffer(device->wined3d_device, &wined3d_format)))
     {
         buffer_impl = wined3d_buffer_get_parent(wined3d_buffer);
         *buffer = &buffer_impl->IDirect3DIndexBuffer8_iface;

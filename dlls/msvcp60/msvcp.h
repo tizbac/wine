@@ -50,6 +50,7 @@ const char* __thiscall basic_string_char_c_str(const basic_string_char*);
 void basic_string_char_clear(basic_string_char*);
 basic_string_char* __thiscall basic_string_char_append_ch(basic_string_char*, char);
 MSVCP_size_t __thiscall basic_string_char_length(const basic_string_char*);
+basic_string_char* __thiscall basic_string_char_append_len_ch(basic_string_char*, MSVCP_size_t, char);
 
 typedef struct
 {
@@ -164,15 +165,23 @@ typedef struct
 
 locale* __thiscall locale_ctor(locale*);
 locale* __thiscall locale_copy_ctor(locale*, const locale*);
+locale* __thiscall locale_ctor_uninitialized(locale *, int);
 locale* __thiscall locale_operator_assign(locale*, const locale*);
 void __thiscall locale_dtor(locale*);
 void free_locale(void);
+locale* __thiscall locale__Addfac(locale*, locale_facet*, MSVCP_size_t, MSVCP_size_t);
 codecvt_char* codecvt_char_use_facet(const locale*);
 codecvt_wchar* codecvt_wchar_use_facet(const locale*);
 codecvt_wchar* codecvt_short_use_facet(const locale*);
 ctype_char* ctype_char_use_facet(const locale*);
 ctype_wchar* ctype_wchar_use_facet(const locale*);
 ctype_wchar* ctype_short_use_facet(const locale*);
+
+typedef struct {
+    MSVCP_size_t id;
+} locale_id;
+extern locale_id codecvt_char_id;
+extern locale_id codecvt_short_id;
 
 /* class _Lockit */
 typedef struct {
@@ -189,16 +198,6 @@ void init_lockit(void);
 void free_lockit(void);
 _Lockit* __thiscall _Lockit_ctor_locktype(_Lockit*, int);
 void __thiscall _Lockit_dtor(_Lockit*);
-
-/* class mutex */
-typedef struct {
-    void *mutex;
-} mutex;
-
-mutex* mutex_ctor(mutex*);
-void mutex_dtor(mutex*);
-void mutex_lock(mutex*);
-void mutex_unlock(mutex*);
 
 typedef enum {
     FMTFLAG_skipws      = 0x0001,
@@ -276,7 +275,6 @@ typedef struct _fnarray {
 /* class ios_base */
 typedef struct _ios_base {
     const vtable_ptr *vtable;
-    MSVCP_size_t stdstr;
     IOSB_iostate state;
     IOSB_iostate except;
     IOSB_fmtflags fmtfl;
@@ -284,7 +282,8 @@ typedef struct _ios_base {
     streamsize wide;
     IOS_BASE_iosarray *arr;
     IOS_BASE_fnarray *calls;
-    locale *loc;
+    locale loc;
+    MSVCP_size_t stdstr;
 } ios_base;
 
 /* class basic_streambuf<char> */
@@ -323,7 +322,6 @@ int __thiscall basic_streambuf_char_sputc(basic_streambuf_char*, char);
 /* class basic_streambuf<wchar> */
 typedef struct {
     const vtable_ptr *vtable;
-    mutex lock;
     wchar_t *rbuf;
     wchar_t *wbuf;
     wchar_t **prbuf;

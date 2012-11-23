@@ -550,11 +550,22 @@ static ULONG WINAPI TiffDecoder_Release(IWICBitmapDecoder *iface)
     return ref;
 }
 
-static HRESULT WINAPI TiffDecoder_QueryCapability(IWICBitmapDecoder *iface, IStream *pIStream,
-    DWORD *pdwCapability)
+static HRESULT WINAPI TiffDecoder_QueryCapability(IWICBitmapDecoder *iface, IStream *stream,
+    DWORD *capability)
 {
-    FIXME("(%p,%p,%p): stub\n", iface, pIStream, pdwCapability);
-    return E_NOTIMPL;
+    HRESULT hr;
+
+    TRACE("(%p,%p,%p)\n", iface, stream, capability);
+
+    if (!stream || !capability) return E_INVALIDARG;
+
+    hr = IWICBitmapDecoder_Initialize(iface, stream, WICDecodeMetadataCacheOnDemand);
+    if (hr != S_OK) return hr;
+
+    *capability = WICBitmapDecoderCapabilityCanDecodeAllImages |
+                  WICBitmapDecoderCapabilityCanDecodeSomeImages |
+                  WICBitmapDecoderCapabilityCanEnumerateMetadata;
+    return S_OK;
 }
 
 static HRESULT WINAPI TiffDecoder_Initialize(IWICBitmapDecoder *iface, IStream *pIStream,
@@ -668,14 +679,10 @@ static HRESULT WINAPI TiffDecoder_GetFrameCount(IWICBitmapDecoder *iface,
 {
     TiffDecoder *This = impl_from_IWICBitmapDecoder(iface);
 
-    if (!This->tiff)
-    {
-        WARN("(%p) <-- WINCODEC_ERR_WRONGSTATE\n", iface);
-        return WINCODEC_ERR_WRONGSTATE;
-    }
+    if (!pCount) return E_INVALIDARG;
 
     EnterCriticalSection(&This->lock);
-    *pCount = pTIFFNumberOfDirectories(This->tiff);
+    *pCount = This->tiff ? pTIFFNumberOfDirectories(This->tiff) : 0;
     LeaveCriticalSection(&This->lock);
 
     TRACE("(%p) <-- %i\n", iface, *pCount);

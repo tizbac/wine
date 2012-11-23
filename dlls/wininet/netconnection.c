@@ -655,7 +655,6 @@ static DWORD create_netconn_socket(server_t *server, netconn_t *netconn, DWORD t
                 if (!res)
                 {
                     closesocket(netconn->socketFD);
-                    heap_free(netconn);
                     return ERROR_INTERNET_CANNOT_CONNECT;
                 }
                 else if (res > 0)
@@ -674,10 +673,8 @@ static DWORD create_netconn_socket(server_t *server, netconn_t *netconn, DWORD t
             ioctlsocket(netconn->socketFD, FIONBIO, &flag);
         }
     }
-    if(result == -1) {
-        heap_free(netconn);
+    if(result == -1)
         return sock_get_error(errno);
-    }
 
 #ifdef TCP_NODELAY
     flag = 1;
@@ -710,16 +707,19 @@ DWORD create_netconn(BOOL useSSL, server_t *server, DWORD security_flags, BOOL m
     if(!netconn)
         return ERROR_OUTOFMEMORY;
 
-    netconn->useSSL = useSSL;
     netconn->socketFD = -1;
     netconn->security_flags = security_flags | server->security_flags;
     netconn->mask_errors = mask_errors;
     list_init(&netconn->pool_entry);
 
     result = create_netconn_socket(server, netconn, timeout);
+    if (result != ERROR_SUCCESS) {
+        heap_free(netconn);
+        return result;
+    }
+
     server_addref(server);
     netconn->server = server;
-
     *ret = netconn;
     return result;
 }
@@ -902,7 +902,7 @@ fail:
  * NETCON_secure_connect
  * Initiates a secure connection over an existing plaintext connection.
  */
-DWORD NETCON_secure_connect(netconn_t *connection)
+DWORD NETCON_secure_connect(netconn_t *connection, server_t *server)
 {
     DWORD res = ERROR_NOT_SUPPORTED;
 #ifdef SONAME_LIBSSL
@@ -911,6 +911,13 @@ DWORD NETCON_secure_connect(netconn_t *connection)
     {
         ERR("already connected\n");
         return ERROR_INTERNET_CANNOT_CONNECT;
+    }
+
+    connection->useSSL = TRUE;
+    if(server != connection->server) {
+        server_release(connection->server);
+        server_addref(server);
+        connection->server = server;
     }
 
     /* connect with given TLS options */

@@ -2884,7 +2884,7 @@ static UINT ITERATE_WriteRegistryValues(MSIRECORD *row, LPVOID param)
         if (type == REG_MULTI_SZ)
         {
             BYTE *new;
-            if (old_type != REG_MULTI_SZ)
+            if (old_value && old_type != REG_MULTI_SZ)
             {
                 msi_free( old_value );
                 old_value = NULL;
@@ -5752,6 +5752,7 @@ static UINT ITERATE_InstallService(MSIRECORD *rec, LPVOID param)
     LPWSTR depends = NULL, pass = NULL, args = NULL, image_path = NULL;
     DWORD serv_type, start_type, err_control;
     SERVICE_DESCRIPTIONW sd = {NULL};
+    UINT ret = ERROR_SUCCESS;
 
     comp = MSI_RecordGetString( rec, 12 );
     component = msi_get_loaded_component( package, comp );
@@ -5809,7 +5810,10 @@ static UINT ITERATE_InstallService(MSIRECORD *rec, LPVOID param)
     {
         int len = strlenW(file->TargetPath) + strlenW(args) + 2;
         if (!(image_path = msi_alloc(len * sizeof(WCHAR))))
-            return ERROR_OUTOFMEMORY;
+        {
+            ret = ERROR_OUTOFMEMORY;
+            goto done;
+        }
 
         strcpyW(image_path, file->TargetPath);
         strcatW(image_path, szSpace);
@@ -5843,7 +5847,7 @@ done:
     msi_free(depends);
     msi_free(args);
 
-    return ERROR_SUCCESS;
+    return ret;
 }
 
 static UINT ACTION_InstallServices( MSIPACKAGE *package )
@@ -6043,6 +6047,7 @@ static BOOL stop_service_dependents(SC_HANDLE scm, SC_HANDLE service)
     ENUM_SERVICE_STATUSW *dependencies;
     SERVICE_STATUS ss;
     SC_HANDLE depserv;
+    BOOL stopped, ret = FALSE;
 
     if (EnumDependentServicesW(service, SERVICE_ACTIVE, NULL,
                                0, &needed, &count))
@@ -6057,24 +6062,26 @@ static BOOL stop_service_dependents(SC_HANDLE scm, SC_HANDLE service)
 
     if (!EnumDependentServicesW(service, SERVICE_ACTIVE, dependencies,
                                 needed, &needed, &count))
-        goto error;
+        goto done;
 
     for (i = 0; i < count; i++)
     {
         depserv = OpenServiceW(scm, dependencies[i].lpServiceName,
                                SERVICE_STOP | SERVICE_QUERY_STATUS);
         if (!depserv)
-            goto error;
+            goto done;
 
-        if (!ControlService(depserv, SERVICE_CONTROL_STOP, &ss))
-            goto error;
+        stopped = ControlService(depserv, SERVICE_CONTROL_STOP, &ss);
+        CloseServiceHandle(depserv);
+        if (!stopped)
+            goto done;
     }
 
-    return TRUE;
+    ret = TRUE;
 
-error:
+done:
     msi_free(dependencies);
-    return FALSE;
+    return ret;
 }
 
 static UINT stop_service( LPCWSTR name )
@@ -7720,7 +7727,7 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     static const WCHAR szDisableRollback[] = {'D','I','S','A','B','L','E','R','O','L','L','B','A','C','K',0};
     static const WCHAR szAction[] = {'A','C','T','I','O','N',0};
     static const WCHAR szInstall[] = {'I','N','S','T','A','L','L',0};
-    WCHAR *reinstall, *remove;
+    WCHAR *reinstall, *remove, *patch;
     BOOL ui_exists;
     UINT rc;
 
@@ -7771,9 +7778,10 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     msi_apply_transforms( package );
     msi_apply_patches( package );
 
+    patch = msi_dup_property( package->db, szPatch );
     remove = msi_dup_property( package->db, szRemove );
     reinstall = msi_dup_property( package->db, szReinstall );
-    if (msi_get_property_int( package->db, szInstalled, 0 ) && !remove && !reinstall)
+    if (msi_get_property_int( package->db, szInstalled, 0 ) && !remove && !reinstall && !patch)
     {
         TRACE("setting REINSTALL property to ALL\n");
         msi_set_property( package->db, szReinstall, szAll, -1 );
@@ -7834,6 +7842,7 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     }
     msi_free( reinstall );
     msi_free( remove );
+    msi_free( patch );
 
     if (rc == ERROR_SUCCESS && package->need_reboot_at_end)
         return ERROR_SUCCESS_REBOOT_REQUIRED;

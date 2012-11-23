@@ -453,6 +453,32 @@ void deactivate_document(DocHost *This)
     This->document = NULL;
 }
 
+HRESULT refresh_document(DocHost *This)
+{
+    IOleCommandTarget *cmdtrg;
+    VARIANT vin, vout;
+    HRESULT hres;
+
+    if(!This->document) {
+        FIXME("no document\n");
+        return E_FAIL;
+    }
+
+    hres = IUnknown_QueryInterface(This->document, &IID_IOleCommandTarget, (void**)&cmdtrg);
+    if(FAILED(hres))
+        return hres;
+
+    V_VT(&vin) = VT_EMPTY;
+    V_VT(&vout) = VT_EMPTY;
+    hres = IOleCommandTarget_Exec(cmdtrg, NULL, OLECMDID_REFRESH, OLECMDEXECOPT_PROMPTUSER, &vin, &vout);
+    IOleCommandTarget_Release(cmdtrg);
+    if(FAILED(hres))
+        return hres;
+
+    VariantClear(&vout);
+    return S_OK;
+}
+
 void release_dochost_client(DocHost *This)
 {
     if(This->hwnd) {
@@ -526,6 +552,7 @@ static HRESULT WINAPI ClOleCommandTarget_Exec(IOleCommandTarget *iface,
     if(!pguidCmdGroup) {
         switch(nCmdID) {
         case OLECMDID_UPDATECOMMANDS:
+        case OLECMDID_SETDOWNLOADSTATE:
             return This->container_vtbl->exec(This, pguidCmdGroup, nCmdID, nCmdexecopt, pvaIn, pvaOut);
         default:
             FIXME("Unimplemented cmdid %d\n", nCmdID);
@@ -604,6 +631,9 @@ static HRESULT WINAPI ClOleCommandTarget_Exec(IOleCommandTarget *iface,
             return E_NOTIMPL;
         }
     }
+
+    if(IsEqualGUID(&CGID_DocHostCommandHandler, pguidCmdGroup))
+        return This->container_vtbl->exec(This, pguidCmdGroup, nCmdID, nCmdexecopt, pvaIn, pvaOut);
 
     FIXME("Unimplemented cmdid %d of group %s\n", nCmdID, debugstr_guid(pguidCmdGroup));
     return E_NOTIMPL;

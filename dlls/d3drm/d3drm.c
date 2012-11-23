@@ -240,7 +240,8 @@ static HRESULT WINAPI IDirect3DRMImpl_CreateDevice(IDirect3DRM* iface, DWORD wid
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice, (IUnknown**)ppDevice);
 }
 
-static HRESULT WINAPI IDirect3DRMImpl_CreateDeviceFromSurface(IDirect3DRM* iface, LPGUID pGUID, LPDIRECTDRAW pDD, LPDIRECTDRAWSURFACE pDDSBack, LPDIRECT3DRMDEVICE * ppDevice)
+static HRESULT WINAPI IDirect3DRMImpl_CreateDeviceFromSurface(IDirect3DRM *iface, GUID *pGUID,
+        IDirectDraw *pDD, IDirectDrawSurface *pDDSBack, IDirect3DRMDevice **ppDevice)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM(iface);
 
@@ -250,7 +251,8 @@ static HRESULT WINAPI IDirect3DRMImpl_CreateDeviceFromSurface(IDirect3DRM* iface
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice, (IUnknown**)ppDevice);
 }
 
-static HRESULT WINAPI IDirect3DRMImpl_CreateDeviceFromD3D(IDirect3DRM* iface, LPDIRECT3D pD3D, LPDIRECT3DDEVICE pD3DDev, LPDIRECT3DRMDEVICE * ppDevice)
+static HRESULT WINAPI IDirect3DRMImpl_CreateDeviceFromD3D(IDirect3DRM *iface,
+        IDirect3D *pD3D, IDirect3DDevice *pD3DDev, IDirect3DRMDevice **ppDevice)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM(iface);
 
@@ -259,7 +261,9 @@ static HRESULT WINAPI IDirect3DRMImpl_CreateDeviceFromD3D(IDirect3DRM* iface, LP
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice, (IUnknown**)ppDevice);
 }
 
-static HRESULT WINAPI IDirect3DRMImpl_CreateDeviceFromClipper(IDirect3DRM* iface, LPDIRECTDRAWCLIPPER pDDClipper, LPGUID pGUID, int width, int height, LPDIRECT3DRMDEVICE * ppDevice)
+static HRESULT WINAPI IDirect3DRMImpl_CreateDeviceFromClipper(IDirect3DRM *iface,
+        IDirectDrawClipper *pDDClipper, GUID *pGUID, int width, int height,
+        IDirect3DRMDevice **ppDevice)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM(iface);
 
@@ -269,7 +273,8 @@ static HRESULT WINAPI IDirect3DRMImpl_CreateDeviceFromClipper(IDirect3DRM* iface
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice, (IUnknown**)ppDevice);
 }
 
-static HRESULT WINAPI IDirect3DRMImpl_CreateTextureFromSurface(IDirect3DRM* iface, LPDIRECTDRAWSURFACE pDDS, LPDIRECT3DRMTEXTURE * ppTexture)
+static HRESULT WINAPI IDirect3DRMImpl_CreateTextureFromSurface(IDirect3DRM *iface,
+        IDirectDrawSurface *pDDS, IDirect3DRMTexture **ppTexture)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM(iface);
 
@@ -614,10 +619,8 @@ static HRESULT WINAPI IDirect3DRM2Impl_CreateDevice(IDirect3DRM2* iface, DWORD w
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice2, (IUnknown**)ppDevice);
 }
 
-static HRESULT WINAPI IDirect3DRM2Impl_CreateDeviceFromSurface(IDirect3DRM2* iface, LPGUID pGUID,
-                                                               LPDIRECTDRAW pDD,
-                                                               LPDIRECTDRAWSURFACE pDDSBack,
-                                                               LPDIRECT3DRMDEVICE2 * ppDevice)
+static HRESULT WINAPI IDirect3DRM2Impl_CreateDeviceFromSurface(IDirect3DRM2 *iface, GUID *pGUID,
+        IDirectDraw *pDD, IDirectDrawSurface *pDDSBack, IDirect3DRMDevice2 **ppDevice)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM2(iface);
 
@@ -627,9 +630,8 @@ static HRESULT WINAPI IDirect3DRM2Impl_CreateDeviceFromSurface(IDirect3DRM2* ifa
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice2, (IUnknown**)ppDevice);
 }
 
-static HRESULT WINAPI IDirect3DRM2Impl_CreateDeviceFromD3D(IDirect3DRM2* iface, LPDIRECT3D2 pD3D,
-                                                           LPDIRECT3DDEVICE2 pD3DDev,
-                                                           LPDIRECT3DRMDEVICE2 * ppDevice)
+static HRESULT WINAPI IDirect3DRM2Impl_CreateDeviceFromD3D(IDirect3DRM2 *iface,
+        IDirect3D2 *pD3D, IDirect3DDevice2 *pD3DDev, IDirect3DRMDevice2 **ppDevice)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM2(iface);
 
@@ -638,10 +640,9 @@ static HRESULT WINAPI IDirect3DRM2Impl_CreateDeviceFromD3D(IDirect3DRM2* iface, 
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice2, (IUnknown**)ppDevice);
 }
 
-static HRESULT WINAPI IDirect3DRM2Impl_CreateDeviceFromClipper(IDirect3DRM2* iface,
-                                                               LPDIRECTDRAWCLIPPER pDDClipper,
-                                                               LPGUID pGUID, int width, int height,
-                                                               LPDIRECT3DRMDEVICE2 * ppDevice)
+static HRESULT WINAPI IDirect3DRM2Impl_CreateDeviceFromClipper(IDirect3DRM2 *iface,
+        IDirectDrawClipper *pDDClipper, GUID *pGUID, int width, int height,
+        IDirect3DRMDevice2 **ppDevice)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM2(iface);
 
@@ -651,9 +652,8 @@ static HRESULT WINAPI IDirect3DRM2Impl_CreateDeviceFromClipper(IDirect3DRM2* ifa
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice2, (IUnknown**)ppDevice);
 }
 
-static HRESULT WINAPI IDirect3DRM2Impl_CreateTextureFromSurface(IDirect3DRM2* iface,
-                                                                LPDIRECTDRAWSURFACE pDDS,
-                                                                LPDIRECT3DRMTEXTURE2 * ppTexture)
+static HRESULT WINAPI IDirect3DRM2Impl_CreateTextureFromSurface(IDirect3DRM2 *iface,
+        IDirectDrawSurface *pDDS, IDirect3DRMTexture2 **ppTexture)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM2(iface);
 
@@ -1063,10 +1063,8 @@ static HRESULT WINAPI IDirect3DRM3Impl_CreateDevice(IDirect3DRM3* iface, DWORD w
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice3, (IUnknown**)device);
 }
 
-static HRESULT WINAPI IDirect3DRM3Impl_CreateDeviceFromSurface(IDirect3DRM3* iface, LPGUID pGUID,
-                                                               LPDIRECTDRAW dd,
-                                                               LPDIRECTDRAWSURFACE back,
-                                                               LPDIRECT3DRMDEVICE3* device)
+static HRESULT WINAPI IDirect3DRM3Impl_CreateDeviceFromSurface(IDirect3DRM3 *iface, GUID *pGUID,
+        IDirectDraw *dd, IDirectDrawSurface *back, IDirect3DRMDevice3 **device)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM3(iface);
 
@@ -1075,9 +1073,8 @@ static HRESULT WINAPI IDirect3DRM3Impl_CreateDeviceFromSurface(IDirect3DRM3* ifa
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice3, (IUnknown**)device);
 }
 
-static HRESULT WINAPI IDirect3DRM3Impl_CreateDeviceFromD3D(IDirect3DRM3* iface, LPDIRECT3D2 d3d,
-                                                           LPDIRECT3DDEVICE2 d3ddev,
-                                                           LPDIRECT3DRMDEVICE3* device)
+static HRESULT WINAPI IDirect3DRM3Impl_CreateDeviceFromD3D(IDirect3DRM3 *iface,
+        IDirect3D2 *d3d, IDirect3DDevice2 *d3ddev, IDirect3DRMDevice3 **device)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM3(iface);
 
@@ -1086,14 +1083,13 @@ static HRESULT WINAPI IDirect3DRM3Impl_CreateDeviceFromD3D(IDirect3DRM3* iface, 
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice3, (IUnknown**)device);
 }
 
-static HRESULT WINAPI IDirect3DRM3Impl_CreateDeviceFromClipper(IDirect3DRM3* iface,
-                                                               LPDIRECTDRAWCLIPPER clipper,
-                                                               LPGUID GUID, int width, int height,
-                                                               LPDIRECT3DRMDEVICE3* device)
+static HRESULT WINAPI IDirect3DRM3Impl_CreateDeviceFromClipper(IDirect3DRM3 *iface,
+        IDirectDrawClipper *clipper, GUID *guid, int width, int height,
+        IDirect3DRMDevice3 **device)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM3(iface);
 
-    FIXME("(%p/%p)->(%p,%s,%d,%d,%p): partial stub\n", iface, This, clipper, debugstr_guid(GUID),
+    FIXME("(%p/%p)->(%p,%s,%d,%d,%p): partial stub\n", iface, This, clipper, debugstr_guid(guid),
           width, height, device);
 
     return Direct3DRMDevice_create(&IID_IDirect3DRMDevice3, (IUnknown**)device);
@@ -1113,9 +1109,8 @@ static HRESULT WINAPI IDirect3DRM3Impl_CreateShadow(IDirect3DRM3* iface, LPUNKNO
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI IDirect3DRM3Impl_CreateTextureFromSurface(IDirect3DRM3* iface,
-                                                                LPDIRECTDRAWSURFACE surface,
-                                                                LPDIRECT3DRMTEXTURE3* texture)
+static HRESULT WINAPI IDirect3DRM3Impl_CreateTextureFromSurface(IDirect3DRM3 *iface,
+        IDirectDrawSurface *surface, IDirect3DRMTexture3 **texture)
 {
     IDirect3DRMImpl *This = impl_from_IDirect3DRM3(iface);
 

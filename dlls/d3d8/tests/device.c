@@ -1018,9 +1018,11 @@ static void test_reset(void)
     IDirect3D8 *d3d8 = NULL;
     UINT mode_count = 0;
     HWND window = NULL;
+    RECT winrect;
     D3DVIEWPORT8 vp;
     D3DCAPS8 caps;
     DWORD shader;
+    DWORD value;
     HRESULT hr;
     UINT i;
 
@@ -1140,6 +1142,12 @@ static void test_reset(void)
     hr = IDirect3DDevice8_SetViewport(device1, &vp);
     ok(SUCCEEDED(hr), "SetViewport failed, hr %#x.\n", hr);
 
+    hr = IDirect3DDevice8_GetRenderState(device1, D3DRS_LIGHTING, &value);
+    ok(SUCCEEDED(hr), "Failed to get render state, hr %#x.\n", hr);
+    ok(!!value, "Got unexpected value %#x for D3DRS_LIGHTING.\n", value);
+    hr = IDirect3DDevice8_SetRenderState(device1, D3DRS_LIGHTING, FALSE);
+    ok(SUCCEEDED(hr), "Failed to set render state, hr %#x.\n", hr);
+
     memset(&d3dpp, 0, sizeof(d3dpp));
     d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
     d3dpp.Windowed = FALSE;
@@ -1150,6 +1158,10 @@ static void test_reset(void)
     ok(SUCCEEDED(hr), "Reset failed, hr %#x.\n", hr);
     hr = IDirect3DDevice8_TestCooperativeLevel(device1);
     ok(SUCCEEDED(hr), "TestCooperativeLevel failed, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice8_GetRenderState(device1, D3DRS_LIGHTING, &value);
+    ok(SUCCEEDED(hr), "Failed to get render state, hr %#x.\n", hr);
+    ok(!!value, "Got unexpected value %#x for D3DRS_LIGHTING.\n", value);
 
     memset(&vp, 0, sizeof(vp));
     hr = IDirect3DDevice8_GetViewport(device1, &vp);
@@ -1216,6 +1228,51 @@ static void test_reset(void)
             surface_desc.Width);
     ok(surface_desc.Height == 300, "Back buffer height is %u, expected 300.\n",
             surface_desc.Height);
+    IDirect3DSurface8_Release(surface);
+
+    winrect.left = 0;
+    winrect.top = 0;
+    winrect.right = 200;
+    winrect.bottom = 150;
+    ok(AdjustWindowRect(&winrect, WS_OVERLAPPEDWINDOW, FALSE), "AdjustWindowRect failed\n");
+    ok(SetWindowPos(window, NULL, 0, 0,
+                    winrect.right-winrect.left,
+                    winrect.bottom-winrect.top,
+                    SWP_NOMOVE|SWP_NOZORDER),
+       "SetWindowPos failed\n");
+
+    memset(&d3dpp, 0, sizeof(d3dpp));
+    d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
+    d3dpp.Windowed = TRUE;
+    d3dpp.BackBufferWidth = 0;
+    d3dpp.BackBufferHeight = 0;
+    d3dpp.BackBufferFormat = d3ddm.Format;
+    hr = IDirect3DDevice8_Reset(device1, &d3dpp);
+    ok(SUCCEEDED(hr), "Reset failed, hr %#x.\n", hr);
+    hr = IDirect3DDevice8_TestCooperativeLevel(device1);
+    ok(SUCCEEDED(hr), "TestCooperativeLevel failed, hr %#x.\n", hr);
+
+    memset(&vp, 0, sizeof(vp));
+    hr = IDirect3DDevice8_GetViewport(device1, &vp);
+    ok(SUCCEEDED(hr), "GetViewport failed, hr %#x.\n", hr);
+    if (SUCCEEDED(hr))
+    {
+        ok(vp.X == 0, "D3DVIEWPORT->X = %u, expected 0.\n", vp.X);
+        ok(vp.Y == 0, "D3DVIEWPORT->Y = %u, expected 0.\n", vp.Y);
+        todo_wine ok(vp.Width == 200, "D3DVIEWPORT->Width = %u, expected 200.\n", vp.Width);
+        todo_wine ok(vp.Height == 150, "D3DVIEWPORT->Height = %u, expected 150.\n", vp.Height);
+        ok(vp.MinZ == 0, "D3DVIEWPORT->MinZ = %.8e, expected 0.\n", vp.MinZ);
+        ok(vp.MaxZ == 1, "D3DVIEWPORT->MaxZ = %.8e, expected 1.\n", vp.MaxZ);
+    }
+
+    hr = IDirect3DDevice8_GetRenderTarget(device1, &surface);
+    ok(SUCCEEDED(hr), "GetRenderTarget failed, hr %#x.\n", hr);
+    hr = IDirect3DSurface8_GetDesc(surface, &surface_desc);
+    ok(hr == D3D_OK, "GetDesc failed, hr %#x.\n", hr);
+    todo_wine ok(surface_desc.Width == 200, "Back buffer width is %u, expected 200.\n",
+                 surface_desc.Width);
+    todo_wine ok(surface_desc.Height == 150, "Back buffer height is %u, expected 150.\n",
+                 surface_desc.Height);
     IDirect3DSurface8_Release(surface);
 
     memset(&d3dpp, 0, sizeof(d3dpp));
@@ -3227,6 +3284,96 @@ done:
     DestroyWindow(window);
 }
 
+static void test_set_rt_vp_scissor(void)
+{
+    IDirect3DDevice8 *device;
+    IDirect3DSurface8 *rt;
+    IDirect3D8 *d3d8;
+    DWORD stateblock;
+    D3DVIEWPORT8 vp;
+    UINT refcount;
+    HWND window;
+    HRESULT hr;
+
+    if (!(d3d8 = pDirect3DCreate8(D3D_SDK_VERSION)))
+    {
+        skip("Failed to create IDirect3D8 object, skipping tests.\n");
+        return;
+    }
+
+    window = CreateWindowA("static", "d3d8_test", WS_OVERLAPPEDWINDOW,
+            0, 0, 640, 480, 0, 0, 0, 0);
+    if (!(device = create_device(d3d8, window, window, TRUE)))
+    {
+        skip("Failed to create a D3D device, skipping tests.\n");
+        DestroyWindow(window);
+        return;
+    }
+
+    hr = IDirect3DDevice8_CreateRenderTarget(device, 128, 128, D3DFMT_A8R8G8B8,
+            D3DMULTISAMPLE_NONE, FALSE, &rt);
+    ok(SUCCEEDED(hr), "Failed to create render target, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice8_GetViewport(device, &vp);
+    ok(SUCCEEDED(hr), "Failed to get viewport, hr %#x.\n", hr);
+    ok(!vp.X, "Got unexpected vp.X %u.\n", vp.X);
+    ok(!vp.Y, "Got unexpected vp.Y %u.\n", vp.Y);
+    ok(vp.Width == screen_width, "Got unexpected vp.Width %u.\n", vp.Width);
+    ok(vp.Height == screen_height, "Got unexpected vp.Height %u.\n", vp.Height);
+    ok(vp.MinZ == 0.0f, "Got unexpected vp.MinZ %.8e.\n", vp.MinZ);
+    ok(vp.MaxZ == 1.0f, "Got unexpected vp.MaxZ %.8e.\n", vp.MaxZ);
+
+    hr = IDirect3DDevice8_BeginStateBlock(device);
+    ok(SUCCEEDED(hr), "Failed to begin stateblock, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice8_SetRenderTarget(device, rt, NULL);
+    ok(SUCCEEDED(hr), "Failed to set render target, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice8_EndStateBlock(device, &stateblock);
+    ok(SUCCEEDED(hr), "Failed to end stateblock, hr %#x.\n", hr);
+    hr = IDirect3DDevice8_DeleteStateBlock(device, stateblock);
+    ok(SUCCEEDED(hr), "Failed to delete stateblock, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice8_GetViewport(device, &vp);
+    ok(SUCCEEDED(hr), "Failed to get viewport, hr %#x.\n", hr);
+    ok(!vp.X, "Got unexpected vp.X %u.\n", vp.X);
+    ok(!vp.Y, "Got unexpected vp.Y %u.\n", vp.Y);
+    ok(vp.Width == 128, "Got unexpected vp.Width %u.\n", vp.Width);
+    ok(vp.Height == 128, "Got unexpected vp.Height %u.\n", vp.Height);
+    ok(vp.MinZ == 0.0f, "Got unexpected vp.MinZ %.8e.\n", vp.MinZ);
+    ok(vp.MaxZ == 1.0f, "Got unexpected vp.MaxZ %.8e.\n", vp.MaxZ);
+
+    hr = IDirect3DDevice8_SetRenderTarget(device, rt, NULL);
+    ok(SUCCEEDED(hr), "Failed to set render target, hr %#x.\n", hr);
+
+    vp.X = 10;
+    vp.Y = 20;
+    vp.Width = 30;
+    vp.Height = 40;
+    vp.MinZ = 0.25f;
+    vp.MaxZ = 0.75f;
+    hr = IDirect3DDevice8_SetViewport(device, &vp);
+    ok(SUCCEEDED(hr), "Failed to set viewport, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice8_SetRenderTarget(device, rt, NULL);
+    ok(SUCCEEDED(hr), "Failed to set render target, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice8_GetViewport(device, &vp);
+    ok(SUCCEEDED(hr), "Failed to get viewport, hr %#x.\n", hr);
+    ok(!vp.X, "Got unexpected vp.X %u.\n", vp.X);
+    ok(!vp.Y, "Got unexpected vp.Y %u.\n", vp.Y);
+    ok(vp.Width == 128, "Got unexpected vp.Width %u.\n", vp.Width);
+    ok(vp.Height == 128, "Got unexpected vp.Height %u.\n", vp.Height);
+    ok(vp.MinZ == 0.0f, "Got unexpected vp.MinZ %.8e.\n", vp.MinZ);
+    ok(vp.MaxZ == 1.0f, "Got unexpected vp.MaxZ %.8e.\n", vp.MaxZ);
+
+    IDirect3DSurface8_Release(rt);
+    refcount = IDirect3DDevice8_Release(device);
+    ok(!refcount, "Device has %u references left.\n", refcount);
+    IDirect3D8_Release(d3d8);
+    DestroyWindow(window);
+}
+
 START_TEST(device)
 {
     HMODULE d3d8_handle = LoadLibraryA( "d3d8.dll" );
@@ -3283,6 +3430,7 @@ START_TEST(device)
         test_device_window_reset();
         test_reset_resources();
         depth_blit_test();
+        test_set_rt_vp_scissor();
     }
     UnregisterClassA("d3d8_test_wc", GetModuleHandleA(NULL));
 }

@@ -63,6 +63,7 @@ struct  nsWineURI {
     nsChannelBSC *channel_bsc;
     IUri *uri;
     IUriBuilder *uri_builder;
+    char *origin_charset;
     BOOL is_doc_uri;
     BOOL is_mutable;
     DWORD scheme;
@@ -94,7 +95,7 @@ IUri *nsuri_get_uri(nsWineURI *nsuri)
     return nsuri->uri;
 }
 
-static IUri *get_uri_nofrag(IUri *uri)
+IUri *get_uri_nofrag(IUri *uri)
 {
     IUriBuilder *uri_builder;
     IUri *ret;
@@ -121,7 +122,7 @@ static IUri *get_uri_nofrag(IUri *uri)
     return ret;
 }
 
-BOOL compare_ignoring_frag(IUri *uri1, IUri *uri2)
+static BOOL compare_ignoring_frag(IUri *uri1, IUri *uri2)
 {
     IUri *uri_nofrag1, *uri_nofrag2;
     BOOL ret = FALSE;
@@ -140,7 +141,7 @@ BOOL compare_ignoring_frag(IUri *uri1, IUri *uri2)
     return ret;
 }
 
-static nsresult create_nsuri(IUri*,HTMLOuterWindow*,NSContainer*,nsWineURI**);
+static nsresult create_nsuri(IUri*,HTMLOuterWindow*,NSContainer*,const char*,nsWineURI**);
 
 static const char *debugstr_nsacstr(const nsACString *nsstr)
 {
@@ -162,12 +163,12 @@ static nsresult return_wstr_nsacstr(nsACString *ret_str, const WCHAR *str, int l
         return NS_OK;
     }
 
-    lena = WideCharToMultiByte(CP_ACP, 0, str, len, NULL, 0, NULL, NULL);
+    lena = WideCharToMultiByte(CP_UTF8, 0, str, len, NULL, 0, NULL, NULL);
     stra = heap_alloc(lena+1);
     if(!stra)
         return NS_ERROR_OUT_OF_MEMORY;
 
-    WideCharToMultiByte(CP_ACP, 0, str, len, stra, lena, NULL, NULL);
+    WideCharToMultiByte(CP_UTF8, 0, str, len, stra, lena, NULL, NULL);
     stra[lena] = 0;
 
     nsACString_SetData(ret_str, stra);
@@ -992,7 +993,7 @@ static nsresult async_open(nsChannel *This, HTMLOuterWindow *window, BOOL is_doc
     }
 
     if(is_doc_channel)
-        set_current_mon(window, mon);
+        set_current_mon(window, mon, BINDING_NAVIGATED);
 
     hres = create_channelbsc(mon, NULL, NULL, 0, is_doc_channel, &bscallback);
     IMoniker_Release(mon);
@@ -1769,7 +1770,7 @@ static nsresult get_uri_string(nsWineURI *This, Uri_PROPERTY prop, nsACString *r
         return NS_ERROR_UNEXPECTED;
     }
 
-    vala = heap_strdupWtoA(val);
+    vala = heap_strdupWtoU(val);
     SysFreeString(val);
     if(!vala)
         return NS_ERROR_OUT_OF_MEMORY;
@@ -1847,6 +1848,7 @@ static nsrefcnt NSAPI nsURI_Release(nsIFileURL *iface)
             nsIWebBrowserChrome_Release(&This->container->nsIWebBrowserChrome_iface);
         if(This->uri)
             IUri_Release(This->uri);
+        heap_free(This->origin_charset);
         heap_free(This);
     }
 
@@ -1876,7 +1878,7 @@ static nsresult NSAPI nsURI_SetSpec(nsIFileURL *iface, const nsACString *aSpec)
         return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aSpec, &speca);
-    spec = heap_strdupAtoW(speca);
+    spec = heap_strdupUtoW(speca);
     if(!spec)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -1942,7 +1944,7 @@ static nsresult NSAPI nsURI_SetScheme(nsIFileURL *iface, const nsACString *aSche
         return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aScheme, &schemea);
-    scheme = heap_strdupAtoW(schemea);
+    scheme = heap_strdupUtoW(schemea);
     if(!scheme)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -2002,7 +2004,7 @@ static nsresult NSAPI nsURI_SetUserPass(nsIFileURL *iface, const nsACString *aUs
     if(*user_pass) {
         WCHAR *ptr;
 
-        buf = heap_strdupAtoW(user_pass);
+        buf = heap_strdupUtoW(user_pass);
         if(!buf)
             return NS_ERROR_OUT_OF_MEMORY;
 
@@ -2049,7 +2051,7 @@ static nsresult NSAPI nsURI_SetUsername(nsIFileURL *iface, const nsACString *aUs
         return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aUsername, &usera);
-    user = heap_strdupAtoW(usera);
+    user = heap_strdupUtoW(usera);
     if(!user)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -2083,7 +2085,7 @@ static nsresult NSAPI nsURI_SetPassword(nsIFileURL *iface, const nsACString *aPa
         return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aPassword, &passa);
-    pass = heap_strdupAtoW(passa);
+    pass = heap_strdupUtoW(passa);
     if(!pass)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -2118,7 +2120,7 @@ static nsresult NSAPI nsURI_GetHostPort(nsIFileURL *iface, nsACString *aHostPort
     if(!ptr)
         ptr = val;
 
-    vala = heap_strdupWtoA(ptr);
+    vala = heap_strdupWtoU(ptr);
     SysFreeString(val);
     if(!vala)
         return NS_ERROR_OUT_OF_MEMORY;
@@ -2161,7 +2163,7 @@ static nsresult NSAPI nsURI_SetHost(nsIFileURL *iface, const nsACString *aHost)
         return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aHost, &hosta);
-    host = heap_strdupAtoW(hosta);
+    host = heap_strdupUtoW(hosta);
     if(!host)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -2230,7 +2232,7 @@ static nsresult NSAPI nsURI_SetPath(nsIFileURL *iface, const nsACString *aPath)
         return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aPath, &patha);
-    path = heap_strdupAtoW(patha);
+    path = heap_strdupUtoW(patha);
     if(!path)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -2292,7 +2294,7 @@ static nsresult NSAPI nsURI_SchemeIs(nsIFileURL *iface, const char *scheme, cpp_
     if(FAILED(hres))
         return NS_ERROR_UNEXPECTED;
 
-    MultiByteToWideChar(CP_ACP, 0, scheme, -1, buf, sizeof(buf)/sizeof(WCHAR));
+    MultiByteToWideChar(CP_UTF8, 0, scheme, -1, buf, sizeof(buf)/sizeof(WCHAR));
     *_retval = !strcmpW(scheme_name, buf);
     SysFreeString(scheme_name);
     return NS_OK;
@@ -2309,7 +2311,8 @@ static nsresult NSAPI nsURI_Clone(nsIFileURL *iface, nsIURI **_retval)
     if(!ensure_uri(This))
         return NS_ERROR_UNEXPECTED;
 
-    nsres = create_nsuri(This->uri, This->window_ref ? This->window_ref->window : NULL, This->container, &wine_uri);
+    nsres = create_nsuri(This->uri, This->window_ref ? This->window_ref->window : NULL,
+            This->container, This->origin_charset, &wine_uri);
     if(NS_FAILED(nsres)) {
         WARN("create_nsuri failed: %08x\n", nsres);
         return nsres;
@@ -2336,7 +2339,7 @@ static nsresult NSAPI nsURI_Resolve(nsIFileURL *iface, const nsACString *aRelati
         return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aRelativePath, &patha);
-    path = heap_strdupAtoW(patha);
+    path = heap_strdupUtoW(patha);
     if(!path)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -2352,7 +2355,7 @@ static nsresult NSAPI nsURI_Resolve(nsIFileURL *iface, const nsACString *aRelati
     if(FAILED(hres))
         return NS_ERROR_FAILURE;
 
-    reta = heap_strdupWtoA(ret);
+    reta = heap_strdupWtoU(ret);
     SysFreeString(ret);
     if(!reta)
         return NS_ERROR_OUT_OF_MEMORY;
@@ -2384,8 +2387,11 @@ static nsresult NSAPI nsURI_GetAsciiHost(nsIFileURL *iface, nsACString *aAsciiHo
 static nsresult NSAPI nsURI_GetOriginCharset(nsIFileURL *iface, nsACString *aOriginCharset)
 {
     nsWineURI *This = impl_from_nsIFileURL(iface);
-    FIXME("(%p)->(%p)\n", This, aOriginCharset);
-    return NS_ERROR_NOT_IMPLEMENTED;
+
+    TRACE("(%p)->(%p)\n", This, aOriginCharset);
+
+    nsACString_SetData(aOriginCharset, This->origin_charset);
+    return NS_OK;
 }
 
 static nsresult NSAPI nsURL_GetRef(nsIFileURL *iface, nsACString *aRef)
@@ -2404,7 +2410,7 @@ static nsresult NSAPI nsURL_GetRef(nsIFileURL *iface, nsACString *aRef)
     if(FAILED(hres))
         return NS_ERROR_UNEXPECTED;
 
-    refa = heap_strdupWtoA(ref);
+    refa = heap_strdupWtoU(ref);
     SysFreeString(ref);
     if(ref && !refa)
         return NS_ERROR_OUT_OF_MEMORY;
@@ -2427,7 +2433,7 @@ static nsresult NSAPI nsURL_SetRef(nsIFileURL *iface, const nsACString *aRef)
         return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aRef, &refa);
-    ref = heap_strdupAtoW(refa);
+    ref = heap_strdupUtoW(refa);
     if(!ref)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -2481,7 +2487,8 @@ static nsresult NSAPI nsURI_CloneIgnoreRef(nsIFileURL *iface, nsIURI **_retval)
     if(!uri)
         return NS_ERROR_FAILURE;
 
-    nsres = create_nsuri(uri, This->window_ref ? This->window_ref->window : NULL, This->container, &wine_uri);
+    nsres = create_nsuri(uri, This->window_ref ? This->window_ref->window : NULL, This->container,
+            This->origin_charset, &wine_uri);
     IUri_Release(uri);
     if(NS_FAILED(nsres)) {
         WARN("create_nsuri failed: %08x\n", nsres);
@@ -2563,7 +2570,7 @@ static nsresult NSAPI nsURL_SetQuery(nsIFileURL *iface, const nsACString *aQuery
         return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aQuery, &querya);
-    query = heap_strdupAtoW(querya);
+    query = heap_strdupUtoW(querya);
     if(!query)
         return NS_ERROR_OUT_OF_MEMORY;
 
@@ -2850,7 +2857,8 @@ static const nsIStandardURLVtbl nsStandardURLVtbl = {
     nsStandardURL_Init
 };
 
-static nsresult create_nsuri(IUri *iuri, HTMLOuterWindow *window, NSContainer *container, nsWineURI **_retval)
+static nsresult create_nsuri(IUri *iuri, HTMLOuterWindow *window, NSContainer *container,
+        const char *origin_charset, nsWineURI **_retval)
 {
     nsWineURI *ret;
     HRESULT hres;
@@ -2874,6 +2882,14 @@ static nsresult create_nsuri(IUri *iuri, HTMLOuterWindow *window, NSContainer *c
     if(FAILED(hres))
         ret->scheme = URL_SCHEME_UNKNOWN;
 
+    if(origin_charset && *origin_charset && strcmp(origin_charset, "UTF-8")) {
+        ret->origin_charset = heap_strdupA(origin_charset);
+        if(!ret->origin_charset) {
+            nsIFileURL_Release(&ret->nsIFileURL_iface);
+            return NS_ERROR_OUT_OF_MEMORY;
+        }
+    }
+
     TRACE("retval=%p\n", ret);
     *_retval = ret;
     return NS_OK;
@@ -2890,7 +2906,7 @@ HRESULT create_doc_uri(HTMLOuterWindow *window, const WCHAR *url, nsWineURI **re
     if(FAILED(hres))
         return hres;
 
-    nsres = create_nsuri(iuri, window, window->doc_obj->nscontainer, &uri);
+    nsres = create_nsuri(iuri, window, window->doc_obj->nscontainer, NULL, &uri);
     IUri_Release(iuri);
     if(NS_FAILED(nsres))
         return E_FAIL;
@@ -2942,7 +2958,7 @@ HRESULT create_redirect_nschannel(const WCHAR *url, nsChannel *orig_channel, nsC
 
     if(orig_channel->uri->window_ref)
         window = orig_channel->uri->window_ref->window;
-    nsres = create_nsuri(iuri, window, NULL, &uri);
+    nsres = create_nsuri(iuri, window, NULL, NULL, &uri);
     IUri_Release(iuri);
     if(NS_FAILED(nsres))
         return E_FAIL;
@@ -3257,7 +3273,7 @@ static nsresult NSAPI nsIOService_NewURI(nsIIOService *iface, const nsACString *
     if(FAILED(hres))
         return nsIIOService_NewURI(nsio, aSpec, aOriginCharset, aBaseURI, _retval);
 
-    nsres = create_nsuri(urlmon_uri, window, NULL, &wine_uri);
+    nsres = create_nsuri(urlmon_uri, window, NULL, NULL, &wine_uri);
     IUri_Release(urlmon_uri);
     if(base_wine_uri)
         nsIFileURL_Release(&base_wine_uri->nsIFileURL_iface);

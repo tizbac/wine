@@ -595,7 +595,7 @@ HRESULT node_clone(xmlnode *This, VARIANT_BOOL deep, IXMLDOMNode **cloneNode)
     clone = xmlCopyNode(This->node, deep ? 1 : 2);
     if (clone)
     {
-        clone->doc = This->node->doc;
+        xmlSetTreeDoc(clone, This->node->doc);
         xmldoc_add_orphan(clone->doc, clone);
 
         node = create_node(clone);
@@ -833,6 +833,53 @@ HRESULT node_get_xml(xmlnode *This, BOOL ensure_eol, BSTR *ret)
     return *ret ? S_OK : E_OUTOFMEMORY;
 }
 
+static void htmldtd_dumpcontent(xmlOutputBufferPtr buf, xmlDocPtr doc)
+{
+    xmlDtdPtr cur = doc->intSubset;
+
+    xmlOutputBufferWriteString(buf, "<!DOCTYPE ");
+    xmlOutputBufferWriteString(buf, (const char *)cur->name);
+    if (cur->ExternalID)
+    {
+        xmlOutputBufferWriteString(buf, " PUBLIC ");
+        xmlBufferWriteQuotedString(buf->buffer, cur->ExternalID);
+        if (cur->SystemID)
+        {
+            xmlOutputBufferWriteString(buf, " ");
+            xmlBufferWriteQuotedString(buf->buffer, cur->SystemID);
+	}
+    }
+    else if (cur->SystemID)
+    {
+        xmlOutputBufferWriteString(buf, " SYSTEM ");
+        xmlBufferWriteQuotedString(buf->buffer, cur->SystemID);
+    }
+    xmlOutputBufferWriteString(buf, ">\n");
+}
+
+static void htmldoc_dumpcontent(xmlOutputBufferPtr buf, xmlDocPtr doc)
+{
+    xmlElementType type;
+
+    /* force HTML output */
+    type = doc->type;
+    doc->type = XML_HTML_DOCUMENT_NODE;
+    if (doc->intSubset)
+        htmldtd_dumpcontent(buf, doc);
+    if (doc->children)
+    {
+        xmlNodePtr cur = doc->children;
+
+        while (cur)
+        {
+            htmlNodeDumpFormatOutput(buf, doc, cur, NULL, 1);
+            cur = cur->next;
+        }
+
+    }
+    doc->type = type;
+}
+
 HRESULT node_transform_node(const xmlnode *This, IXMLDOMNode *stylesheet, BSTR *p)
 {
 #ifdef SONAME_LIBXSLT
@@ -860,7 +907,7 @@ HRESULT node_transform_node(const xmlnode *This, IXMLDOMNode *stylesheet, BSTR *
                 xmlOutputBufferPtr output = xmlAllocOutputBuffer(NULL);
                 if (output)
                 {
-                    htmlDocContentDumpOutput(output, result->doc, NULL);
+                    htmldoc_dumpcontent(output, result->doc);
                     content = xmlBufferContent(output->buffer);
                     *p = bstr_from_xmlChar(content);
                     xmlOutputBufferClose(output);
@@ -1066,15 +1113,15 @@ static HRESULT WINAPI unknode_GetTypeInfo(
     IXMLDOMNode *iface,
     UINT iTInfo,
     LCID lcid,
-    ITypeInfo** ppTInfo )
+    ITypeInfo** ti )
 {
     unknode *This = unknode_from_IXMLDOMNode( iface );
     HRESULT hr;
 
-    TRACE("(%p)->(%u %u %p)\n", This, iTInfo, lcid, ppTInfo);
+    TRACE("(%p)->(%u %u %p)\n", This, iTInfo, lcid, ti);
 
-    hr = get_typeinfo(IXMLDOMNode_tid, ppTInfo);
-
+    hr = get_typeinfo(IXMLDOMNode_tid, ti);
+    ITypeInfo_AddRef(*ti);
     return hr;
 }
 
@@ -1099,10 +1146,7 @@ static HRESULT WINAPI unknode_GetIDsOfNames(
 
     hr = get_typeinfo(IXMLDOMNode_tid, &typeinfo);
     if(SUCCEEDED(hr))
-    {
         hr = ITypeInfo_GetIDsOfNames(typeinfo, rgszNames, cNames, rgDispId);
-        ITypeInfo_Release(typeinfo);
-    }
 
     return hr;
 }
@@ -1127,11 +1171,8 @@ static HRESULT WINAPI unknode_Invoke(
 
     hr = get_typeinfo(IXMLDOMNode_tid, &typeinfo);
     if(SUCCEEDED(hr))
-    {
         hr = ITypeInfo_Invoke(typeinfo, &This->IXMLDOMNode_iface, dispIdMember, wFlags, pDispParams,
                 pVarResult, pExcepInfo, puArgErr);
-        ITypeInfo_Release(typeinfo);
-    }
 
     return hr;
 }

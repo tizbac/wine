@@ -432,7 +432,6 @@ static HRESULT WINAPI Gstreamer_transform_Cleanup(TransformFilter *tf, PIN_DIREC
         This->my_sink = This->my_src = This->their_sink = This->their_src = NULL;
         This->their_src2 = This->their_sink2 = NULL;
         This->filter2 = NULL;
-        FIXME("%p stub\n", This);
     }
     return S_OK;
 }

@@ -1,10 +1,10 @@
 @ stub CommitComplete
 @ stub CommitEnlistment
-@ stub CommitTransaction
+@ stdcall CommitTransaction(ptr)
 @ stub CommitTransactionAsync
 @ stub CreateEnlistment
 @ stub CreateResourceManager
-@ stub CreateTransaction
+@ stdcall CreateTransaction(ptr ptr long long long long wstr)
 @ stub CreateTransactionManager
 @ stub GetCurrentClockTransactionManager
 @ stub GetEnlistmentId

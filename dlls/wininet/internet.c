@@ -1717,9 +1717,7 @@ BOOL WINAPI InternetCrackUrlW(LPCWSTR lpszUrl_orig, DWORD dwUrlLength_orig, DWOR
     lpUC->nPort = INTERNET_INVALID_PORT_NUMBER;
 
     /* Parse <params> */
-    lpszParam = memchrW(lpszap, ';', dwUrlLength - (lpszap - lpszUrl));
-    if(!lpszParam)
-        lpszParam = memchrW(lpszap, '?', dwUrlLength - (lpszap - lpszUrl));
+    lpszParam = memchrW(lpszap, '?', dwUrlLength - (lpszap - lpszUrl));
     if(!lpszParam)
         lpszParam = memchrW(lpszap, '#', dwUrlLength - (lpszap - lpszUrl));
 
@@ -4430,10 +4428,7 @@ BOOL WINAPI InternetGetSecurityInfoByURLW(LPCWSTR lpszURL, PCCERT_CHAIN_CONTEXT 
         return FALSE;
     }
 
-    if(url.nPort == INTERNET_INVALID_PORT_NUMBER)
-        url.nPort = INTERNET_DEFAULT_HTTPS_PORT;
-
-    server = get_server(hostname, url.nPort, FALSE);
+    server = get_server(hostname, url.nPort, TRUE, FALSE);
     if(!server) {
         SetLastError(ERROR_INTERNET_ITEM_NOT_FOUND);
         return FALSE;

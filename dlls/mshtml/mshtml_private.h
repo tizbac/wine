@@ -372,7 +372,9 @@ struct HTMLOuterWindow {
     HTMLInnerWindow *pending_window;
     IMoniker *mon;
     IUri *uri;
+    IUri *uri_nofrag;
     BSTR url;
+    DWORD load_flags;
 
     SCRIPTMODE scriptmode;
 
@@ -530,6 +532,7 @@ struct HTMLDocumentObj {
 
     IOleClientSite *client;
     IDocHostUIHandler *hostui;
+    IOleCommandTarget *client_cmdtrg;
     BOOL custom_hostui;
     IOleInPlaceSite *ipsite;
     IOleInPlaceFrame *frame;
@@ -779,9 +782,7 @@ BOOL is_gecko_path(const char*) DECLSPEC_HIDDEN;
 void init_node_cc(void);
 
 HRESULT nsuri_to_url(LPCWSTR,BOOL,BSTR*) DECLSPEC_HIDDEN;
-BOOL compare_ignoring_frag(IUri*,IUri*) DECLSPEC_HIDDEN;
 
-HRESULT navigate_url(HTMLOuterWindow*,const WCHAR*,IUri*) DECLSPEC_HIDDEN;
 HRESULT set_frame_doc(HTMLFrameBase*,nsIDOMDocument*) DECLSPEC_HIDDEN;
 
 void call_property_onchanged(ConnectionPoint*,DISPID) DECLSPEC_HIDDEN;
@@ -810,8 +811,6 @@ nsIWritableVariant *create_nsvariant(void) DECLSPEC_HIDDEN;
 nsresult create_nsfile(const PRUnichar*,nsIFile**) DECLSPEC_HIDDEN;
 
 HRESULT create_pending_window(HTMLOuterWindow*,nsChannelBSC*) DECLSPEC_HIDDEN;
-void set_current_mon(HTMLOuterWindow*,IMoniker*) DECLSPEC_HIDDEN;
-void set_current_uri(HTMLOuterWindow*,IUri*) DECLSPEC_HIDDEN;
 HRESULT start_binding(HTMLInnerWindow*,BSCallback*,IBindCtx*) DECLSPEC_HIDDEN;
 HRESULT async_start_doc_binding(HTMLOuterWindow*,HTMLInnerWindow*) DECLSPEC_HIDDEN;
 void abort_window_bindings(HTMLInnerWindow*) DECLSPEC_HIDDEN;
@@ -1034,7 +1033,8 @@ static inline LPWSTR heap_strdupW(LPCWSTR str)
 
         size = (strlenW(str)+1)*sizeof(WCHAR);
         ret = heap_alloc(size);
-        memcpy(ret, str, size);
+        if(ret)
+            memcpy(ret, str, size);
     }
 
     return ret;
@@ -1046,8 +1046,11 @@ static inline LPWSTR heap_strndupW(LPCWSTR str, unsigned len)
 
     if(str) {
         ret = heap_alloc((len+1)*sizeof(WCHAR));
-        memcpy(ret, str, len*sizeof(WCHAR));
-        ret[len] = 0;
+        if(ret)
+        {
+            memcpy(ret, str, len*sizeof(WCHAR));
+            ret[len] = 0;
+        }
     }
 
     return ret;
@@ -1062,7 +1065,8 @@ static inline char *heap_strdupA(const char *str)
 
         size = strlen(str)+1;
         ret = heap_alloc(size);
-        memcpy(ret, str, size);
+        if(ret)
+            memcpy(ret, str, size);
     }
 
     return ret;
@@ -1077,7 +1081,8 @@ static inline WCHAR *heap_strdupAtoW(const char *str)
 
         len = MultiByteToWideChar(CP_ACP, 0, str, -1, NULL, 0);
         ret = heap_alloc(len*sizeof(WCHAR));
-        MultiByteToWideChar(CP_ACP, 0, str, -1, ret, len);
+        if(ret)
+            MultiByteToWideChar(CP_ACP, 0, str, -1, ret, len);
     }
 
     return ret;
@@ -1090,7 +1095,38 @@ static inline char *heap_strdupWtoA(LPCWSTR str)
     if(str) {
         DWORD size = WideCharToMultiByte(CP_ACP, 0, str, -1, NULL, 0, NULL, NULL);
         ret = heap_alloc(size);
-        WideCharToMultiByte(CP_ACP, 0, str, -1, ret, size, NULL, NULL);
+        if(ret)
+            WideCharToMultiByte(CP_ACP, 0, str, -1, ret, size, NULL, NULL);
+    }
+
+    return ret;
+}
+
+static inline WCHAR *heap_strdupUtoW(const char *str)
+{
+    WCHAR *ret = NULL;
+
+    if(str) {
+        size_t len;
+
+        len = MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+        ret = heap_alloc(len*sizeof(WCHAR));
+        if(ret)
+            MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
+    }
+
+    return ret;
+}
+
+static inline char *heap_strdupWtoU(const WCHAR *str)
+{
+    char *ret = NULL;
+
+    if(str) {
+        size_t size = WideCharToMultiByte(CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
+        ret = heap_alloc(size);
+        if(ret)
+            WideCharToMultiByte(CP_UTF8, 0, str, -1, ret, size, NULL, NULL);
     }
 
     return ret;

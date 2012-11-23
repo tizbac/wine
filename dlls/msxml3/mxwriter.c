@@ -288,7 +288,9 @@ static HRESULT alloc_output_buffer(xml_encoding encoding, output_buffer **buffer
         return hr;
     }
 
-    if (ret->code_page == CP_UTF8) {
+    /* currently we always create a default output buffer that is UTF-16 only,
+       but it's possible to allocate with specific encoding too */
+    if (encoding != XmlEncoding_UTF16) {
         hr = init_encoded_buffer(&ret->encoded);
         if (hr != S_OK) {
             free_encoded_buffer(&ret->utf16);
@@ -2178,11 +2180,16 @@ static HRESULT WINAPI VBSAXAttributes_GetTypeInfoCount( IVBSAXAttributes *iface,
 
 static HRESULT WINAPI VBSAXAttributes_GetTypeInfo(
     IVBSAXAttributes *iface,
-    UINT iTInfo, LCID lcid, ITypeInfo** ppTInfo )
+    UINT iTInfo, LCID lcid, ITypeInfo** ti )
 {
     mxattributes *This = impl_from_IVBSAXAttributes( iface );
-    TRACE("(%p)->(%u %u %p)\n", This, iTInfo, lcid, ppTInfo);
-    return get_typeinfo(IVBSAXAttributes_tid, ppTInfo);
+    HRESULT hr;
+
+    TRACE("(%p)->(%u %u %p)\n", This, iTInfo, lcid, ti);
+
+    hr = get_typeinfo(IVBSAXAttributes_tid, ti);
+    ITypeInfo_AddRef(*ti);
+    return hr;
 }
 
 static HRESULT WINAPI VBSAXAttributes_GetIDsOfNames(
@@ -2205,10 +2212,7 @@ static HRESULT WINAPI VBSAXAttributes_GetIDsOfNames(
 
     hr = get_typeinfo(IVBSAXAttributes_tid, &typeinfo);
     if(SUCCEEDED(hr))
-    {
         hr = ITypeInfo_GetIDsOfNames(typeinfo, rgszNames, cNames, rgDispId);
-        ITypeInfo_Release(typeinfo);
-    }
 
     return hr;
 }
@@ -2233,11 +2237,8 @@ static HRESULT WINAPI VBSAXAttributes_Invoke(
 
     hr = get_typeinfo(IVBSAXAttributes_tid, &typeinfo);
     if(SUCCEEDED(hr))
-    {
         hr = ITypeInfo_Invoke(typeinfo, &This->IVBSAXAttributes_iface, dispIdMember, wFlags,
                 pDispParams, pVarResult, pExcepInfo, puArgErr);
-        ITypeInfo_Release(typeinfo);
-    }
 
     return hr;
 }

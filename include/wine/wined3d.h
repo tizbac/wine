@@ -2126,7 +2126,9 @@ HRESULT __cdecl wined3d_device_get_front_buffer_data(const struct wined3d_device
         UINT swapchain_idx, struct wined3d_surface *dst_surface);
 void __cdecl wined3d_device_get_gamma_ramp(const struct wined3d_device *device,
         UINT swapchain_idx, struct wined3d_gamma_ramp *ramp);
-struct wined3d_buffer * __cdecl wined3d_device_get_index_buffer(const struct wined3d_device *device);
+struct wined3d_shader * __cdecl wined3d_device_get_geometry_shader(const struct wined3d_device *device);
+struct wined3d_buffer * __cdecl wined3d_device_get_index_buffer(const struct wined3d_device *device,
+        enum wined3d_format_id *format);
 HRESULT __cdecl wined3d_device_get_light(const struct wined3d_device *device,
         UINT light_idx, struct wined3d_light *light);
 HRESULT __cdecl wined3d_device_get_light_enable(const struct wined3d_device *device, UINT light_idx, BOOL *enable);
@@ -2185,7 +2187,7 @@ HRESULT __cdecl wined3d_device_process_vertices(struct wined3d_device *device,
 void __cdecl wined3d_device_release_focus_window(struct wined3d_device *device);
 HRESULT __cdecl wined3d_device_reset(struct wined3d_device *device,
         const struct wined3d_swapchain_desc *swapchain_desc, const struct wined3d_display_mode *mode,
-        wined3d_device_reset_cb callback);
+        wined3d_device_reset_cb callback, BOOL reset_state);
 void __cdecl wined3d_device_restore_fullscreen_window(struct wined3d_device *device, HWND window);
 void __cdecl wined3d_device_set_base_vertex_index(struct wined3d_device *device, INT base_index);
 HRESULT __cdecl wined3d_device_set_clip_plane(struct wined3d_device *device,
@@ -2200,6 +2202,7 @@ void __cdecl wined3d_device_set_depth_stencil(struct wined3d_device *device, str
 HRESULT __cdecl wined3d_device_set_dialog_box_mode(struct wined3d_device *device, BOOL enable_dialogs);
 void __cdecl wined3d_device_set_gamma_ramp(const struct wined3d_device *device,
         UINT swapchain_idx, DWORD flags, const struct wined3d_gamma_ramp *ramp);
+void __cdecl wined3d_device_set_geometry_shader(struct wined3d_device *device, struct wined3d_shader *shader);
 void __cdecl wined3d_device_set_index_buffer(struct wined3d_device *device,
         struct wined3d_buffer *index_buffer, enum wined3d_format_id format_id);
 HRESULT __cdecl wined3d_device_set_light(struct wined3d_device *device,

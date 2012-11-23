@@ -75,6 +75,7 @@ static SQLRETURN (*pSQLConnect)(SQLHDBC,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLIN
 static SQLRETURN (*pSQLConnectW)(SQLHDBC,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT);
 static SQLRETURN (*pSQLCopyDesc)(SQLHDESC,SQLHDESC);
 static SQLRETURN (*pSQLDataSources)(SQLHENV,SQLUSMALLINT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLDataSourcesA)(SQLHENV,SQLUSMALLINT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*);
 static SQLRETURN (*pSQLDataSourcesW)(SQLHENV,SQLUSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*);
 static SQLRETURN (*pSQLDescribeCol)(SQLHSTMT,SQLUSMALLINT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLSMALLINT*,SQLUINTEGER*,SQLSMALLINT*,SQLSMALLINT*);
 static SQLRETURN (*pSQLDescribeColW)(SQLHSTMT,SQLUSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLSMALLINT*,SQLULEN*,SQLSMALLINT*,SQLSMALLINT*);
@@ -584,6 +585,7 @@ static BOOL ODBC_LoadDMFunctions(void)
     LOAD_FUNC(SQLConnectW);
     LOAD_FUNC(SQLCopyDesc);
     LOAD_FUNC(SQLDataSources);
+    LOAD_FUNC(SQLDataSourcesA);
     LOAD_FUNC(SQLDataSourcesW);
     LOAD_FUNC(SQLDescribeCol);
     LOAD_FUNC(SQLDescribeColW);
@@ -686,7 +688,7 @@ static BOOL ODBC_LoadDMFunctions(void)
 SQLRETURN WINAPI SQLAllocConnect(SQLHENV EnvironmentHandle, SQLHDBC *ConnectionHandle)
 {
         SQLRETURN ret;
-        TRACE("Env=%lx\n",EnvironmentHandle);
+        TRACE("Env=%p\n",EnvironmentHandle);
 
         if (!pSQLAllocConnect)
         {
@@ -696,7 +698,7 @@ SQLRETURN WINAPI SQLAllocConnect(SQLHENV EnvironmentHandle, SQLHDBC *ConnectionH
         }
 
         ret = pSQLAllocConnect(EnvironmentHandle, ConnectionHandle);
-        TRACE("Returns ret=%d, Handle %lx\n",ret, *ConnectionHandle);
+        TRACE("Returns ret=%d, Handle %p\n",ret, *ConnectionHandle);
         return ret;
 }
 
@@ -717,7 +719,7 @@ SQLRETURN WINAPI  SQLAllocEnv(SQLHENV *EnvironmentHandle)
         }
 
         ret = pSQLAllocEnv(EnvironmentHandle);
-        TRACE("Returns ret=%d, Env=%lx\n",ret, *EnvironmentHandle);
+        TRACE("Returns ret=%d, Env=%p\n",ret, *EnvironmentHandle);
         return ret;
 }
 
@@ -728,7 +730,7 @@ SQLRETURN WINAPI  SQLAllocEnv(SQLHENV *EnvironmentHandle)
 SQLRETURN WINAPI SQLAllocHandle(SQLSMALLINT HandleType, SQLHANDLE InputHandle, SQLHANDLE *OutputHandle)
 {
         SQLRETURN ret;
-        TRACE("(Type=%d, Handle=%lx)\n",HandleType,InputHandle);
+        TRACE("(Type=%d, Handle=%p)\n",HandleType,InputHandle);
 
         if (!pSQLAllocHandle)
         {
@@ -749,7 +751,7 @@ SQLRETURN WINAPI SQLAllocHandle(SQLSMALLINT HandleType, SQLHANDLE InputHandle, S
         }
 
         ret = pSQLAllocHandle(HandleType, InputHandle, OutputHandle);
-        TRACE("Returns ret=%d, Handle=%lx\n",ret, *OutputHandle);
+        TRACE("Returns ret=%d, Handle=%p\n",ret, *OutputHandle);
         return ret;
 }
 
@@ -761,7 +763,7 @@ SQLRETURN WINAPI SQLAllocStmt(SQLHDBC ConnectionHandle, SQLHSTMT *StatementHandl
 {
         SQLRETURN ret;
 
-        TRACE("(Connection=%lx)\n",ConnectionHandle);
+        TRACE("(Connection=%p)\n",ConnectionHandle);
 
         if (!pSQLAllocStmt)
         {
@@ -771,7 +773,7 @@ SQLRETURN WINAPI SQLAllocStmt(SQLHDBC ConnectionHandle, SQLHSTMT *StatementHandl
         }
 
         ret = pSQLAllocStmt(ConnectionHandle, StatementHandle);
-        TRACE ("Returns ret=%d, Handle=%lx\n", ret, *StatementHandle);
+        TRACE ("Returns ret=%d, Handle=%p\n", ret, *StatementHandle);
         return ret;
 }
 
@@ -862,7 +864,7 @@ SQLRETURN WINAPI SQLCancel(SQLHSTMT StatementHandle)
 SQLRETURN WINAPI  SQLCloseCursor(SQLHSTMT StatementHandle)
 {
         SQLRETURN ret;
-        TRACE("(Handle=%lx)\n",StatementHandle);
+        TRACE("(Handle=%p)\n",StatementHandle);
 
         if (!pSQLCloseCursor) return SQL_ERROR;
 
@@ -949,7 +951,7 @@ SQLRETURN WINAPI SQLDataSources(SQLHENV EnvironmentHandle,
 {
         SQLRETURN ret;
 
-        TRACE("EnvironmentHandle = %p\n", (LPVOID)EnvironmentHandle);
+        TRACE("EnvironmentHandle = %p\n", EnvironmentHandle);
 
         if (!pSQLDataSources) return SQL_ERROR;
 
@@ -969,6 +971,32 @@ SQLRETURN WINAPI SQLDataSources(SQLHENV EnvironmentHandle,
         return ret;
 }
 
+SQLRETURN WINAPI SQLDataSourcesA(SQLHENV EnvironmentHandle,
+             SQLUSMALLINT Direction, SQLCHAR *ServerName,
+             SQLSMALLINT BufferLength1, SQLSMALLINT *NameLength1,
+             SQLCHAR *Description, SQLSMALLINT BufferLength2,
+             SQLSMALLINT *NameLength2)
+{
+    SQLRETURN ret;
+
+    TRACE("EnvironmentHandle = %p\n", EnvironmentHandle);
+
+    if (!pSQLDataSourcesA) return SQL_ERROR;
+
+    ret = pSQLDataSourcesA(EnvironmentHandle, Direction, ServerName,
+                           BufferLength1, NameLength1, Description, BufferLength2, NameLength2);
+    if (TRACE_ON(odbc))
+    {
+       TRACE("returns: %d \t", ret);
+       if (NameLength1 && *NameLength1 > 0)
+         TRACE("DataSource = %s,", ServerName);
+       if (NameLength2 && *NameLength2 > 0)
+         TRACE(" Description = %s", Description);
+       TRACE("\n");
+    }
+
+    return ret;
+}
 
 /*************************************************************************
  *				SQLDescribeCol           [ODBC32.008]
@@ -993,7 +1021,7 @@ SQLRETURN WINAPI SQLDescribeCol(SQLHSTMT StatementHandle,
 SQLRETURN WINAPI SQLDisconnect(SQLHDBC ConnectionHandle)
 {
         SQLRETURN ret;
-        TRACE("(Handle=%lx)\n", ConnectionHandle);
+        TRACE("(Handle=%p)\n", ConnectionHandle);
 
         if (!pSQLDisconnect) return SQL_ERROR;
 
@@ -1086,7 +1114,7 @@ SQLRETURN WINAPI SQLFetchScroll(SQLHSTMT StatementHandle, SQLSMALLINT FetchOrien
 SQLRETURN WINAPI SQLFreeConnect(SQLHDBC ConnectionHandle)
 {
         SQLRETURN ret;
-        TRACE("(Handle=%lx)\n",ConnectionHandle);
+        TRACE("(Handle=%p)\n",ConnectionHandle);
 
         if (!pSQLFreeConnect) return SQL_ERROR;
 
@@ -1102,7 +1130,7 @@ SQLRETURN WINAPI SQLFreeConnect(SQLHDBC ConnectionHandle)
 SQLRETURN WINAPI SQLFreeEnv(SQLHENV EnvironmentHandle)
 {
         SQLRETURN ret;
-        TRACE("(Env=%lx)\n",EnvironmentHandle);
+        TRACE("(Env=%p)\n",EnvironmentHandle);
 
         if (!pSQLFreeEnv) return SQL_ERROR;
 
@@ -1118,7 +1146,7 @@ SQLRETURN WINAPI SQLFreeEnv(SQLHENV EnvironmentHandle)
 SQLRETURN WINAPI SQLFreeHandle(SQLSMALLINT HandleType, SQLHANDLE Handle)
 {
         SQLRETURN ret;
-        TRACE("(Type=%d, Handle=%lx)\n",HandleType,Handle);
+        TRACE("(Type=%d, Handle=%p)\n",HandleType,Handle);
 
         if (!pSQLFreeHandle) return SQL_ERROR;
 
@@ -1134,7 +1162,7 @@ SQLRETURN WINAPI SQLFreeHandle(SQLSMALLINT HandleType, SQLHANDLE Handle)
 SQLRETURN WINAPI SQLFreeStmt(SQLHSTMT StatementHandle, SQLUSMALLINT Option)
 {
         SQLRETURN ret;
-        TRACE("(Handle %lx, Option=%d)\n",StatementHandle, Option);
+        TRACE("(Handle %p, Option=%d)\n",StatementHandle, Option);
 
         if (!pSQLFreeStmt) return SQL_ERROR;
 
@@ -2011,7 +2039,7 @@ SQLRETURN WINAPI SQLColAttributesW(
 {
         SQLRETURN iResult;
 
-        TRACE("hstmt=0x%08lx icol=%d fDescType=%d rgbDesc=%p cbDescMax=%d pcbDesc=%p pfDesc=%p\n",
+        TRACE("hstmt=%p icol=%d fDescType=%d rgbDesc=%p cbDescMax=%d pcbDesc=%p pfDesc=%p\n",
             hstmt, icol, fDescType, rgbDesc, cbDescMax, pcbDesc, pfDesc);
 
         if (!pSQLColAttributesW) return SQL_ERROR;
@@ -2057,7 +2085,7 @@ SQLRETURN WINAPI SQLConnectW(SQLHDBC ConnectionHandle,
 SQLRETURN WINAPI SQLDescribeColW(SQLHSTMT StatementHandle,
              SQLUSMALLINT ColumnNumber, WCHAR *ColumnName,
              SQLSMALLINT BufferLength, SQLSMALLINT *NameLength,
-             SQLSMALLINT *DataType, SQLUINTEGER *ColumnSize,
+             SQLSMALLINT *DataType, SQLULEN *ColumnSize,
              SQLSMALLINT *DecimalDigits, SQLSMALLINT *Nullable)
 {
         SQLRETURN iResult;
@@ -2154,7 +2182,7 @@ SQLRETURN WINAPI SQLColAttributeW (SQLHSTMT StatementHandle,
 {
         SQLRETURN iResult;
 
-        TRACE("StatementHandle=0x%08lx ColumnNumber=%d FieldIdentifier=%d CharacterAttribute=%p BufferLength=%d StringLength=%p NumericAttribute=%p\n",
+        TRACE("StatementHandle=%p ColumnNumber=%d FieldIdentifier=%d CharacterAttribute=%p BufferLength=%d StringLength=%p NumericAttribute=%p\n",
             StatementHandle, ColumnNumber, FieldIdentifier,
             CharacterAttribute, BufferLength, StringLength, NumericAttribute);
 
@@ -2212,7 +2240,7 @@ SQLRETURN WINAPI SQLGetDescRecW(SQLHDESC DescriptorHandle,
              SQLSMALLINT RecNumber, WCHAR *Name,
              SQLSMALLINT BufferLength, SQLSMALLINT *StringLength,
              SQLSMALLINT *Type, SQLSMALLINT *SubType,
-             SQLINTEGER *Length, SQLSMALLINT *Precision,
+             SQLLEN *Length, SQLSMALLINT *Precision,
              SQLSMALLINT *Scale, SQLSMALLINT *Nullable)
 {
         TRACE("\n");
@@ -2261,7 +2289,7 @@ SQLRETURN WINAPI SQLGetStmtAttrW(SQLHSTMT StatementHandle,
 {
         SQLRETURN iResult;
 
-        TRACE("Attribute = (%02ld) Value = %p BufferLength = (%ld) StringLength = %p\n",
+        TRACE("Attribute = (%02d) Value = %p BufferLength = (%d) StringLength = %p\n",
             Attribute, Value, BufferLength, StringLength);
 
         if (Value == NULL) {
@@ -2479,7 +2507,7 @@ SQLRETURN WINAPI SQLDataSourcesW(SQLHENV EnvironmentHandle,
 {
         SQLRETURN ret;
 
-        TRACE("EnvironmentHandle = %p\n", (LPVOID)EnvironmentHandle);
+        TRACE("EnvironmentHandle = %p\n", EnvironmentHandle);
 
         if (!pSQLDataSourcesW) return SQL_ERROR;
 
@@ -2661,7 +2689,7 @@ SQLRETURN WINAPI SQLSetStmtAttrW(SQLHSTMT StatementHandle,
                  SQLINTEGER StringLength)
 {
         SQLRETURN iResult;
-        TRACE("Attribute = (%02ld) Value = %p StringLength = (%ld)\n",
+        TRACE("Attribute = (%02d) Value = %p StringLength = (%d)\n",
             Attribute, Value, StringLength);
 
         if (!pSQLSetStmtAttrW) return SQL_ERROR;

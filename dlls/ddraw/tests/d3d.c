@@ -30,11 +30,11 @@
 #include "unknwn.h"
 
 static IDirectDraw7 *lpDD;
-static LPDIRECT3D7             lpD3D = NULL;
+static IDirect3D7 *lpD3D;
 static IDirectDrawSurface7 *lpDDS;
 static IDirectDrawSurface7 *lpDDSdepth;
-static LPDIRECT3DDEVICE7       lpD3DDevice = NULL;
-static LPDIRECT3DVERTEXBUFFER7 lpVBufSrc = NULL;
+static IDirect3DDevice7 *lpD3DDevice;
+static IDirect3DVertexBuffer7 *lpVBufSrc;
 
 static IDirectDraw *DirectDraw1 = NULL;
 static IDirectDrawSurface *Surface1 = NULL;
@@ -925,7 +925,7 @@ static void D3D1_releaseObjects(void)
 static void ViewportTest(void)
 {
     HRESULT hr;
-    LPDIRECT3DVIEWPORT2 Viewport2;
+    IDirect3DViewport2 *Viewport2;
     IDirect3DViewport3 *Viewport3;
     D3DVIEWPORT vp1_data, ret_vp1_data;
     D3DVIEWPORT2 vp2_data, ret_vp2_data;

@@ -6073,7 +6073,7 @@ static void test_cloneNode(void )
     IXMLDOMNamedNodeMap *mapAttr;
     LONG length, length1;
     LONG attr_cnt, attr_cnt1;
-    IXMLDOMNode *node;
+    IXMLDOMNode *node, *attr;
     IXMLDOMNode *node_clone;
     IXMLDOMNode *node_first;
     HRESULT hr;
@@ -6134,6 +6134,11 @@ static void test_cloneNode(void )
     hr = IXMLDOMNamedNodeMap_get_length(mapAttr, &attr_cnt1);
     ok( hr == S_OK, "ret %08x\n", hr );
     ok(attr_cnt1 == 3, "got %d\n", attr_cnt1);
+    /* now really get some attributes from cloned element */
+    attr = NULL;
+    hr = IXMLDOMNamedNodeMap_getNamedItem(mapAttr, _bstr_("id"), &attr);
+    ok(hr == S_OK, "ret %08x\n", hr);
+    IXMLDOMNode_Release(attr);
     IXMLDOMNamedNodeMap_Release(mapAttr);
 
     ok(length == length1, "wrong Child count (%d, %d)\n", length, length1);
@@ -9732,8 +9737,7 @@ todo_wine {
     hr = IXSLProcessor_get_output(processor, &v);
     ok(hr == S_OK, "got 0x%08x\n", hr);
     ok(V_VT(&v) == VT_BSTR, "got type %d\n", V_VT(&v));
-    /* we currently output one '\n' instead of empty string */
-    todo_wine ok(lstrcmpW(V_BSTR(&v), _bstr_("")) == 0, "got %s\n", wine_dbgstr_w(V_BSTR(&v)));
+    ok(lstrcmpW(V_BSTR(&v), _bstr_("")) == 0, "got %s\n", wine_dbgstr_w(V_BSTR(&v)));
     IXMLDOMDocument_Release(doc2);
     VariantClear(&v);
 
@@ -12186,6 +12190,9 @@ static void test_put_data(void)
     WCHAR buff[100], *data;
     IXMLDOMDocument *doc;
     DOMNodeType *type;
+    IXMLDOMText *text;
+    IXMLDOMNode *node;
+    VARIANT v;
     BSTR get_data;
     HRESULT hr;
 
@@ -12200,9 +12207,6 @@ static void test_put_data(void)
     type = put_data_types;
     while (*type != NODE_INVALID)
     {
-       IXMLDOMNode *node;
-       VARIANT v;
-
        V_VT(&v) = VT_I2;
        V_I2(&v) = *type;
 
@@ -12214,8 +12218,6 @@ static void test_put_data(void)
        {
            case NODE_TEXT:
            {
-              IXMLDOMText *text;
-
               hr = IXMLDOMNode_QueryInterface(node, &IID_IXMLDOMText, (void**)&text);
               EXPECT_HR(hr, S_OK);
               hr = IXMLDOMText_put_data(text, data);
@@ -12284,6 +12286,32 @@ static void test_put_data(void)
        IXMLDOMNode_Release(node);
        type++;
     }
+
+    /* \r\n sequence is never escaped */
+    V_VT(&v) = VT_I2;
+    V_I2(&v) = NODE_TEXT;
+
+    hr = IXMLDOMDocument_createNode(doc, v, _bstr_("name"), NULL, &node);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    IXMLDOMNode_QueryInterface(node, &IID_IXMLDOMText, (void**)&text);
+
+    hr = IXMLDOMText_put_data(text, _bstr_("\r\n"));
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    hr = IXMLDOMText_get_data(text, &get_data);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+todo_wine
+    ok(!lstrcmpW(get_data, _bstr_("\n")), "got %s\n", wine_dbgstr_w(get_data));
+    SysFreeString(get_data);
+
+    hr = IXMLDOMText_get_xml(text, &get_data);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(!lstrcmpW(get_data, _bstr_("\r\n")), "got %s\n", wine_dbgstr_w(get_data));
+    SysFreeString(get_data);
+
+    IXMLDOMText_Release(text);
+    IXMLDOMNode_Release(node);
 
     IXMLDOMDocument_Release(doc);
     free_bstrs();
@@ -12469,6 +12497,47 @@ static void test_namedmap_newenum(void)
     IXMLDOMDocument_Release(doc);
 }
 
+static const char xsltext_xsl[] =
+"<?xml version=\"1.0\"?>"
+"<xsl:stylesheet version=\"1.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" >"
+"<xsl:output method=\"html\" encoding=\"us-ascii\"/>"
+"<xsl:template match=\"/\">"
+"    <xsl:choose>"
+"        <xsl:when test=\"testkey\">"
+"            <xsl:text>testdata</xsl:text>"
+"        </xsl:when>"
+"    </xsl:choose>"
+"</xsl:template>"
+"</xsl:stylesheet>";
+
+static void test_xsltext(void)
+{
+    IXMLDOMDocument *doc, *doc2;
+    VARIANT_BOOL b;
+    HRESULT hr;
+    BSTR ret;
+
+    doc = create_document(&IID_IXMLDOMDocument);
+    if (!doc) return;
+
+    doc2 = create_document(&IID_IXMLDOMDocument);
+
+    hr = IXMLDOMDocument_loadXML(doc, _bstr_(xsltext_xsl), &b);
+    EXPECT_HR(hr, S_OK);
+
+    hr = IXMLDOMDocument_loadXML(doc2, _bstr_("<testkey/>"), &b);
+    EXPECT_HR(hr, S_OK);
+
+    hr = IXMLDOMDocument_transformNode(doc2, (IXMLDOMNode*)doc, &ret);
+    EXPECT_HR(hr, S_OK);
+    ok(!lstrcmpW(ret, _bstr_("testdata")), "transform result %s\n", wine_dbgstr_w(ret));
+    SysFreeString(ret);
+
+    IXMLDOMDocument_Release(doc2);
+    IXMLDOMDocument_Release(doc);
+    free_bstrs();
+}
+
 START_TEST(domdoc)
 {
     IXMLDOMDocument *doc;
@@ -12552,6 +12621,7 @@ START_TEST(domdoc)
     test_namedmap_newenum();
 
     test_xsltemplate();
+    test_xsltext();
 
     hr = CoCreateInstance(&CLSID_MXNamespaceManager40, NULL, CLSCTX_INPROC_SERVER,
         &IID_IMXNamespaceManager, (void**)&unk);

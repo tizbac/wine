@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <locale.h>
+#include <wctype.h>
 
 #include <windef.h>
 #include <winbase.h>
@@ -50,6 +51,7 @@ typedef struct
 
 static void* (__cdecl *p_set_invalid_parameter_handler)(void*);
 static _locale_t (__cdecl *p__get_current_locale)(void);
+static void (__cdecl *p__free_locale)(_locale_t);
 static void  (__cdecl *p_free)(void*);
 
 static void (__cdecl *p_char_assign)(void*, const void*);
@@ -65,6 +67,8 @@ static char* (__cdecl *p_Copy_s)(char*, size_t, const char*, size_t);
 static unsigned short (__cdecl *p_wctype)(const char*);
 static MSVCP__Ctypevec* (__cdecl *p__Getctype)(MSVCP__Ctypevec*);
 static /*MSVCP__Collvec*/ULONGLONG (__cdecl *p__Getcoll)(void);
+static wctrans_t (__cdecl *p_wctrans)(const char*);
+static wint_t (__cdecl *p_towctrans)(wint_t, wctrans_t);
 
 #undef __thiscall
 #ifdef __i386__
@@ -95,6 +99,7 @@ static /*basic_ostringstream_char*/void* (__thiscall *p_basic_ostringstream_char
         /*basic_ostringstream_char*/void*, int, /*MSVCP_bool*/int);
 static void (__thiscall *p_basic_ostringstream_char_dtor)(/*basic_ostringstream_char*/void*);
 static void (__thiscall *p_basic_ostringstream_char_vbase_dtor)(/*basic_ostringstream_char*/void*);
+static void (__thiscall *p_basic_ios_char_dtor)(/*basic_ios_char*/void*);
 
 static int invalid_parameter = 0;
 static void __cdecl test_invalid_parameter_handler(const wchar_t *expression,
@@ -174,8 +179,9 @@ static BOOL init(void)
 
     p_set_invalid_parameter_handler = (void*)GetProcAddress(msvcr, "_set_invalid_parameter_handler");
     p__get_current_locale = (void*)GetProcAddress(msvcr, "_get_current_locale");
+    p__free_locale = (void*)GetProcAddress(msvcr, "_free_locale");
     p_free = (void*)GetProcAddress(msvcr, "free");
-    if(!p_set_invalid_parameter_handler || !p__get_current_locale || !p_free) {
+    if(!p_set_invalid_parameter_handler || !p__get_current_locale || !p__free_locale || !p_free) {
         win_skip("Error setting tests environment\n");
         return FALSE;
     }
@@ -185,6 +191,8 @@ static BOOL init(void)
     SET(p_wctype, "wctype");
     SET(p__Getctype, "_Getctype");
     SET(p__Getcoll, "_Getcoll");
+    SET(p_wctrans, "wctrans");
+    SET(p_towctrans, "towctrans");
     SET(basic_ostringstream_char_vbtable, "??_8?$basic_ostringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@7B@");
     if(sizeof(void*) == 8) { /* 64-bit initialization */
         SET(p_char_assign, "?assign@?$char_traits@D@std@@SAXAEADAEBD@Z");
@@ -221,6 +229,8 @@ static BOOL init(void)
                 "??1?$basic_ostringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@UEAA@XZ");
         SET(p_basic_ostringstream_char_vbase_dtor,
                 "??_D?$basic_ostringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QEAAXXZ");
+        SET(p_basic_ios_char_dtor,
+                "??1?$basic_ios@DU?$char_traits@D@std@@@std@@UEAA@XZ");
     } else {
         SET(p_char_assign, "?assign@?$char_traits@D@std@@SAXAADABD@Z");
         SET(p_wchar_assign, "?assign@?$char_traits@_W@std@@SAXAA_WAB_W@Z");
@@ -256,6 +266,8 @@ static BOOL init(void)
                 "??1?$basic_ostringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@UAE@XZ");
         SET(p_basic_ostringstream_char_vbase_dtor,
                 "??_D?$basic_ostringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXXZ");
+        SET(p_basic_ios_char_dtor,
+                "??1?$basic_ios@DU?$char_traits@D@std@@@std@@UAE@XZ");
     }
 
     init_thiscall_thunk();
@@ -389,6 +401,7 @@ static void test_wctype(void)
 static void test__Getctype(void)
 {
     MSVCP__Ctypevec ret;
+    _locale_t locale;
 
     ok(p__Getctype(&ret) == &ret, "__Getctype returned incorrect pointer\n");
     ok(ret.handle == 0, "ret.handle = %d\n", ret.handle);
@@ -397,7 +410,9 @@ static void test__Getctype(void)
     ok(ret.table[0] == 32, "ret.table[0] = %d\n", ret.table[0]);
     p_free(ret.table);
 
-    p__get_current_locale()->locinfo->lc_handle[LC_COLLATE] = 0x1234567;
+    locale = p__get_current_locale();
+    locale->locinfo->lc_handle[LC_COLLATE] = 0x1234567;
+    p__free_locale(locale);
     ok(p__Getctype(&ret) == &ret, "__Getctype returned incorrect pointer\n");
     ok(ret.handle == 0x1234567, "ret.handle = %d\n", ret.handle);
     ok(ret.page == 0, "ret.page = %d\n", ret.page);
@@ -409,13 +424,16 @@ static void test__Getctype(void)
 static void test__Getcoll(void)
 {
     ULONGLONG (__cdecl *p__Getcoll_arg)(MSVCP__Collvec*);
+    _locale_t locale;
 
     union {
         MSVCP__Collvec collvec;
         ULONGLONG ull;
     }ret;
 
-    p__get_current_locale()->locinfo->lc_handle[LC_COLLATE] = 0x7654321;
+    locale = p__get_current_locale();
+    locale->locinfo->lc_handle[LC_COLLATE] = 0x7654321;
+    p__free_locale(locale);
     ret.ull = 0;
     p__Getcoll_arg = (void*)p__Getcoll;
     p__Getcoll_arg(&ret.collvec);
@@ -425,6 +443,37 @@ static void test__Getcoll(void)
     ret.ull = p__Getcoll();
     ok(ret.collvec.handle == 0x7654321, "ret.collvec.handle = %x\n", ret.collvec.handle);
     ok(ret.collvec.page == 0, "ret.page = %x\n", ret.collvec.page);
+}
+
+static void test_towctrans(void)
+{
+    wchar_t ret;
+
+    ret = p_wctrans("tolower");
+    ok(ret == 2, "wctrans returned %d, expected 2\n", ret);
+    ret = p_wctrans("toupper");
+    ok(ret == 1, "wctrans returned %d, expected 1\n", ret);
+    ret = p_wctrans("toLower");
+    ok(ret == 0, "wctrans returned %d, expected 0\n", ret);
+    ret = p_wctrans("");
+    ok(ret == 0, "wctrans returned %d, expected 0\n", ret);
+    if(0) { /* crashes on windows */
+        ret = p_wctrans(NULL);
+        ok(ret == 0, "wctrans returned %d, expected 0\n", ret);
+    }
+
+    ret = p_towctrans('t', 2);
+    ok(ret == 't', "towctrans('t', 2) returned %c, expected t\n", ret);
+    ret = p_towctrans('T', 2);
+    ok(ret == 't', "towctrans('T', 2) returned %c, expected t\n", ret);
+    ret = p_towctrans('T', 0);
+    ok(ret == 't', "towctrans('T', 0) returned %c, expected t\n", ret);
+    ret = p_towctrans('T', 3);
+    ok(ret == 't', "towctrans('T', 3) returned %c, expected t\n", ret);
+    ret = p_towctrans('t', 1);
+    ok(ret == 'T', "towctrans('t', 1) returned %c, expected T\n", ret);
+    ret = p_towctrans('T', 1);
+    ok(ret == 'T', "towctrans('T', 1) returned %c, expected T\n", ret);
 }
 
 static void test_allocator_char(void)
@@ -462,12 +511,15 @@ static void test_virtual_call(void)
 {
     BYTE this[256];
     basic_string_char bstr;
+    _locale_t locale;
     const char *p;
     char str1[] = "test";
     char str2[] = "TEST";
     int ret;
 
-    p__get_current_locale()->locinfo->lc_handle[LC_COLLATE] = 1;
+    locale = p__get_current_locale();
+    locale->locinfo->lc_handle[LC_COLLATE] = 1;
+    p__free_locale(locale);
     call_func2(p_collate_char_ctor_refs, this, 0);
     ret = (int)call_func5(p_collate_char_compare, this, str1, str1+4, str1, str1+4);
     ok(ret == 0, "collate<char>::compare returned %d\n", ret);
@@ -492,8 +544,10 @@ static void test_virtual_base_dtors(void)
     call_func3(p_basic_ostringstream_char_ctor_mode, this, 0, 1);
     call_func1(p_basic_ostringstream_char_vbase_dtor, this);
 
+    /* this test uses vbtable set by earlier test */
     call_func3(p_basic_ostringstream_char_ctor_mode, this, 0, 0);
     call_func1(p_basic_ostringstream_char_dtor, this+basic_ostringstream_char_vbtable[1]);
+    call_func1(p_basic_ios_char_dtor, this+((int**)this)[0][1]);
 }
 
 START_TEST(misc)
@@ -507,6 +561,7 @@ START_TEST(misc)
     test_wctype();
     test__Getctype();
     test__Getcoll();
+    test_towctrans();
     test_virtual_call();
     test_virtual_base_dtors();
 

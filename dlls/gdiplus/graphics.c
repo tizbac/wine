@@ -1095,7 +1095,6 @@ static GpStatus brush_fill_pixels(GpGraphics *graphics, GpBrush *brush,
         GpTexture *fill = (GpTexture*)brush;
         GpPointF draw_points[3];
         GpStatus stat;
-        GpMatrix *world_to_texture;
         int x, y;
         GpBitmap *bitmap;
         int src_stride;
@@ -1127,17 +1126,11 @@ static GpStatus brush_fill_pixels(GpGraphics *graphics, GpBrush *brush,
 
         if (stat == Ok)
         {
-            stat = GdipCloneMatrix(fill->transform, &world_to_texture);
-        }
+            GpMatrix world_to_texture = fill->transform;
 
-        if (stat == Ok)
-        {
-            stat = GdipInvertMatrix(world_to_texture);
-
+            stat = GdipInvertMatrix(&world_to_texture);
             if (stat == Ok)
-                stat = GdipTransformMatrixPoints(world_to_texture, draw_points, 3);
-
-            GdipDeleteMatrix(world_to_texture);
+                stat = GdipTransformMatrixPoints(&world_to_texture, draw_points, 3);
         }
 
         if (stat == Ok && !fill->bitmap_bits)
@@ -1246,7 +1239,7 @@ static GpStatus brush_fill_pixels(GpGraphics *graphics, GpBrush *brush,
         if (!transform_fixme_once)
         {
             BOOL is_identity=TRUE;
-            GdipIsMatrixIdentity(fill->transform, &is_identity);
+            GdipIsMatrixIdentity(&fill->transform, &is_identity);
             if (!is_identity)
             {
                 FIXME("path gradient transform not implemented\n");
@@ -1446,7 +1439,7 @@ static void draw_cap(GpGraphics *graphics, COLORREF color, GpLineCap cap, REAL s
     const GpCustomLineCap *custom, REAL x1, REAL y1, REAL x2, REAL y2)
 {
     HGDIOBJ oldbrush = NULL, oldpen = NULL;
-    GpMatrix *matrix = NULL;
+    GpMatrix matrix;
     HBRUSH brush = NULL;
     HPEN pen = NULL;
     PointF ptf[4], *custptf = NULL;
@@ -1591,16 +1584,17 @@ static void draw_cap(GpGraphics *graphics, COLORREF color, GpLineCap cap, REAL s
             custpt = GdipAlloc(count * sizeof(POINT));
             tp = GdipAlloc(count);
 
-            if(!custptf || !custpt || !tp || (GdipCreateMatrix(&matrix) != Ok))
+            if(!custptf || !custpt || !tp)
                 goto custend;
 
             memcpy(custptf, custom->pathdata.Points, count * sizeof(PointF));
 
-            GdipScaleMatrix(matrix, size, size, MatrixOrderAppend);
-            GdipRotateMatrix(matrix, (180.0 / M_PI) * (theta - M_PI_2),
+            GdipSetMatrixElements(&matrix, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+            GdipScaleMatrix(&matrix, size, size, MatrixOrderAppend);
+            GdipRotateMatrix(&matrix, (180.0 / M_PI) * (theta - M_PI_2),
                              MatrixOrderAppend);
-            GdipTranslateMatrix(matrix, x2, y2, MatrixOrderAppend);
-            GdipTransformMatrixPoints(matrix, custptf, count);
+            GdipTranslateMatrix(&matrix, x2, y2, MatrixOrderAppend);
+            GdipTransformMatrixPoints(&matrix, custptf, count);
 
             transform_and_round_points(graphics, custpt, custptf, count);
 
@@ -1620,7 +1614,6 @@ custend:
             GdipFree(custptf);
             GdipFree(custpt);
             GdipFree(tp);
-            GdipDeleteMatrix(matrix);
             break;
         default:
             break;
@@ -3134,7 +3127,7 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
             RECT dst_area;
             GpRect src_area;
             int i, x, y, src_stride, dst_stride;
-            GpMatrix *dst_to_src;
+            GpMatrix dst_to_src;
             REAL m11, m12, m21, m22, mdx, mdy;
             LPBYTE src_data, dst_data;
             BitmapData lockeddata;
@@ -3166,22 +3159,13 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
             m22 = (ptf[2].Y - ptf[0].Y) / srcheight;
             mdy = ptf[0].Y - m12 * srcx - m22 * srcy;
 
-            stat = GdipCreateMatrix2(m11, m12, m21, m22, mdx, mdy, &dst_to_src);
+            GdipSetMatrixElements(&dst_to_src, m11, m12, m21, m22, mdx, mdy);
+
+            stat = GdipInvertMatrix(&dst_to_src);
             if (stat != Ok) return stat;
 
-            stat = GdipInvertMatrix(dst_to_src);
-            if (stat != Ok)
-            {
-                GdipDeleteMatrix(dst_to_src);
-                return stat;
-            }
-
             dst_data = GdipAlloc(sizeof(ARGB) * (dst_area.right - dst_area.left) * (dst_area.bottom - dst_area.top));
-            if (!dst_data)
-            {
-                GdipDeleteMatrix(dst_to_src);
-                return OutOfMemory;
-            }
+            if (!dst_data) return OutOfMemory;
 
             dst_stride = sizeof(ARGB) * (dst_area.right - dst_area.left);
 
@@ -3194,7 +3178,6 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
             if (!src_data)
             {
                 GdipFree(dst_data);
-                GdipDeleteMatrix(dst_to_src);
                 return OutOfMemory;
             }
             src_stride = sizeof(ARGB) * src_area.Width;
@@ -3217,7 +3200,6 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
                 if (src_data != dst_data)
                     GdipFree(src_data);
                 GdipFree(dst_data);
-                GdipDeleteMatrix(dst_to_src);
                 return stat;
             }
 
@@ -3226,7 +3208,7 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
                 src_stride, ColorAdjustTypeBitmap);
 
             /* Transform the bits as needed to the destination. */
-            GdipTransformMatrixPoints(dst_to_src, dst_to_src_points, 3);
+            GdipTransformMatrixPoints(&dst_to_src, dst_to_src_points, 3);
 
             x_dx = dst_to_src_points[1].X - dst_to_src_points[0].X;
             x_dy = dst_to_src_points[1].Y - dst_to_src_points[0].Y;
@@ -3252,8 +3234,6 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
                         *dst_color = 0;
                 }
             }
-
-            GdipDeleteMatrix(dst_to_src);
 
             GdipFree(src_data);
 

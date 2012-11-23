@@ -1450,7 +1450,6 @@ static void handle_navigation_error(nsChannelBSC *This, DWORD result)
 {
     HTMLOuterWindow *outer_window;
     HTMLDocumentObj *doc;
-    IOleCommandTarget *olecmd;
     BOOL is_error_url;
     SAFEARRAY *sa;
     SAFEARRAYBOUND bound;
@@ -1473,18 +1472,15 @@ static void handle_navigation_error(nsChannelBSC *This, DWORD result)
     if(FAILED(hres) || is_error_url)
         return;
 
-    hres = IOleClientSite_QueryInterface(doc->client,
-            &IID_IOleCommandTarget, (void**)&olecmd);
+    if(!doc->client_cmdtrg)
     if(FAILED(hres))
         return;
 
     bound.lLbound = 0;
     bound.cElements = 8;
     sa = SafeArrayCreate(VT_VARIANT, 1, &bound);
-    if(!sa) {
-        IOleCommandTarget_Release(olecmd);
+    if(!sa)
         return;
-    }
 
     ind = 0;
     V_VT(&var) = VT_I4;
@@ -1532,11 +1528,10 @@ static void handle_navigation_error(nsChannelBSC *This, DWORD result)
     V_ARRAY(&var) = sa;
     V_VT(&varOut) = VT_BOOL;
     V_BOOL(&varOut) = VARIANT_TRUE;
-    IOleCommandTarget_Exec(olecmd, &CGID_DocHostCmdPriv, 1, 0, &var, FAILED(hres)?NULL:&varOut);
+    IOleCommandTarget_Exec(doc->client_cmdtrg, &CGID_DocHostCmdPriv, 1, 0, &var, FAILED(hres)?NULL:&varOut);
 
     SysFreeString(unk);
     SafeArrayDestroy(sa);
-    IOleCommandTarget_Release(olecmd);
 }
 
 static HRESULT nsChannelBSC_stop_binding(BSCallback *bsc, HRESULT result)
@@ -1777,7 +1772,7 @@ static void start_doc_binding_proc(task_t *_task)
 {
     start_doc_binding_task_t *task = (start_doc_binding_task_t*)_task;
 
-    set_current_mon(task->window, task->pending_window->bscallback->bsc.mon);
+    set_current_mon(task->window, task->pending_window->bscallback->bsc.mon, BINDING_NAVIGATED);
     start_binding(task->pending_window, &task->pending_window->bscallback->bsc, NULL);
 }
 
@@ -1948,7 +1943,9 @@ typedef struct {
     task_t header;
     HTMLOuterWindow *window;
     nsChannelBSC *bscallback;
+    DWORD flags;
     IMoniker *mon;
+    IUri *uri;
 } navigate_task_t;
 
 static void navigate_proc(task_t *_task)
@@ -1958,7 +1955,8 @@ static void navigate_proc(task_t *_task)
 
     hres = set_moniker(&task->window->doc_obj->basedoc, task->mon, NULL, task->bscallback, TRUE);
     if(SUCCEEDED(hres)) {
-        set_current_mon(task->window, task->bscallback->bsc.mon);
+        set_current_mon(task->window, task->bscallback->bsc.mon, task->flags);
+        set_current_uri(task->window, task->uri);
         start_binding(task->window->pending_window, &task->bscallback->bsc, NULL);
     }
 }
@@ -1969,6 +1967,7 @@ static void navigate_task_destr(task_t *_task)
 
     IBindStatusCallback_Release(&task->bscallback->bsc.IBindStatusCallback_iface);
     IMoniker_Release(task->mon);
+    IUri_Release(task->uri);
     heap_free(task);
 }
 
@@ -2041,14 +2040,19 @@ static HRESULT navigate_fragment(HTMLOuterWindow *window, IUri *uri)
     return S_OK;
 }
 
-HRESULT super_navigate(HTMLOuterWindow *window, IUri *uri, const WCHAR *headers, BYTE *post_data, DWORD post_data_size)
+HRESULT super_navigate(HTMLOuterWindow *window, IUri *uri, DWORD flags, const WCHAR *headers, BYTE *post_data, DWORD post_data_size)
 {
     nsChannelBSC *bsc;
+    IUri *uri_nofrag;
     IMoniker *mon;
     DWORD scheme;
     HRESULT hres;
 
-    if(window->doc_obj->client) {
+    uri_nofrag = get_uri_nofrag(uri);
+    if(!uri_nofrag)
+        return E_FAIL;
+
+    if(window->doc_obj->client && !(flags & BINDING_REFRESH)) {
         IOleCommandTarget *cmdtrg;
 
         hres = IOleClientSite_QueryInterface(window->doc_obj->client, &IID_IOleCommandTarget, (void**)&cmdtrg);
@@ -2056,7 +2060,7 @@ HRESULT super_navigate(HTMLOuterWindow *window, IUri *uri, const WCHAR *headers,
             VARIANT in, out;
             BSTR url_str;
 
-            hres = IUri_GetDisplayUri(uri, &url_str);
+            hres = IUri_GetDisplayUri(uri_nofrag, &url_str);
             if(SUCCEEDED(hres)) {
                 V_VT(&in) = VT_BSTR;
                 V_BSTR(&in) = url_str;
@@ -2071,12 +2075,19 @@ HRESULT super_navigate(HTMLOuterWindow *window, IUri *uri, const WCHAR *headers,
         }
     }
 
-    if(window->uri && !post_data_size && compare_ignoring_frag(window->uri, uri)) {
-        TRACE("fragment navigate\n");
-        return navigate_fragment(window, uri);
+    if(!(flags & BINDING_REFRESH) && window->uri_nofrag && !post_data_size) {
+        BOOL eq;
+
+        hres = IUri_IsEqual(uri_nofrag, window->uri_nofrag, &eq);
+        if(SUCCEEDED(hres) && eq) {
+            IUri_Release(uri_nofrag);
+            TRACE("fragment navigate\n");
+            return navigate_fragment(window, uri);
+        }
     }
 
-    hres = CreateURLMonikerEx2(NULL, uri, &mon, URL_MK_UNIFORM);
+    hres = CreateURLMonikerEx2(NULL, uri_nofrag, &mon, URL_MK_UNIFORM);
+    IUri_Release(uri_nofrag);
     if(FAILED(hres))
         return hres;
 
@@ -2089,7 +2100,7 @@ HRESULT super_navigate(HTMLOuterWindow *window, IUri *uri, const WCHAR *headers,
         return hres;
     }
 
-    prepare_for_binding(&window->doc_obj->basedoc, mon, TRUE);
+    prepare_for_binding(&window->doc_obj->basedoc, mon, flags);
 
     hres = IUri_GetScheme(uri, &scheme);
     if(SUCCEEDED(hres) && scheme != URL_SCHEME_JAVASCRIPT) {
@@ -2104,11 +2115,16 @@ HRESULT super_navigate(HTMLOuterWindow *window, IUri *uri, const WCHAR *headers,
 
         /* Silently and repeated when real loading starts? */
         window->readystate = READYSTATE_LOADING;
-        call_docview_84(window->doc_obj);
+        if(!(flags & (BINDING_FROMHIST|BINDING_REFRESH)))
+            call_docview_84(window->doc_obj);
 
         task->window = window;
         task->bscallback = bsc;
+        task->flags = flags;
         task->mon = mon;
+
+        IUri_AddRef(uri);
+        task->uri = uri;
         hres = push_task(&task->header, navigate_proc, navigate_task_destr, window->task_magic);
     }else {
         navigate_javascript_task_t *task;
@@ -2122,7 +2138,8 @@ HRESULT super_navigate(HTMLOuterWindow *window, IUri *uri, const WCHAR *headers,
 
         /* Why silently? */
         window->readystate = READYSTATE_COMPLETE;
-        call_docview_84(window->doc_obj);
+        if(!(flags & BINDING_FROMHIST))
+            call_docview_84(window->doc_obj);
 
         IUri_AddRef(uri);
         task->window = window;
@@ -2216,7 +2233,7 @@ HRESULT hlink_frame_navigate(HTMLDocument *doc, LPCWSTR url, nsChannel *nschanne
 
     hres = CreateAsyncBindCtx(0, &callback->bsc.IBindStatusCallback_iface, NULL, &bindctx);
     if(SUCCEEDED(hres))
-        hres = CoCreateInstance(&CLSID_StdHlink, NULL, CLSCTX_INPROC_SERVER,
+       hres = CoCreateInstance(&CLSID_StdHlink, NULL, CLSCTX_INPROC_SERVER,
                 &IID_IHlink, (LPVOID*)&hlink);
 
     if(SUCCEEDED(hres))
@@ -2243,22 +2260,24 @@ HRESULT hlink_frame_navigate(HTMLDocument *doc, LPCWSTR url, nsChannel *nschanne
     return hres;
 }
 
-static HRESULT navigate_uri(HTMLOuterWindow *window, IUri *uri, const WCHAR *display_uri)
+static HRESULT navigate_uri(HTMLOuterWindow *window, IUri *uri, const WCHAR *display_uri, DWORD flags)
 {
     nsWineURI *nsuri;
     HRESULT hres;
 
     if(window->doc_obj && window->doc_obj->is_webbrowser && window == window->doc_obj->basedoc.window) {
-        BOOL cancel = FALSE;
+        if(!(flags & BINDING_REFRESH)) {
+            BOOL cancel = FALSE;
 
-        hres = IDocObjectService_FireBeforeNavigate2(window->doc_obj->doc_object_service, NULL, display_uri, 0x40,
-                NULL, NULL, 0, NULL, TRUE, &cancel);
-        if(SUCCEEDED(hres) && cancel) {
-            TRACE("Navigation canceled\n");
-            return S_OK;
+            hres = IDocObjectService_FireBeforeNavigate2(window->doc_obj->doc_object_service, NULL, display_uri, 0x40,
+                    NULL, NULL, 0, NULL, TRUE, &cancel);
+            if(SUCCEEDED(hres) && cancel) {
+                TRACE("Navigation canceled\n");
+                return S_OK;
+            }
         }
 
-        return super_navigate(window, uri, NULL, NULL, 0);
+        return super_navigate(window, uri, flags, NULL, NULL, 0);
     }
 
     if(window->doc_obj && window == window->doc_obj->basedoc.window) {
@@ -2283,7 +2302,21 @@ static HRESULT navigate_uri(HTMLOuterWindow *window, IUri *uri, const WCHAR *dis
     return hres;
 }
 
-HRESULT navigate_url(HTMLOuterWindow *window, const WCHAR *new_url, IUri *base_uri)
+HRESULT load_uri(HTMLOuterWindow *window, IUri *uri, DWORD flags)
+{
+    BSTR display_uri;
+    HRESULT hres;
+
+    hres = IUri_GetDisplayUri(uri, &display_uri);
+    if(FAILED(hres))
+        return hres;
+
+    hres = navigate_uri(window, uri, display_uri, flags);
+    SysFreeString(display_uri);
+    return hres;
+}
+
+HRESULT navigate_url(HTMLOuterWindow *window, const WCHAR *new_url, IUri *base_uri, DWORD flags)
 {
     BSTR display_uri;
     IUri *uri;
@@ -2325,7 +2358,7 @@ HRESULT navigate_url(HTMLOuterWindow *window, const WCHAR *new_url, IUri *base_u
         }
     }
 
-    hres = navigate_uri(window, uri, display_uri);
+    hres = navigate_uri(window, uri, display_uri, flags);
 
     IUri_Release(uri);
     SysFreeString(display_uri);

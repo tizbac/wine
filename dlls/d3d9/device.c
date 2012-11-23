@@ -582,8 +582,9 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH d3d9_device_Reset(IDirect3DDevice9Ex *if
 
     wined3d_mutex_lock();
     wined3d_swapchain_desc_from_present_parameters(&swapchain_desc, present_parameters);
-    hr = wined3d_device_reset(device->wined3d_device, &swapchain_desc, NULL, reset_enum_callback);
-    if (FAILED(hr))
+    hr = wined3d_device_reset(device->wined3d_device, &swapchain_desc,
+            NULL, reset_enum_callback, !device->d3d_parent->extended);
+    if (FAILED(hr) && !device->d3d_parent->extended)
         device->not_reset = TRUE;
     else
         device->not_reset = FALSE;
@@ -2482,6 +2483,7 @@ static HRESULT WINAPI d3d9_device_SetIndices(IDirect3DDevice9Ex *iface, IDirect3
 static HRESULT WINAPI d3d9_device_GetIndices(IDirect3DDevice9Ex *iface, IDirect3DIndexBuffer9 **buffer)
 {
     struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
+    enum wined3d_format_id wined3d_format;
     struct wined3d_buffer *wined3d_buffer;
     struct d3d9_indexbuffer *buffer_impl;
 
@@ -2491,7 +2493,7 @@ static HRESULT WINAPI d3d9_device_GetIndices(IDirect3DDevice9Ex *iface, IDirect3
         return D3DERR_INVALIDCALL;
 
     wined3d_mutex_lock();
-    if ((wined3d_buffer = wined3d_device_get_index_buffer(device->wined3d_device)))
+    if ((wined3d_buffer = wined3d_device_get_index_buffer(device->wined3d_device, &wined3d_format)))
     {
         buffer_impl = wined3d_buffer_get_parent(wined3d_buffer);
         *buffer = &buffer_impl->IDirect3DIndexBuffer9_iface;
@@ -2907,11 +2909,7 @@ static HRESULT WINAPI d3d9_device_ResetEx(IDirect3DDevice9Ex *iface,
     wined3d_mutex_lock();
     wined3d_swapchain_desc_from_present_parameters(&swapchain_desc, present_parameters);
     hr = wined3d_device_reset(device->wined3d_device, &swapchain_desc,
-            mode ? &wined3d_mode : NULL, reset_enum_callback);
-    if (FAILED(hr))
-        device->not_reset = TRUE;
-    else
-        device->not_reset = FALSE;
+            mode ? &wined3d_mode : NULL, reset_enum_callback, FALSE);
     wined3d_mutex_unlock();
 
     return hr;

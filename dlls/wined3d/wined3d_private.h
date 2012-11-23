@@ -995,7 +995,10 @@ extern glMultiTexCoordFunc multi_texcoord_funcs[WINED3D_FFP_EMIT_COUNT] DECLSPEC
 #define STATE_VSHADER (STATE_VDECL + 1)
 #define STATE_IS_VSHADER(a) ((a) == STATE_VSHADER)
 
-#define STATE_VIEWPORT (STATE_VSHADER + 1)
+#define STATE_GEOMETRY_SHADER (STATE_VSHADER + 1)
+#define STATE_IS_GEOMETRY_SHADER(a) ((a) == STATE_GEOMETRY_SHADER)
+
+#define STATE_VIEWPORT (STATE_GEOMETRY_SHADER + 1)
 #define STATE_IS_VIEWPORT(a) ((a) == STATE_VIEWPORT)
 
 #define STATE_VERTEXSHADERCONSTANT (STATE_VIEWPORT + 1)
@@ -1206,6 +1209,7 @@ extern const struct fragment_pipeline atifs_fragment_pipeline DECLSPEC_HIDDEN;
 extern const struct fragment_pipeline arbfp_fragment_pipeline DECLSPEC_HIDDEN;
 extern const struct fragment_pipeline nvts_fragment_pipeline DECLSPEC_HIDDEN;
 extern const struct fragment_pipeline nvrc_fragment_pipeline DECLSPEC_HIDDEN;
+extern const struct fragment_pipeline glsl_fragment_pipe DECLSPEC_HIDDEN;
 
 /* "Base" state table */
 HRESULT compile_state_table(struct StateEntry *StateTable, APPLYSTATEFUNC **dev_multistate_funcs,
@@ -1430,6 +1434,7 @@ enum wined3d_pci_device
     CARD_NVIDIA_GEFORCE_GTX570      = 0x1081,
     CARD_NVIDIA_GEFORCE_GTX580      = 0x1080,
     CARD_NVIDIA_GEFORCE_GT630M      = 0x0de9,
+    CARD_NVIDIA_GEFORCE_GT640M      = 0x0fd2,
     CARD_NVIDIA_GEFORCE_GT650M      = 0x0fd1,
     CARD_NVIDIA_GEFORCE_GTX670      = 0x1189,
     CARD_NVIDIA_GEFORCE_GTX680      = 0x1180,
@@ -2295,6 +2300,8 @@ struct wined3d_state
     INT vs_consts_i[MAX_CONST_I * 4];
     float *vs_consts_f;
 
+    struct wined3d_shader *geometry_shader;
+
     struct wined3d_shader *pixel_shader;
     BOOL ps_consts_b[MAX_CONST_B];
     INT ps_consts_i[MAX_CONST_I * 4];
@@ -2545,11 +2552,14 @@ void state_fogstartend(struct wined3d_context *context,
         const struct wined3d_state *state, DWORD state_id) DECLSPEC_HIDDEN;
 void state_fog_fragpart(struct wined3d_context *context,
         const struct wined3d_state *state, DWORD state_id) DECLSPEC_HIDDEN;
+void state_srgbwrite(struct wined3d_context *context,
+        const struct wined3d_state *state, DWORD state_id) DECLSPEC_HIDDEN;
 
 BOOL getColorBits(const struct wined3d_format *format,
         BYTE *redSize, BYTE *greenSize, BYTE *blueSize, BYTE *alphaSize, BYTE *totalSize) DECLSPEC_HIDDEN;
 BOOL getDepthStencilBits(const struct wined3d_format *format,
         BYTE *depthSize, BYTE *stencilSize) DECLSPEC_HIDDEN;
+GLenum gl_primitive_type_from_d3d(enum wined3d_primitive_type primitive_type) DECLSPEC_HIDDEN;
 
 /* Math utils */
 void multiply_matrix(struct wined3d_matrix *dest, const struct wined3d_matrix *src1,
@@ -2593,6 +2603,13 @@ BOOL vshader_get_input(const struct wined3d_shader *shader,
 struct wined3d_vertex_shader
 {
     struct wined3d_shader_attribute attributes[MAX_ATTRIBS];
+};
+
+struct wined3d_geometry_shader
+{
+    enum wined3d_primitive_type input_type;
+    enum wined3d_primitive_type output_type;
+    UINT vertices_out;
 };
 
 struct wined3d_pixel_shader
@@ -2640,6 +2657,7 @@ struct wined3d_shader
     union
     {
         struct wined3d_vertex_shader vs;
+        struct wined3d_geometry_shader gs;
         struct wined3d_pixel_shader ps;
     } u;
 };
