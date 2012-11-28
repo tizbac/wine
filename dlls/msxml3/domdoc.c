@@ -132,9 +132,6 @@ struct domdoc
     bsc_t *bsc;
     HRESULT error;
 
-    /* IPersistStream */
-    IStream *stream;
-
     /* IObjectWithSite*/
     IUnknown *site;
 
@@ -718,46 +715,42 @@ static HRESULT WINAPI PersistStreamInit_IsDirty(
     return S_FALSE;
 }
 
-static HRESULT WINAPI PersistStreamInit_Load(
-    IPersistStreamInit *iface, LPSTREAM pStm)
+static HRESULT domdoc_load_from_stream(domdoc *doc, ISequentialStream *stream)
 {
-    domdoc *This = impl_from_IPersistStreamInit(iface);
-    HRESULT hr;
-    HGLOBAL hglobal;
     DWORD read, written, len;
-    BYTE buf[4096];
-    char *ptr;
     xmlDocPtr xmldoc = NULL;
+    IStream *hstream;
+    HGLOBAL hglobal;
+    BYTE buf[4096];
+    HRESULT hr;
+    char *ptr;
 
-    TRACE("(%p)->(%p)\n", This, pStm);
-
-    if (!pStm)
-        return E_INVALIDARG;
-
-    hr = CreateStreamOnHGlobal(NULL, TRUE, &This->stream);
+    hstream = NULL;
+    hr = CreateStreamOnHGlobal(NULL, TRUE, &hstream);
     if (FAILED(hr))
         return hr;
 
     do
     {
-        IStream_Read(pStm, buf, sizeof(buf), &read);
-        hr = IStream_Write(This->stream, buf, read, &written);
+        ISequentialStream_Read(stream, buf, sizeof(buf), &read);
+        hr = IStream_Write(hstream, buf, read, &written);
     } while(SUCCEEDED(hr) && written != 0 && read != 0);
 
     if (FAILED(hr))
     {
-        ERR("Failed to copy stream\n");
+        ERR("failed to copy stream 0x%08x\n", hr);
+        IStream_Release(hstream);
         return hr;
     }
 
-    hr = GetHGlobalFromStream(This->stream, &hglobal);
+    hr = GetHGlobalFromStream(hstream, &hglobal);
     if (FAILED(hr))
         return hr;
 
     len = GlobalSize(hglobal);
     ptr = GlobalLock(hglobal);
-    if (len != 0)
-        xmldoc = doparse(This, ptr, len, XML_CHAR_ENCODING_NONE);
+    if (len)
+        xmldoc = doparse(doc, ptr, len, XML_CHAR_ENCODING_NONE);
     GlobalUnlock(hglobal);
 
     if (!xmldoc)
@@ -768,7 +761,19 @@ static HRESULT WINAPI PersistStreamInit_Load(
 
     xmldoc->_private = create_priv();
 
-    return attach_xmldoc(This, xmldoc);
+    return attach_xmldoc(doc, xmldoc);
+}
+
+static HRESULT WINAPI PersistStreamInit_Load(IPersistStreamInit *iface, IStream *stream)
+{
+    domdoc *This = impl_from_IPersistStreamInit(iface);
+
+    TRACE("(%p)->(%p)\n", This, stream);
+
+    if (!stream)
+        return E_INVALIDARG;
+
+    return domdoc_load_from_stream(This, (ISequentialStream*)stream);
 }
 
 static HRESULT WINAPI PersistStreamInit_Save(
@@ -911,8 +916,6 @@ static ULONG WINAPI domdoc_Release( IXMLDOMDocument3 *iface )
         if (This->site)
             IUnknown_Release( This->site );
         destroy_xmlnode(&This->node);
-        if (This->stream)
-            IStream_Release(This->stream);
 
         for (eid = 0; eid < EVENTID_LAST; eid++)
             if (This->events[eid]) IDispatch_Release(This->events[eid]);
@@ -2026,8 +2029,6 @@ static HRESULT WINAPI domdoc_load(
     domdoc *This = impl_from_IXMLDOMDocument3( iface );
     LPWSTR filename = NULL;
     HRESULT hr = S_FALSE;
-    IXMLDOMDocument3 *pNewDoc = NULL;
-    IStream *pStream = NULL;
     xmlDocPtr xmldoc;
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&source));
@@ -2093,13 +2094,18 @@ static HRESULT WINAPI domdoc_load(
         }
         break;
     case VT_UNKNOWN:
+    {
+        ISequentialStream *stream = NULL;
+        IXMLDOMDocument3 *newdoc = NULL;
+
         if (!V_UNKNOWN(&source)) return E_INVALIDARG;
-        hr = IUnknown_QueryInterface(V_UNKNOWN(&source), &IID_IXMLDOMDocument3, (void**)&pNewDoc);
+
+        hr = IUnknown_QueryInterface(V_UNKNOWN(&source), &IID_IXMLDOMDocument3, (void**)&newdoc);
         if(hr == S_OK)
         {
-            if(pNewDoc)
+            if(newdoc)
             {
-                domdoc *newDoc = impl_from_IXMLDOMDocument3( pNewDoc );
+                domdoc *newDoc = impl_from_IXMLDOMDocument3( newdoc );
 
                 xmldoc = xmlCopyDoc(get_doc(newDoc), 1);
                 xmldoc->_private = create_priv();
@@ -2111,40 +2117,25 @@ static HRESULT WINAPI domdoc_load(
                 return hr;
             }
         }
-        hr = IUnknown_QueryInterface(V_UNKNOWN(&source), &IID_IStream, (void**)&pStream);
-        if(hr == S_OK)
-        {
-            IPersistStream *pDocStream;
-            hr = IXMLDOMDocument3_QueryInterface(iface, &IID_IPersistStream, (void**)&pDocStream);
-            if(hr == S_OK)
-            {
-                hr = IPersistStream_Load(pDocStream, pStream);
-                IStream_Release(pStream);
-                if(hr == S_OK)
-                {
-                    *isSuccessful = VARIANT_TRUE;
 
-                    TRACE("Using IStream to load Document\n");
-                    return S_OK;
-                }
-                else
-                {
-                    ERR("xmldoc_IPersistStream_Load failed (%d)\n", hr);
-                }
-            }
-            else
-            {
-                ERR("QueryInterface IID_IPersistStream failed (%d)\n", hr);
-            }
-        }
-        else
+        hr = IUnknown_QueryInterface(V_UNKNOWN(&source), &IID_IStream, (void**)&stream);
+        if (FAILED(hr))
+            hr = IUnknown_QueryInterface(V_UNKNOWN(&source), &IID_ISequentialStream, (void**)&stream);
+
+        if (hr == S_OK)
         {
-            /* ISequentialStream */
-            FIXME("Unknown type not supported (%d) (%p)(%p)\n", hr, pNewDoc, V_UNKNOWN(&source)->lpVtbl);
+            hr = domdoc_load_from_stream(This, stream);
+            if (hr == S_OK)
+                *isSuccessful = VARIANT_TRUE;
+            ISequentialStream_Release(stream);
+            return hr;
         }
+
+        FIXME("unsupported IUnknown type (0x%08x) (%p)\n", hr, V_UNKNOWN(&source)->lpVtbl);
         break;
-     default:
-            FIXME("VT type not supported (%d)\n", V_VT(&source));
+    }
+    default:
+        FIXME("VT type not supported (%d)\n", V_VT(&source));
     }
 
     if ( filename )
@@ -3494,7 +3485,6 @@ HRESULT get_domdoc_from_xmldoc(xmlDocPtr xmldoc, IXMLDOMDocument3 **document)
     doc->resolving = 0;
     doc->properties = properties_from_xmlDocPtr(xmldoc);
     doc->error = S_OK;
-    doc->stream = NULL;
     doc->site = NULL;
     doc->safeopt = 0;
     doc->bsc = NULL;

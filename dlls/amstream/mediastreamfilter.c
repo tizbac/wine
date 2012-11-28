@@ -132,6 +132,9 @@ static HRESULT WINAPI BasePinImp_GetMediaType(BasePin *This, int index, AM_MEDIA
     MSPID purpose_id;
     int i;
 
+    /* FIXME: Reset structure as we only fill majortype and minortype for now */
+    ZeroMemory(amt, sizeof(*amt));
+
     /* Find which stream is associated with the pin */
     for (i = 0; i < filter->nb_streams; i++)
         if (&This->IPin_iface == filter->pins[i])
@@ -178,15 +181,14 @@ static HRESULT WINAPI BasePinImp_GetMediaType(BasePin *This, int index, AM_MEDIA
     }
     else if (IsEqualGUID(&purpose_id, &MSPID_PrimaryAudio))
     {
-        if (!index)
-        {
-            amt->majortype = MEDIATYPE_Audio;
-            amt->subtype = MEDIASUBTYPE_PCM;
-            return S_OK;
-        }
+        if (index)
+            return S_FALSE;
+
+         amt->majortype = MEDIATYPE_Audio;
+         amt->subtype = MEDIASUBTYPE_PCM;
     }
 
-    return S_FALSE;
+    return S_OK;
 }
 
 static const  BasePinFuncTable input_BaseFuncTable = {

@@ -1201,16 +1201,10 @@ static DWORD FTPFILE_ReadFile(object_header_t *hdr, void *buffer, DWORD size, DW
     return error;
 }
 
-static DWORD FTPFILE_ReadFileExA(object_header_t *hdr, INTERNET_BUFFERSA *buffers,
+static DWORD FTPFILE_ReadFileEx(object_header_t *hdr, void *buf, DWORD size, DWORD *ret_size,
     DWORD flags, DWORD_PTR context)
 {
-    return FTPFILE_ReadFile(hdr, buffers->lpvBuffer, buffers->dwBufferLength, &buffers->dwBufferLength);
-}
-
-static DWORD FTPFILE_ReadFileExW(object_header_t *hdr, INTERNET_BUFFERSW *buffers,
-    DWORD flags, DWORD_PTR context)
-{
-    return FTPFILE_ReadFile(hdr, buffers->lpvBuffer, buffers->dwBufferLength, &buffers->dwBufferLength);
+    return FTPFILE_ReadFile(hdr, buf, size, ret_size);
 }
 
 static DWORD FTPFILE_WriteFile(object_header_t *hdr, const void *buffer, DWORD size, DWORD *written)
@@ -1299,8 +1293,7 @@ static const object_vtbl_t FTPFILEVtbl = {
     FTPFILE_QueryOption,
     INET_SetOption,
     FTPFILE_ReadFile,
-    FTPFILE_ReadFileExA,
-    FTPFILE_ReadFileExW,
+    FTPFILE_ReadFileEx,
     FTPFILE_WriteFile,
     FTPFILE_QueryDataAvailable,
     NULL
@@ -3475,7 +3468,6 @@ static const object_vtbl_t FTPFINDNEXTVtbl = {
     NULL,
     FTPFINDNEXT_QueryOption,
     INET_SetOption,
-    NULL,
     NULL,
     NULL,
     NULL,

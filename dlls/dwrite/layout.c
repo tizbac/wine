@@ -34,6 +34,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(dwrite);
 
 struct dwrite_textformat_data {
     WCHAR *family_name;
+    UINT32 family_len;
     WCHAR *locale;
     UINT32 locale_len;
 
@@ -61,6 +62,8 @@ struct dwrite_textformat {
     struct dwrite_textformat_data format;
 };
 
+static const IDWriteTextFormatVtbl dwritetextformatvtbl;
+
 static void release_format_data(struct dwrite_textformat_data *data)
 {
     if (data->collection) IDWriteFontCollection_Release(data->collection);
@@ -76,6 +79,11 @@ static inline struct dwrite_textlayout *impl_from_IDWriteTextLayout(IDWriteTextL
 static inline struct dwrite_textformat *impl_from_IDWriteTextFormat(IDWriteTextFormat *iface)
 {
     return CONTAINING_RECORD(iface, struct dwrite_textformat, IDWriteTextFormat_iface);
+}
+
+static inline struct dwrite_textformat *unsafe_impl_from_IDWriteTextFormat(IDWriteTextFormat *iface)
+{
+    return iface->lpVtbl == &dwritetextformatvtbl ? impl_from_IDWriteTextFormat(iface) : NULL;
 }
 
 static HRESULT WINAPI dwritetextlayout_QueryInterface(IDWriteTextLayout *iface, REFIID riid, void **obj)
@@ -671,10 +679,46 @@ static const IDWriteTextLayoutVtbl dwritetextlayoutvtbl = {
     dwritetextlayout_HitTestTextRange
 };
 
+static void layout_format_from_textformat(struct dwrite_textlayout *layout, IDWriteTextFormat *format)
+{
+    struct dwrite_textformat *f;
+
+    memset(&layout->format, 0, sizeof(layout->format));
+
+    if ((f = unsafe_impl_from_IDWriteTextFormat(format)))
+    {
+        layout->format = f->format;
+        layout->format.locale = heap_strdupW(f->format.locale);
+        layout->format.family_name = heap_strdupW(f->format.family_name);
+    }
+    else
+    {
+        UINT32 locale_len, family_len;
+
+        layout->format.weight  = IDWriteTextFormat_GetFontWeight(format);
+        layout->format.style   = IDWriteTextFormat_GetFontStyle(format);
+        layout->format.stretch = IDWriteTextFormat_GetFontStretch(format);
+        layout->format.size    = IDWriteTextFormat_GetFontSize(format);
+
+        /* locale name and length */
+        locale_len = IDWriteTextFormat_GetLocaleNameLength(format);
+        layout->format.locale  = heap_alloc((locale_len+1)*sizeof(WCHAR));
+        IDWriteTextFormat_GetLocaleName(format, layout->format.locale, locale_len+1);
+        layout->format.locale_len = locale_len;
+
+        /* font family name and length */
+        family_len = IDWriteTextFormat_GetFontFamilyNameLength(format);
+        layout->format.family_name = heap_alloc((family_len+1)*sizeof(WCHAR));
+        IDWriteTextFormat_GetFontFamilyName(format, layout->format.family_name, family_len+1);
+        layout->format.family_len = family_len;
+    }
+
+    IDWriteTextFormat_GetFontCollection(format, &layout->format.collection);
+}
+
 HRESULT create_textlayout(const WCHAR *str, UINT32 len, IDWriteTextFormat *format, IDWriteTextLayout **layout)
 {
     struct dwrite_textlayout *This;
-    UINT32 locale_len;
 
     *layout = NULL;
 
@@ -685,21 +729,7 @@ HRESULT create_textlayout(const WCHAR *str, UINT32 len, IDWriteTextFormat *forma
     This->ref = 1;
     This->str = heap_strdupnW(str, len);
     This->len = len;
-    memset(&This->format, 0, sizeof(This->format));
-
-    /* reference is not kept here, instead copy all underlying data */
-    IDWriteTextFormat_GetFontCollection(format, &This->format.collection);
-
-    /* locale name and length */
-    locale_len = IDWriteTextFormat_GetLocaleNameLength(format);
-    This->format.locale  = heap_alloc((locale_len+1)*sizeof(WCHAR));
-    IDWriteTextFormat_GetLocaleName(format, This->format.locale, locale_len+1);
-    This->format.locale_len = locale_len;
-
-    This->format.weight  = IDWriteTextFormat_GetFontWeight(format);
-    This->format.style   = IDWriteTextFormat_GetFontStyle(format);
-    This->format.stretch = IDWriteTextFormat_GetFontStretch(format);
-    This->format.size    = IDWriteTextFormat_GetFontSize(format);
+    layout_format_from_textformat(This, format);
 
     *layout = &This->IDWriteTextLayout_iface;
 
@@ -880,15 +910,19 @@ static HRESULT WINAPI dwritetextformat_GetFontCollection(IDWriteTextFormat *ifac
 static UINT32 WINAPI dwritetextformat_GetFontFamilyNameLength(IDWriteTextFormat *iface)
 {
     struct dwrite_textformat *This = impl_from_IDWriteTextFormat(iface);
-    FIXME("(%p): stub\n", This);
-    return 0;
+    TRACE("(%p)\n", This);
+    return This->format.family_len;
 }
 
 static HRESULT WINAPI dwritetextformat_GetFontFamilyName(IDWriteTextFormat *iface, WCHAR *name, UINT32 size)
 {
     struct dwrite_textformat *This = impl_from_IDWriteTextFormat(iface);
-    FIXME("(%p)->(%p %u): stub\n", This, name, size);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%p %u)\n", This, name, size);
+
+    if (size <= This->format.family_len) return E_NOT_SUFFICIENT_BUFFER;
+    strcpyW(name, This->format.family_name);
+    return S_OK;
 }
 
 static DWRITE_FONT_WEIGHT WINAPI dwritetextformat_GetFontWeight(IDWriteTextFormat *iface)
@@ -981,6 +1015,7 @@ HRESULT create_textformat(const WCHAR *family_name, IDWriteFontCollection *colle
     This->IDWriteTextFormat_iface.lpVtbl = &dwritetextformatvtbl;
     This->ref = 1;
     This->format.family_name = heap_strdupW(family_name);
+    This->format.family_len = strlenW(family_name);
     This->format.locale = heap_strdupW(locale);
     This->format.locale_len = strlenW(locale);
     This->format.weight = weight;

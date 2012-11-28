@@ -1010,22 +1010,20 @@ static ULONG WINAPI BmpDecoder_Release(IWICBitmapDecoder *iface)
     return ref;
 }
 
-static HRESULT WINAPI BmpDecoder_QueryCapability(IWICBitmapDecoder *iface, IStream *pIStream,
-    DWORD *pdwCapability)
+static HRESULT WINAPI BmpDecoder_QueryCapability(IWICBitmapDecoder *iface, IStream *stream,
+    DWORD *capability)
 {
     HRESULT hr;
     BmpDecoder *This = impl_from_IWICBitmapDecoder(iface);
 
-    EnterCriticalSection(&This->lock);
-    hr = BmpDecoder_ReadHeaders(This, pIStream);
-    LeaveCriticalSection(&This->lock);
-    if (FAILED(hr)) return hr;
+    TRACE("(%p,%p,%p)\n", iface, stream, capability);
 
-    if (This->read_data_func == BmpFrameDecode_ReadUnsupported)
-        *pdwCapability = 0;
-    else
-        *pdwCapability = WICBitmapDecoderCapabilityCanDecodeAllImages;
+    if (!stream || !capability) return E_INVALIDARG;
 
+    hr = IWICBitmapDecoder_Initialize(iface, stream, WICDecodeMetadataCacheOnDemand);
+    if (hr != S_OK) return hr;
+
+    *capability = This->read_data_func == BmpFrameDecode_ReadUnsupported ? 0 : WICBitmapDecoderCapabilityCanDecodeAllImages;
     return S_OK;
 }
 
@@ -1113,6 +1111,8 @@ static HRESULT WINAPI BmpDecoder_GetThumbnail(IWICBitmapDecoder *iface,
 static HRESULT WINAPI BmpDecoder_GetFrameCount(IWICBitmapDecoder *iface,
     UINT *pCount)
 {
+    if (!pCount) return E_INVALIDARG;
+
     *pCount = 1;
     return S_OK;
 }
@@ -1124,7 +1124,7 @@ static HRESULT WINAPI BmpDecoder_GetFrame(IWICBitmapDecoder *iface,
 
     if (index != 0) return E_INVALIDARG;
 
-    if (!This->stream) return WINCODEC_ERR_WRONGSTATE;
+    if (!This->stream) return WINCODEC_ERR_FRAMEMISSING;
 
     *ppIBitmapFrame = &This->IWICBitmapFrameDecode_iface;
     IWICBitmapDecoder_AddRef(iface);

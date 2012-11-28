@@ -703,10 +703,7 @@ HRESULT WINAPI OleRegGetUserType(
   /*
    * Open the class id Key
    */
-  hres = RegOpenKeyW(HKEY_CLASSES_ROOT,
-		     keyName,
-		     &clsidKey);
-
+  hres = open_classes_key(HKEY_CLASSES_ROOT, keyName, MAXIMUM_ALLOWED, &clsidKey);
   if (hres != ERROR_SUCCESS)
     return REGDB_E_CLASSNOTREG;
 
@@ -902,21 +899,14 @@ HRESULT WINAPI OleRegGetMiscStatus(
   /*
    * Open the class id Key
    */
-  result = RegOpenKeyW(HKEY_CLASSES_ROOT,
-		       keyName,
-		       &clsidKey);
-
+  result = open_classes_key(HKEY_CLASSES_ROOT, keyName, MAXIMUM_ALLOWED, &clsidKey);
   if (result != ERROR_SUCCESS)
     return REGDB_E_CLASSNOTREG;
 
   /*
    * Get the MiscStatus
    */
-  result = RegOpenKeyW(clsidKey,
-		       miscstatusW,
-		       &miscStatusKey);
-
-
+  result = open_classes_key(clsidKey, miscstatusW, MAXIMUM_ALLOWED, &miscStatusKey);
   if (result != ERROR_SUCCESS)
   {
     RegCloseKey(clsidKey);
@@ -933,10 +923,7 @@ HRESULT WINAPI OleRegGetMiscStatus(
    */
   sprintfW(keyName, dfmtW, dwAspect);
 
-  result = RegOpenKeyW(miscStatusKey,
-		       keyName,
-		       &aspectKey);
-
+  result = open_classes_key(miscStatusKey, keyName, MAXIMUM_ALLOWED, &aspectKey);
   if (result == ERROR_SUCCESS)
   {
     OLEUTL_ReadRegistryDWORDValue(aspectKey, pdwStatus);
@@ -2554,7 +2541,7 @@ HRESULT WINAPI OleDraw(
 	IUnknown *pUnk,
 	DWORD dwAspect,
 	HDC hdcDraw,
-	LPCRECT lprcBounds)
+	LPCRECT rect)
 {
   HRESULT hres;
   IViewObject *viewobject;
@@ -2562,24 +2549,14 @@ HRESULT WINAPI OleDraw(
   hres = IUnknown_QueryInterface(pUnk,
 				 &IID_IViewObject,
 				 (void**)&viewobject);
-
   if (SUCCEEDED(hres))
   {
-    RECTL rectl;
-
-    rectl.left = lprcBounds->left;
-    rectl.right = lprcBounds->right;
-    rectl.top = lprcBounds->top;
-    rectl.bottom = lprcBounds->bottom;
-    hres = IViewObject_Draw(viewobject, dwAspect, -1, 0, 0, 0, hdcDraw, &rectl, 0, 0, 0);
-
+    hres = IViewObject_Draw(viewobject, dwAspect, -1, 0, 0, 0, hdcDraw, (RECTL*)rect, 0, 0, 0);
     IViewObject_Release(viewobject);
     return hres;
   }
   else
-  {
     return DV_E_NOIVIEWOBJECT;
-  }
 }
 
 /***********************************************************************

@@ -693,9 +693,10 @@ collate* __thiscall collate_char_ctor_refs(collate *this, MSVCP_size_t refs)
     return collate_char_ctor_name(this, "C", refs);
 }
 
-/* ??1?$collate@D@std@@MAE@XZ */
-/* ??1?$collate@D@std@@MEAA@XZ */
-static void collate_char_dtor(collate *this)
+/* ??1?$collate@D@std@@UAE@XZ */
+/* ??1?$collate@D@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(collate_char_dtor, 4)
+void __thiscall collate_char_dtor(collate *this)
 {
     TRACE("(%p)\n", this);
 }
@@ -888,11 +889,10 @@ collate* __thiscall collate_short_ctor_refs(collate *this, MSVCP_size_t refs)
     return ret;
 }
 
-/* ??1?$collate@_W@std@@MAE@XZ */
-/* ??1?$collate@_W@std@@MEAA@XZ */
-/* ??1?$collate@G@std@@MAE@XZ */
-/* ??1?$collate@G@std@@MEAA@XZ */
-static void collate_wchar_dtor(collate *this)
+/* ??1?$collate@G@std@@UAE@XZ */
+/* ??1?$collate@G@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(collate_wchar_dtor, 4)
+void __thiscall collate_wchar_dtor(collate *this)
 {
     TRACE("(%p)\n", this);
 }
@@ -1166,9 +1166,10 @@ ctype_char* __thiscall ctype_char_ctor(ctype_char *this)
     return ctype_char_ctor_table(this, NULL, FALSE, 0);
 }
 
-/* ??1?$ctype@D@std@@MAE@XZ */
-/* ??1?$ctype@D@std@@MEAA@XZ */
-static void ctype_char_dtor(ctype_char *this)
+/* ??1?$ctype@D@std@@UAE@XZ */
+/* ??1?$ctype@D@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(ctype_char_dtor, 4)
+void __thiscall ctype_char_dtor(ctype_char *this)
 {
     TRACE("(%p)\n", this);
     ctype_char__Tidy(this);
@@ -1650,11 +1651,10 @@ ctype_wchar* __thiscall ctype_short_ctor(ctype_wchar *this)
     return ret;
 }
 
-/* ??1?$ctype@_W@std@@MAE@XZ */
-/* ??1?$ctype@_W@std@@MEAA@XZ */
-/* ??1?$ctype@G@std@@MAE@XZ */
-/* ??1?$ctype@G@std@@MEAA@XZ */
-static void ctype_wchar_dtor(ctype_wchar *this)
+/* ??1?$ctype@G@std@@UAE@XZ */
+/* ??1?$ctype@G@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(ctype_wchar_dtor, 4)
+void __thiscall ctype_wchar_dtor(ctype_wchar *this)
 {
     TRACE("(%p)\n", this);
     if(this->ctype.delfl)
@@ -2401,9 +2401,10 @@ codecvt_char* __thiscall codecvt_char_ctor(codecvt_char *this)
     return codecvt_char_ctor_locinfo(this, NULL, 0);
 }
 
-/* ??1?$codecvt@DDH@std@@MAE@XZ */
-/* ??1?$codecvt@DDH@std@@MEAA@XZ */
-static void codecvt_char_dtor(codecvt_char *this)
+/* ??1?$codecvt@DDH@std@@UAE@XZ */
+/* ??1?$codecvt@DDH@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(codecvt_char_dtor, 4)
+void __thiscall codecvt_char_dtor(codecvt_char *this)
 {
     TRACE("(%p)\n", this);
     codecvt_base_dtor(&this->base);
@@ -2551,15 +2552,6 @@ int __thiscall codecvt_char_do_unshift(const codecvt_char *this,
     return CODECVT_noconv;
 }
 
-/* ?unshift@?$codecvt@DDH@std@@QBEHAAHPAD1AAPAD@Z */
-/* ?unshift@?$codecvt@DDH@std@@QEBAHAEAHPEAD1AEAPEAD@Z */
-int codecvt_char_unshift(const codecvt_char *this,
-        int *state, char *to, char *to_end, char **to_next)
-{
-    TRACE("(%p %p %p %p %p)\n", this, state, to, to_end, to_next);
-    return call_codecvt_char_do_unshift(this, state, to, to_end, to_next);
-}
-
 /* ?do_length@?$codecvt@DDH@std@@MBEHABHPBD1I@Z */
 /* ?do_length@?$codecvt@DDH@std@@MEBAHAEBHPEBD1_K@Z */
 #define call_codecvt_char_do_length(this, state, from, from_end, max) CALL_VTBL_FUNC(this, 28, \
@@ -2642,11 +2634,10 @@ codecvt_wchar* __thiscall codecvt_short_ctor(codecvt_wchar *this)
     return codecvt_short_ctor_refs(this, 0);
 }
 
-/* ??1?$codecvt@GDH@std@@MAE@XZ */
-/* ??1?$codecvt@GDH@std@@MEAA@XZ */
-/* ??1?$codecvt@_WDH@std@@MAE@XZ */
-/* ??1?$codecvt@_WDH@std@@MEAA@XZ */
-static void codecvt_wchar_dtor(codecvt_wchar *this)
+/* ??1?$codecvt@GDH@std@@UAE@XZ */
+/* ??1?$codecvt@GDH@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(codecvt_wchar_dtor, 4)
+void __thiscall codecvt_wchar_dtor(codecvt_wchar *this)
 {
     TRACE("(%p)\n", this);
     codecvt_base_dtor(&this->base);
@@ -2696,7 +2687,7 @@ static MSVCP_size_t codecvt_wchar__Getcat(const locale_facet **facet, const loca
     return LC_CTYPE;
 }
 
-codecvt_wchar* codecvt_wchar_use_facet(const locale *loc)
+static codecvt_wchar* codecvt_wchar_use_facet(const locale *loc)
 {
     static codecvt_wchar *obj = NULL;
 
@@ -2926,17 +2917,6 @@ int __thiscall codecvt_wchar_do_unshift(const codecvt_wchar *this,
     return CODECVT_ok;
 }
 
-/* ?unshift@?$codecvt@GDH@std@@QBEHAAHPAD1AAPAD@Z */
-/* ?unshift@?$codecvt@GDH@std@@QEBAHAEAHPEAD1AEAPEAD@Z */
-/* ?unshift@?$codecvt@_WDH@std@@QBEHAAHPAD1AAPAD@Z */
-/* ?unshift@?$codecvt@_WDH@std@@QEBAHAEAHPEAD1AEAPEAD@Z */
-int codecvt_wchar_unshift(const codecvt_wchar *this,
-        int *state, char *to, char *to_end, char **to_next)
-{
-    TRACE("(%p %p %p %p %p)\n", this, state, to, to_end, to_next);
-    return call_codecvt_wchar_do_unshift(this, state, to, to_end, to_next);
-}
-
 /* ?do_length@?$codecvt@GDH@std@@MBEHABHPBD1I@Z */
 /* ?do_length@?$codecvt@GDH@std@@MEBAHAEBHPEBD1_K@Z */
 /* ?do_length@?$codecvt@_WDH@std@@MBEHABHPBD1I@Z */
@@ -3080,9 +3060,10 @@ numpunct_char* __thiscall numpunct_char_ctor(numpunct_char *this)
     return numpunct_char_ctor_refs(this, 0);
 }
 
-/* ??1?$numpunct@D@std@@MAE@XZ */
-/* ??1?$numpunct@D@std@@MEAA@XZ */
-static void numpunct_char_dtor(numpunct_char *this)
+/* ??1?$numpunct@D@std@@UAE@XZ */
+/* ??1?$numpunct@D@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(numpunct_char_dtor, 4)
+void __thiscall numpunct_char_dtor(numpunct_char *this)
 {
     TRACE("(%p)\n", this);
     numpunct_char__Tidy(this);
@@ -3415,11 +3396,10 @@ numpunct_wchar* __thiscall numpunct_short_ctor(numpunct_wchar *this)
     return numpunct_short_ctor_refs(this, 0);
 }
 
-/* ??1?$numpunct@_W@std@@MAE@XZ */
-/* ??1?$numpunct@_W@std@@MEAA@XZ */
-/* ??1?$numpunct@G@std@@MAE@XZ */
-/* ??1?$numpunct@G@std@@MEAA@XZ */
-static void numpunct_wchar_dtor(numpunct_wchar *this)
+/* ??1?$numpunct@G@std@@UAE@XZ */
+/* ??1?$numpunct@G@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(numpunct_wchar_dtor, 4)
+void __thiscall numpunct_wchar_dtor(numpunct_wchar *this)
 {
     TRACE("(%p)\n", this);
     numpunct_wchar__Tidy(this);
@@ -3822,11 +3802,10 @@ num_get* __thiscall num_get_short_ctor(num_get *this)
     return num_get_short_ctor_refs(this, 0);
 }
 
-/* ??1?$num_get@_WV?$istreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@MAE@XZ */
-/* ??1?$num_get@_WV?$istreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@MEAA@XZ */
-/* ??1?$num_get@GV?$istreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@MAE@XZ */
-/* ??1?$num_get@GV?$istreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@MEAA@XZ */
-static void num_get_wchar_dtor(num_get *this)
+/* ??1?$num_get@GV?$istreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@UAE@XZ */
+/* ??1?$num_get@GV?$istreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(num_get_wchar_dtor, 4)
+void __thiscall num_get_wchar_dtor(num_get *this)
 {
     TRACE("(%p)\n", this);
     locale_facet_dtor(&this->facet);
@@ -4835,9 +4814,10 @@ num_get* __thiscall num_get_char_ctor(num_get *this)
     return num_get_char_ctor_refs(this, 0);
 }
 
-/* ??1?$num_get@DV?$istreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@MAE@XZ */
-/* ??1?$num_get@DV?$istreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@MEAA@XZ */
-static void num_get_char_dtor(num_get *this)
+/* ??1?$num_get@DV?$istreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@UAE@XZ */
+/* ??1?$num_get@DV?$istreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(num_get_char_dtor, 4)
+void __thiscall num_get_char_dtor(num_get *this)
 {
     TRACE("(%p)\n", this);
     locale_facet_dtor(&this->facet);
@@ -5588,9 +5568,10 @@ num_put* __thiscall num_put_char_ctor(num_put *this)
     return num_put_char_ctor_refs(this, 0);
 }
 
-/* ??1?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@MAE@XZ */
-/* ??1?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@MEAA@XZ */
-static void num_put_char_dtor(num_put *this)
+/* ??1?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@UAE@XZ */
+/* ??1?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(num_put_char_dtor, 4)
+void __thiscall num_put_char_dtor(num_put *this)
 {
     TRACE("(%p)\n", this);
     locale_facet_dtor(&this->facet);
@@ -6173,11 +6154,10 @@ num_put* __thiscall num_put_short_ctor(num_put *this)
     return num_put_short_ctor_refs(this, 0);
 }
 
-/* ??1?$num_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@MAE@XZ */
-/* ??1?$num_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@MEAA@XZ */
-/* ??1?$num_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@MAE@XZ */
-/* ??1?$num_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@MEAA@XZ */
-static void num_put_wchar_dtor(num_put *this)
+/* ??1?$num_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@UAE@XZ */
+/* ??1?$num_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@UEAA@XZ */
+DEFINE_THISCALL_WRAPPER(num_put_wchar_dtor, 4)
+void __thiscall num_put_wchar_dtor(num_put *this)
 {
     TRACE("(%p)\n", this);
     locale_facet_dtor(&this->facet);

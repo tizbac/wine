@@ -430,11 +430,11 @@ BOOL INTERNET_FindProxyForProtocol(LPCWSTR szProxy, LPCWSTR proto, WCHAR *foundP
         /* It wasn't found: look for no protocol */
         for (ptr = szProxy; !ret && ptr && *ptr; )
         {
-            LPCWSTR end, equal;
+            LPCWSTR end;
 
             if (!(end = strchrW(ptr, ' ')))
                 end = ptr + strlenW(ptr);
-            if (!(equal = strchrW(ptr, '=')))
+            if (!strchrW(ptr, '='))
             {
                 if (end - ptr + 1 > *foundProxyLen)
                 {
@@ -924,7 +924,6 @@ static const object_vtbl_t APPINFOVtbl = {
     NULL,
     APPINFO_QueryOption,
     APPINFO_SetOption,
-    NULL,
     NULL,
     NULL,
     NULL,
@@ -2237,14 +2236,20 @@ BOOL WINAPI InternetReadFileExA(HINTERNET hFile, LPINTERNET_BUFFERSA lpBuffersOu
 
     TRACE("(%p %p 0x%x 0x%lx)\n", hFile, lpBuffersOut, dwFlags, dwContext);
 
+    if (lpBuffersOut->dwStructSize != sizeof(*lpBuffersOut)) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
     hdr = get_handle_object(hFile);
     if (!hdr) {
         INTERNET_SetLastError(ERROR_INVALID_HANDLE);
         return FALSE;
     }
 
-    if(hdr->vtbl->ReadFileExA)
-        res = hdr->vtbl->ReadFileExA(hdr, lpBuffersOut, dwFlags, dwContext);
+    if(hdr->vtbl->ReadFileEx)
+        res = hdr->vtbl->ReadFileEx(hdr, lpBuffersOut->lpvBuffer, lpBuffersOut->dwBufferLength,
+                &lpBuffersOut->dwBufferLength, dwFlags, dwContext);
 
     WININET_Release(hdr);
 
@@ -2269,14 +2274,20 @@ BOOL WINAPI InternetReadFileExW(HINTERNET hFile, LPINTERNET_BUFFERSW lpBuffer,
 
     TRACE("(%p %p 0x%x 0x%lx)\n", hFile, lpBuffer, dwFlags, dwContext);
 
+    if (lpBuffer->dwStructSize != sizeof(*lpBuffer)) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
     hdr = get_handle_object(hFile);
     if (!hdr) {
         INTERNET_SetLastError(ERROR_INVALID_HANDLE);
         return FALSE;
     }
 
-    if(hdr->vtbl->ReadFileExW)
-        res = hdr->vtbl->ReadFileExW(hdr, lpBuffer, dwFlags, dwContext);
+    if(hdr->vtbl->ReadFileEx)
+        res = hdr->vtbl->ReadFileEx(hdr, lpBuffer->lpvBuffer, lpBuffer->dwBufferLength, &lpBuffer->dwBufferLength,
+                dwFlags, dwContext);
 
     WININET_Release(hdr);
 

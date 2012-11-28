@@ -154,6 +154,7 @@ void wined3d_rb_free(void *ptr) DECLSPEC_HIDDEN;
 
 /* Device caps */
 #define MAX_PALETTES            65536
+#define MAX_STREAM_OUT          4
 #define MAX_STREAMS             16
 #define MAX_TEXTURES            8
 #define MAX_FRAGMENT_SAMPLERS   16
@@ -943,13 +944,8 @@ struct wined3d_stream_info
     WORD use_map; /* MAX_ATTRIBS, 16 */
 };
 
-/*****************************************************************************
- * Prototypes
- */
-
-/* Routine common to the draw primitive and draw indexed primitive routines */
-void drawPrimitive(struct wined3d_device *device, UINT index_count,
-        UINT start_idx, BOOL indexed, const void *idxData) DECLSPEC_HIDDEN;
+void draw_primitive(struct wined3d_device *device, UINT start_idx, UINT index_count,
+        UINT start_instance, UINT instance_count, BOOL indexed, const void *idx_data) DECLSPEC_HIDDEN;
 DWORD get_flexible_vertex_size(DWORD d3dvtVertexType) DECLSPEC_HIDDEN;
 
 typedef void (WINE_GLAPI *glAttribFunc)(const void *data);
@@ -2273,6 +2269,12 @@ struct StageState {
     DWORD state;
 };
 
+struct wined3d_stream_output
+{
+    struct wined3d_buffer *buffer;
+    UINT offset;
+};
+
 struct wined3d_stream_state
 {
     struct wined3d_buffer *buffer;
@@ -2287,6 +2289,7 @@ struct wined3d_state
     const struct wined3d_fb_state *fb;
 
     struct wined3d_vertex_declaration *vertex_declaration;
+    struct wined3d_stream_output stream_output[MAX_STREAM_OUT];
     struct wined3d_stream_state streams[MAX_STREAMS + 1 /* tesselated pseudo-stream */];
     BOOL user_stream;
     struct wined3d_buffer *index_buffer;
