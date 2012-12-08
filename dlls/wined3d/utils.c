@@ -1721,6 +1721,13 @@ UINT wined3d_format_calculate_size(const struct wined3d_format *format, UINT ali
         UINT row_block_count = (width + format->block_width - 1) / format->block_width;
         UINT row_count = (height + format->block_height - 1) / format->block_height;
         size = row_count * (((row_block_count * format->block_byte_count) + alignment - 1) & ~(alignment - 1));
+
+	if (width < format->block_width && height < format->block_height) {
+		WARN("Invalid size: %u x %u -> %u (min %u x %u)\n",
+		     width, height, size, format->block_width, format->block_height);
+
+		size = 0;
+	}
     }
     else
     {
