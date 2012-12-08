@@ -4645,7 +4645,6 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHBITMAP(HBITMAP hbm, HPALETTE hpal, GpBi
     GpStatus retval;
     PixelFormat format;
     BitmapData lockeddata;
-    INT y;
 
     TRACE("%p %p %p\n", hbm, hpal, bitmap);
 
@@ -4694,62 +4693,31 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHBITMAP(HBITMAP hbm, HPALETTE hpal, GpBi
             format, &lockeddata);
         if (retval == Ok)
         {
-            if (bm.bmBits)
+            HDC hdc;
+            BITMAPINFO *pbmi;
+            INT src_height;
+
+            hdc = CreateCompatibleDC(NULL);
+            pbmi = GdipAlloc(sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD));
+
+            if (pbmi)
             {
-                for (y=0; y<bm.bmHeight; y++)
-                {
-                    memcpy((BYTE*)lockeddata.Scan0+lockeddata.Stride*y,
-                           (BYTE*)bm.bmBits+bm.bmWidthBytes*(bm.bmHeight-1-y),
-                           bm.bmWidthBytes);
-                }
+                pbmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                pbmi->bmiHeader.biBitCount = 0;
+
+                GetDIBits(hdc, hbm, 0, 0, NULL, pbmi, DIB_RGB_COLORS);
+
+                src_height = abs(pbmi->bmiHeader.biHeight);
+                pbmi->bmiHeader.biHeight = -src_height;
+
+                GetDIBits(hdc, hbm, 0, src_height, lockeddata.Scan0, pbmi, DIB_RGB_COLORS);
+
+                GdipFree(pbmi);
             }
             else
-            {
-                HDC hdc;
-                HBITMAP oldhbm;
-                BITMAPINFO *pbmi;
-                INT src_height, dst_stride;
-                BYTE *dst_bits;
+                retval = OutOfMemory;
 
-                hdc = CreateCompatibleDC(NULL);
-                oldhbm = SelectObject(hdc, hbm);
-
-                pbmi = GdipAlloc(sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD));
-
-                if (pbmi)
-                {
-                    pbmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                    pbmi->bmiHeader.biBitCount = 0;
-
-                    GetDIBits(hdc, hbm, 0, 0, NULL, pbmi, DIB_RGB_COLORS);
-
-                    src_height = abs(pbmi->bmiHeader.biHeight);
-
-                    if (pbmi->bmiHeader.biHeight > 0)
-                    {
-                        dst_bits = (BYTE*)lockeddata.Scan0+lockeddata.Stride*(src_height-1);
-                        dst_stride = -lockeddata.Stride;
-                    }
-                    else
-                    {
-                        dst_bits = lockeddata.Scan0;
-                        dst_stride = lockeddata.Stride;
-                    }
-
-                    for (y=0; y<src_height; y++)
-                    {
-                        GetDIBits(hdc, hbm, y, 1, dst_bits+dst_stride*y,
-                            pbmi, DIB_RGB_COLORS);
-                    }
-
-                    GdipFree(pbmi);
-                }
-                else
-                    retval = OutOfMemory;
-
-                SelectObject(hdc, oldhbm);
-                DeleteDC(hdc);
-            }
+            DeleteDC(hdc);
 
             GdipBitmapUnlockBits(*bitmap, &lockeddata);
         }

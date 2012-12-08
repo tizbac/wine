@@ -81,6 +81,7 @@
 
 #include "winternl.h"
 #include "winioctl.h"
+#include "ddk/ntddk.h"
 #include "ddk/ntddser.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ntdll);
@@ -1594,9 +1595,13 @@ static NTSTATUS set_file_times( int fd, const LARGE_INTEGER *mtime, const LARGE_
             tv[1].tv_sec = st.st_mtime;
 #ifdef HAVE_STRUCT_STAT_ST_ATIM
             tv[0].tv_usec = st.st_atim.tv_nsec / 1000;
+#elif defined(HAVE_STRUCT_STAT_ST_ATIMESPEC)
+            tv[0].tv_usec = st.st_atimespec.tv_nsec / 1000;
 #endif
 #ifdef HAVE_STRUCT_STAT_ST_MTIM
             tv[1].tv_usec = st.st_mtim.tv_nsec / 1000;
+#elif defined(HAVE_STRUCT_STAT_ST_MTIMESPEC)
+            tv[1].tv_usec = st.st_mtimespec.tv_nsec / 1000;
 #endif
         }
     }
@@ -1631,14 +1636,34 @@ static inline void get_file_times( const struct stat *st, LARGE_INTEGER *mtime, 
     RtlSecondsSince1970ToTime( st->st_atime, atime );
 #ifdef HAVE_STRUCT_STAT_ST_MTIM
     mtime->QuadPart += st->st_mtim.tv_nsec / 100;
+#elif defined(HAVE_STRUCT_STAT_ST_MTIMESPEC)
+    mtime->QuadPart += st->st_mtimespec.tv_nsec / 100;
 #endif
 #ifdef HAVE_STRUCT_STAT_ST_CTIM
     ctime->QuadPart += st->st_ctim.tv_nsec / 100;
+#elif defined(HAVE_STRUCT_STAT_ST_CTIMESPEC)
+    ctime->QuadPart += st->st_ctimespec.tv_nsec / 100;
 #endif
 #ifdef HAVE_STRUCT_STAT_ST_ATIM
     atime->QuadPart += st->st_atim.tv_nsec / 100;
+#elif defined(HAVE_STRUCT_STAT_ST_ATIMESPEC)
+    atime->QuadPart += st->st_atimespec.tv_nsec / 100;
 #endif
+#ifdef HAVE_STRUCT_STAT_ST_BIRTHTIME
+    RtlSecondsSince1970ToTime( st->st_birthtime, creation );
+#ifdef HAVE_STRUCT_STAT_ST_BIRTHTIM
+    creation->QuadPart += st->st_birthtim.tv_nsec / 100;
+#elif defined(HAVE_STRUCT_STAT_ST_BIRTHTIMESPEC)
+    creation->QuadPart += st->st_birthtimespec.tv_nsec / 100;
+#endif
+#elif defined(HAVE_STRUCT_STAT___ST_BIRTHTIME)
+    RtlSecondsSince1970ToTime( st->__st_birthtime, creation );
+#ifdef HAVE_STRUCT_STAT___ST_BIRTHTIM
+    creation->QuadPart += st->__st_birthtim.tv_nsec / 100;
+#endif
+#else
     *creation = *mtime;
+#endif
 }
 
 /* fill in the file information that depends on the stat info */
@@ -2219,6 +2244,36 @@ NTSTATUS WINAPI NtSetInformationFile(HANDLE handle, PIO_STATUS_BLOCK io,
 
     case FileAllInformation:
         io->u.Status = STATUS_INVALID_INFO_CLASS;
+        break;
+
+    case FileValidDataLengthInformation:
+        if (len >= sizeof(FILE_VALID_DATA_LENGTH_INFORMATION))
+        {
+            struct stat st;
+            const FILE_VALID_DATA_LENGTH_INFORMATION *info = ptr;
+
+            if ((io->u.Status = server_get_unix_fd( handle, FILE_WRITE_DATA, &fd, &needs_close, NULL, NULL )))
+                return io->u.Status;
+
+            if (fstat( fd, &st ) == -1) io->u.Status = FILE_GetNtStatus();
+            else if (info->ValidDataLength.QuadPart <= 0 || (off_t)info->ValidDataLength.QuadPart > st.st_size)
+                io->u.Status = STATUS_INVALID_PARAMETER;
+            else
+            {
+#ifdef HAVE_FALLOCATE
+                if (fallocate( fd, 0, 0, (off_t)info->ValidDataLength.QuadPart ) == -1)
+                {
+                    NTSTATUS status = FILE_GetNtStatus();
+                    if (status == STATUS_NOT_SUPPORTED) WARN( "fallocate not supported on this filesystem\n" );
+                    else io->u.Status = status;
+                }
+#else
+                FIXME( "setting valid data length not supported\n" );
+#endif
+            }
+            if (needs_close) close( fd );
+        }
+        else io->u.Status = STATUS_INVALID_PARAMETER_3;
         break;
 
     default:

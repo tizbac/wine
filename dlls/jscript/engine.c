@@ -1592,7 +1592,6 @@ static HRESULT interp_mod(exec_ctx_t *ctx)
 static HRESULT interp_delete(exec_ctx_t *ctx)
 {
     jsval_t objv, namev;
-    IDispatchEx *dispex;
     IDispatch *obj;
     jsstr_t *name;
     BOOL ret;
@@ -1617,25 +1616,7 @@ static HRESULT interp_delete(exec_ctx_t *ctx)
         return hres;
     }
 
-    hres = IDispatch_QueryInterface(obj, &IID_IDispatchEx, (void**)&dispex);
-    if(SUCCEEDED(hres)) {
-        BSTR bstr;
-
-        bstr = SysAllocStringLen(name->str, jsstr_length(name));
-        if(bstr) {
-            hres = IDispatchEx_DeleteMemberByName(dispex, bstr, make_grfdex(ctx->script, fdexNameCaseSensitive));
-            SysFreeString(bstr);
-            ret = TRUE;
-        }else {
-            hres = E_OUTOFMEMORY;
-        }
-
-        IDispatchEx_Release(dispex);
-    }else {
-        hres = S_OK;
-        ret = FALSE;
-    }
-
+    hres = disp_delete_name(ctx->script, obj, name, &ret);
     IDispatch_Release(obj);
     jsstr_release(name);
     if(FAILED(hres))
@@ -1648,9 +1629,8 @@ static HRESULT interp_delete(exec_ctx_t *ctx)
 static HRESULT interp_delete_ident(exec_ctx_t *ctx)
 {
     const BSTR arg = get_op_bstr(ctx, 0);
-    IDispatchEx *dispex;
     exprval_t exprval;
-    BOOL ret = FALSE;
+    BOOL ret;
     HRESULT hres;
 
     TRACE("%s\n", debugstr_w(arg));
@@ -1665,16 +1645,10 @@ static HRESULT interp_delete_ident(exec_ctx_t *ctx)
         return E_NOTIMPL;
     }
 
-    hres = IDispatch_QueryInterface(exprval.u.idref.disp, &IID_IDispatchEx, (void**)&dispex);
+    hres = disp_delete(exprval.u.idref.disp, exprval.u.idref.id, &ret);
     IDispatch_Release(exprval.u.idref.disp);
-    if(SUCCEEDED(hres)) {
-        hres = IDispatchEx_DeleteMemberByDispID(dispex, exprval.u.idref.id);
-        IDispatchEx_Release(dispex);
-        if(FAILED(hres))
-            return hres;
-
-        ret = TRUE;
-    }
+    if(FAILED(hres))
+        return ret;
 
     return stack_push(ctx, jsval_bool(ret));
 }
@@ -2484,7 +2458,7 @@ static HRESULT enter_bytecode(script_ctx_t *ctx, bytecode_t *code, function_code
         op = code->instrs[exec_ctx->ip].op;
         hres = op_funcs[op](exec_ctx);
         if(FAILED(hres)) {
-            TRACE("EXCEPTION\n");
+            TRACE("EXCEPTION %08x\n", hres);
 
             if(!exec_ctx->except_frame)
                 break;

@@ -1902,9 +1902,41 @@ int CDECL MSVCRT_mblen(const char* str, MSVCRT_size_t size)
     if(get_locinfo()->mb_cur_max == 1)
       return 1; /* ASCII CP */
 
-    return !MSVCRT_isleadbyte(*str) ? 1 : (size>1 ? 2 : -1);
+    return !MSVCRT_isleadbyte((unsigned char)*str) ? 1 : (size>1 ? 2 : -1);
   }
   return 0;
+}
+
+/*********************************************************************
+ *              mbrlen(MSVCRT.@)
+ */
+MSVCRT_size_t CDECL MSVCRT_mbrlen(const char *str, MSVCRT_size_t len, MSVCRT_mbstate_t *state)
+{
+    MSVCRT_mbstate_t s = (state ? *state : 0);
+    MSVCRT_size_t ret;
+
+    if(!len || !str || !*str)
+        return 0;
+
+    if(get_locinfo()->mb_cur_max == 1) {
+        return 1;
+    }else if(!s && MSVCRT_isleadbyte((unsigned char)*str)) {
+        if(len == 1) {
+            s = (unsigned char)*str;
+            ret = -2;
+        }else {
+            ret = 2;
+        }
+    }else if(!s) {
+        ret = 1;
+    }else {
+        s = 0;
+        ret = 2;
+    }
+
+    if(state)
+        *state = s;
+    return ret;
 }
 
 /*********************************************************************
@@ -1963,7 +1995,7 @@ int CDECL MSVCRT_mbtowc_l(MSVCRT_wchar_t *dst, const char* str, MSVCRT_size_t n,
     /* return the number of bytes from src that have been used */
     if(!*str)
         return 0;
-    if(n >= 2 && MSVCRT__isleadbyte_l(*str, locale) && str[1])
+    if(n >= 2 && MSVCRT__isleadbyte_l((unsigned char)*str, locale) && str[1])
         return 2;
     return 1;
 }
@@ -1974,6 +2006,53 @@ int CDECL MSVCRT_mbtowc_l(MSVCRT_wchar_t *dst, const char* str, MSVCRT_size_t n,
 int CDECL MSVCRT_mbtowc(MSVCRT_wchar_t *dst, const char* str, MSVCRT_size_t n)
 {
     return MSVCRT_mbtowc_l(dst, str, n, NULL);
+}
+
+/*********************************************************************
+ *              mbrtowc(MSVCRT.@)
+ */
+MSVCRT_size_t CDECL MSVCRT_mbrtowc(MSVCRT_wchar_t *dst, const char *str,
+        MSVCRT_size_t n, MSVCRT_mbstate_t *state)
+{
+    MSVCRT_pthreadlocinfo locinfo = get_locinfo();
+    MSVCRT_mbstate_t s = (state ? *state : 0);
+    char tmpstr[2];
+    int len = 0;
+
+    if(dst)
+        *dst = 0;
+
+    if(!n || !str || !*str)
+        return 0;
+
+    if(locinfo->mb_cur_max == 1) {
+        tmpstr[len++] = *str;
+    }else if(!s && MSVCRT_isleadbyte((unsigned char)*str)) {
+        if(n == 1) {
+            s = (unsigned char)*str;
+            len = -2;
+        }else {
+            tmpstr[0] = str[0];
+            tmpstr[1] = str[1];
+            len = 2;
+        }
+    }else if(!s) {
+        tmpstr[len++] = *str;
+    }else {
+        tmpstr[0] = s;
+        tmpstr[1] = *str;
+        len = 2;
+        s = 0;
+    }
+
+    if(len > 0) {
+        if(!MultiByteToWideChar(locinfo->lc_codepage, 0, tmpstr, len, dst, dst ? 1 : 0))
+            len = -1;
+    }
+
+    if(state)
+        *state = s;
+    return len;
 }
 
 /*********************************************************************
@@ -1998,7 +2077,7 @@ MSVCRT_size_t CDECL MSVCRT__mbstowcs_l(MSVCRT_wchar_t *wcstr, const char *mbstr,
         if(mbstr[size] == '\0')
             break;
 
-        size += (MSVCRT__isleadbyte_l(mbstr[size], locale) ? 2 : 1);
+        size += (MSVCRT__isleadbyte_l((unsigned char)mbstr[size], locale) ? 2 : 1);
     }
 
     size = MultiByteToWideChar(locinfo->lc_codepage, 0,
@@ -2070,4 +2149,36 @@ int CDECL MSVCRT__mbstowcs_s(MSVCRT_size_t *ret, MSVCRT_wchar_t *wcstr,
         MSVCRT_size_t size, const char *mbstr, MSVCRT_size_t count)
 {
     return MSVCRT__mbstowcs_s_l(ret, wcstr, size, mbstr, count, NULL);
+}
+
+/*********************************************************************
+ *              mbsrtowcs(MSVCRT.@)
+ */
+MSVCRT_size_t CDECL MSVCRT_mbsrtowcs(MSVCRT_wchar_t *wcstr,
+        const char **pmbstr, MSVCRT_size_t count, MSVCRT_mbstate_t *state)
+{
+    MSVCRT_mbstate_t s = (state ? *state : 0);
+    MSVCRT_wchar_t tmpdst;
+    MSVCRT_size_t ret = 0;
+
+    if(!MSVCRT_CHECK_PMT(pmbstr != NULL))
+        return -1;
+
+    while(!wcstr || count>ret) {
+        int ch_len = MSVCRT_mbrtowc(&tmpdst, *pmbstr, 2, &s);
+        if(wcstr)
+            wcstr[ret] = tmpdst;
+
+        if(ch_len < 0) {
+            return -1;
+        }else if(ch_len == 0) {
+            *pmbstr = NULL;
+            return ret;
+        }
+
+        *pmbstr += ch_len;
+        ret++;
+    }
+
+    return ret;
 }

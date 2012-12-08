@@ -46,26 +46,6 @@ typedef struct
     struct list entryFromQmgr;
 } BackgroundCopyJobImpl;
 
-/* Enum background copy jobs vtbl and related data */
-typedef struct
-{
-    const IEnumBackgroundCopyJobsVtbl *lpVtbl;
-    LONG ref;
-    IBackgroundCopyJob **jobs;
-    ULONG numJobs;
-    ULONG indexJobs;
-} EnumBackgroundCopyJobsImpl;
-
-/* Enum background copy files vtbl and related data */
-typedef struct
-{
-    const IEnumBackgroundCopyFilesVtbl *lpVtbl;
-    LONG ref;
-    IBackgroundCopyFile **files;
-    ULONG numFiles;
-    ULONG indexFiles;
-} EnumBackgroundCopyFilesImpl;
-
 /* Background copy file vtbl and related data */
 typedef struct
 {
@@ -81,7 +61,7 @@ typedef struct
 /* Background copy manager vtbl and related data */
 typedef struct
 {
-    const IBackgroundCopyManagerVtbl *lpVtbl;
+    IBackgroundCopyManager IBackgroundCopyManager_iface;
     /* Protects job list, job states, and jobEvent  */
     CRITICAL_SECTION cs;
     HANDLE jobEvent;
@@ -100,8 +80,8 @@ extern BackgroundCopyManagerImpl globalMgr DECLSPEC_HIDDEN;
 HRESULT BackgroundCopyManagerConstructor(IUnknown *pUnkOuter, LPVOID *ppObj) DECLSPEC_HIDDEN;
 HRESULT BackgroundCopyJobConstructor(LPCWSTR displayName, BG_JOB_TYPE type,
                                      GUID *pJobId, LPVOID *ppObj) DECLSPEC_HIDDEN;
-HRESULT EnumBackgroundCopyJobsConstructor(LPVOID *ppObj,
-                                          IBackgroundCopyManager* copyManager) DECLSPEC_HIDDEN;
+HRESULT enum_copy_job_create(BackgroundCopyManagerImpl *qmgr,
+        IEnumBackgroundCopyJobs **enumjob) DECLSPEC_HIDDEN;
 HRESULT BackgroundCopyFileConstructor(BackgroundCopyJobImpl *owner,
                                       LPCWSTR remoteName, LPCWSTR localName,
                                       LPVOID *ppObj) DECLSPEC_HIDDEN;

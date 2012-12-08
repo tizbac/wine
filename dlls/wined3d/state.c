@@ -2629,6 +2629,8 @@ static void set_tex_op(const struct wined3d_gl_info *gl_info, const struct wined
             case WINED3D_TOP_BUMPENVMAP:
             case WINED3D_TOP_BUMPENVMAP_LUMINANCE:
                 FIXME("Implement bump environment mapping in GL_NV_texture_env_combine4 path\n");
+                Handled = FALSE;
+                break;
 
             default:
                 Handled = FALSE;
@@ -3091,6 +3093,9 @@ static void set_tex_op(const struct wined3d_gl_info *gl_info, const struct wined
                  */
                 FIXME("Implement bump mapping with GL_NV_texture_shader in non register combiner path\n");
             }
+            Handled = FALSE;
+            break;
+
         default:
             Handled = FALSE;
     }
@@ -4097,6 +4102,8 @@ static inline void unload_numbered_array(struct wined3d_context *context, int i)
 
     GL_EXTCALL(glDisableVertexAttribArrayARB(i));
     checkGLcall("glDisableVertexAttribArrayARB(reg)");
+    if (gl_info->supported[ARB_INSTANCED_ARRAYS])
+        GL_EXTCALL(glVertexAttribDivisorARB(i, 0));
 
     context->numbered_array_mask &= ~(1 << i);
 }
@@ -4122,7 +4129,7 @@ static void load_numbered_arrays(struct wined3d_context *context,
     int i;
 
     /* Default to no instancing */
-    device->instancedDraw = FALSE;
+    device->instance_count = 0;
 
     for (i = 0; i < MAX_ATTRIBS; i++)
     {
@@ -4139,12 +4146,25 @@ static void load_numbered_arrays(struct wined3d_context *context,
 
         stream = &state->streams[stream_info->elements[i].stream_idx];
 
-        /* Do not load instance data. It will be specified using glTexCoord by drawprim */
         if (stream->flags & WINED3DSTREAMSOURCE_INSTANCEDATA)
         {
-            if (context->numbered_array_mask & (1 << i)) unload_numbered_array(context, i);
-            device->instancedDraw = TRUE;
-            continue;
+            if (!device->instance_count)
+                device->instance_count = state->streams[0].frequency ? state->streams[0].frequency : 1;
+
+            if (!gl_info->supported[ARB_INSTANCED_ARRAYS])
+            {
+                /* Unload instanced arrays, they will be loaded using
+                 * immediate mode instead. */
+                if (context->numbered_array_mask & (1 << i))
+                    unload_numbered_array(context, i);
+                continue;
+            }
+
+            GL_EXTCALL(glVertexAttribDivisorARB(i, 1));
+        }
+        else if (gl_info->supported[ARB_INSTANCED_ARRAYS])
+        {
+            GL_EXTCALL(glVertexAttribDivisorARB(i, 0));
         }
 
         TRACE_(d3d_shader)("Loading array %u [VBO=%u]\n", i, stream_info->elements[i].data.buffer_object);
@@ -4286,7 +4306,7 @@ static void load_vertex_data(const struct wined3d_context *context,
     TRACE("Using fast vertex array code\n");
 
     /* This is fixed function pipeline only, and the fixed function pipeline doesn't do instancing */
-    device->instancedDraw = FALSE;
+    device->instance_count = 0;
 
     /* Blend Data ---------------------------------------------- */
     if ((si->use_map & (1 << WINED3D_FFP_BLENDWEIGHT))

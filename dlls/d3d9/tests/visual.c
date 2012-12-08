@@ -3878,12 +3878,25 @@ static void projected_textures_test(IDirect3DDevice9 *device,
     };
     IDirect3DVertexShader9 *vs = NULL;
     IDirect3DPixelShader9 *ps = NULL;
+    IDirect3D9 *d3d;
+    D3DCAPS9 caps;
     HRESULT hr;
 
-    hr = IDirect3DDevice9_CreateVertexShader(device, vertex_shader, &vs);
-    ok(SUCCEEDED(hr), "CreateVertexShader failed (%08x)\n", hr);
-    hr = IDirect3DDevice9_CreatePixelShader(device, pixel_shader, &ps);
-    ok(SUCCEEDED(hr), "CreatePixelShader failed (%08x)\n", hr);
+    IDirect3DDevice9_GetDirect3D(device, &d3d);
+    hr = IDirect3DDevice9_GetDeviceCaps(device, &caps);
+    ok(SUCCEEDED(hr), "GetDeviceCaps failed (%08x)\n", hr);
+    IDirect3D9_Release(d3d);
+
+    if (caps.VertexShaderVersion >= D3DVS_VERSION(1, 1))
+    {
+        hr = IDirect3DDevice9_CreateVertexShader(device, vertex_shader, &vs);
+        ok(SUCCEEDED(hr), "CreateVertexShader failed (%08x)\n", hr);
+    }
+    if (caps.PixelShaderVersion >= D3DPS_VERSION(1, 3))
+    {
+        hr = IDirect3DDevice9_CreatePixelShader(device, pixel_shader, &ps);
+        ok(SUCCEEDED(hr), "CreatePixelShader failed (%08x)\n", hr);
+    }
 
     hr = IDirect3DDevice9_Clear(device, 0, NULL, D3DCLEAR_TARGET, 0xff203040, 0.0f, 0);
     ok(hr == D3D_OK, "IDirect3DDevice9_Clear returned %08x\n", hr);
@@ -3920,12 +3933,26 @@ static void projected_textures_test(IDirect3DDevice9 *device,
         };
 
         if (tests[i].vs)
+        {
+            if (!vs)
+            {
+                skip("Vertex shaders not supported, skipping\n");
+                continue;
+            }
             hr = IDirect3DDevice9_SetVertexShader(device, vs);
+        }
         else
             hr = IDirect3DDevice9_SetVertexShader(device, NULL);
         ok(SUCCEEDED(hr), "SetVertexShader failed (%08x)\n", hr);
         if (tests[i].ps)
+        {
+            if (!ps)
+            {
+                skip("Pixel shaders not supported, skipping\n");
+                continue;
+            }
             hr = IDirect3DDevice9_SetPixelShader(device, ps);
+        }
         else
             hr = IDirect3DDevice9_SetPixelShader(device, NULL);
         ok(SUCCEEDED(hr), "SetPixelShader failed (%08x)\n", hr);
@@ -3949,11 +3976,14 @@ static void projected_textures_test(IDirect3DDevice9 *device,
 
     hr = IDirect3DDevice9_SetVertexShader(device, NULL);
     hr = IDirect3DDevice9_SetPixelShader(device, NULL);
-    IDirect3DVertexShader9_Release(vs);
-    IDirect3DPixelShader9_Release(ps);
+    if (vs) IDirect3DVertexShader9_Release(vs);
+    if (ps) IDirect3DPixelShader9_Release(ps);
 
     for (i = 0; i < 4; ++i)
-        check_rect(device, tests[i].rect, tests[i].message);
+    {
+        if ((!tests[i].vs || vs) && (!tests[i].ps || ps))
+            check_rect(device, tests[i].rect, tests[i].message);
+    }
 
     hr = IDirect3DDevice9_Present(device, NULL, NULL, NULL, NULL);
     ok(hr == D3D_OK, "IDirect3DDevice9_Present failed with %08x\n", hr);
@@ -4033,6 +4063,10 @@ static void texture_transform_flags_test(IDirect3DDevice9 *device)
     ok(hr == D3D_OK, "IDirect3DDevice9_SetSamplerState(D3DSAMP_ADDRESSV) returned %08x\n", hr);
     hr = IDirect3DDevice9_SetSamplerState(device, 0, D3DSAMP_ADDRESSW, D3DTADDRESS_CLAMP);
     ok(hr == D3D_OK, "IDirect3DDevice9_SetSamplerState(D3DSAMP_ADDRESSW) returned %08x\n", hr);
+    hr = IDirect3DDevice9_SetTextureStageState(device, 0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+    ok(hr == D3D_OK, "IDirect3DDevice9_SetTextureStageState(D3DTSS_COLOROP) returned %08x\n", hr);
+    hr = IDirect3DDevice9_SetTextureStageState(device, 0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+    ok(hr == D3D_OK, "IDirect3DDevice9_SetTextureStageState(D3DTSS_COLORARG1) returned %08x\n", hr);
     hr = IDirect3DDevice9_SetRenderState(device, D3DRS_LIGHTING, FALSE);
     ok(hr == D3D_OK, "IDirect3DDevice9_SetRenderState(D3DRS_LIGHTING) returned %08x\n", hr);
     hr = IDirect3DDevice9_Clear(device, 0, NULL, D3DCLEAR_TARGET, 0xff0000ff, 0.0, 0);
@@ -14098,6 +14132,7 @@ START_TEST(visual)
         loop_index_test(device_ptr);
         sincos_test(device_ptr);
         sgn_test(device_ptr);
+        clip_planes_test(device_ptr);
         if (caps.VertexShaderVersion >= D3DVS_VERSION(3, 0)) {
             test_vshader_input(device_ptr);
             test_vshader_float16(device_ptr);
@@ -14154,7 +14189,6 @@ START_TEST(visual)
     fp_special_test(device_ptr);
     depth_bounds_test(device_ptr);
     srgbwrite_format_test(device_ptr);
-    clip_planes_test(device_ptr);
     update_surface_test(device_ptr);
     multisample_get_rtdata_test(device_ptr);
     zenable_test(device_ptr);

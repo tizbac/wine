@@ -157,6 +157,7 @@ static const char *debug_rep(GLuint rep) {
         case GL_RED:                    return "GL_RED";
         case GL_GREEN:                  return "GL_GREEN";
         case GL_BLUE:                   return "GL_BLUE";
+        case GL_ALPHA:                  return "GL_ALPHA";
         default:                        return "unknown argrep";
     }
 }
@@ -468,11 +469,11 @@ static GLuint gen_ati_shader(const struct texture_stage_op op[MAX_TEXTURES], con
          */
         wrap_op3(gl_info, GL_MAD_ATI, GL_REG_0_ATI + stage + 1, GL_ALPHA, GL_NONE,
                  GL_REG_0_ATI + stage, GL_RED, argmodextra_y,
-                 ATI_FFP_CONST_BUMPMAT(stage), GL_BLUE, GL_NONE,
+                 ATI_FFP_CONST_BUMPMAT(stage), GL_BLUE, GL_2X_BIT_ATI | GL_BIAS_BIT_ATI,
                  GL_REG_0_ATI + stage + 1, GL_GREEN, GL_NONE);
         wrap_op3(gl_info, GL_MAD_ATI, GL_REG_0_ATI + stage + 1, GL_GREEN_BIT_ATI, GL_NONE,
                  GL_REG_0_ATI + stage, GL_GREEN, argmodextra_y,
-                 ATI_FFP_CONST_BUMPMAT(stage), GL_ALPHA, GL_NONE,
+                 ATI_FFP_CONST_BUMPMAT(stage), GL_ALPHA, GL_2X_BIT_ATI | GL_BIAS_BIT_ATI,
                  GL_REG_0_ATI + stage + 1, GL_ALPHA, GL_NONE);
     }
 
@@ -857,7 +858,7 @@ static void set_tex_op_atifs(struct wined3d_context *context, const struct wined
         {
             if (settings.op[i].cop == WINED3D_TOP_DISABLE)
                 break;
-            new_desc->num_textures_used = i;
+            new_desc->num_textures_used = i + 1;
         }
 
         memcpy(&new_desc->parent.settings, &settings, sizeof(settings));

@@ -57,8 +57,6 @@ struct gdi_obj_funcs
     BOOL    (*pDeleteObject)( HGDIOBJ handle );
 };
 
-typedef struct tagGdiFont GdiFont;
-
 typedef struct tagDC
 {
     HDC          hSelf;            /* Handle to this DC */
@@ -103,7 +101,6 @@ typedef struct tagDC
     HBITMAP       hBitmap;
     HPALETTE      hPalette;
 
-    GdiFont      *gdiFont;
     struct gdi_path *path;
 
     UINT          font_code_page;
@@ -294,7 +291,6 @@ extern INT WineEngAddFontResourceEx(LPCWSTR, DWORD, PVOID) DECLSPEC_HIDDEN;
 extern HANDLE WineEngAddFontMemResourceEx(PVOID, DWORD, PVOID, LPDWORD) DECLSPEC_HIDDEN;
 extern BOOL WineEngCreateScalableFontResource(DWORD, LPCWSTR, LPCWSTR, LPCWSTR) DECLSPEC_HIDDEN;
 extern BOOL WineEngDestroyFontInstance(HFONT handle) DECLSPEC_HIDDEN;
-extern BOOL WineEngGetLinkedHFont(DC *dc, WCHAR c, HFONT *new_hfont, UINT *glyph) DECLSPEC_HIDDEN;
 extern BOOL WineEngInit(void) DECLSPEC_HIDDEN;
 extern BOOL WineEngRemoveFontResourceEx(LPCWSTR, DWORD, PVOID) DECLSPEC_HIDDEN;
 

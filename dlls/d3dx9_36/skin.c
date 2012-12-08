@@ -297,7 +297,7 @@ static LPD3DXMATRIX WINAPI ID3DXSkinInfoImpl_GetBoneOffsetMatrix(ID3DXSkinInfo *
     return &This->bones[bone_num].transform;
 }
 
-static HRESULT WINAPI ID3DXSkinInfoImpl_Clone(ID3DXSkinInfo *iface, LPD3DXSKININFO *skin_info)
+static HRESULT WINAPI ID3DXSkinInfoImpl_Clone(ID3DXSkinInfo *iface, ID3DXSkinInfo **skin_info)
 {
     ID3DXSkinInfoImpl *This = impl_from_ID3DXSkinInfo(iface);
 
@@ -388,10 +388,10 @@ static HRESULT WINAPI ID3DXSkinInfoImpl_UpdateSkinnedMesh(ID3DXSkinInfo *iface, 
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI ID3DXSkinInfoImpl_ConvertToBlendedMesh(ID3DXSkinInfo *iface, LPD3DXMESH mesh_in,
-        DWORD options, CONST DWORD *adjacency_in, LPDWORD adjacency_out, DWORD *face_remap,
-        LPD3DXBUFFER *vertex_remap, DWORD *max_face_infl, DWORD *num_bone_combinations,
-        LPD3DXBUFFER *bone_combination_table, LPD3DXMESH *mesh_out)
+static HRESULT WINAPI ID3DXSkinInfoImpl_ConvertToBlendedMesh(ID3DXSkinInfo *iface, ID3DXMesh *mesh_in,
+        DWORD options, const DWORD *adjacency_in, DWORD *adjacency_out, DWORD *face_remap,
+        ID3DXBuffer **vertex_remap, DWORD *max_face_infl, DWORD *num_bone_combinations,
+        ID3DXBuffer **bone_combination_table, ID3DXMesh **mesh_out)
 {
     ID3DXSkinInfoImpl *This = impl_from_ID3DXSkinInfo(iface);
 
@@ -402,10 +402,10 @@ static HRESULT WINAPI ID3DXSkinInfoImpl_ConvertToBlendedMesh(ID3DXSkinInfo *ifac
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI ID3DXSkinInfoImpl_ConvertToIndexedBlendedMesh(ID3DXSkinInfo *iface, LPD3DXMESH mesh_in,
-        DWORD options, CONST DWORD *adjacency_in, LPDWORD adjacency_out, DWORD *face_remap,
-        LPD3DXBUFFER *vertex_remap, DWORD *max_face_infl, DWORD *num_bone_combinations,
-        LPD3DXBUFFER *bone_combination_table, LPD3DXMESH *mesh_out)
+static HRESULT WINAPI ID3DXSkinInfoImpl_ConvertToIndexedBlendedMesh(ID3DXSkinInfo *iface, ID3DXMesh *mesh_in,
+        DWORD options, const DWORD *adjacency_in, DWORD *adjacency_out, DWORD *face_remap,
+        ID3DXBuffer **vertex_remap, DWORD *max_face_infl, DWORD *num_bone_combinations,
+        ID3DXBuffer **bone_combination_table, ID3DXMesh **mesh_out)
 {
     ID3DXSkinInfoImpl *This = impl_from_ID3DXSkinInfo(iface);
 
@@ -449,8 +449,8 @@ static const struct ID3DXSkinInfoVtbl ID3DXSkinInfoImpl_Vtbl =
     ID3DXSkinInfoImpl_ConvertToIndexedBlendedMesh
 };
 
-HRESULT WINAPI D3DXCreateSkinInfo(DWORD num_vertices, CONST D3DVERTEXELEMENT9 *declaration,
-                                  DWORD num_bones, LPD3DXSKININFO *skin_info)
+HRESULT WINAPI D3DXCreateSkinInfo(DWORD num_vertices, const D3DVERTEXELEMENT9 *declaration,
+        DWORD num_bones, ID3DXSkinInfo **skin_info)
 {
     HRESULT hr;
     ID3DXSkinInfoImpl *object = NULL;
@@ -490,7 +490,7 @@ error:
     return hr;
 }
 
-HRESULT WINAPI D3DXCreateSkinInfoFVF(DWORD num_vertices, DWORD fvf, DWORD num_bones, LPD3DXSKININFO *skin_info)
+HRESULT WINAPI D3DXCreateSkinInfoFVF(DWORD num_vertices, DWORD fvf, DWORD num_bones, ID3DXSkinInfo **skin_info)
 {
     HRESULT hr;
     D3DVERTEXELEMENT9 declaration[MAX_FVF_DECL_SIZE];

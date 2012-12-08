@@ -58,7 +58,7 @@ do { \
 static void test_create_line(IDirect3DDevice9* device)
 {
     HRESULT hr;
-    LPD3DXLINE line = NULL;
+    ID3DXLine *line = NULL;
     struct IDirect3DDevice9 *return_device;
     D3DXMATRIX world, identity, result;
     FLOAT r11, r12, r13, r14;
@@ -109,8 +109,7 @@ static void test_create_line(IDirect3DDevice9* device)
     ok(hr == D3D_OK, "Got result %x, expected %x (D3D_OK)\n", hr, D3D_OK);
     expect_mat(&world, &result);
 
-    ref = IDirect3DDevice9_Release(return_device);
-    ok(ref == 2, "Got %x references to device %p, expected 2\n", ref, return_device);
+    IDirect3DDevice9_Release(return_device);
 
     ref = ID3DXLine_Release(line);
     ok(ref == 0, "Got %x references to line %p, expected 0\n", ref, line);

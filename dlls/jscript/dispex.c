@@ -39,7 +39,8 @@ typedef enum {
     PROP_JSVAL,
     PROP_BUILTIN,
     PROP_PROTREF,
-    PROP_DELETED
+    PROP_DELETED,
+    PROP_IDX
 } prop_type_t;
 
 struct _dispex_prop_t {
@@ -52,6 +53,7 @@ struct _dispex_prop_t {
         jsval_t val;
         const builtin_prop_t *p;
         DWORD ref;
+        unsigned idx;
     } u;
 
     int bucket_head;
@@ -219,6 +221,23 @@ static HRESULT find_prop_name(jsdisp_t *This, unsigned hash, const WCHAR *name, 
         return S_OK;
     }
 
+    if(This->builtin_info->idx_length) {
+        const WCHAR *ptr;
+        unsigned idx = 0;
+
+        for(ptr = name; isdigitW(*ptr) && idx < 0x10000; ptr++)
+            idx = idx*10 + (*ptr-'0');
+        if(!*ptr && idx < This->builtin_info->idx_length(This)) {
+            prop = alloc_prop(This, name, PROP_IDX, This->builtin_info->idx_put ? 0 : PROPF_CONST);
+            if(!prop)
+                return E_OUTOFMEMORY;
+
+            prop->u.idx = idx;
+            *ret = prop;
+            return S_OK;
+        }
+    }
+
     *ret = NULL;
     return S_OK;
 }
@@ -383,10 +402,14 @@ static HRESULT invoke_prop_func(jsdisp_t *This, IDispatch *jsthis, dispex_prop_t
 
         return disp_call_value(This->ctx, get_object(prop->u.val), jsthis, flags, argc, argv, r);
     }
-    default:
-        ERR("type %d\n", prop->type);
+    case PROP_IDX:
+        FIXME("Invoking PROP_IDX not yet supported\n");
+        return E_NOTIMPL;
+    case PROP_DELETED:
+        assert(0);
     }
 
+    assert(0);
     return E_FAIL;
 }
 
@@ -422,6 +445,9 @@ static HRESULT prop_get(jsdisp_t *This, dispex_prop_t *prop, DISPPARAMS *dp,
         break;
     case PROP_JSVAL:
         hres = jsval_copy(prop->u.val, r);
+        break;
+    case PROP_IDX:
+        hres = This->builtin_info->idx_get(This, prop->u.idx, r);
         break;
     default:
         ERR("type %d\n", prop->type);
@@ -463,6 +489,8 @@ static HRESULT prop_put(jsdisp_t *This, dispex_prop_t *prop, jsval_t val, IServi
     case PROP_JSVAL:
         jsval_release(prop->u.val);
         break;
+    case PROP_IDX:
+        return This->builtin_info->idx_put(This, prop->u.idx, val);
     default:
         ERR("type %d\n", prop->type);
         return E_FAIL;
@@ -479,7 +507,6 @@ static HRESULT prop_put(jsdisp_t *This, dispex_prop_t *prop, jsval_t val, IServi
     if(This->builtin_info->on_put)
         This->builtin_info->on_put(This, prop->name);
 
-    TRACE("%s = %s\n", debugstr_w(prop->name), debugstr_jsval(val));
     return S_OK;
 }
 
@@ -713,8 +740,15 @@ static HRESULT WINAPI DispatchEx_InvokeEx(IDispatchEx *iface, DISPID id, LCID lc
     return hres;
 }
 
-static HRESULT delete_prop(dispex_prop_t *prop)
+static HRESULT delete_prop(dispex_prop_t *prop, BOOL *ret)
 {
+    if(prop->flags & PROPF_DONTDELETE) {
+        *ret = FALSE;
+        return S_OK;
+    }
+
+    *ret = TRUE; /* FIXME: not exactly right */
+
     if(prop->type == PROP_JSVAL) {
         jsval_release(prop->u.val);
         prop->type = PROP_DELETED;
@@ -726,6 +760,7 @@ static HRESULT WINAPI DispatchEx_DeleteMemberByName(IDispatchEx *iface, BSTR bst
 {
     jsdisp_t *This = impl_from_IDispatchEx(iface);
     dispex_prop_t *prop;
+    BOOL b;
     HRESULT hres;
 
     TRACE("(%p)->(%s %x)\n", This, debugstr_w(bstrName), grfdex);
@@ -741,13 +776,14 @@ static HRESULT WINAPI DispatchEx_DeleteMemberByName(IDispatchEx *iface, BSTR bst
         return S_OK;
     }
 
-    return delete_prop(prop);
+    return delete_prop(prop, &b);
 }
 
 static HRESULT WINAPI DispatchEx_DeleteMemberByDispID(IDispatchEx *iface, DISPID id)
 {
     jsdisp_t *This = impl_from_IDispatchEx(iface);
     dispex_prop_t *prop;
+    BOOL b;
 
     TRACE("(%p)->(%x)\n", This, id);
 
@@ -757,7 +793,7 @@ static HRESULT WINAPI DispatchEx_DeleteMemberByDispID(IDispatchEx *iface, DISPID
         return DISP_E_MEMBERNOTFOUND;
     }
 
-    return delete_prop(prop);
+    return delete_prop(prop, &b);
 }
 
 static HRESULT WINAPI DispatchEx_GetMemberProperties(IDispatchEx *iface, DISPID id, DWORD grfdexFetch, DWORD *pgrfdex)
@@ -1239,16 +1275,21 @@ HRESULT disp_call_value(script_ctx_t *ctx, IDispatch *disp, IDispatch *jsthis, W
     return hres;
 }
 
-HRESULT jsdisp_propput_name(jsdisp_t *obj, const WCHAR *name, jsval_t val)
+HRESULT jsdisp_propput(jsdisp_t *obj, const WCHAR *name, DWORD flags, jsval_t val)
 {
     dispex_prop_t *prop;
     HRESULT hres;
 
-    hres = ensure_prop_name(obj, name, FALSE, PROPF_ENUM, &prop);
+    hres = ensure_prop_name(obj, name, FALSE, flags, &prop);
     if(FAILED(hres))
         return hres;
 
     return prop_put(obj, prop, val, NULL);
+}
+
+HRESULT jsdisp_propput_name(jsdisp_t *obj, const WCHAR *name, jsval_t val)
+{
+    return jsdisp_propput(obj, name, PROPF_ENUM, val);
 }
 
 HRESULT jsdisp_propput_const(jsdisp_t *obj, const WCHAR *name, jsval_t val)
@@ -1265,14 +1306,7 @@ HRESULT jsdisp_propput_const(jsdisp_t *obj, const WCHAR *name, jsval_t val)
 
 HRESULT jsdisp_propput_dontenum(jsdisp_t *obj, const WCHAR *name, jsval_t val)
 {
-    dispex_prop_t *prop;
-    HRESULT hres;
-
-    hres = ensure_prop_name(obj, name, FALSE, 0, &prop);
-    if(FAILED(hres))
-        return hres;
-
-    return prop_put(obj, prop, val, NULL);
+    return jsdisp_propput(obj, name, 0, val);
 }
 
 HRESULT jsdisp_propput_idx(jsdisp_t *obj, DWORD idx, jsval_t val)
@@ -1424,6 +1458,7 @@ HRESULT jsdisp_delete_idx(jsdisp_t *obj, DWORD idx)
     static const WCHAR formatW[] = {'%','d',0};
     WCHAR buf[12];
     dispex_prop_t *prop;
+    BOOL b;
     HRESULT hres;
 
     sprintfW(buf, formatW, idx);
@@ -1432,7 +1467,84 @@ HRESULT jsdisp_delete_idx(jsdisp_t *obj, DWORD idx)
     if(FAILED(hres) || !prop)
         return hres;
 
-    return delete_prop(prop);
+    return delete_prop(prop, &b);
+}
+
+HRESULT disp_delete(IDispatch *disp, DISPID id, BOOL *ret)
+{
+    IDispatchEx *dispex;
+    jsdisp_t *jsdisp;
+    HRESULT hres;
+
+    jsdisp = iface_to_jsdisp((IUnknown*)disp);
+    if(jsdisp) {
+        dispex_prop_t *prop;
+
+        prop = get_prop(jsdisp, id);
+        if(prop)
+            hres = delete_prop(prop, ret);
+        else
+            hres = DISP_E_MEMBERNOTFOUND;
+
+        jsdisp_release(jsdisp);
+        return hres;
+    }
+
+    hres = IDispatch_QueryInterface(disp, &IID_IDispatchEx, (void**)&dispex);
+    if(FAILED(hres)) {
+        *ret = FALSE;
+        return S_OK;
+    }
+
+    hres = IDispatchEx_DeleteMemberByDispID(dispex, id);
+    IDispatchEx_Release(dispex);
+    if(FAILED(hres))
+        return hres;
+
+    *ret = TRUE;
+    return S_OK;
+}
+
+HRESULT disp_delete_name(script_ctx_t *ctx, IDispatch *disp, jsstr_t *name, BOOL *ret)
+{
+    IDispatchEx *dispex;
+    jsdisp_t *jsdisp;
+    HRESULT hres;
+
+    jsdisp = iface_to_jsdisp((IUnknown*)disp);
+    if(jsdisp) {
+        dispex_prop_t *prop;
+
+        hres = find_prop_name(jsdisp, string_hash(name->str), name->str, &prop);
+        if(prop)
+            hres = delete_prop(prop, ret);
+        else
+            hres = DISP_E_MEMBERNOTFOUND;
+
+        jsdisp_release(jsdisp);
+        return hres;
+    }
+
+    hres = IDispatch_QueryInterface(disp, &IID_IDispatchEx, (void**)&dispex);
+    if(SUCCEEDED(hres)) {
+        BSTR bstr;
+
+        bstr = SysAllocStringLen(name->str, jsstr_length(name));
+        if(bstr) {
+            hres = IDispatchEx_DeleteMemberByName(dispex, bstr, make_grfdex(ctx, fdexNameCaseSensitive));
+            SysFreeString(bstr);
+            *ret = TRUE;
+        }else {
+            hres = E_OUTOFMEMORY;
+        }
+
+        IDispatchEx_Release(dispex);
+    }else {
+        hres = S_OK;
+        ret = FALSE;
+    }
+
+    return hres;
 }
 
 HRESULT jsdisp_is_own_prop(jsdisp_t *obj, const WCHAR *name, BOOL *ret)

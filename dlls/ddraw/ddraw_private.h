@@ -276,6 +276,8 @@ struct d3d_device
     struct wined3d_device *wined3d_device;
     struct ddraw *ddraw;
     struct wined3d_buffer *indexbuffer;
+    UINT indexbuffer_size;
+    UINT indexbuffer_pos;
     struct ddraw_surface *target;
 
     /* Viewport management */
@@ -525,6 +527,8 @@ struct d3d_vertex_buffer
     /*** Storage for D3D7 specific things ***/
     DWORD                Caps;
     DWORD                fvf;
+    DWORD                size;
+    BOOL                 dynamic;
 };
 
 HRESULT d3d_vertex_buffer_create(struct d3d_vertex_buffer **buffer, struct ddraw *ddraw,

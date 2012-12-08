@@ -74,8 +74,21 @@ function testFunc1(x, y) {
     ok(arguments.callee === testFunc1, "arguments.calee !== testFunc1");
     ok(testFunc1.arguments === arguments, "testFunc1.arguments = " + testFunc1.arguments);
 
+    x = false;
+    ok(arguments[0] === false, "arguments[0] is not false");
+    arguments[1] = "x";
+    ok(y === "x", "y = " + y);
+    ok(arguments[1] === "x", "arguments[1] = " + arguments[1]);
+
+    ok(arguments["0x0"] === undefined, "arguments['0x0'] = " + arguments["0x0"]);
+    ok(arguments["x"] === undefined, "arguments['x'] = " + arguments["x"]);
+
     ok(this === test, "this !== test");
     eval('ok(this === test, "this !== test");');
+
+    tmp = delete arguments;
+    ok(tmp === false, "arguments deleted");
+    ok(typeof(arguments) === "object", "typeof(arguments) = " + typeof(arguments));
 
     return true;
 }
@@ -1185,6 +1198,20 @@ try {
     ok(false, "expected exception");
 }catch(e) {}
 ok(!("prop" in obj), "prop in obj");
+
+if(invokeVersion >= 2) {
+    ok("test"[0] === "t", '"test"[0] = ' + test[0]);
+    ok("test"[5] === undefined, '"test"[0] = ' + test[0]);
+
+    tmp = "test";
+    ok(tmp[1] === "e", "tmp[1] = " + tmp[1]);
+    tmp[1] = "x";
+    ok(tmp[1] === "e", "tmp[1] = " + tmp[1]);
+    ok(tmp["1"] === "e", "tmp['1'] = " + tmp["1"]);
+    ok(tmp["0x1"] === undefined, "tmp['0x1'] = " + tmp["0x1"]);
+}else {
+    ok("test"[0] === undefined, '"test"[0] = ' + test[0]);
+}
 
 ok(isNaN(NaN) === true, "isNaN(NaN) !== true");
 ok(isNaN(0.5) === false, "isNaN(0.5) !== false");

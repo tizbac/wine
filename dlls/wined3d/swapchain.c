@@ -366,6 +366,7 @@ static void swapchain_blit(const struct wined3d_swapchain *swapchain,
 
         ENTER_GL();
         context_apply_fbo_state_blit(context2, GL_FRAMEBUFFER, swapchain->front_buffer, NULL, SFLAG_INDRAWABLE);
+        context_bind_texture(context2, backbuffer->texture_target, backbuffer->texture_name);
 
         /* Set up the texture. The surface is not in a wined3d_texture
          * container, so there are no D3D texture settings to dirtify. */
@@ -559,7 +560,9 @@ static void swapchain_gl_present(struct wined3d_swapchain *swapchain, const RECT
 
     if (swapchain->num_contexts > 1)
         gl_info->gl_ops.gl.p_glFinish();
-    SwapBuffers(context->hdc); /* TODO: cycle through the swapchain buffers */
+
+    /* call wglSwapBuffers through the gl table to avoid confusing the Steam overlay */
+    gl_info->gl_ops.wgl.p_wglSwapBuffers(context->hdc); /* TODO: cycle through the swapchain buffers */
 
     TRACE("SwapBuffers called, Starting new frame\n");
     /* FPS support */

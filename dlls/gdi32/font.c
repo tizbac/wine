@@ -1710,10 +1710,9 @@ BOOL WINAPI GetCharWidth32A( HDC hdc, UINT firstChar, UINT lastChar,
 
 
 /* helper for nulldrv_ExtTextOut */
-static DWORD get_glyph_bitmap( HDC hdc, UINT index, UINT aa_flags,
+static DWORD get_glyph_bitmap( HDC hdc, UINT index, UINT flags, UINT aa_flags,
                                GLYPHMETRICS *metrics, struct gdi_image_bits *image )
 {
-    UINT ggo_flags = aa_flags | GGO_GLYPH_INDEX;
     static const MAT2 identity = { {0,1}, {0,0}, {0,0}, {0,1} };
     UINT indices[3] = {0, 0, 0x20};
     int i;
@@ -1721,11 +1720,12 @@ static DWORD get_glyph_bitmap( HDC hdc, UINT index, UINT aa_flags,
     int stride;
 
     indices[0] = index;
+    if (flags & ETO_GLYPH_INDEX) aa_flags |= GGO_GLYPH_INDEX;
 
     for (i = 0; i < sizeof(indices) / sizeof(indices[0]); i++)
     {
         index = indices[i];
-        ret = GetGlyphOutlineW( hdc, index, ggo_flags, metrics, 0, NULL, &identity );
+        ret = GetGlyphOutlineW( hdc, index, aa_flags, metrics, 0, NULL, &identity );
         if (ret != GDI_ERROR) break;
     }
 
@@ -1743,7 +1743,7 @@ static DWORD get_glyph_bitmap( HDC hdc, UINT index, UINT aa_flags,
     image->is_copy = TRUE;
     image->free = free_heap_bits;
 
-    ret = GetGlyphOutlineW( hdc, index, ggo_flags, metrics, size, image->ptr, &identity );
+    ret = GetGlyphOutlineW( hdc, index, aa_flags, metrics, size, image->ptr, &identity );
     if (ret == GDI_ERROR)
     {
         HeapFree( GetProcessHeap(), 0, image->ptr );
@@ -1764,7 +1764,7 @@ static RECT get_total_extents( HDC hdc, INT x, INT y, UINT flags, UINT aa_flags,
     {
         GLYPHMETRICS metrics;
 
-        if (get_glyph_bitmap( hdc, (UINT)str[i], aa_flags, &metrics, NULL )) continue;
+        if (get_glyph_bitmap( hdc, str[i], flags, aa_flags, &metrics, NULL )) continue;
 
         rect.left   = x + metrics.gmptGlyphOrigin.x;
         rect.top    = y - metrics.gmptGlyphOrigin.y;
@@ -1949,7 +1949,7 @@ BOOL nulldrv_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags, const RECT *rect
         GLYPHMETRICS metrics;
         struct gdi_image_bits image;
 
-        err = get_glyph_bitmap( dev->hdc, (UINT)str[i], GGO_BITMAP, &metrics, &image );
+        err = get_glyph_bitmap( dev->hdc, str[i], flags, GGO_BITMAP, &metrics, &image );
         if (err) continue;
 
         if (image.ptr) draw_glyph( dev->hdc, x, y, &metrics, &image, (flags & ETO_CLIPPED) ? rect : NULL );
@@ -2371,79 +2371,8 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
         }
     }
 
-    if(FontIsLinked(hdc) && !(flags & ETO_GLYPH_INDEX))
-    {
-        HFONT orig_font = dc->hFont, cur_font;
-        UINT glyph;
-        INT span = 0;
-        POINT *offsets = NULL;
-        unsigned int i;
-
-        glyphs = HeapAlloc(GetProcessHeap(), 0, count * sizeof(WORD));
-        for(i = 0; i < count; i++)
-        {
-            WineEngGetLinkedHFont(dc, reordered_str[i], &cur_font, &glyph);
-            if(cur_font != dc->hFont)
-            {
-                if(!offsets)
-                {
-                    unsigned int j;
-                    offsets = HeapAlloc(GetProcessHeap(), 0, count * sizeof(*deltas));
-                    offsets[0].x = offsets[0].y = 0;
-
-                    if(!deltas)
-                    {
-                        SIZE tmpsz;
-                        for(j = 1; j < count; j++)
-                        {
-                            GetTextExtentPointW(hdc, reordered_str + j - 1, 1, &tmpsz);
-                            offsets[j].x = offsets[j - 1].x + abs(INTERNAL_XWSTODS(dc, tmpsz.cx));
-                            offsets[j].y = 0;
-                        }
-                    }
-                    else
-                    {
-                        for(j = 1; j < count; j++)
-                        {
-                            offsets[j].x = offsets[j - 1].x + deltas[j].x;
-                            offsets[j].y = offsets[j - 1].y + deltas[j].y;
-                        }
-                    }
-                }
-                if(span)
-                {
-                    physdev->funcs->pExtTextOut( physdev, x + offsets[i - span].x,
-                                                 y + offsets[i - span].y,
-                                                 (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc, glyphs,
-                                                 span, deltas ? (INT*)(deltas + (i - span)) : NULL);
-                    span = 0;
-                }
-                SelectObject(hdc, cur_font);
-            }
-            glyphs[span++] = glyph;
-
-            if(i == count - 1)
-            {
-                ret = physdev->funcs->pExtTextOut(physdev, x + (offsets ? offsets[count - span].x : 0),
-                                                  y + (offsets ? offsets[count - span].y : 0),
-                                                  (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc, glyphs,
-                                                  span, deltas ? (INT*)(deltas + (count - span)) : NULL);
-                SelectObject(hdc, orig_font);
-                HeapFree(GetProcessHeap(), 0, offsets);
-           }
-        }
-    }
-    else
-    {
-        if(!(flags & ETO_GLYPH_INDEX) && dc->gdiFont)
-        {
-            glyphs = HeapAlloc(GetProcessHeap(), 0, count * sizeof(WORD));
-            GetGlyphIndicesW(hdc, reordered_str, count, glyphs, 0);
-            flags |= ETO_GLYPH_INDEX;
-        }
-        ret = physdev->funcs->pExtTextOut( physdev, x, y, (flags & ~ETO_OPAQUE), &rc,
-                                           glyphs ? glyphs : reordered_str, count, (INT*)deltas );
-    }
+    ret = physdev->funcs->pExtTextOut( physdev, x, y, (flags & ~ETO_OPAQUE), &rc,
+                                       glyphs ? glyphs : reordered_str, count, (INT*)deltas );
 
 done:
     HeapFree(GetProcessHeap(), 0, deltas);

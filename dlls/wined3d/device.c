@@ -1581,7 +1581,7 @@ void CDECL wined3d_device_set_stream_output(struct wined3d_device *device, UINT 
         if (buffer)
             wined3d_buffer_incref(buffer);
         if (prev_buffer)
-            wined3d_buffer_decref(buffer);
+            wined3d_buffer_decref(prev_buffer);
         return;
     }
 
@@ -2532,6 +2532,92 @@ struct wined3d_shader * CDECL wined3d_device_get_vertex_shader(const struct wine
     return device->stateBlock->state.vertex_shader;
 }
 
+void CDECL wined3d_device_set_vs_cb(struct wined3d_device *device, UINT idx, struct wined3d_buffer *buffer)
+{
+    struct wined3d_buffer *prev;
+
+    TRACE("device %p, idx %u, buffer %p.\n", device, idx, buffer);
+
+    if (idx >= MAX_CONSTANT_BUFFERS)
+    {
+        WARN("Invalid constant buffer index %u.\n", idx);
+        return;
+    }
+
+    prev = device->updateStateBlock->state.vs_cb[idx];
+    device->updateStateBlock->state.vs_cb[idx] = buffer;
+
+    if (device->isRecordingState)
+    {
+        if (buffer)
+            wined3d_buffer_incref(buffer);
+        if (prev)
+            wined3d_buffer_decref(prev);
+        return;
+    }
+
+    if (prev != buffer)
+    {
+        if (buffer)
+        {
+            InterlockedIncrement(&buffer->resource.bind_count);
+            wined3d_buffer_incref(buffer);
+        }
+        if (prev)
+        {
+            InterlockedDecrement(&prev->resource.bind_count);
+            wined3d_buffer_decref(prev);
+        }
+    }
+}
+
+struct wined3d_buffer * CDECL wined3d_device_get_vs_cb(const struct wined3d_device *device, UINT idx)
+{
+    TRACE("device %p, idx %u.\n", device, idx);
+
+    if (idx >= MAX_CONSTANT_BUFFERS)
+    {
+        WARN("Invalid constant buffer index %u.\n", idx);
+        return NULL;
+    }
+
+    return device->stateBlock->state.vs_cb[idx];
+}
+
+void CDECL wined3d_device_set_vs_sampler(struct wined3d_device *device, UINT idx, struct wined3d_sampler *sampler)
+{
+    struct wined3d_sampler *prev;
+
+    TRACE("device %p, idx %u, sampler %p.\n", device, idx, sampler);
+
+    if (idx >= MAX_SAMPLER_OBJECTS)
+    {
+        WARN("Invalid sampler index %u.\n", idx);
+        return;
+    }
+
+    prev = device->updateStateBlock->state.vs_sampler[idx];
+    device->updateStateBlock->state.vs_sampler[idx] = sampler;
+
+    if (sampler)
+        wined3d_sampler_incref(sampler);
+    if (prev)
+        wined3d_sampler_decref(prev);
+}
+
+struct wined3d_sampler * CDECL wined3d_device_get_vs_sampler(const struct wined3d_device *device, UINT idx)
+{
+    TRACE("device %p, idx %u.\n", device, idx);
+
+    if (idx >= MAX_SAMPLER_OBJECTS)
+    {
+        WARN("Invalid sampler index %u.\n", idx);
+        return NULL;
+    }
+
+    return device->stateBlock->state.vs_sampler[idx];
+}
+
 HRESULT CDECL wined3d_device_set_vs_consts_b(struct wined3d_device *device,
         UINT start_register, const BOOL *constants, UINT bool_count)
 {
@@ -2914,6 +3000,58 @@ struct wined3d_shader * CDECL wined3d_device_get_pixel_shader(const struct wined
     return device->stateBlock->state.pixel_shader;
 }
 
+void CDECL wined3d_device_set_ps_cb(struct wined3d_device *device, UINT idx, struct wined3d_buffer *buffer)
+{
+    struct wined3d_buffer *prev;
+
+    TRACE("device %p, idx %u, buffer %p.\n", device, idx, buffer);
+
+    if (idx >= MAX_CONSTANT_BUFFERS)
+    {
+        WARN("Invalid constant buffer index %u.\n", idx);
+        return;
+    }
+
+    prev = device->updateStateBlock->state.ps_cb[idx];
+    device->updateStateBlock->state.ps_cb[idx] = buffer;
+
+    if (device->isRecordingState)
+    {
+        if (buffer)
+            wined3d_buffer_incref(buffer);
+        if (prev)
+            wined3d_buffer_decref(prev);
+        return;
+    }
+
+    if (prev != buffer)
+    {
+        if (buffer)
+        {
+            InterlockedIncrement(&buffer->resource.bind_count);
+            wined3d_buffer_incref(buffer);
+        }
+        if (prev)
+        {
+            InterlockedDecrement(&prev->resource.bind_count);
+            wined3d_buffer_decref(prev);
+        }
+    }
+}
+
+struct wined3d_buffer * CDECL wined3d_device_get_ps_cb(const struct wined3d_device *device, UINT idx)
+{
+    TRACE("device %p, idx %u.\n", device, idx);
+
+    if (idx >= MAX_CONSTANT_BUFFERS)
+    {
+        WARN("Invalid constant buffer index %u.\n", idx);
+        return NULL;
+    }
+
+    return device->stateBlock->state.ps_cb[idx];
+}
+
 HRESULT CDECL wined3d_device_set_ps_consts_b(struct wined3d_device *device,
         UINT start_register, const BOOL *constants, UINT bool_count)
 {
@@ -3075,6 +3213,92 @@ struct wined3d_shader * CDECL wined3d_device_get_geometry_shader(const struct wi
     TRACE("device %p.\n", device);
 
     return device->stateBlock->state.geometry_shader;
+}
+
+void CDECL wined3d_device_set_gs_cb(struct wined3d_device *device, UINT idx, struct wined3d_buffer *buffer)
+{
+    struct wined3d_buffer *prev;
+
+    TRACE("device %p, idx %u, buffer %p.\n", device, idx, buffer);
+
+    if (idx >= MAX_CONSTANT_BUFFERS)
+    {
+        WARN("Invalid constant buffer index %u.\n", idx);
+        return;
+    }
+
+    prev = device->updateStateBlock->state.gs_cb[idx];
+    device->updateStateBlock->state.gs_cb[idx] = buffer;
+
+    if (device->isRecordingState)
+    {
+        if (buffer)
+            wined3d_buffer_incref(buffer);
+        if (prev)
+            wined3d_buffer_decref(prev);
+        return;
+    }
+
+    if (prev != buffer)
+    {
+        if (buffer)
+        {
+            InterlockedIncrement(&buffer->resource.bind_count);
+            wined3d_buffer_incref(buffer);
+        }
+        if (prev)
+        {
+            InterlockedDecrement(&prev->resource.bind_count);
+            wined3d_buffer_decref(prev);
+        }
+    }
+}
+
+struct wined3d_buffer * CDECL wined3d_device_get_gs_cb(const struct wined3d_device *device, UINT idx)
+{
+    TRACE("device %p, idx %u.\n", device, idx);
+
+    if (idx >= MAX_CONSTANT_BUFFERS)
+    {
+        WARN("Invalid constant buffer index %u.\n", idx);
+        return NULL;
+    }
+
+    return device->stateBlock->state.gs_cb[idx];
+}
+
+void CDECL wined3d_device_set_gs_sampler(struct wined3d_device *device, UINT idx, struct wined3d_sampler *sampler)
+{
+    struct wined3d_sampler *prev;
+
+    TRACE("device %p, idx %u, sampler %p.\n", device, idx, sampler);
+
+    if (idx >= MAX_SAMPLER_OBJECTS)
+    {
+        WARN("Invalid sampler index %u.\n", idx);
+        return;
+    }
+
+    prev = device->updateStateBlock->state.gs_sampler[idx];
+    device->updateStateBlock->state.gs_sampler[idx] = sampler;
+
+    if (sampler)
+        wined3d_sampler_incref(sampler);
+    if (prev)
+        wined3d_sampler_decref(prev);
+}
+
+struct wined3d_sampler * CDECL wined3d_device_get_gs_sampler(const struct wined3d_device *device, UINT idx)
+{
+    TRACE("device %p, idx %u.\n", device, idx);
+
+    if (idx >= MAX_SAMPLER_OBJECTS)
+    {
+        WARN("Invalid sampler index %u.\n", idx);
+        return NULL;
+    }
+
+    return device->stateBlock->state.gs_sampler[idx];
 }
 
 /* Context activation is done by the caller. */

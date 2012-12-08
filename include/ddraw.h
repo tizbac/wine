@@ -1058,8 +1058,8 @@ typedef BOOL (CALLBACK *LPDDENUMCALLBACKA)(GUID *, LPSTR, LPSTR, LPVOID);
 typedef BOOL (CALLBACK *LPDDENUMCALLBACKW)(GUID *, LPWSTR, LPWSTR, LPVOID);
 DECL_WINELIB_TYPE_AW(LPDDENUMCALLBACK)
 
-typedef HRESULT (CALLBACK *LPDDENUMMODESCALLBACK)(LPDDSURFACEDESC, LPVOID);
-typedef HRESULT (CALLBACK *LPDDENUMMODESCALLBACK2)(LPDDSURFACEDESC2, LPVOID);
+typedef HRESULT (CALLBACK *LPDDENUMMODESCALLBACK)(DDSURFACEDESC *desc, void *ctx);
+typedef HRESULT (CALLBACK *LPDDENUMMODESCALLBACK2)(DDSURFACEDESC2 *desc, void *ctx);
 typedef HRESULT (CALLBACK *LPDDENUMSURFACESCALLBACK)(struct IDirectDrawSurface *surface,
         DDSURFACEDESC *surface_desc, void *ctx);
 typedef HRESULT (CALLBACK *LPDDENUMSURFACESCALLBACK2)(struct IDirectDrawSurface4 *surface,
@@ -1329,11 +1329,13 @@ DECLARE_INTERFACE_(IDirectDraw,IUnknown)
             struct IDirectDrawSurface **surface, IUnknown *outer) PURE;
     STDMETHOD(DuplicateSurface)(THIS_ struct IDirectDrawSurface *src_surface,
             struct IDirectDrawSurface **dst_surface) PURE;
-    STDMETHOD(EnumDisplayModes)(THIS_ DWORD dwFlags, LPDDSURFACEDESC lpDDSurfaceDesc, LPVOID lpContext, LPDDENUMMODESCALLBACK lpEnumModesCallback) PURE;
-    STDMETHOD(EnumSurfaces)(THIS_ DWORD dwFlags, LPDDSURFACEDESC lpDDSD, LPVOID lpContext, LPDDENUMSURFACESCALLBACK lpEnumSurfacesCallback) PURE;
+    STDMETHOD(EnumDisplayModes)(THIS_ DWORD flags, DDSURFACEDESC *surface_desc,
+            void *ctx, LPDDENUMMODESCALLBACK cb) PURE;
+    STDMETHOD(EnumSurfaces)(THIS_ DWORD flags, DDSURFACEDESC *surface_desc,
+            void *ctx, LPDDENUMSURFACESCALLBACK cb) PURE;
     STDMETHOD(FlipToGDISurface)(THIS) PURE;
-    STDMETHOD(GetCaps)(THIS_ LPDDCAPS lpDDDriverCaps, LPDDCAPS lpDDHELCaps) PURE;
-    STDMETHOD(GetDisplayMode)(THIS_ LPDDSURFACEDESC lpDDSurfaceDesc) PURE;
+    STDMETHOD(GetCaps)(THIS_ DDCAPS *driver_caps, DDCAPS *hel_caps) PURE;
+    STDMETHOD(GetDisplayMode)(THIS_ DDSURFACEDESC *surface_desc) PURE;
     STDMETHOD(GetFourCCCodes)(THIS_ LPDWORD lpNumCodes, LPDWORD lpCodes) PURE;
     STDMETHOD(GetGDISurface)(THIS_ struct IDirectDrawSurface **surface) PURE;
     STDMETHOD(GetMonitorFrequency)(THIS_ LPDWORD lpdwFrequency) PURE;
@@ -1439,11 +1441,13 @@ DECLARE_INTERFACE_(IDirectDraw2,IUnknown)
                 struct IDirectDrawSurface **surface, IUnknown *outer) PURE;
 /*1c*/    STDMETHOD(DuplicateSurface)(THIS_ struct IDirectDrawSurface *src_surface,
                 struct IDirectDrawSurface **dst_surface) PURE;
-/*20*/    STDMETHOD(EnumDisplayModes)(THIS_ DWORD dwFlags, LPDDSURFACEDESC lpDDSurfaceDesc, LPVOID lpContext, LPDDENUMMODESCALLBACK lpEnumModesCallback) PURE;
-/*24*/    STDMETHOD(EnumSurfaces)(THIS_ DWORD dwFlags, LPDDSURFACEDESC lpDDSD, LPVOID lpContext, LPDDENUMSURFACESCALLBACK lpEnumSurfacesCallback) PURE;
+/*20*/    STDMETHOD(EnumDisplayModes)(THIS_ DWORD flags, DDSURFACEDESC *surface_desc,
+                void *ctx, LPDDENUMMODESCALLBACK cb) PURE;
+/*24*/    STDMETHOD(EnumSurfaces)(THIS_ DWORD flags, DDSURFACEDESC *surface_desc,
+                void *ctx, LPDDENUMSURFACESCALLBACK cb) PURE;
 /*28*/    STDMETHOD(FlipToGDISurface)(THIS) PURE;
-/*2c*/    STDMETHOD(GetCaps)(THIS_ LPDDCAPS lpDDDriverCaps, LPDDCAPS lpDDHELCaps) PURE;
-/*30*/    STDMETHOD(GetDisplayMode)(THIS_ LPDDSURFACEDESC lpDDSurfaceDesc) PURE;
+/*2c*/    STDMETHOD(GetCaps)(THIS_ DDCAPS *driver_caps, DDCAPS *hel_caps) PURE;
+/*30*/    STDMETHOD(GetDisplayMode)(THIS_ DDSURFACEDESC *surface_desc) PURE;
 /*34*/    STDMETHOD(GetFourCCCodes)(THIS_ LPDWORD lpNumCodes, LPDWORD lpCodes) PURE;
 /*38*/    STDMETHOD(GetGDISurface)(THIS_ struct IDirectDrawSurface **surface) PURE;
 /*3c*/    STDMETHOD(GetMonitorFrequency)(THIS_ LPDWORD lpdwFrequency) PURE;
@@ -1455,7 +1459,7 @@ DECLARE_INTERFACE_(IDirectDraw2,IUnknown)
 /*54*/    STDMETHOD(SetDisplayMode)(THIS_ DWORD dwWidth, DWORD dwHeight, DWORD dwBPP, DWORD dwRefreshRate, DWORD dwFlags) PURE;
 /*58*/    STDMETHOD(WaitForVerticalBlank)(THIS_ DWORD dwFlags, HANDLE hEvent) PURE;
           /* added in v2 */
-/*5c*/    STDMETHOD(GetAvailableVidMem)(THIS_ LPDDSCAPS lpDDCaps, LPDWORD lpdwTotal, LPDWORD lpdwFree) PURE;
+/*5c*/    STDMETHOD(GetAvailableVidMem)(THIS_ DDSCAPS *caps, DWORD *total, DWORD *free) PURE;
 };
 #undef INTERFACE
 
@@ -1537,11 +1541,13 @@ DECLARE_INTERFACE_(IDirectDraw3,IUnknown)
                 struct IDirectDrawSurface **surface, IUnknown *outer) PURE;
 /*1c*/    STDMETHOD(DuplicateSurface)(THIS_ struct IDirectDrawSurface *src_surface,
                 struct IDirectDrawSurface **dst_surface) PURE;
-/*20*/    STDMETHOD(EnumDisplayModes)(THIS_ DWORD dwFlags, LPDDSURFACEDESC lpDDSurfaceDesc, LPVOID lpContext, LPDDENUMMODESCALLBACK lpEnumModesCallback) PURE;
-/*24*/    STDMETHOD(EnumSurfaces)(THIS_ DWORD dwFlags, LPDDSURFACEDESC lpDDSD, LPVOID lpContext, LPDDENUMSURFACESCALLBACK lpEnumSurfacesCallback) PURE;
+/*20*/    STDMETHOD(EnumDisplayModes)(THIS_ DWORD flags, DDSURFACEDESC *surface_desc,
+                void *ctx, LPDDENUMMODESCALLBACK cb) PURE;
+/*24*/    STDMETHOD(EnumSurfaces)(THIS_ DWORD flags, DDSURFACEDESC *surface_desc,
+                void *ctx, LPDDENUMSURFACESCALLBACK cb) PURE;
 /*28*/    STDMETHOD(FlipToGDISurface)(THIS) PURE;
-/*2c*/    STDMETHOD(GetCaps)(THIS_ LPDDCAPS lpDDDriverCaps, LPDDCAPS lpDDHELCaps) PURE;
-/*30*/    STDMETHOD(GetDisplayMode)(THIS_ LPDDSURFACEDESC lpDDSurfaceDesc) PURE;
+/*2c*/    STDMETHOD(GetCaps)(THIS_ DDCAPS *driver_caps, DDCAPS *hel_caps) PURE;
+/*30*/    STDMETHOD(GetDisplayMode)(THIS_ DDSURFACEDESC *surface_desc) PURE;
 /*34*/    STDMETHOD(GetFourCCCodes)(THIS_ LPDWORD lpNumCodes, LPDWORD lpCodes) PURE;
 /*38*/    STDMETHOD(GetGDISurface)(THIS_ struct IDirectDrawSurface **surface) PURE;
 /*3c*/    STDMETHOD(GetMonitorFrequency)(THIS_ LPDWORD lpdwFrequency) PURE;
@@ -1553,7 +1559,7 @@ DECLARE_INTERFACE_(IDirectDraw3,IUnknown)
 /*54*/    STDMETHOD(SetDisplayMode)(THIS_ DWORD dwWidth, DWORD dwHeight, DWORD dwBPP, DWORD dwRefreshRate, DWORD dwFlags) PURE;
 /*58*/    STDMETHOD(WaitForVerticalBlank)(THIS_ DWORD dwFlags, HANDLE hEvent) PURE;
           /* added in v2 */
-/*5c*/    STDMETHOD(GetAvailableVidMem)(THIS_ LPDDSCAPS lpDDCaps, LPDWORD lpdwTotal, LPDWORD lpdwFree) PURE;
+/*5c*/    STDMETHOD(GetAvailableVidMem)(THIS_ DDSCAPS *caps, DWORD *total, DWORD *free) PURE;
           /* added in v3 */
 /*60*/    STDMETHOD(GetSurfaceFromDC)(THIS_ HDC dc, struct IDirectDrawSurface **surface) PURE;
 };
@@ -1641,11 +1647,13 @@ DECLARE_INTERFACE_(IDirectDraw4,IUnknown)
                 struct IDirectDrawSurface4 **surface, IUnknown *outer) PURE;
 /*1c*/    STDMETHOD(DuplicateSurface)(THIS_ struct IDirectDrawSurface4 *src_surface,
                 struct IDirectDrawSurface4 **dst_surface) PURE;
-/*20*/    STDMETHOD(EnumDisplayModes)(THIS_ DWORD dwFlags, LPDDSURFACEDESC2 lpDDSurfaceDesc, LPVOID lpContext, LPDDENUMMODESCALLBACK2 lpEnumModesCallback) PURE;
-/*24*/    STDMETHOD(EnumSurfaces)(THIS_ DWORD dwFlags, LPDDSURFACEDESC2 lpDDSD, LPVOID lpContext, LPDDENUMSURFACESCALLBACK2 lpEnumSurfacesCallback) PURE;
+/*20*/    STDMETHOD(EnumDisplayModes)(THIS_ DWORD flags, DDSURFACEDESC2 *surface_desc,
+                void *ctx, LPDDENUMMODESCALLBACK2 cb) PURE;
+/*24*/    STDMETHOD(EnumSurfaces)(THIS_ DWORD flags, DDSURFACEDESC2 *surface_desc,
+                void *ctx, LPDDENUMSURFACESCALLBACK2 cb) PURE;
 /*28*/    STDMETHOD(FlipToGDISurface)(THIS) PURE;
-/*2c*/    STDMETHOD(GetCaps)(THIS_ LPDDCAPS lpDDDriverCaps, LPDDCAPS lpDDHELCaps) PURE;
-/*30*/    STDMETHOD(GetDisplayMode)(THIS_ LPDDSURFACEDESC2 lpDDSurfaceDesc) PURE;
+/*2c*/    STDMETHOD(GetCaps)(THIS_ DDCAPS *driver_caps, DDCAPS *hel_caps) PURE;
+/*30*/    STDMETHOD(GetDisplayMode)(THIS_ DDSURFACEDESC2 *surface_desc) PURE;
 /*34*/    STDMETHOD(GetFourCCCodes)(THIS_ LPDWORD lpNumCodes, LPDWORD lpCodes) PURE;
 /*38*/    STDMETHOD(GetGDISurface)(THIS_ struct IDirectDrawSurface4 **surface) PURE;
 /*3c*/    STDMETHOD(GetMonitorFrequency)(THIS_ LPDWORD lpdwFrequency) PURE;
@@ -1657,7 +1665,7 @@ DECLARE_INTERFACE_(IDirectDraw4,IUnknown)
 /*54*/    STDMETHOD(SetDisplayMode)(THIS_ DWORD dwWidth, DWORD dwHeight, DWORD dwBPP, DWORD dwRefreshRate, DWORD dwFlags) PURE;
 /*58*/    STDMETHOD(WaitForVerticalBlank)(THIS_ DWORD dwFlags, HANDLE hEvent) PURE;
           /* added in v2 */
-/*5c*/    STDMETHOD(GetAvailableVidMem)(THIS_ LPDDSCAPS2 lpDDCaps, LPDWORD lpdwTotal, LPDWORD lpdwFree) PURE;
+/*5c*/    STDMETHOD(GetAvailableVidMem)(THIS_ DDSCAPS2 *caps, DWORD *total, DWORD *free) PURE;
           /* added in v4 */
 /*60*/    STDMETHOD(GetSurfaceFromDC)(THIS_ HDC dc, struct IDirectDrawSurface4 **surface) PURE;
 /*64*/    STDMETHOD(RestoreAllSurfaces)(THIS) PURE;
@@ -1757,11 +1765,13 @@ DECLARE_INTERFACE_(IDirectDraw7,IUnknown)
                 struct IDirectDrawSurface7 **surface, IUnknown *outer) PURE;
 /*1c*/    STDMETHOD(DuplicateSurface)(THIS_ struct IDirectDrawSurface7 *src_surface,
                 struct IDirectDrawSurface7 **dst_surface) PURE;
-/*20*/    STDMETHOD(EnumDisplayModes)(THIS_ DWORD dwFlags, LPDDSURFACEDESC2 lpDDSurfaceDesc, LPVOID lpContext, LPDDENUMMODESCALLBACK2 lpEnumModesCallback) PURE;
-/*24*/    STDMETHOD(EnumSurfaces)(THIS_ DWORD dwFlags, LPDDSURFACEDESC2 lpDDSD, LPVOID lpContext, LPDDENUMSURFACESCALLBACK7 lpEnumSurfacesCallback) PURE;
+/*20*/    STDMETHOD(EnumDisplayModes)(THIS_ DWORD flags, DDSURFACEDESC2 *surface_desc,
+                void *ctx, LPDDENUMMODESCALLBACK2 cb) PURE;
+/*24*/    STDMETHOD(EnumSurfaces)(THIS_ DWORD flags, DDSURFACEDESC2 *surface_desc,
+                void *ctx, LPDDENUMSURFACESCALLBACK7 cb) PURE;
 /*28*/    STDMETHOD(FlipToGDISurface)(THIS) PURE;
-/*2c*/    STDMETHOD(GetCaps)(THIS_ LPDDCAPS lpDDDriverCaps, LPDDCAPS lpDDHELCaps) PURE;
-/*30*/    STDMETHOD(GetDisplayMode)(THIS_ LPDDSURFACEDESC2 lpDDSurfaceDesc) PURE;
+/*2c*/    STDMETHOD(GetCaps)(THIS_ DDCAPS *driver_caps, DDCAPS *hel_caps) PURE;
+/*30*/    STDMETHOD(GetDisplayMode)(THIS_ DDSURFACEDESC2 *surface_desc) PURE;
 /*34*/    STDMETHOD(GetFourCCCodes)(THIS_ LPDWORD lpNumCodes, LPDWORD lpCodes) PURE;
 /*38*/    STDMETHOD(GetGDISurface)(THIS_ struct IDirectDrawSurface7 **surface) PURE;
 /*3c*/    STDMETHOD(GetMonitorFrequency)(THIS_ LPDWORD lpdwFrequency) PURE;
@@ -1773,7 +1783,7 @@ DECLARE_INTERFACE_(IDirectDraw7,IUnknown)
 /*54*/    STDMETHOD(SetDisplayMode)(THIS_ DWORD dwWidth, DWORD dwHeight, DWORD dwBPP, DWORD dwRefreshRate, DWORD dwFlags) PURE;
 /*58*/    STDMETHOD(WaitForVerticalBlank)(THIS_ DWORD dwFlags, HANDLE hEvent) PURE;
           /* added in v2 */
-/*5c*/    STDMETHOD(GetAvailableVidMem)(THIS_ LPDDSCAPS2 lpDDCaps, LPDWORD lpdwTotal, LPDWORD lpdwFree) PURE;
+/*5c*/    STDMETHOD(GetAvailableVidMem)(THIS_ DDSCAPS2 *caps, DWORD *total, DWORD *free) PURE;
           /* added in v4 */
 /*60*/    STDMETHOD(GetSurfaceFromDC)(THIS_ HDC dc, struct IDirectDrawSurface7 **surface) PURE;
 /*64*/    STDMETHOD(RestoreAllSurfaces)(THIS) PURE;
@@ -1884,22 +1894,22 @@ DECLARE_INTERFACE_(IDirectDrawSurface,IUnknown)
 /*2c*/    STDMETHOD(Flip)(THIS_ IDirectDrawSurface *dst_surface, DWORD flags) PURE;
 /*30*/    STDMETHOD(GetAttachedSurface)(THIS_ DDSCAPS *caps, IDirectDrawSurface **attachment) PURE;
 /*34*/    STDMETHOD(GetBltStatus)(THIS_ DWORD dwFlags) PURE;
-/*38*/    STDMETHOD(GetCaps)(THIS_ LPDDSCAPS lpDDSCaps) PURE;
+/*38*/    STDMETHOD(GetCaps)(THIS_ DDSCAPS *caps) PURE;
 /*3c*/    STDMETHOD(GetClipper)(THIS_ IDirectDrawClipper **clipper) PURE;
-/*40*/    STDMETHOD(GetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+/*40*/    STDMETHOD(GetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
 /*44*/    STDMETHOD(GetDC)(THIS_ HDC *lphDC) PURE;
 /*48*/    STDMETHOD(GetFlipStatus)(THIS_ DWORD dwFlags) PURE;
 /*4c*/    STDMETHOD(GetOverlayPosition)(THIS_ LPLONG lplX, LPLONG lplY) PURE;
 /*50*/    STDMETHOD(GetPalette)(THIS_ IDirectDrawPalette **palette) PURE;
-/*54*/    STDMETHOD(GetPixelFormat)(THIS_ LPDDPIXELFORMAT lpDDPixelFormat) PURE;
-/*58*/    STDMETHOD(GetSurfaceDesc)(THIS_ LPDDSURFACEDESC lpDDSurfaceDesc) PURE;
+/*54*/    STDMETHOD(GetPixelFormat)(THIS_ DDPIXELFORMAT *format) PURE;
+/*58*/    STDMETHOD(GetSurfaceDesc)(THIS_ DDSURFACEDESC *surface_desc) PURE;
 /*5c*/    STDMETHOD(Initialize)(THIS_ IDirectDraw *ddraw, DDSURFACEDESC *surface_desc) PURE;
 /*60*/    STDMETHOD(IsLost)(THIS) PURE;
-/*64*/    STDMETHOD(Lock)(THIS_ LPRECT lpDestRect, LPDDSURFACEDESC lpDDSurfaceDesc, DWORD dwFlags, HANDLE hEvent) PURE;
+/*64*/    STDMETHOD(Lock)(THIS_ RECT *rect, DDSURFACEDESC *surface_desc, DWORD flags, HANDLE event) PURE;
 /*68*/    STDMETHOD(ReleaseDC)(THIS_ HDC hDC) PURE;
 /*6c*/    STDMETHOD(Restore)(THIS) PURE;
 /*70*/    STDMETHOD(SetClipper)(THIS_ IDirectDrawClipper *clipper) PURE;
-/*74*/    STDMETHOD(SetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+/*74*/    STDMETHOD(SetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
 /*78*/    STDMETHOD(SetOverlayPosition)(THIS_ LONG lX, LONG lY) PURE;
 /*7c*/    STDMETHOD(SetPalette)(THIS_ IDirectDrawPalette *palette) PURE;
 /*80*/    STDMETHOD(Unlock)(THIS_ LPVOID lpSurfaceData) PURE;
@@ -2018,22 +2028,22 @@ DECLARE_INTERFACE_(IDirectDrawSurface2,IUnknown)
     STDMETHOD(Flip)(THIS_ IDirectDrawSurface2 *dst_surface, DWORD flags) PURE;
     STDMETHOD(GetAttachedSurface)(THIS_ DDSCAPS *caps, IDirectDrawSurface2 **attachment) PURE;
     STDMETHOD(GetBltStatus)(THIS_ DWORD dwFlags) PURE;
-    STDMETHOD(GetCaps)(THIS_ LPDDSCAPS lpDDSCaps) PURE;
+    STDMETHOD(GetCaps)(THIS_ DDSCAPS *caps) PURE;
     STDMETHOD(GetClipper)(THIS_ IDirectDrawClipper **clipper) PURE;
-    STDMETHOD(GetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+    STDMETHOD(GetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
     STDMETHOD(GetDC)(THIS_ HDC *lphDC) PURE;
     STDMETHOD(GetFlipStatus)(THIS_ DWORD dwFlags) PURE;
     STDMETHOD(GetOverlayPosition)(THIS_ LPLONG lplX, LPLONG lplY) PURE;
     STDMETHOD(GetPalette)(THIS_ IDirectDrawPalette **palette) PURE;
-    STDMETHOD(GetPixelFormat)(THIS_ LPDDPIXELFORMAT lpDDPixelFormat) PURE;
-    STDMETHOD(GetSurfaceDesc)(THIS_ LPDDSURFACEDESC lpDDSurfaceDesc) PURE;
+    STDMETHOD(GetPixelFormat)(THIS_ DDPIXELFORMAT *format) PURE;
+    STDMETHOD(GetSurfaceDesc)(THIS_ DDSURFACEDESC *surface_desc) PURE;
     STDMETHOD(Initialize)(THIS_ IDirectDraw *ddraw, DDSURFACEDESC *surface_desc) PURE;
     STDMETHOD(IsLost)(THIS) PURE;
-    STDMETHOD(Lock)(THIS_ LPRECT lpDestRect, LPDDSURFACEDESC lpDDSurfaceDesc, DWORD dwFlags, HANDLE hEvent) PURE;
+    STDMETHOD(Lock)(THIS_ RECT *rect, DDSURFACEDESC *surface_desc, DWORD flags, HANDLE event) PURE;
     STDMETHOD(ReleaseDC)(THIS_ HDC hDC) PURE;
     STDMETHOD(Restore)(THIS) PURE;
     STDMETHOD(SetClipper)(THIS_ IDirectDrawClipper *clipper) PURE;
-    STDMETHOD(SetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+    STDMETHOD(SetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
     STDMETHOD(SetOverlayPosition)(THIS_ LONG lX, LONG lY) PURE;
     STDMETHOD(SetPalette)(THIS_ IDirectDrawPalette *palette) PURE;
     STDMETHOD(Unlock)(THIS_ LPVOID lpSurfaceData) PURE;
@@ -2164,22 +2174,22 @@ DECLARE_INTERFACE_(IDirectDrawSurface3,IUnknown)
     STDMETHOD(Flip)(THIS_ IDirectDrawSurface3 *dst_surface, DWORD flags) PURE;
     STDMETHOD(GetAttachedSurface)(THIS_ DDSCAPS *caps, IDirectDrawSurface3 **attachment) PURE;
     STDMETHOD(GetBltStatus)(THIS_ DWORD dwFlags) PURE;
-    STDMETHOD(GetCaps)(THIS_ LPDDSCAPS lpDDSCaps) PURE;
+    STDMETHOD(GetCaps)(THIS_ DDSCAPS *caps) PURE;
     STDMETHOD(GetClipper)(THIS_ IDirectDrawClipper **clipper) PURE;
-    STDMETHOD(GetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+    STDMETHOD(GetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
     STDMETHOD(GetDC)(THIS_ HDC *lphDC) PURE;
     STDMETHOD(GetFlipStatus)(THIS_ DWORD dwFlags) PURE;
     STDMETHOD(GetOverlayPosition)(THIS_ LPLONG lplX, LPLONG lplY) PURE;
     STDMETHOD(GetPalette)(THIS_ IDirectDrawPalette **palette) PURE;
-    STDMETHOD(GetPixelFormat)(THIS_ LPDDPIXELFORMAT lpDDPixelFormat) PURE;
-    STDMETHOD(GetSurfaceDesc)(THIS_ LPDDSURFACEDESC lpDDSurfaceDesc) PURE;
+    STDMETHOD(GetPixelFormat)(THIS_ DDPIXELFORMAT *format) PURE;
+    STDMETHOD(GetSurfaceDesc)(THIS_ DDSURFACEDESC *surface_desc) PURE;
     STDMETHOD(Initialize)(THIS_ IDirectDraw *ddraw, DDSURFACEDESC *surface_desc) PURE;
     STDMETHOD(IsLost)(THIS) PURE;
-    STDMETHOD(Lock)(THIS_ LPRECT lpDestRect, LPDDSURFACEDESC lpDDSurfaceDesc, DWORD dwFlags, HANDLE hEvent) PURE;
+    STDMETHOD(Lock)(THIS_ RECT *rect, DDSURFACEDESC *surface_desc, DWORD flags, HANDLE event) PURE;
     STDMETHOD(ReleaseDC)(THIS_ HDC hDC) PURE;
     STDMETHOD(Restore)(THIS) PURE;
     STDMETHOD(SetClipper)(THIS_ IDirectDrawClipper *clipper) PURE;
-    STDMETHOD(SetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+    STDMETHOD(SetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
     STDMETHOD(SetOverlayPosition)(THIS_ LONG lX, LONG lY) PURE;
     STDMETHOD(SetPalette)(THIS_ IDirectDrawPalette *palette) PURE;
     STDMETHOD(Unlock)(THIS_ LPVOID lpSurfaceData) PURE;
@@ -2192,7 +2202,7 @@ DECLARE_INTERFACE_(IDirectDrawSurface3,IUnknown)
     STDMETHOD(PageLock)(THIS_ DWORD dwFlags) PURE;
     STDMETHOD(PageUnlock)(THIS_ DWORD dwFlags) PURE;
     /* added in v3 */
-    STDMETHOD(SetSurfaceDesc)(THIS_ LPDDSURFACEDESC lpDDSD, DWORD dwFlags) PURE;
+    STDMETHOD(SetSurfaceDesc)(THIS_ DDSURFACEDESC *surface_desc, DWORD flags) PURE;
 };
 #undef INTERFACE
 
@@ -2315,22 +2325,22 @@ DECLARE_INTERFACE_(IDirectDrawSurface4,IUnknown)
     STDMETHOD(Flip)(THIS_ IDirectDrawSurface4 *dst_surface, DWORD flags) PURE;
     STDMETHOD(GetAttachedSurface)(THIS_ DDSCAPS2 *caps, IDirectDrawSurface4 **attachment) PURE;
     STDMETHOD(GetBltStatus)(THIS_ DWORD dwFlags) PURE;
-    STDMETHOD(GetCaps)(THIS_ LPDDSCAPS2 lpDDSCaps) PURE;
+    STDMETHOD(GetCaps)(THIS_ DDSCAPS2 *caps) PURE;
     STDMETHOD(GetClipper)(THIS_ IDirectDrawClipper **clipper) PURE;
-    STDMETHOD(GetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+    STDMETHOD(GetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
     STDMETHOD(GetDC)(THIS_ HDC *lphDC) PURE;
     STDMETHOD(GetFlipStatus)(THIS_ DWORD dwFlags) PURE;
     STDMETHOD(GetOverlayPosition)(THIS_ LPLONG lplX, LPLONG lplY) PURE;
     STDMETHOD(GetPalette)(THIS_ IDirectDrawPalette **palette) PURE;
-    STDMETHOD(GetPixelFormat)(THIS_ LPDDPIXELFORMAT lpDDPixelFormat) PURE;
-    STDMETHOD(GetSurfaceDesc)(THIS_ LPDDSURFACEDESC2 lpDDSurfaceDesc) PURE;
+    STDMETHOD(GetPixelFormat)(THIS_ DDPIXELFORMAT *format) PURE;
+    STDMETHOD(GetSurfaceDesc)(THIS_ DDSURFACEDESC2 *surface_desc) PURE;
     STDMETHOD(Initialize)(THIS_ IDirectDraw *ddraw, DDSURFACEDESC2 *surface_desc) PURE;
     STDMETHOD(IsLost)(THIS) PURE;
-    STDMETHOD(Lock)(THIS_ LPRECT lpDestRect, LPDDSURFACEDESC2 lpDDSurfaceDesc, DWORD dwFlags, HANDLE hEvent) PURE;
+    STDMETHOD(Lock)(THIS_ RECT *rect, DDSURFACEDESC2 *surface_desc, DWORD flags, HANDLE event) PURE;
     STDMETHOD(ReleaseDC)(THIS_ HDC hDC) PURE;
     STDMETHOD(Restore)(THIS) PURE;
     STDMETHOD(SetClipper)(THIS_ IDirectDrawClipper *clipper) PURE;
-    STDMETHOD(SetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+    STDMETHOD(SetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
     STDMETHOD(SetOverlayPosition)(THIS_ LONG lX, LONG lY) PURE;
     STDMETHOD(SetPalette)(THIS_ IDirectDrawPalette *palette) PURE;
     STDMETHOD(Unlock)(THIS_ LPRECT lpSurfaceData) PURE;
@@ -2343,7 +2353,7 @@ DECLARE_INTERFACE_(IDirectDrawSurface4,IUnknown)
     STDMETHOD(PageLock)(THIS_ DWORD dwFlags) PURE;
     STDMETHOD(PageUnlock)(THIS_ DWORD dwFlags) PURE;
     /* added in v3 */
-    STDMETHOD(SetSurfaceDesc)(THIS_ LPDDSURFACEDESC2 lpDDSD, DWORD dwFlags) PURE;
+    STDMETHOD(SetSurfaceDesc)(THIS_ DDSURFACEDESC2 *surface_desc, DWORD flags) PURE;
     /* added in v4 */
     STDMETHOD(SetPrivateData)(THIS_ REFGUID tag, LPVOID pData, DWORD cbSize, DWORD dwFlags) PURE;
     STDMETHOD(GetPrivateData)(THIS_ REFGUID tag, LPVOID pBuffer, LPDWORD pcbBufferSize) PURE;
@@ -2482,22 +2492,22 @@ DECLARE_INTERFACE_(IDirectDrawSurface7,IUnknown)
     STDMETHOD(Flip)(THIS_ IDirectDrawSurface7 *dst_surface, DWORD flags) PURE;
     STDMETHOD(GetAttachedSurface)(THIS_ DDSCAPS2 *caps, IDirectDrawSurface7 **attachment) PURE;
     STDMETHOD(GetBltStatus)(THIS_ DWORD dwFlags) PURE;
-    STDMETHOD(GetCaps)(THIS_ LPDDSCAPS2 lpDDSCaps) PURE;
+    STDMETHOD(GetCaps)(THIS_ DDSCAPS2 *caps) PURE;
     STDMETHOD(GetClipper)(THIS_ IDirectDrawClipper **clipper) PURE;
-    STDMETHOD(GetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+    STDMETHOD(GetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
     STDMETHOD(GetDC)(THIS_ HDC *lphDC) PURE;
     STDMETHOD(GetFlipStatus)(THIS_ DWORD dwFlags) PURE;
     STDMETHOD(GetOverlayPosition)(THIS_ LPLONG lplX, LPLONG lplY) PURE;
     STDMETHOD(GetPalette)(THIS_ IDirectDrawPalette **palette) PURE;
-    STDMETHOD(GetPixelFormat)(THIS_ LPDDPIXELFORMAT lpDDPixelFormat) PURE;
-    STDMETHOD(GetSurfaceDesc)(THIS_ LPDDSURFACEDESC2 lpDDSurfaceDesc) PURE;
+    STDMETHOD(GetPixelFormat)(THIS_ DDPIXELFORMAT *format) PURE;
+    STDMETHOD(GetSurfaceDesc)(THIS_ DDSURFACEDESC2 *surface_desc) PURE;
     STDMETHOD(Initialize)(THIS_ IDirectDraw *ddraw, DDSURFACEDESC2 *surface_desc) PURE;
     STDMETHOD(IsLost)(THIS) PURE;
-    STDMETHOD(Lock)(THIS_ LPRECT lpDestRect, LPDDSURFACEDESC2 lpDDSurfaceDesc, DWORD dwFlags, HANDLE hEvent) PURE;
+    STDMETHOD(Lock)(THIS_ RECT *rect, DDSURFACEDESC2 *surface_desc, DWORD flags, HANDLE event) PURE;
     STDMETHOD(ReleaseDC)(THIS_ HDC hDC) PURE;
     STDMETHOD(Restore)(THIS) PURE;
     STDMETHOD(SetClipper)(THIS_ IDirectDrawClipper *clipper) PURE;
-    STDMETHOD(SetColorKey)(THIS_ DWORD dwFlags, LPDDCOLORKEY lpDDColorKey) PURE;
+    STDMETHOD(SetColorKey)(THIS_ DWORD flags, DDCOLORKEY *color_key) PURE;
     STDMETHOD(SetOverlayPosition)(THIS_ LONG lX, LONG lY) PURE;
     STDMETHOD(SetPalette)(THIS_ IDirectDrawPalette *palette) PURE;
     STDMETHOD(Unlock)(THIS_ LPRECT lpSurfaceData) PURE;
@@ -2510,7 +2520,7 @@ DECLARE_INTERFACE_(IDirectDrawSurface7,IUnknown)
     STDMETHOD(PageLock)(THIS_ DWORD dwFlags) PURE;
     STDMETHOD(PageUnlock)(THIS_ DWORD dwFlags) PURE;
     /* added in v3 */
-    STDMETHOD(SetSurfaceDesc)(THIS_ LPDDSURFACEDESC2 lpDDSD, DWORD dwFlags) PURE;
+    STDMETHOD(SetSurfaceDesc)(THIS_ DDSURFACEDESC2 *surface_desc, DWORD flags) PURE;
     /* added in v4 */
     STDMETHOD(SetPrivateData)(THIS_ REFGUID tag, LPVOID pData, DWORD cbSize, DWORD dwFlags) PURE;
     STDMETHOD(GetPrivateData)(THIS_ REFGUID tag, LPVOID pBuffer, LPDWORD pcbBufferSize) PURE;

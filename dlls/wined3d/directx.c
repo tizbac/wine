@@ -105,6 +105,7 @@ static const struct wined3d_extension_map gl_extension_map[] =
     {"GL_ARB_geometry_shader4",             ARB_GEOMETRY_SHADER4          },
     {"GL_ARB_half_float_pixel",             ARB_HALF_FLOAT_PIXEL          },
     {"GL_ARB_half_float_vertex",            ARB_HALF_FLOAT_VERTEX         },
+    {"GL_ARB_instanced_arrays",             ARB_INSTANCED_ARRAYS,         },
     {"GL_ARB_map_buffer_alignment",         ARB_MAP_BUFFER_ALIGNMENT      },
     {"GL_ARB_map_buffer_range",             ARB_MAP_BUFFER_RANGE          },
     {"GL_ARB_multisample",                  ARB_MULTISAMPLE               }, /* needs GLX_ARB_MULTISAMPLE as well */
@@ -5461,6 +5462,7 @@ static BOOL InitAdapters(struct wined3d *wined3d)
 #define USE_GL_FUNC(f) gl_info->gl_ops.gl.p_##f = (void *)GetProcAddress(mod_gl, #f);
         ALL_WGL_FUNCS
 #undef USE_GL_FUNC
+        gl_info->gl_ops.wgl.p_wglSwapBuffers = (void *)GetProcAddress(mod_gl, "wglSwapBuffers");
     }
 #else
     /* To bypass the opengl32 thunks retrieve functions from the WGL driver instead of opengl32 */
@@ -5469,6 +5471,7 @@ static BOOL InitAdapters(struct wined3d *wined3d)
         const struct opengl_funcs *wgl_driver = __wine_get_wgl_driver( hdc, WINE_WGL_DRIVER_VERSION );
         ReleaseDC( 0, hdc );
         if (!wgl_driver || wgl_driver == (void *)-1) goto nogl_adapter;
+        gl_info->gl_ops.wgl = wgl_driver->wgl;
         gl_info->gl_ops.gl = wgl_driver->gl;
     }
 #endif

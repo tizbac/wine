@@ -977,7 +977,6 @@ static BOOL get_path_entry( union sysparam_all_entry *entry, UINT int_param, voi
 
         if (load_entry( &entry->hdr, buffer, sizeof(buffer) ))
             lstrcpynW( entry->path.path, buffer, MAX_PATH );
-        HeapFree( GetProcessHeap(), 0, buffer );
     }
     lstrcpynW( ptr_param, entry->path.path, int_param );
     return TRUE;
@@ -996,7 +995,6 @@ static BOOL set_path_entry( union sysparam_all_entry *entry, UINT int_param, voi
         strcpyW( entry->path.path, buffer );
         entry->hdr.loaded = TRUE;
     }
-    HeapFree( GetProcessHeap(), 0, buffer );
     return ret;
 }
 
@@ -1125,7 +1123,7 @@ static BOOL set_entry( void *ptr, UINT int_param, void *ptr_param, UINT flags )
 
 #define BINARY_ENTRY(name,data) \
     struct sysparam_binary_entry entry_##name = { { get_binary_entry, set_binary_entry, init_binary_entry, \
-                                                    name ##_VALNAME }, &(data), sizeof(data) }
+                                                    name ##_VALNAME }, data, sizeof(data) }
 
 #define PATH_ENTRY(name) \
     struct sysparam_binary_entry entry_##name = { { get_path_entry, set_path_entry, init_path_entry, \
@@ -1293,6 +1291,7 @@ static union sysparam_all_entry * const default_entries[] =
     (union sysparam_all_entry *)&entry_CAPTIONHEIGHT,
     (union sysparam_all_entry *)&entry_CAPTIONWIDTH,
     (union sysparam_all_entry *)&entry_CARETWIDTH,
+    (union sysparam_all_entry *)&entry_DESKWALLPAPER,
     (union sysparam_all_entry *)&entry_DOUBLECLICKTIME,
     (union sysparam_all_entry *)&entry_DOUBLECLKHEIGHT,
     (union sysparam_all_entry *)&entry_DOUBLECLKWIDTH,
@@ -1372,6 +1371,23 @@ void SYSPARAMS_Init(void)
         for (i = 0; i < sizeof(default_entries)/sizeof(default_entries[0]); i++)
             default_entries[i]->hdr.init( default_entries[i] );
     }
+}
+
+static BOOL update_desktop_wallpaper(void)
+{
+    DWORD pid;
+
+    if (GetWindowThreadProcessId( GetDesktopWindow(), &pid ) && pid == GetCurrentProcessId())
+    {
+        WCHAR wallpaper[MAX_PATH], pattern[256];
+
+        entry_DESKWALLPAPER.hdr.loaded = entry_DESKPATTERN.hdr.loaded = FALSE;
+        if (get_entry( &entry_DESKWALLPAPER, MAX_PATH, wallpaper ) &&
+            get_entry( &entry_DESKPATTERN, 256, pattern ))
+            update_wallpaper( wallpaper, pattern );
+    }
+    else SendMessageW( GetDesktopWindow(), WM_SETTINGCHANGE, SPI_SETDESKWALLPAPER, 0 );
+    return TRUE;
 }
 
 /***********************************************************************
@@ -1484,14 +1500,12 @@ BOOL WINAPI SystemParametersInfoW( UINT uiAction, UINT uiParam,
         ret = set_entry( &entry_GRIDGRANULARITY, uiParam, pvParam, fWinIni );
         break;
     case SPI_SETDESKWALLPAPER:
-        ret = set_entry( &entry_DESKWALLPAPER, uiParam, pvParam, fWinIni );
+        if (!pvParam || set_entry( &entry_DESKWALLPAPER, uiParam, pvParam, fWinIni ))
+            ret = update_desktop_wallpaper();
         break;
     case SPI_SETDESKPATTERN:
         if (!pvParam || set_entry( &entry_DESKPATTERN, uiParam, pvParam, fWinIni ))
-        {
-            WCHAR buf[256];
-            ret = get_entry( &entry_DESKPATTERN, 256, buf ) && DESKTOP_SetPattern( buf );
-        }
+            ret = update_desktop_wallpaper();
         break;
     case SPI_GETKEYBOARDDELAY:
         ret = get_entry( &entry_KEYBOARDDELAY, uiParam, pvParam );

@@ -256,6 +256,30 @@ static inline void do_rop_codes_line_rev_1(BYTE *dst, int dst_x, const BYTE *src
     }
 }
 
+static inline void memset_32( DWORD *start, DWORD val, DWORD size )
+{
+#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
+    DWORD dummy;
+    __asm__ __volatile__( "cld; rep; stosl"
+                          : "=c" (dummy), "=D" (dummy)
+                          : "a" (val), "0" (size), "1" (start) );
+#else
+    while (size--) *start++ = val;
+#endif
+}
+
+static inline void memset_16( WORD *start, WORD val, DWORD size )
+{
+#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
+    DWORD dummy;
+    __asm__ __volatile__( "cld; rep; stosw"
+                          : "=c" (dummy), "=D" (dummy)
+                          : "a" (val), "0" (size), "1" (start) );
+#else
+    while (size--) *start++ = val;
+#endif
+}
+
 static void solid_rects_32(const dib_info *dib, int num, const RECT *rc, DWORD and, DWORD xor)
 {
     DWORD *ptr, *start;
@@ -263,10 +287,16 @@ static void solid_rects_32(const dib_info *dib, int num, const RECT *rc, DWORD a
 
     for(i = 0; i < num; i++, rc++)
     {
+        assert( !is_rect_empty( rc ));
+
         start = get_pixel_ptr_32(dib, rc->left, rc->top);
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 4)
-            for(x = rc->left, ptr = start; x < rc->right; x++)
-                do_rop_32(ptr++, and, xor);
+        if (and)
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 4)
+                for(x = rc->left, ptr = start; x < rc->right; x++)
+                    do_rop_32(ptr++, and, xor);
+        else
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 4)
+                memset_32( start, xor, rc->right - rc->left );
     }
 }
 
@@ -289,7 +319,7 @@ static void solid_rects_24(const dib_info *dib, int num, const RECT *rc, DWORD a
         int left = dib->rect.left + rc->left;
         int right = dib->rect.left + rc->right;
 
-        if (left >= right) continue;
+        assert( !is_rect_empty( rc ));
 
         if ((left & ~3) == (right & ~3)) /* Special case for lines that start and end in the same DWORD triplet */
         {
@@ -304,7 +334,7 @@ static void solid_rects_24(const dib_info *dib, int num, const RECT *rc, DWORD a
                 }
             }
         }
-        else
+        else if (and)
         {
             start = get_pixel_ptr_24_dword(dib, rc->left, rc->top);
             for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 4)
@@ -351,6 +381,53 @@ static void solid_rects_24(const dib_info *dib, int num, const RECT *rc, DWORD a
                 }
             }
         }
+        else
+        {
+            start = get_pixel_ptr_24_dword(dib, rc->left, rc->top);
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 4)
+            {
+                ptr = start;
+
+                switch(left & 3)
+                {
+                case 1:
+                    do_rop_32(ptr++, 0x00ffffff, xor_masks[0] & 0xff000000);
+                    *ptr++ = xor_masks[1];
+                    *ptr++ = xor_masks[2];
+                    break;
+                case 2:
+                    do_rop_32(ptr++, 0x0000ffff, xor_masks[1] & 0xffff0000);
+                    *ptr++ = xor_masks[2];
+                    break;
+                case 3:
+                    do_rop_32(ptr++, 0x000000ff, xor_masks[2] & 0xffffff00);
+                    break;
+                }
+
+                for(x = (left + 3) & ~3; x < (right & ~3); x += 4)
+                {
+                    *ptr++ = xor_masks[0];
+                    *ptr++ = xor_masks[1];
+                    *ptr++ = xor_masks[2];
+                }
+
+                switch(right & 3)
+                {
+                case 1:
+                    do_rop_32(ptr, 0xff000000, xor_masks[0] & 0x00ffffff);
+                    break;
+                case 2:
+                    *ptr++ = xor_masks[0];
+                    do_rop_32(ptr, 0xffff0000, xor_masks[1] & 0x0000ffff);
+                    break;
+                case 3:
+                    *ptr++ = xor_masks[0];
+                    *ptr++ = xor_masks[1];
+                    do_rop_32(ptr, 0xffffff00, xor_masks[2] & 0x000000ff);
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -361,10 +438,16 @@ static void solid_rects_16(const dib_info *dib, int num, const RECT *rc, DWORD a
 
     for(i = 0; i < num; i++, rc++)
     {
+        assert( !is_rect_empty( rc ));
+
         start = get_pixel_ptr_16(dib, rc->left, rc->top);
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 2)
-            for(x = rc->left, ptr = start; x < rc->right; x++)
-                do_rop_16(ptr++, and, xor);
+        if (and)
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 2)
+                for(x = rc->left, ptr = start; x < rc->right; x++)
+                    do_rop_16(ptr++, and, xor);
+        else
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 2)
+                memset_16( start, xor, rc->right - rc->left );
     }
 }
 
@@ -375,10 +458,16 @@ static void solid_rects_8(const dib_info *dib, int num, const RECT *rc, DWORD an
 
     for(i = 0; i < num; i++, rc++)
     {
+        assert( !is_rect_empty( rc ));
+
         start = get_pixel_ptr_8(dib, rc->left, rc->top);
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
-            for(x = rc->left, ptr = start; x < rc->right; x++)
-                do_rop_8(ptr++, and, xor);
+        if (and)
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+                for(x = rc->left, ptr = start; x < rc->right; x++)
+                    do_rop_8(ptr++, and, xor);
+        else
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+                memset( start, xor, rc->right - rc->left );
     }
 }
 
@@ -394,19 +483,39 @@ static void solid_rects_4(const dib_info *dib, int num, const RECT *rc, DWORD an
         int left = dib->rect.left + rc->left;
         int right = dib->rect.left + rc->right;
 
-        if (left >= right) continue;
+        assert( !is_rect_empty( rc ));
+
         start = get_pixel_ptr_4(dib, rc->left, rc->top);
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+        if (and)
         {
-            ptr = start;
-            if(left & 1) /* upper nibble untouched */
-                do_rop_8(ptr++, byte_and | 0xf0, byte_xor & 0x0f);
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+            {
+                ptr = start;
+                if(left & 1) /* upper nibble untouched */
+                    do_rop_8(ptr++, byte_and | 0xf0, byte_xor & 0x0f);
 
-            for(x = (left + 1) & ~1; x < (right & ~1); x += 2)
-                do_rop_8(ptr++, byte_and, byte_xor);
+                for(x = (left + 1) & ~1; x < (right & ~1); x += 2)
+                    do_rop_8(ptr++, byte_and, byte_xor);
 
-            if(right & 1) /* lower nibble untouched */
-                do_rop_8(ptr, byte_and | 0x0f, byte_xor & 0xf0);
+                if(right & 1) /* lower nibble untouched */
+                    do_rop_8(ptr, byte_and | 0x0f, byte_xor & 0xf0);
+            }
+        }
+        else
+        {
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+            {
+                unsigned int byte_len = (right - ((left + 1) & ~1)) / 2;
+
+                ptr = start;
+                if(left & 1) /* upper nibble untouched */
+                    do_rop_8(ptr++, 0xf0, byte_xor & 0x0f);
+
+                memset( ptr, byte_xor, byte_len );
+
+                if(right & 1) /* lower nibble untouched */
+                    do_rop_8(ptr + byte_len, 0x0f, byte_xor & 0xf0);
+            }
         }
     }
 }
@@ -417,7 +526,6 @@ static void solid_rects_1(const dib_info *dib, int num, const RECT *rc, DWORD an
     int x, y, i;
     BYTE byte_and = (and & 1) ? 0xff : 0;
     BYTE byte_xor = (xor & 1) ? 0xff : 0;
-    BYTE start_and, start_xor, end_and, end_xor, mask;
     static const BYTE masks[8] = {0xff, 0x7f, 0x3f, 0x1f, 0x0f, 0x07, 0x03, 0x01};
 
     for(i = 0; i < num; i++, rc++)
@@ -425,44 +533,51 @@ static void solid_rects_1(const dib_info *dib, int num, const RECT *rc, DWORD an
         int left = dib->rect.left + rc->left;
         int right = dib->rect.left + rc->right;
 
-        if (left >= right) continue;
+        assert( !is_rect_empty( rc ));
 
         start = get_pixel_ptr_1(dib, rc->left, rc->top);
 
         if ((left & ~7) == (right & ~7)) /* Special case for lines that start and end in the same byte */
         {
-            mask = masks[left & 7] & ~masks[right & 7];
+            BYTE mask = masks[left & 7] & ~masks[right & 7];
 
-            start_and = byte_and | ~mask;
-            start_xor = byte_xor & mask;
             for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
             {
-                do_rop_8(start, start_and, start_xor);
+                do_rop_8(start, byte_and | ~mask, byte_xor & mask);
             }
         }
-        else
+        else if (and)
         {
-            mask = masks[left & 7];
-            start_and = byte_and | ~mask;
-            start_xor = byte_xor & mask;
-
-            mask = masks[right & 7];
-            /* This is inverted wrt to start mask, so end_and/xor assignments reflect this */
-            end_and = byte_and | mask;
-            end_xor = byte_xor & ~mask;
-
             for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
             {
                 ptr = start;
 
                 if(left & 7)
-                    do_rop_8(ptr++, start_and, start_xor);
+                    do_rop_8(ptr++, byte_and | ~masks[left & 7], byte_xor & masks[left & 7]);
 
                 for(x = (left + 7) & ~7; x < (right & ~7); x += 8)
                     do_rop_8(ptr++, byte_and, byte_xor);
 
                 if(right & 7)
-                    do_rop_8(ptr, end_and, end_xor);
+                    /* this is inverted wrt start mask */
+                    do_rop_8(ptr, byte_and | masks[right & 7], byte_xor & ~masks[right & 7]);
+            }
+        }
+        else
+        {
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+            {
+                unsigned int byte_len = (right - ((left + 7) & ~7)) / 8;
+
+                ptr = start;
+
+                if(left & 7)
+                    do_rop_8(ptr++, ~masks[left & 7], byte_xor & masks[left & 7]);
+
+                memset( ptr, byte_xor, byte_len );
+
+                if(right & 7)
+                    do_rop_8(ptr + byte_len, masks[right & 7], byte_xor & ~masks[right & 7]);
             }
         }
     }
@@ -721,43 +836,66 @@ static void pattern_rects_32(const dib_info *dib, int num, const RECT *rc, const
                              const dib_info *brush, const rop_mask_bits *bits)
 {
     DWORD *ptr, *start, *start_and, *and_ptr, *start_xor, *xor_ptr;
-    int x, y, i;
+    int x, y, i, len, brush_x;
     POINT offset;
 
     for(i = 0; i < num; i++, rc++)
     {
         offset = calc_brush_offset(rc, brush, origin);
-
         start = get_pixel_ptr_32(dib, rc->left, rc->top);
-        start_and = (DWORD*)bits->and + offset.y * brush->stride / 4;
         start_xor = (DWORD*)bits->xor + offset.y * brush->stride / 4;
 
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 4)
+        if (bits->and)
         {
-            and_ptr = start_and + offset.x;
-            xor_ptr = start_xor + offset.x;
+            start_and = (DWORD*)bits->and + offset.y * brush->stride / 4;
 
-            for(x = rc->left, ptr = start; x < rc->right; x++)
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 4)
             {
-                do_rop_32(ptr++, *and_ptr++, *xor_ptr++);
-                if(and_ptr == start_and + brush->width)
+                and_ptr = start_and + offset.x;
+                xor_ptr = start_xor + offset.x;
+
+                for(x = rc->left, ptr = start; x < rc->right; x++)
                 {
-                    and_ptr = start_and;
-                    xor_ptr = start_xor;
+                    do_rop_32(ptr++, *and_ptr++, *xor_ptr++);
+                    if(and_ptr == start_and + brush->width)
+                    {
+                        and_ptr = start_and;
+                        xor_ptr = start_xor;
+                    }
+                }
+
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_and = bits->and;
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
+                else
+                {
+                    start_and += brush->stride / 4;
+                    start_xor += brush->stride / 4;
                 }
             }
+        }
+        else
+        {
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 4)
+            {
+                for (x = rc->left, brush_x = offset.x; x < rc->right; x += len)
+                {
+                    len = min( rc->right - x, brush->width - brush_x );
+                    memcpy( start + x - rc->left, start_xor + brush_x, len * 4 );
+                    brush_x = 0;
+                }
 
-            offset.y++;
-            if(offset.y == brush->height)
-            {
-                start_and = bits->and;
-                start_xor = bits->xor;
-                offset.y = 0;
-            }
-            else
-            {
-                start_and += brush->stride / 4;
                 start_xor += brush->stride / 4;
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
             }
         }
     }
@@ -767,7 +905,7 @@ static void pattern_rects_24(const dib_info *dib, int num, const RECT *rc, const
                              const dib_info *brush, const rop_mask_bits *bits)
 {
     BYTE *ptr, *start, *start_and, *and_ptr, *start_xor, *xor_ptr;
-    int x, y, i;
+    int x, y, i, len, brush_x;
     POINT offset;
 
     for(i = 0; i < num; i++, rc++)
@@ -775,37 +913,60 @@ static void pattern_rects_24(const dib_info *dib, int num, const RECT *rc, const
         offset = calc_brush_offset(rc, brush, origin);
 
         start = get_pixel_ptr_24(dib, rc->left, rc->top);
-        start_and = (BYTE*)bits->and + offset.y * brush->stride;
         start_xor = (BYTE*)bits->xor + offset.y * brush->stride;
 
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+        if (bits->and)
         {
-            and_ptr = start_and + offset.x * 3;
-            xor_ptr = start_xor + offset.x * 3;
-
-            for(x = rc->left, ptr = start; x < rc->right; x++)
+            start_and = (BYTE*)bits->and + offset.y * brush->stride;
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
             {
-                do_rop_8(ptr++, *and_ptr++, *xor_ptr++);
-                do_rop_8(ptr++, *and_ptr++, *xor_ptr++);
-                do_rop_8(ptr++, *and_ptr++, *xor_ptr++);
-                if(and_ptr == start_and + brush->width * 3)
+                and_ptr = start_and + offset.x * 3;
+                xor_ptr = start_xor + offset.x * 3;
+
+                for(x = rc->left, ptr = start; x < rc->right; x++)
                 {
-                    and_ptr = start_and;
-                    xor_ptr = start_xor;
+                    do_rop_8(ptr++, *and_ptr++, *xor_ptr++);
+                    do_rop_8(ptr++, *and_ptr++, *xor_ptr++);
+                    do_rop_8(ptr++, *and_ptr++, *xor_ptr++);
+                    if(and_ptr == start_and + brush->width * 3)
+                    {
+                        and_ptr = start_and;
+                        xor_ptr = start_xor;
+                    }
+                }
+
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_and = bits->and;
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
+                else
+                {
+                    start_and += brush->stride;
+                    start_xor += brush->stride;
                 }
             }
+        }
+        else
+        {
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+            {
+                for (x = rc->left, brush_x = offset.x; x < rc->right; x += len)
+                {
+                    len = min( rc->right - x, brush->width - brush_x );
+                    memcpy( start + (x - rc->left) * 3, start_xor + brush_x * 3, len * 3 );
+                    brush_x = 0;
+                }
 
-            offset.y++;
-            if(offset.y == brush->height)
-            {
-                start_and = bits->and;
-                start_xor = bits->xor;
-                offset.y = 0;
-            }
-            else
-            {
-                start_and += brush->stride;
                 start_xor += brush->stride;
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
             }
         }
     }
@@ -815,7 +976,7 @@ static void pattern_rects_16(const dib_info *dib, int num, const RECT *rc, const
                              const dib_info *brush, const rop_mask_bits *bits)
 {
     WORD *ptr, *start, *start_and, *and_ptr, *start_xor, *xor_ptr;
-    int x, y, i;
+    int x, y, i, len, brush_x;
     POINT offset;
 
     for(i = 0; i < num; i++, rc++)
@@ -823,35 +984,58 @@ static void pattern_rects_16(const dib_info *dib, int num, const RECT *rc, const
         offset = calc_brush_offset(rc, brush, origin);
 
         start = get_pixel_ptr_16(dib, rc->left, rc->top);
-        start_and = (WORD*)bits->and + offset.y * brush->stride / 2;
         start_xor = (WORD*)bits->xor + offset.y * brush->stride / 2;
 
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 2)
+        if (bits->and)
         {
-            and_ptr = start_and + offset.x;
-            xor_ptr = start_xor + offset.x;
-
-            for(x = rc->left, ptr = start; x < rc->right; x++)
+            start_and = (WORD*)bits->and + offset.y * brush->stride / 2;
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 2)
             {
-                do_rop_16(ptr++, *and_ptr++, *xor_ptr++);
-                if(and_ptr == start_and + brush->width)
+                and_ptr = start_and + offset.x;
+                xor_ptr = start_xor + offset.x;
+
+                for(x = rc->left, ptr = start; x < rc->right; x++)
                 {
-                    and_ptr = start_and;
-                    xor_ptr = start_xor;
+                    do_rop_16(ptr++, *and_ptr++, *xor_ptr++);
+                    if(and_ptr == start_and + brush->width)
+                    {
+                        and_ptr = start_and;
+                        xor_ptr = start_xor;
+                    }
+                }
+
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_and = bits->and;
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
+                else
+                {
+                    start_and += brush->stride / 2;
+                    start_xor += brush->stride / 2;
                 }
             }
+        }
+        else
+        {
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride / 2)
+            {
+                for (x = rc->left, brush_x = offset.x; x < rc->right; x += len)
+                {
+                    len = min( rc->right - x, brush->width - brush_x );
+                    memcpy( start + x - rc->left, start_xor + brush_x, len * 2 );
+                    brush_x = 0;
+                }
 
-            offset.y++;
-            if(offset.y == brush->height)
-            {
-                start_and = bits->and;
-                start_xor = bits->xor;
-                offset.y = 0;
-            }
-            else
-            {
-                start_and += brush->stride / 2;
                 start_xor += brush->stride / 2;
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
             }
         }
     }
@@ -861,7 +1045,7 @@ static void pattern_rects_8(const dib_info *dib, int num, const RECT *rc, const 
                             const dib_info *brush, const rop_mask_bits *bits)
 {
     BYTE *ptr, *start, *start_and, *and_ptr, *start_xor, *xor_ptr;
-    int x, y, i;
+    int x, y, i, len, brush_x;
     POINT offset;
 
     for(i = 0; i < num; i++, rc++)
@@ -869,35 +1053,58 @@ static void pattern_rects_8(const dib_info *dib, int num, const RECT *rc, const 
         offset = calc_brush_offset(rc, brush, origin);
 
         start = get_pixel_ptr_8(dib, rc->left, rc->top);
-        start_and = (BYTE*)bits->and + offset.y * brush->stride;
         start_xor = (BYTE*)bits->xor + offset.y * brush->stride;
 
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+        if (bits->and)
         {
-            and_ptr = start_and + offset.x;
-            xor_ptr = start_xor + offset.x;
-
-            for(x = rc->left, ptr = start; x < rc->right; x++)
+            start_and = (BYTE*)bits->and + offset.y * brush->stride;
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
             {
-                do_rop_8(ptr++, *and_ptr++, *xor_ptr++);
-                if(and_ptr == start_and + brush->width)
+                and_ptr = start_and + offset.x;
+                xor_ptr = start_xor + offset.x;
+
+                for(x = rc->left, ptr = start; x < rc->right; x++)
                 {
-                    and_ptr = start_and;
-                    xor_ptr = start_xor;
+                    do_rop_8(ptr++, *and_ptr++, *xor_ptr++);
+                    if(and_ptr == start_and + brush->width)
+                    {
+                        and_ptr = start_and;
+                        xor_ptr = start_xor;
+                    }
+                }
+
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_and = bits->and;
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
+                else
+                {
+                    start_and += brush->stride;
+                    start_xor += brush->stride;
                 }
             }
+        }
+        else
+        {
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+            {
+                for (x = rc->left, brush_x = offset.x; x < rc->right; x += len)
+                {
+                    len = min( rc->right - x, brush->width - brush_x );
+                    memcpy( start + x - rc->left, start_xor + brush_x, len );
+                    brush_x = 0;
+                }
 
-            offset.y++;
-            if(offset.y == brush->height)
-            {
-                start_and = bits->and;
-                start_xor = bits->xor;
-                offset.y = 0;
-            }
-            else
-            {
-                start_and += brush->stride;
                 start_xor += brush->stride;
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
             }
         }
     }
@@ -917,69 +1124,119 @@ static void pattern_rects_4(const dib_info *dib, int num, const RECT *rc, const 
         right = dib->rect.left + rc->right;
 
         start = get_pixel_ptr_4(dib, rc->left, rc->top);
-        start_and = (BYTE*)bits->and + offset.y * brush->stride;
         start_xor = (BYTE*)bits->xor + offset.y * brush->stride;
 
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+        if (bits->and)
         {
-            INT brush_x = offset.x;
-            BYTE byte_and, byte_xor;
-
-            and_ptr = start_and + brush_x / 2;
-            xor_ptr = start_xor + brush_x / 2;
-
-            for(x = left, ptr = start; x < right; x++)
+            start_and = (BYTE*)bits->and + offset.y * brush->stride;
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
             {
-                /* FIXME: Two pixels at a time */
-                if(x & 1) /* lower dst nibble */
+                INT brush_x = offset.x;
+                BYTE byte_and, byte_xor;
+
+                and_ptr = start_and + brush_x / 2;
+                xor_ptr = start_xor + brush_x / 2;
+
+                for(x = left, ptr = start; x < right; x++)
                 {
-                    if(brush_x & 1) /* lower pat nibble */
+                    /* FIXME: Two pixels at a time */
+                    if(x & 1) /* lower dst nibble */
                     {
-                        byte_and = *and_ptr++ | 0xf0;
-                        byte_xor = *xor_ptr++ & 0x0f;
+                        if(brush_x & 1) /* lower pat nibble */
+                        {
+                            byte_and = *and_ptr++ | 0xf0;
+                            byte_xor = *xor_ptr++ & 0x0f;
+                        }
+                        else /* upper pat nibble */
+                        {
+                            byte_and = (*and_ptr >> 4) | 0xf0;
+                            byte_xor = (*xor_ptr >> 4) & 0x0f;
+                        }
                     }
-                    else /* upper pat nibble */
+                    else /* upper dst nibble */
                     {
-                        byte_and = (*and_ptr >> 4) | 0xf0;
-                        byte_xor = (*xor_ptr >> 4) & 0x0f;
+                        if(brush_x & 1) /* lower pat nibble */
+                        {
+                            byte_and = (*and_ptr++ << 4) | 0x0f;
+                            byte_xor = (*xor_ptr++ << 4) & 0xf0;
+                        }
+                        else /* upper pat nibble */
+                        {
+                            byte_and = *and_ptr | 0x0f;
+                            byte_xor = *xor_ptr & 0xf0;
+                        }
+                    }
+                    do_rop_8(ptr, byte_and, byte_xor);
+
+                    if(x & 1) ptr++;
+
+                    if(++brush_x == brush->width)
+                    {
+                        brush_x = 0;
+                        and_ptr = start_and;
+                        xor_ptr = start_xor;
                     }
                 }
-                else /* upper dst nibble */
+
+                offset.y++;
+                if(offset.y == brush->height)
                 {
-                    if(brush_x & 1) /* lower pat nibble */
-                    {
-                        byte_and = (*and_ptr++ << 4) | 0x0f;
-                        byte_xor = (*xor_ptr++ << 4) & 0xf0;
-                    }
-                    else /* upper pat nibble */
-                    {
-                        byte_and = *and_ptr | 0x0f;
-                        byte_xor = *xor_ptr & 0xf0;
-                    }
+                    start_and = bits->and;
+                    start_xor = bits->xor;
+                    offset.y = 0;
                 }
-                do_rop_8(ptr, byte_and, byte_xor);
-
-                if(x & 1) ptr++;
-
-                if(++brush_x == brush->width)
+                else
                 {
-                    brush_x = 0;
-                    and_ptr = start_and;
-                    xor_ptr = start_xor;
+                    start_and += brush->stride;
+                    start_xor += brush->stride;
                 }
             }
+        }
+        else
+        {
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+            {
+                INT brush_x = offset.x;
+                BYTE byte_xor;
 
-            offset.y++;
-            if(offset.y == brush->height)
-            {
-                start_and = bits->and;
-                start_xor = bits->xor;
-                offset.y = 0;
-            }
-            else
-            {
-                start_and += brush->stride;
+                xor_ptr = start_xor + brush_x / 2;
+
+                for(x = left, ptr = start; x < right; x++)
+                {
+                    /* FIXME: Two pixels at a time */
+                    if(x & 1) /* lower dst nibble */
+                    {
+                        if(brush_x & 1) /* lower pat nibble */
+                            byte_xor = *xor_ptr++ & 0x0f;
+                        else /* upper pat nibble */
+                            byte_xor = (*xor_ptr >> 4) & 0x0f;
+                        do_rop_8(ptr, 0xf0, byte_xor);
+                    }
+                    else /* upper dst nibble */
+                    {
+                        if(brush_x & 1) /* lower pat nibble */
+                            byte_xor = (*xor_ptr++ << 4) & 0xf0;
+                        else /* upper pat nibble */
+                            byte_xor = *xor_ptr & 0xf0;
+                        do_rop_8(ptr, 0x0f, byte_xor);
+                    }
+
+                    if(x & 1) ptr++;
+
+                    if(++brush_x == brush->width)
+                    {
+                        brush_x = 0;
+                        xor_ptr = start_xor;
+                    }
+                }
+
                 start_xor += brush->stride;
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
             }
         }
     }
@@ -999,53 +1256,90 @@ static void pattern_rects_1(const dib_info *dib, int num, const RECT *rc, const 
         right = dib->rect.left + rc->right;
 
         start = get_pixel_ptr_1(dib, rc->left, rc->top);
-        start_and = (BYTE*)bits->and + offset.y * brush->stride;
         start_xor = (BYTE*)bits->xor + offset.y * brush->stride;
 
-        for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+        if (bits->and)
         {
-            INT brush_x = offset.x;
-            BYTE byte_and, byte_xor;
-
-            and_ptr = start_and + brush_x / 8;
-            xor_ptr = start_xor + brush_x / 8;
-
-            for(x = left, ptr = start; x < right; x++)
+            start_and = (BYTE*)bits->and + offset.y * brush->stride;
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
             {
-                byte_and = (*and_ptr & pixel_masks_1[brush_x % 8]) ? 0xff : 0;
-                byte_and |= ~pixel_masks_1[x % 8];
-                byte_xor = (*xor_ptr & pixel_masks_1[brush_x % 8]) ? 0xff : 0;
-                byte_xor &= pixel_masks_1[x % 8];
+                INT brush_x = offset.x;
+                BYTE byte_and, byte_xor;
 
-                do_rop_8(ptr, byte_and, byte_xor);
+                and_ptr = start_and + brush_x / 8;
+                xor_ptr = start_xor + brush_x / 8;
 
-                if((x & 7) == 7) ptr++;
-
-                if((brush_x & 7) == 7)
+                for(x = left, ptr = start; x < right; x++)
                 {
-                    and_ptr++;
-                    xor_ptr++;
+                    byte_and = (*and_ptr & pixel_masks_1[brush_x % 8]) ? 0xff : 0;
+                    byte_and |= ~pixel_masks_1[x % 8];
+                    byte_xor = (*xor_ptr & pixel_masks_1[brush_x % 8]) ? 0xff : 0;
+                    byte_xor &= pixel_masks_1[x % 8];
+
+                    do_rop_8(ptr, byte_and, byte_xor);
+
+                    if((x & 7) == 7) ptr++;
+
+                    if((brush_x & 7) == 7)
+                    {
+                        and_ptr++;
+                        xor_ptr++;
+                    }
+
+                    if(++brush_x == brush->width)
+                    {
+                        brush_x = 0;
+                        and_ptr = start_and;
+                        xor_ptr = start_xor;
+                    }
                 }
 
-                if(++brush_x == brush->width)
+                offset.y++;
+                if(offset.y == brush->height)
                 {
-                    brush_x = 0;
-                    and_ptr = start_and;
-                    xor_ptr = start_xor;
+                    start_and = bits->and;
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
+                else
+                {
+                    start_and += brush->stride;
+                    start_xor += brush->stride;
                 }
             }
+        }
+        else
+        {
+            for(y = rc->top; y < rc->bottom; y++, start += dib->stride)
+            {
+                INT brush_x = offset.x;
 
-            offset.y++;
-            if(offset.y == brush->height)
-            {
-                start_and = bits->and;
-                start_xor = bits->xor;
-                offset.y = 0;
-            }
-            else
-            {
-                start_and += brush->stride;
+                xor_ptr = start_xor + brush_x / 8;
+
+                for(x = left, ptr = start; x < right; x++)
+                {
+                    BYTE byte_xor = (*xor_ptr & pixel_masks_1[brush_x % 8]) ? 0xff : 0;
+                    byte_xor &= pixel_masks_1[x % 8];
+
+                    do_rop_8(ptr, ~pixel_masks_1[x % 8], byte_xor);
+
+                    if((x & 7) == 7) ptr++;
+                    if((brush_x & 7) == 7) xor_ptr++;
+
+                    if(++brush_x == brush->width)
+                    {
+                        brush_x = 0;
+                        xor_ptr = start_xor;
+                    }
+                }
+
                 start_xor += brush->stride;
+                offset.y++;
+                if(offset.y == brush->height)
+                {
+                    start_xor = bits->xor;
+                    offset.y = 0;
+                }
             }
         }
     }
@@ -4226,7 +4520,7 @@ static BOOL gradient_rect_8888( const dib_info *dib, const RECT *rc, const TRIVE
         for (y = rc->top; y < rc->bottom; y++, ptr += dib->stride / 4)
         {
             DWORD val = gradient_rgb_8888( v, y - v[0].y, v[1].y - v[0].y );
-            for (x = 0; x < rc->right - rc->left; x++) ptr[x] = val;
+            memset_32( ptr, val, rc->right - rc->left );
         }
         break;
 
@@ -4276,7 +4570,7 @@ static BOOL gradient_rect_32( const dib_info *dib, const RECT *rc, const TRIVERT
         break;
 
     case GRADIENT_FILL_RECT_V:
-        for (y = rc->top; y < rc->bottom; y++)
+        for (y = rc->top; y < rc->bottom; y++, ptr += dib->stride / 4)
         {
             DWORD val = gradient_rgb_24( v, y - v[0].y, v[1].y - v[0].y );
             if (dib->red_len == 8 && dib->green_len == 8 && dib->blue_len == 8)
@@ -4288,8 +4582,7 @@ static BOOL gradient_rect_32( const dib_info *dib, const RECT *rc, const TRIVERT
                        put_field( val >> 8,  dib->green_shift, dib->green_len ) |
                        put_field( val,       dib->blue_shift,  dib->blue_len ));
 
-            for (x = 0; x < rc->right - rc->left; x++) ptr[x] = val;
-            ptr += dib->stride / 4;
+            memset_32( ptr, val, rc->right - rc->left );
         }
         break;
 
@@ -4859,7 +5152,7 @@ static void draw_glyph_null( const dib_info *dib, const RECT *rect, const dib_in
     return;
 }
 
-static DWORD blend_subpixel( BYTE r, BYTE g, BYTE b, DWORD text, DWORD alpha )
+static inline DWORD blend_subpixel( BYTE r, BYTE g, BYTE b, DWORD text, DWORD alpha )
 {
     return blend_color( r, text >> 16, (BYTE)(alpha >> 16) ) << 16 |
            blend_color( g, text >> 8,  (BYTE)(alpha >> 8) )  << 8  |
@@ -5404,19 +5697,37 @@ static void stretch_row_32(const dib_info *dst_dib, const POINT *dst_start,
     DWORD *src_ptr = get_pixel_ptr_32( src_dib, src_start->x, src_start->y );
     int err = params->err_start;
     int width;
-    struct rop_codes codes;
 
-    rop_codes_from_stretch_mode( mode, &codes );
-    for (width = params->length; width; width--)
+    if (mode == STRETCH_DELETESCANS || !keep_dst)
     {
-        do_rop_codes_32( dst_ptr, *src_ptr, &codes );
-        dst_ptr += params->dst_inc;
-        if (err > 0)
+        for (width = params->length; width; width--)
         {
-            src_ptr += params->src_inc;
-            err += params->err_add_1;
+            *dst_ptr = *src_ptr;
+            dst_ptr += params->dst_inc;
+            if (err > 0)
+            {
+                src_ptr += params->src_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
         }
-        else err += params->err_add_2;
+    }
+    else
+    {
+        struct rop_codes codes;
+
+        rop_codes_from_stretch_mode( mode, &codes );
+        for (width = params->length; width; width--)
+        {
+            do_rop_codes_32( dst_ptr, *src_ptr, &codes );
+            dst_ptr += params->dst_inc;
+            if (err > 0)
+            {
+                src_ptr += params->src_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
+        }
     }
 }
 
@@ -5429,21 +5740,41 @@ static void stretch_row_24(const dib_info *dst_dib, const POINT *dst_start,
     BYTE *src_ptr = get_pixel_ptr_24( src_dib, src_start->x, src_start->y );
     int err = params->err_start;
     int width;
-    struct rop_codes codes;
 
-    rop_codes_from_stretch_mode( mode, &codes );
-    for (width = params->length; width; width--)
+    if (mode == STRETCH_DELETESCANS || !keep_dst)
     {
-        do_rop_codes_8( dst_ptr,     *src_ptr,       &codes );
-        do_rop_codes_8( dst_ptr + 1, *(src_ptr + 1), &codes );
-        do_rop_codes_8( dst_ptr + 2, *(src_ptr + 2), &codes );
-        dst_ptr += 3 * params->dst_inc;
-        if (err > 0)
+        for (width = params->length; width; width--)
         {
-            src_ptr += 3 * params->src_inc;
-            err += params->err_add_1;
+            dst_ptr[0] = src_ptr[0];
+            dst_ptr[1] = src_ptr[1];
+            dst_ptr[2] = src_ptr[2];
+            dst_ptr += 3 * params->dst_inc;
+            if (err > 0)
+            {
+                src_ptr += 3 * params->src_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
         }
-        else err += params->err_add_2;
+    }
+    else
+    {
+        struct rop_codes codes;
+
+        rop_codes_from_stretch_mode( mode, &codes );
+        for (width = params->length; width; width--)
+        {
+            do_rop_codes_8( dst_ptr,     *src_ptr,       &codes );
+            do_rop_codes_8( dst_ptr + 1, *(src_ptr + 1), &codes );
+            do_rop_codes_8( dst_ptr + 2, *(src_ptr + 2), &codes );
+            dst_ptr += 3 * params->dst_inc;
+            if (err > 0)
+            {
+                src_ptr += 3 * params->src_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
+        }
     }
 }
 
@@ -5456,19 +5787,37 @@ static void stretch_row_16(const dib_info *dst_dib, const POINT *dst_start,
     WORD *src_ptr = get_pixel_ptr_16( src_dib, src_start->x, src_start->y );
     int err = params->err_start;
     int width;
-    struct rop_codes codes;
 
-    rop_codes_from_stretch_mode( mode, &codes );
-    for (width = params->length; width; width--)
+    if (mode == STRETCH_DELETESCANS || !keep_dst)
     {
-        do_rop_codes_16( dst_ptr, *src_ptr, &codes );
-        dst_ptr += params->dst_inc;
-        if (err > 0)
+        for (width = params->length; width; width--)
         {
-            src_ptr += params->src_inc;
-            err += params->err_add_1;
+            *dst_ptr = *src_ptr;
+            dst_ptr += params->dst_inc;
+            if (err > 0)
+            {
+                src_ptr += params->src_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
         }
-        else err += params->err_add_2;
+    }
+    else
+    {
+        struct rop_codes codes;
+
+        rop_codes_from_stretch_mode( mode, &codes );
+        for (width = params->length; width; width--)
+        {
+            do_rop_codes_16( dst_ptr, *src_ptr, &codes );
+            dst_ptr += params->dst_inc;
+            if (err > 0)
+            {
+                src_ptr += params->src_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
+        }
     }
 }
 
@@ -5481,19 +5830,37 @@ static void stretch_row_8(const dib_info *dst_dib, const POINT *dst_start,
     BYTE *src_ptr = get_pixel_ptr_8( src_dib, src_start->x, src_start->y );
     int err = params->err_start;
     int width;
-    struct rop_codes codes;
 
-    rop_codes_from_stretch_mode( mode, &codes );
-    for (width = params->length; width; width--)
+    if (mode == STRETCH_DELETESCANS || !keep_dst)
     {
-        do_rop_codes_8( dst_ptr, *src_ptr, &codes );
-        dst_ptr += params->dst_inc;
-        if (err > 0)
+        for (width = params->length; width; width--)
         {
-            src_ptr += params->src_inc;
-            err += params->err_add_1;
+            *dst_ptr = *src_ptr;
+            dst_ptr += params->dst_inc;
+            if (err > 0)
+            {
+                src_ptr += params->src_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
         }
-        else err += params->err_add_2;
+    }
+    else
+    {
+        struct rop_codes codes;
+
+        rop_codes_from_stretch_mode( mode, &codes );
+        for (width = params->length; width; width--)
+        {
+            do_rop_codes_8( dst_ptr, *src_ptr, &codes );
+            dst_ptr += params->dst_inc;
+            if (err > 0)
+            {
+                src_ptr += params->src_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
+        }
     }
 }
 
@@ -5509,6 +5876,7 @@ static void stretch_row_4(const dib_info *dst_dib, const POINT *dst_start,
     struct rop_codes codes;
     BYTE src_val;
 
+    if (!keep_dst) mode = STRETCH_DELETESCANS;
     rop_codes_from_stretch_mode( mode, &codes );
     for (width = params->length; width; width--)
     {
@@ -5544,6 +5912,7 @@ static void stretch_row_1(const dib_info *dst_dib, const POINT *dst_start,
     struct rop_codes codes;
     BYTE src_val;
 
+    if (!keep_dst) mode = STRETCH_DELETESCANS;
     rop_codes_from_stretch_mode( mode, &codes );
     for (width = params->length; width; width--)
     {
@@ -5583,24 +5952,42 @@ static void shrink_row_32(const dib_info *dst_dib, const POINT *dst_start,
     DWORD *src_ptr = get_pixel_ptr_32( src_dib, src_start->x, src_start->y );
     int err = params->err_start;
     int width;
-    struct rop_codes codes;
-    DWORD init_val = (mode == STRETCH_ANDSCANS) ? ~0u : 0u;
-    BOOL new_pix = TRUE;
 
-    rop_codes_from_stretch_mode( mode, &codes );
-    for (width = params->length; width; width--)
+    if (mode == STRETCH_DELETESCANS)
     {
-        if (new_pix && !keep_dst) *dst_ptr = init_val;
-        do_rop_codes_32( dst_ptr, *src_ptr, &codes );
-        new_pix = FALSE;
-        src_ptr += params->src_inc;
-        if (err > 0)
+        for (width = params->length; width; width--)
         {
-            dst_ptr += params->dst_inc;
-            new_pix = TRUE;
-            err += params->err_add_1;
+            *dst_ptr = *src_ptr;
+            src_ptr += params->src_inc;
+            if (err > 0)
+            {
+                dst_ptr += params->dst_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
         }
-        else err += params->err_add_2;
+    }
+    else
+    {
+        struct rop_codes codes;
+        DWORD init_val = (mode == STRETCH_ANDSCANS) ? ~0u : 0u;
+        BOOL new_pix = TRUE;
+
+        rop_codes_from_stretch_mode( mode, &codes );
+        for (width = params->length; width; width--)
+        {
+            if (new_pix && !keep_dst) *dst_ptr = init_val;
+            do_rop_codes_32( dst_ptr, *src_ptr, &codes );
+            new_pix = FALSE;
+            src_ptr += params->src_inc;
+            if (err > 0)
+            {
+                dst_ptr += params->dst_inc;
+                new_pix = TRUE;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
+        }
     }
 }
 
@@ -5613,26 +6000,46 @@ static void shrink_row_24(const dib_info *dst_dib, const POINT *dst_start,
     BYTE *src_ptr = get_pixel_ptr_24( src_dib, src_start->x, src_start->y );
     int err = params->err_start;
     int width;
-    struct rop_codes codes;
-    BYTE init_val = (mode == STRETCH_ANDSCANS) ? ~0u : 0u;
-    BOOL new_pix = TRUE;
 
-    rop_codes_from_stretch_mode( mode, &codes );
-    for (width = params->length; width; width--)
+    if (mode == STRETCH_DELETESCANS)
     {
-        if (new_pix && !keep_dst) memset( dst_ptr, init_val, 3 );
-        do_rop_codes_8( dst_ptr,      *src_ptr,      &codes );
-        do_rop_codes_8( dst_ptr + 1, *(src_ptr + 1), &codes );
-        do_rop_codes_8( dst_ptr + 2, *(src_ptr + 2), &codes );
-        new_pix = FALSE;
-        src_ptr += 3 * params->src_inc;
-        if (err > 0)
+        for (width = params->length; width; width--)
         {
-            dst_ptr += 3 * params->dst_inc;
-            new_pix = TRUE;
-            err += params->err_add_1;
+            dst_ptr[0] = src_ptr[0];
+            dst_ptr[1] = src_ptr[1];
+            dst_ptr[2] = src_ptr[2];
+            src_ptr += 3 * params->src_inc;
+            if (err > 0)
+            {
+                dst_ptr += 3 * params->dst_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
         }
-        else err += params->err_add_2;
+    }
+    else
+    {
+        struct rop_codes codes;
+        BYTE init_val = (mode == STRETCH_ANDSCANS) ? ~0u : 0u;
+        BOOL new_pix = TRUE;
+
+        rop_codes_from_stretch_mode( mode, &codes );
+        for (width = params->length; width; width--)
+        {
+            if (new_pix && !keep_dst) memset( dst_ptr, init_val, 3 );
+            do_rop_codes_8( dst_ptr,      *src_ptr,      &codes );
+            do_rop_codes_8( dst_ptr + 1, *(src_ptr + 1), &codes );
+            do_rop_codes_8( dst_ptr + 2, *(src_ptr + 2), &codes );
+            new_pix = FALSE;
+            src_ptr += 3 * params->src_inc;
+            if (err > 0)
+            {
+                dst_ptr += 3 * params->dst_inc;
+                new_pix = TRUE;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
+        }
     }
 }
 
@@ -5645,24 +6052,42 @@ static void shrink_row_16(const dib_info *dst_dib, const POINT *dst_start,
     WORD *src_ptr = get_pixel_ptr_16( src_dib, src_start->x, src_start->y );
     int err = params->err_start;
     int width;
-    struct rop_codes codes;
-    WORD init_val = (mode == STRETCH_ANDSCANS) ? ~0u : 0u;
-    BOOL new_pix = TRUE;
 
-    rop_codes_from_stretch_mode( mode, &codes );
-    for (width = params->length; width; width--)
+    if (mode == STRETCH_DELETESCANS)
     {
-        if (new_pix && !keep_dst) *dst_ptr = init_val;
-        do_rop_codes_16( dst_ptr, *src_ptr, &codes );
-        new_pix = FALSE;
-        src_ptr += params->src_inc;
-        if (err > 0)
+        for (width = params->length; width; width--)
         {
-            dst_ptr += params->dst_inc;
-            new_pix = TRUE;
-            err += params->err_add_1;
+            *dst_ptr = *src_ptr;
+            src_ptr += params->src_inc;
+            if (err > 0)
+            {
+                dst_ptr += params->dst_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
         }
-        else err += params->err_add_2;
+    }
+    else
+    {
+        struct rop_codes codes;
+        WORD init_val = (mode == STRETCH_ANDSCANS) ? ~0u : 0u;
+        BOOL new_pix = TRUE;
+
+        rop_codes_from_stretch_mode( mode, &codes );
+        for (width = params->length; width; width--)
+        {
+            if (new_pix && !keep_dst) *dst_ptr = init_val;
+            do_rop_codes_16( dst_ptr, *src_ptr, &codes );
+            new_pix = FALSE;
+            src_ptr += params->src_inc;
+            if (err > 0)
+            {
+                dst_ptr += params->dst_inc;
+                new_pix = TRUE;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
+        }
     }
 }
 
@@ -5675,24 +6100,42 @@ static void shrink_row_8(const dib_info *dst_dib, const POINT *dst_start,
     BYTE *src_ptr = get_pixel_ptr_8( src_dib, src_start->x, src_start->y );
     int err = params->err_start;
     int width;
-    struct rop_codes codes;
-    BYTE init_val = (mode == STRETCH_ANDSCANS) ? ~0u : 0u;
-    BOOL new_pix = TRUE;
 
-    rop_codes_from_stretch_mode( mode, &codes );
-    for (width = params->length; width; width--)
+    if (mode == STRETCH_DELETESCANS)
     {
-        if (new_pix && !keep_dst) *dst_ptr = init_val;
-        do_rop_codes_8( dst_ptr, *src_ptr, &codes );
-        new_pix = FALSE;
-        src_ptr += params->src_inc;
-        if (err > 0)
+        for (width = params->length; width; width--)
         {
-            dst_ptr += params->dst_inc;
-            new_pix = TRUE;
-            err += params->err_add_1;
+            *dst_ptr = *src_ptr;
+            src_ptr += params->src_inc;
+            if (err > 0)
+            {
+                dst_ptr += params->dst_inc;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
         }
-        else err += params->err_add_2;
+    }
+    else
+    {
+        struct rop_codes codes;
+        BYTE init_val = (mode == STRETCH_ANDSCANS) ? ~0u : 0u;
+        BOOL new_pix = TRUE;
+
+        rop_codes_from_stretch_mode( mode, &codes );
+        for (width = params->length; width; width--)
+        {
+            if (new_pix && !keep_dst) *dst_ptr = init_val;
+            do_rop_codes_8( dst_ptr, *src_ptr, &codes );
+            new_pix = FALSE;
+            src_ptr += params->src_inc;
+            if (err > 0)
+            {
+                dst_ptr += params->dst_inc;
+                new_pix = TRUE;
+                err += params->err_add_1;
+            }
+            else err += params->err_add_2;
+        }
     }
 }
 

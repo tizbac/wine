@@ -2145,6 +2145,15 @@ then
   AC_DEFINE(HAVE_SCHED_SETAFFINITY, 1, [Define to 1 if you have the `sched_setaffinity' function.])
 fi
 
+AC_CACHE_CHECK([for fallocate],wine_cv_have_fallocate,
+                AC_LINK_IFELSE([AC_LANG_PROGRAM(
+[[#define _GNU_SOURCE
+#include <fcntl.h>]], [[fallocate(-1, 0, 0, 0);]])],[wine_cv_have_fallocate=yes],[wine_cv_have_fallocate=no]))
+if test "$wine_cv_have_fallocate" = "yes"
+then
+  AC_DEFINE(HAVE_FALLOCATE, 1, [Define to 1 if you have the `fallocate' function.])
+fi
+
 dnl **** Check for types ****
 
 AC_C_INLINE
@@ -2298,7 +2307,19 @@ AC_CHECK_MEMBERS([struct option.name],,,
 #endif])
 
 dnl Check for stat.st_blocks and ns-resolved times
-AC_CHECK_MEMBERS([struct stat.st_blocks,struct stat.st_mtim,struct stat.st_ctim,struct stat.st_atim])
+AC_CHECK_MEMBERS([
+	struct stat.st_blocks,
+	struct stat.st_mtim,
+	struct stat.st_mtimespec,
+	struct stat.st_ctim,
+	struct stat.st_ctimespec,
+	struct stat.st_atim,
+	struct stat.st_atimespec,
+	struct stat.st_birthtime,
+	struct stat.st_birthtim,
+	struct stat.st_birthtimespec,
+	struct stat.__st_birthtime,
+	struct stat.__st_birthtim])
 
 dnl Check for sin6_scope_id
 AC_CHECK_MEMBERS([struct sockaddr_in6.sin6_scope_id],,,
@@ -2720,7 +2741,7 @@ WINE_CONFIG_DLL(glu32,,[implib])
 WINE_CONFIG_DLL(gphoto2.ds,,[po])
 WINE_CONFIG_DLL(gpkcsp)
 WINE_CONFIG_DLL(hal)
-WINE_CONFIG_DLL(hhctrl.ocx,,[po])
+WINE_CONFIG_DLL(hhctrl.ocx,,[implib,po],[htmlhelp])
 WINE_CONFIG_DLL(hid,,[implib])
 WINE_CONFIG_DLL(hlink,,[implib])
 WINE_CONFIG_TEST(dlls/hlink/tests)

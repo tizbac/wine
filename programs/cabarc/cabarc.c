@@ -454,6 +454,13 @@ static INT_PTR CDECL extract_notify( FDINOTIFICATIONTYPE fdint, PFDINOTIFICATION
         CloseHandle( (HANDLE)pfdin->hf );
         return 0;
 
+    case fdintNEXT_CABINET:
+        WINE_TRACE("Next cab: status %u, path '%s', file '%s'\n", pfdin->fdie, pfdin->psz3, pfdin->psz1);
+        return pfdin->fdie == FDIERROR_NONE ? 0 : -1;
+
+    case fdintENUMERATE:
+        return 0;
+
     default:
         WINE_FIXME( "Unexpected notification type %d.\n", fdint );
         return 0;
@@ -467,7 +474,11 @@ static int extract_cabinet( char *cab_dir )
     HFDI fdi = FDICreate( cab_alloc, cab_free, fdi_open, fdi_read,
                           fdi_write, fdi_close, fdi_lseek, cpuUNKNOWN, &erf );
 
-    if (!FDICopy( fdi, opt_cab_file, cab_dir, 0, extract_notify, NULL, NULL )) ret = GetLastError();
+    if (!FDICopy( fdi, opt_cab_file, cab_dir, 0, extract_notify, NULL, NULL ))
+    {
+        ret = GetLastError();
+        WINE_WARN("FDICopy() failed: code %u\n", ret);
+    }
     FDIDestroy( fdi );
     return ret;
 }
@@ -616,6 +627,7 @@ int wmain( int argc, WCHAR *argv[] )
 
     WCHAR *p, *command;
     char buffer[MAX_PATH];
+    char filename[MAX_PATH];
     char *cab_file, *file_part;
     int i;
 
@@ -684,15 +696,15 @@ int wmain( int argc, WCHAR *argv[] )
         WINE_ERR( "cannot get full name for %s\n", wine_dbgstr_a( cab_file ));
         return 1;
     }
-    file_part[-1] = 0;
-    cab_free( cab_file );
+    strcpy(filename, file_part);
+    file_part[0] = 0;
 
     /* map slash to backslash in all file arguments */
     for (i = 1; i < argc; i++)
         for (p = argv[i]; *p; p++)
             if (*p == '/') *p = '\\';
     opt_files = argv + 1;
-    opt_cab_file = file_part;
+    opt_cab_file = filename;
 
     switch (*command)
     {
@@ -713,6 +725,7 @@ int wmain( int argc, WCHAR *argv[] )
                 argv[--argc] = NULL;
             }
         }
+        WINE_TRACE("Extracting file(s) from cabinet %s\n", wine_dbgstr_a(cab_file));
         return extract_cabinet( buffer );
     default:
         usage();

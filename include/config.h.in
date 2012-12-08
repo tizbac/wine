@@ -98,6 +98,9 @@
 /* Define to 1 if you have the `epoll_create' function. */
 #undef HAVE_EPOLL_CREATE
 
+/* Define to 1 if you have the `fallocate' function. */
+#undef HAVE_FALLOCATE
+
 /* Define to 1 if you have the `ffs' function. */
 #undef HAVE_FFS
 
@@ -863,14 +866,38 @@
 /* Define to 1 if `st_atim' is a member of `struct stat'. */
 #undef HAVE_STRUCT_STAT_ST_ATIM
 
+/* Define to 1 if `st_atimespec' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT_ST_ATIMESPEC
+
+/* Define to 1 if `st_birthtim' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT_ST_BIRTHTIM
+
+/* Define to 1 if `st_birthtime' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT_ST_BIRTHTIME
+
+/* Define to 1 if `st_birthtimespec' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT_ST_BIRTHTIMESPEC
+
 /* Define to 1 if `st_blocks' is a member of `struct stat'. */
 #undef HAVE_STRUCT_STAT_ST_BLOCKS
 
 /* Define to 1 if `st_ctim' is a member of `struct stat'. */
 #undef HAVE_STRUCT_STAT_ST_CTIM
 
+/* Define to 1 if `st_ctimespec' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT_ST_CTIMESPEC
+
 /* Define to 1 if `st_mtim' is a member of `struct stat'. */
 #undef HAVE_STRUCT_STAT_ST_MTIM
+
+/* Define to 1 if `st_mtimespec' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT_ST_MTIMESPEC
+
+/* Define to 1 if `__st_birthtim' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT___ST_BIRTHTIM
+
+/* Define to 1 if `__st_birthtime' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT___ST_BIRTHTIME
 
 /* Define to 1 if `tcps_connattempt' is a member of `struct tcpstat'. */
 #undef HAVE_STRUCT_TCPSTAT_TCPS_CONNATTEMPT

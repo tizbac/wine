@@ -359,68 +359,67 @@ static void gdi_alpha_blend(GpGraphics *graphics, INT dst_x, INT dst_y, INT dst_
     }
 }
 
+static GpStatus get_clip_hrgn(GpGraphics *graphics, HRGN *hrgn)
+{
+    return GdipGetRegionHRgn(graphics->clip, graphics, hrgn);
+}
+
 /* Draw non-premultiplied ARGB data to the given graphics object */
-static GpStatus alpha_blend_pixels(GpGraphics *graphics, INT dst_x, INT dst_y,
+static GpStatus alpha_blend_bmp_pixels(GpGraphics *graphics, INT dst_x, INT dst_y,
     const BYTE *src, INT src_width, INT src_height, INT src_stride)
 {
-    if (graphics->image && graphics->image->type == ImageTypeBitmap)
-    {
-        GpBitmap *dst_bitmap = (GpBitmap*)graphics->image;
-        INT x, y;
+    GpBitmap *dst_bitmap = (GpBitmap*)graphics->image;
+    INT x, y;
 
-        for (x=0; x<src_width; x++)
+    for (x=0; x<src_width; x++)
+    {
+        for (y=0; y<src_height; y++)
         {
-            for (y=0; y<src_height; y++)
-            {
-                ARGB dst_color, src_color;
-                GdipBitmapGetPixel(dst_bitmap, x+dst_x, y+dst_y, &dst_color);
-                src_color = ((ARGB*)(src + src_stride * y))[x];
-                GdipBitmapSetPixel(dst_bitmap, x+dst_x, y+dst_y, color_over(dst_color, src_color));
-            }
+            ARGB dst_color, src_color;
+            GdipBitmapGetPixel(dst_bitmap, x+dst_x, y+dst_y, &dst_color);
+            src_color = ((ARGB*)(src + src_stride * y))[x];
+            GdipBitmapSetPixel(dst_bitmap, x+dst_x, y+dst_y, color_over(dst_color, src_color));
         }
-
-        return Ok;
     }
-    else if (graphics->image && graphics->image->type == ImageTypeMetafile)
-    {
-        ERR("This should not be used for metafiles; fix caller\n");
-        return NotImplemented;
-    }
-    else
-    {
-        HDC hdc;
-        HBITMAP hbitmap;
-        BITMAPINFOHEADER bih;
-        BYTE *temp_bits;
 
-        hdc = CreateCompatibleDC(0);
+    return Ok;
+}
 
-        bih.biSize = sizeof(BITMAPINFOHEADER);
-        bih.biWidth = src_width;
-        bih.biHeight = -src_height;
-        bih.biPlanes = 1;
-        bih.biBitCount = 32;
-        bih.biCompression = BI_RGB;
-        bih.biSizeImage = 0;
-        bih.biXPelsPerMeter = 0;
-        bih.biYPelsPerMeter = 0;
-        bih.biClrUsed = 0;
-        bih.biClrImportant = 0;
+static GpStatus alpha_blend_hdc_pixels(GpGraphics *graphics, INT dst_x, INT dst_y,
+    const BYTE *src, INT src_width, INT src_height, INT src_stride)
+{
+    HDC hdc;
+    HBITMAP hbitmap;
+    BITMAPINFOHEADER bih;
+    BYTE *temp_bits;
 
-        hbitmap = CreateDIBSection(hdc, (BITMAPINFO*)&bih, DIB_RGB_COLORS,
-            (void**)&temp_bits, NULL, 0);
+    hdc = CreateCompatibleDC(0);
 
-        convert_32bppARGB_to_32bppPARGB(src_width, src_height, temp_bits,
-            4 * src_width, src, src_stride);
+    bih.biSize = sizeof(BITMAPINFOHEADER);
+    bih.biWidth = src_width;
+    bih.biHeight = -src_height;
+    bih.biPlanes = 1;
+    bih.biBitCount = 32;
+    bih.biCompression = BI_RGB;
+    bih.biSizeImage = 0;
+    bih.biXPelsPerMeter = 0;
+    bih.biYPelsPerMeter = 0;
+    bih.biClrUsed = 0;
+    bih.biClrImportant = 0;
 
-        SelectObject(hdc, hbitmap);
-        gdi_alpha_blend(graphics, dst_x, dst_y, src_width, src_height,
-                        hdc, 0, 0, src_width, src_height);
-        DeleteDC(hdc);
-        DeleteObject(hbitmap);
+    hbitmap = CreateDIBSection(hdc, (BITMAPINFO*)&bih, DIB_RGB_COLORS,
+        (void**)&temp_bits, NULL, 0);
 
-        return Ok;
-    }
+    convert_32bppARGB_to_32bppPARGB(src_width, src_height, temp_bits,
+        4 * src_width, src, src_stride);
+
+    SelectObject(hdc, hbitmap);
+    gdi_alpha_blend(graphics, dst_x, dst_y, src_width, src_height,
+                    hdc, 0, 0, src_width, src_height);
+    DeleteDC(hdc);
+    DeleteObject(hbitmap);
+
+    return Ok;
 }
 
 static GpStatus alpha_blend_pixels_hrgn(GpGraphics *graphics, INT dst_x, INT dst_y,
@@ -433,26 +432,52 @@ static GpStatus alpha_blend_pixels_hrgn(GpGraphics *graphics, INT dst_x, INT dst
         int i, size;
         RGNDATA *rgndata;
         RECT *rects;
+        HRGN hrgn, visible_rgn;
 
-        size = GetRegionData(hregion, 0, NULL);
+        hrgn = CreateRectRgn(dst_x, dst_y, dst_x + src_width, dst_y + src_height);
+        if (!hrgn)
+            return OutOfMemory;
+
+        stat = get_clip_hrgn(graphics, &visible_rgn);
+        if (stat != Ok)
+        {
+            DeleteObject(hrgn);
+            return stat;
+        }
+
+        if (visible_rgn)
+        {
+            CombineRgn(hrgn, hrgn, visible_rgn, RGN_AND);
+            DeleteObject(visible_rgn);
+        }
+
+        if (hregion)
+            CombineRgn(hrgn, hrgn, hregion, RGN_AND);
+
+        size = GetRegionData(hrgn, 0, NULL);
 
         rgndata = GdipAlloc(size);
         if (!rgndata)
+        {
+            DeleteObject(hrgn);
             return OutOfMemory;
+        }
 
-        GetRegionData(hregion, size, rgndata);
+        GetRegionData(hrgn, size, rgndata);
 
-        rects = (RECT*)&rgndata->Buffer;
+        rects = (RECT*)rgndata->Buffer;
 
         for (i=0; stat == Ok && i<rgndata->rdh.nCount; i++)
         {
-            stat = alpha_blend_pixels(graphics, rects[i].left, rects[i].top,
+            stat = alpha_blend_bmp_pixels(graphics, rects[i].left, rects[i].top,
                 &src[(rects[i].left - dst_x) * 4 + (rects[i].top - dst_y) * src_stride],
                 rects[i].right - rects[i].left, rects[i].bottom - rects[i].top,
                 src_stride);
         }
 
         GdipFree(rgndata);
+
+        DeleteObject(hrgn);
 
         return stat;
     }
@@ -463,19 +488,37 @@ static GpStatus alpha_blend_pixels_hrgn(GpGraphics *graphics, INT dst_x, INT dst
     }
     else
     {
+        HRGN hrgn;
         int save;
+
+        stat = get_clip_hrgn(graphics, &hrgn);
+
+        if (stat != Ok)
+            return stat;
 
         save = SaveDC(graphics->hdc);
 
-        ExtSelectClipRgn(graphics->hdc, hregion, RGN_AND);
+        if (hrgn)
+            ExtSelectClipRgn(graphics->hdc, hrgn, RGN_AND);
 
-        stat = alpha_blend_pixels(graphics, dst_x, dst_y, src, src_width,
+        if (hregion)
+            ExtSelectClipRgn(graphics->hdc, hregion, RGN_AND);
+
+        stat = alpha_blend_hdc_pixels(graphics, dst_x, dst_y, src, src_width,
             src_height, src_stride);
 
         RestoreDC(graphics->hdc, save);
 
+        DeleteObject(hrgn);
+
         return stat;
     }
+}
+
+static GpStatus alpha_blend_pixels(GpGraphics *graphics, INT dst_x, INT dst_y,
+    const BYTE *src, INT src_width, INT src_height, INT src_stride)
+{
+    return alpha_blend_pixels_hrgn(graphics, dst_x, dst_y, src, src_width, src_height, src_stride, NULL);
 }
 
 static ARGB blend_colors(ARGB start, ARGB end, REAL position)
@@ -2070,6 +2113,25 @@ static GpStatus get_graphics_bounds(GpGraphics* graphics, GpRectF* rect)
         stat = GdipGetImageBounds(graphics->image, rect, &unit);
         if (stat == Ok && unit != UnitPixel)
             FIXME("need to convert from unit %i\n", unit);
+    }else if (GetObjectType(graphics->hdc) == OBJ_MEMDC){
+        HBITMAP hbmp;
+        BITMAP bmp;
+
+        rect->X = 0;
+        rect->Y = 0;
+
+        hbmp = GetCurrentObject(graphics->hdc, OBJ_BITMAP);
+        if (hbmp && GetObjectW(hbmp, sizeof(bmp), &bmp))
+        {
+            rect->Width = bmp.bmWidth;
+            rect->Height = bmp.bmHeight;
+        }
+        else
+        {
+            /* FIXME: ??? */
+            rect->Width = 1;
+            rect->Height = 1;
+        }
     }else{
         rect->X = 0;
         rect->Y = 0;
@@ -2207,6 +2269,8 @@ GpStatus WINGDIPAPI GdipCreateFromHDC(HDC hdc, GpGraphics **graphics)
 GpStatus WINGDIPAPI GdipCreateFromHDC2(HDC hdc, HANDLE hDevice, GpGraphics **graphics)
 {
     GpStatus retval;
+    HBITMAP hbitmap;
+    DIBSECTION dib;
 
     TRACE("(%p, %p, %p)\n", hdc, hDevice, graphics);
 
@@ -2229,6 +2293,13 @@ GpStatus WINGDIPAPI GdipCreateFromHDC2(HDC hdc, HANDLE hDevice, GpGraphics **gra
     if((retval = GdipCreateRegion(&(*graphics)->clip)) != Ok){
         GdipFree(*graphics);
         return retval;
+    }
+
+    hbitmap = GetCurrentObject(hdc, OBJ_BITMAP);
+    if (hbitmap && GetObjectW(hbitmap, sizeof(dib), &dib) == sizeof(dib) &&
+        dib.dsBmih.biBitCount == 32 && dib.dsBmih.biCompression == BI_RGB)
+    {
+        (*graphics)->alpha_hdc = 1;
     }
 
     (*graphics)->hdc = hdc;
@@ -3114,7 +3185,7 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
             graphics->scale, image->xres, image->yres, bitmap->format,
             imageAttributes ? imageAttributes->outside_color : 0);
 
-        if (imageAttributes ||
+        if (imageAttributes || graphics->alpha_hdc ||
             (graphics->image && graphics->image->type == ImageTypeBitmap) ||
             ptf[1].Y != ptf[0].Y || ptf[2].X != ptf[0].X ||
             ptf[1].X - ptf[0].X != srcwidth || ptf[2].Y - ptf[0].Y != srcheight ||
@@ -3978,7 +4049,7 @@ GpStatus WINGDIPAPI GdipFillPath(GpGraphics *graphics, GpBrush *brush, GpPath *p
     if(graphics->busy)
         return ObjectBusy;
 
-    if (!graphics->image)
+    if (!graphics->image && !graphics->alpha_hdc)
         stat = GDI32_GdipFillPath(graphics, brush, path);
 
     if (stat == NotImplemented)
@@ -4316,7 +4387,7 @@ GpStatus WINGDIPAPI GdipFillRegion(GpGraphics* graphics, GpBrush* brush,
     if(graphics->busy)
         return ObjectBusy;
 
-    if (!graphics->image)
+    if (!graphics->image && !graphics->alpha_hdc)
         stat = GDI32_GdipFillRegion(graphics, brush, region);
 
     if (stat == NotImplemented)
@@ -5939,7 +6010,7 @@ GpStatus WINGDIPAPI GdipGetDC(GpGraphics *graphics, HDC *hdc)
     {
         stat = METAFILE_GetDC((GpMetafile*)graphics->image, hdc);
     }
-    else if (!graphics->hdc ||
+    else if (!graphics->hdc || graphics->alpha_hdc ||
         (graphics->image && graphics->image->type == ImageTypeBitmap && ((GpBitmap*)graphics->image)->format & PixelFormatAlpha))
     {
         /* Create a fake HDC and fill it with a constant color. */
@@ -6583,7 +6654,7 @@ static GpStatus draw_driver_string(GpGraphics *graphics, GDIPCONST UINT16 *text,
     if (length == -1)
         length = strlenW(text);
 
-    if (graphics->hdc &&
+    if (graphics->hdc && !graphics->alpha_hdc &&
         ((flags & DriverStringOptionsRealizedAdvance) || length <= 1) &&
         brush->bt == BrushTypeSolidColor &&
         (((GpSolidFill*)brush)->color & 0xff000000) == 0xff000000)

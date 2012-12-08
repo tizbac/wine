@@ -1565,6 +1565,7 @@ struct x11drv_window_surface
     BOOL                  byteswap;
     BOOL                  is_argb;
     COLORREF              color_key;
+    HRGN                  region;
     void                 *bits;
 #ifdef HAVE_LIBXXSHM
     XShmSegmentInfo       shminfo;
@@ -1857,16 +1858,25 @@ static void x11drv_surface_set_region( struct window_surface *window_surface, HR
 
     TRACE( "updating surface %p with %p\n", surface, region );
 
+    window_surface->funcs->lock( window_surface );
     if (!region)
     {
+        if (surface->region) DeleteObject( surface->region );
+        surface->region = 0;
         XSetClipMask( gdi_display, surface->gc, None );
     }
-    else if ((data = X11DRV_GetRegionData( region, 0 )))
+    else
     {
-        XSetClipRectangles( gdi_display, surface->gc, 0, 0,
-                            (XRectangle *)data->Buffer, data->rdh.nCount, YXBanded );
-        HeapFree( GetProcessHeap(), 0, data );
+        if (!surface->region) surface->region = CreateRectRgn( 0, 0, 0, 0 );
+        CombineRgn( surface->region, region, 0, RGN_COPY );
+        if ((data = X11DRV_GetRegionData( surface->region, 0 )))
+        {
+            XSetClipRectangles( gdi_display, surface->gc, 0, 0,
+                                (XRectangle *)data->Buffer, data->rdh.nCount, YXBanded );
+            HeapFree( GetProcessHeap(), 0, data );
+        }
     }
+    window_surface->funcs->unlock( window_surface );
 }
 
 /***********************************************************************
@@ -1910,15 +1920,12 @@ static void x11drv_surface_flush( struct window_surface *window_surface )
 
 #ifdef HAVE_LIBXXSHM
         if (surface->shminfo.shmid != -1)
-        {
             XShmPutImage( gdi_display, surface->window, surface->gc, surface->image,
                           coords.visrect.left, coords.visrect.top,
                           surface->header.rect.left + coords.visrect.left,
                           surface->header.rect.top + coords.visrect.top,
                           coords.visrect.right - coords.visrect.left,
                           coords.visrect.bottom - coords.visrect.top, False );
-            XSync( gdi_display, False );
-        }
         else
 #endif
         XPutImage( gdi_display, surface->window, surface->gc, surface->image,
@@ -1958,6 +1965,7 @@ static void x11drv_surface_destroy( struct window_surface *window_surface )
     }
     surface->crit.DebugInfo->Spare[0] = 0;
     DeleteCriticalSection( &surface->crit );
+    if (surface->region) DeleteObject( surface->region );
     HeapFree( GetProcessHeap(), 0, surface );
 }
 
@@ -2053,4 +2061,27 @@ void set_surface_color_key( struct window_surface *window_surface, COLORREF colo
     set_color_key( surface, color_key );
     if (surface->color_key != prev) update_surface_region( surface );
     window_surface->funcs->unlock( window_surface );
+}
+
+/***********************************************************************
+ *           expose_surface
+ */
+HRGN expose_surface( struct window_surface *window_surface, const RECT *rect )
+{
+    struct x11drv_window_surface *surface = get_x11_surface( window_surface );
+    HRGN region = 0;
+
+    window_surface->funcs->lock( window_surface );
+    add_bounds_rect( &surface->bounds, rect );
+    if (surface->region)
+    {
+        region = CreateRectRgnIndirect( rect );
+        if (CombineRgn( region, region, surface->region, RGN_DIFF ) <= NULLREGION)
+        {
+            DeleteObject( region );
+            region = 0;
+        }
+    }
+    window_surface->funcs->unlock( window_surface );
+    return region;
 }

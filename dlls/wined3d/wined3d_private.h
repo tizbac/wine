@@ -162,6 +162,8 @@ void wined3d_rb_free(void *ptr) DECLSPEC_HIDDEN;
 #define MAX_COMBINED_SAMPLERS   (MAX_FRAGMENT_SAMPLERS + MAX_VERTEX_SAMPLERS)
 #define MAX_ACTIVE_LIGHTS       8
 #define MAX_CLIPPLANES          WINED3DMAXUSERCLIPPLANES
+#define MAX_CONSTANT_BUFFERS    15
+#define MAX_SAMPLER_OBJECTS     16
 
 struct min_lookup
 {
@@ -1723,6 +1725,7 @@ struct wined3d_device
     UINT vs_version, gs_version, ps_version;
     DWORD d3d_vshader_constantF, d3d_pshader_constantF; /* Advertised d3d caps, not GL ones */
     DWORD vs_clipping;
+    UINT instance_count;
 
     WORD view_ident : 1;                /* true iff view matrix is identity */
     WORD vertexBlendUsed : 1;           /* To avoid needless setting of the blend matrices */
@@ -1733,9 +1736,8 @@ struct wined3d_device
     WORD inScene : 1;                   /* A flag to check for proper BeginScene / EndScene call pairs */
     WORD softwareVertexProcessing : 1;  /* process vertex shaders using software or hardware */
     WORD useDrawStridedSlow : 1;
-    WORD instancedDraw : 1;
     WORD filter_messages : 1;
-    WORD padding : 5;
+    WORD padding : 6;
 
     BYTE fixed_function_usage_map;      /* MAX_TEXTURES, 8 */
 
@@ -2209,6 +2211,12 @@ enum wined3d_conversion_type
 
 void d3dfmt_p8_init_palette(const struct wined3d_surface *surface, BYTE table[256][4], BOOL colorkey) DECLSPEC_HIDDEN;
 
+struct wined3d_sampler
+{
+    LONG refcount;
+    void *parent;
+};
+
 struct wined3d_vertex_declaration_element
 {
     const struct wined3d_format *format;
@@ -2299,13 +2307,18 @@ struct wined3d_state
     GLenum gl_primitive_type;
 
     struct wined3d_shader *vertex_shader;
+    struct wined3d_buffer *vs_cb[MAX_CONSTANT_BUFFERS];
+    struct wined3d_sampler *vs_sampler[MAX_SAMPLER_OBJECTS];
     BOOL vs_consts_b[MAX_CONST_B];
     INT vs_consts_i[MAX_CONST_I * 4];
     float *vs_consts_f;
 
     struct wined3d_shader *geometry_shader;
+    struct wined3d_buffer *gs_cb[MAX_CONSTANT_BUFFERS];
+    struct wined3d_sampler *gs_sampler[MAX_SAMPLER_OBJECTS];
 
     struct wined3d_shader *pixel_shader;
+    struct wined3d_buffer *ps_cb[MAX_CONSTANT_BUFFERS];
     BOOL ps_consts_b[MAX_CONST_B];
     INT ps_consts_i[MAX_CONST_I * 4];
     float *ps_consts_f;

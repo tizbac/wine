@@ -95,11 +95,12 @@ typedef struct jsdisp_t jsdisp_t;
 
 extern HINSTANCE jscript_hinstance DECLSPEC_HIDDEN;
 
-#define PROPF_ARGMASK 0x00ff
-#define PROPF_METHOD  0x0100
-#define PROPF_ENUM    0x0200
-#define PROPF_CONSTR  0x0400
-#define PROPF_CONST   0x0800
+#define PROPF_ARGMASK     0x00ff
+#define PROPF_METHOD      0x0100
+#define PROPF_ENUM        0x0200
+#define PROPF_CONSTR      0x0400
+#define PROPF_CONST       0x0800
+#define PROPF_DONTDELETE  0x1000
 
 /* NOTE: Keep in sync with names in Object.toString implementation */
 typedef enum {
@@ -200,6 +201,9 @@ typedef struct {
     const builtin_prop_t *props;
     void (*destructor)(jsdisp_t*);
     void (*on_put)(jsdisp_t*,const WCHAR*);
+    unsigned (*idx_length)(jsdisp_t*);
+    HRESULT (*idx_get)(jsdisp_t*,unsigned,jsval_t*);
+    HRESULT (*idx_put)(jsdisp_t*,unsigned,jsval_t);
 } builtin_info_t;
 
 struct jsdisp_t {
@@ -265,6 +269,7 @@ HRESULT jsdisp_call_name(jsdisp_t*,const WCHAR*,WORD,unsigned,jsval_t*,jsval_t*)
 HRESULT disp_propget(script_ctx_t*,IDispatch*,DISPID,jsval_t*) DECLSPEC_HIDDEN;
 HRESULT disp_propput(script_ctx_t*,IDispatch*,DISPID,jsval_t) DECLSPEC_HIDDEN;
 HRESULT jsdisp_propget(jsdisp_t*,DISPID,jsval_t*) DECLSPEC_HIDDEN;
+HRESULT jsdisp_propput(jsdisp_t*,const WCHAR*,DWORD,jsval_t) DECLSPEC_HIDDEN;
 HRESULT jsdisp_propput_name(jsdisp_t*,const WCHAR*,jsval_t) DECLSPEC_HIDDEN;
 HRESULT jsdisp_propput_const(jsdisp_t*,const WCHAR*,jsval_t) DECLSPEC_HIDDEN;
 HRESULT jsdisp_propput_dontenum(jsdisp_t*,const WCHAR*,jsval_t) DECLSPEC_HIDDEN;
@@ -272,6 +277,8 @@ HRESULT jsdisp_propput_idx(jsdisp_t*,DWORD,jsval_t) DECLSPEC_HIDDEN;
 HRESULT jsdisp_propget_name(jsdisp_t*,LPCWSTR,jsval_t*) DECLSPEC_HIDDEN;
 HRESULT jsdisp_get_idx(jsdisp_t*,DWORD,jsval_t*) DECLSPEC_HIDDEN;
 HRESULT jsdisp_get_id(jsdisp_t*,const WCHAR*,DWORD,DISPID*) DECLSPEC_HIDDEN;
+HRESULT disp_delete(IDispatch*,DISPID,BOOL*) DECLSPEC_HIDDEN;
+HRESULT disp_delete_name(script_ctx_t*,IDispatch*,jsstr_t*,BOOL*);
 HRESULT jsdisp_delete_idx(jsdisp_t*,DWORD) DECLSPEC_HIDDEN;
 HRESULT jsdisp_is_own_prop(jsdisp_t*,const WCHAR*,BOOL*) DECLSPEC_HIDDEN;
 HRESULT jsdisp_is_enumerable(jsdisp_t*,const WCHAR*,BOOL*) DECLSPEC_HIDDEN;

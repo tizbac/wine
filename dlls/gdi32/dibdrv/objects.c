@@ -108,6 +108,13 @@ static inline void calc_rop_masks(INT rop, DWORD color, rop_mask *masks)
     calc_and_xor_masks( rop, color, &masks->and, &masks->xor );
 }
 
+static inline BOOL rop_needs_and_mask( INT rop )
+{
+    struct rop_codes codes;
+    get_rop_codes( rop, &codes );
+    return codes.a1 || codes.a2;
+}
+
 static inline RGBQUAD rgbquad_from_colorref(COLORREF c)
 {
     RGBQUAD ret;
@@ -128,7 +135,7 @@ static inline BOOL rgbquad_equal(const RGBQUAD *a, const RGBQUAD *b)
     return FALSE;
 }
 
-COLORREF make_rgb_colorref( HDC hdc, dib_info *dib, COLORREF color, BOOL *got_pixel, DWORD *pixel )
+static COLORREF make_rgb_colorref( HDC hdc, const dib_info *dib, COLORREF color, BOOL *got_pixel, DWORD *pixel )
 {
     *pixel = 0;
     *got_pixel = FALSE;
@@ -165,7 +172,7 @@ COLORREF make_rgb_colorref( HDC hdc, dib_info *dib, COLORREF color, BOOL *got_pi
  * Otherwise the bg color is mapped to the closest entry in the table and
  * the fg takes the other one.
  */
-DWORD get_pixel_color( dibdrv_physdev *pdev, COLORREF color, BOOL mono_fixup )
+DWORD get_pixel_color( HDC hdc, const dib_info *dib, COLORREF color, BOOL mono_fixup )
 {
     RGBQUAD fg_quad;
     BOOL got_pixel;
@@ -173,21 +180,21 @@ DWORD get_pixel_color( dibdrv_physdev *pdev, COLORREF color, BOOL mono_fixup )
     COLORREF rgb_ref;
     const RGBQUAD *color_table;
 
-    rgb_ref = make_rgb_colorref( pdev->dev.hdc, &pdev->dib, color, &got_pixel, &pixel );
+    rgb_ref = make_rgb_colorref( hdc, dib, color, &got_pixel, &pixel );
     if (got_pixel) return pixel;
 
-    if (pdev->dib.bit_count != 1 || !mono_fixup)
-        return pdev->dib.funcs->colorref_to_pixel( &pdev->dib, rgb_ref );
+    if (dib->bit_count != 1 || !mono_fixup)
+        return dib->funcs->colorref_to_pixel( dib, rgb_ref );
 
-    color_table = get_dib_color_table( &pdev->dib );
+    color_table = get_dib_color_table( dib );
     fg_quad = rgbquad_from_colorref( rgb_ref );
     if(rgbquad_equal(&fg_quad, color_table))
         return 0;
     if(rgbquad_equal(&fg_quad, color_table + 1))
         return 1;
 
-    pixel = get_pixel_color( pdev, GetBkColor(pdev->dev.hdc), FALSE );
-    if (color == GetBkColor(pdev->dev.hdc)) return pixel;
+    pixel = get_pixel_color( hdc, dib, GetBkColor(hdc), FALSE );
+    if (color == GetBkColor(hdc)) return pixel;
     else return !pixel;
 }
 
@@ -198,10 +205,10 @@ DWORD get_pixel_color( dibdrv_physdev *pdev, COLORREF color, BOOL mono_fixup )
  * there are several fg sources (pen, brush, text) we take as bg the inverse
  * of the relevant fg color (which is always set up correctly).
  */
-static inline void get_color_masks( dibdrv_physdev *pdev, UINT rop, COLORREF colorref,
+static inline void get_color_masks( HDC hdc, const dib_info *dib, UINT rop, COLORREF colorref,
                                     INT bkgnd_mode, rop_mask *fg_mask, rop_mask *bg_mask )
 {
-    DWORD color = get_pixel_color( pdev, colorref, TRUE );
+    DWORD color = get_pixel_color( hdc, dib, colorref, TRUE );
 
     calc_rop_masks( rop, color, fg_mask );
 
@@ -212,8 +219,8 @@ static inline void get_color_masks( dibdrv_physdev *pdev, UINT rop, COLORREF col
         return;
     }
 
-    if (pdev->dib.bit_count != 1) color = get_pixel_color( pdev, GetBkColor(pdev->dev.hdc), FALSE );
-    else if (colorref != GetBkColor(pdev->dev.hdc)) color = !color;
+    if (dib->bit_count != 1) color = get_pixel_color( hdc, dib, GetBkColor(hdc), FALSE );
+    else if (colorref != GetBkColor(hdc)) color = !color;
 
     calc_rop_masks( rop, color, bg_mask );
 }
@@ -810,7 +817,7 @@ static BOOL solid_pen_lines(dibdrv_physdev *pdev, int num, POINT *pts, BOOL clos
     {
         DWORD color, and, xor;
 
-        color = get_pixel_color( pdev, pdev->pen_brush.colorref, TRUE );
+        color = get_pixel_color( pdev->dev.hdc, &pdev->dib, pdev->pen_brush.colorref, TRUE );
         calc_and_xor_masks( GetROP2(pdev->dev.hdc), color, &and, &xor );
 
         for (i = 0; i < num - 1; i++)
@@ -1220,7 +1227,7 @@ static BOOL dashed_pen_lines(dibdrv_physdev *pdev, int num, POINT *pts, BOOL clo
     }
     else
     {
-        get_color_masks( pdev, GetROP2(pdev->dev.hdc), pdev->pen_brush.colorref,
+        get_color_masks( pdev->dev.hdc, &pdev->dib, GetROP2(pdev->dev.hdc), pdev->pen_brush.colorref,
                          pdev->pen_is_ext ? TRANSPARENT : GetBkMode(pdev->dev.hdc),
                          &pdev->dash_masks[1], &pdev->dash_masks[0] );
 
@@ -1753,7 +1760,7 @@ static BOOL solid_brush(dibdrv_physdev *pdev, dib_brush *brush, dib_info *dib,
                         int num, const RECT *rects, INT rop)
 {
     rop_mask brush_color;
-    DWORD color = get_pixel_color( pdev, brush->colorref, TRUE );
+    DWORD color = get_pixel_color( pdev->dev.hdc, &pdev->dib, brush->colorref, TRUE );
 
     calc_rop_masks( rop, color, &brush_color );
     dib->funcs->solid_rects( dib, num, rects, brush_color.and, brush_color.xor );
@@ -1768,14 +1775,14 @@ static BOOL alloc_brush_mask_bits( dib_brush *brush )
     assert(brush->masks.xor == NULL);
     assert(brush->dib.stride > 0);
 
-    if (!(brush->masks.and = HeapAlloc(GetProcessHeap(), 0, 2 * size))) return FALSE;
-    brush->masks.xor = (char *)brush->masks.and + size;
+    if (!(brush->masks.xor = HeapAlloc(GetProcessHeap(), 0, 2 * size))) return FALSE;
+    brush->masks.and = (char *)brush->masks.xor + size;
     return TRUE;
 }
 
 static void free_brush_mask_bits( dib_brush *brush )
 {
-    HeapFree(GetProcessHeap(), 0, brush->masks.and);
+    if (brush->masks.xor != brush->dib.bits.ptr) HeapFree(GetProcessHeap(), 0, brush->masks.xor);
     brush->masks.and = brush->masks.xor = NULL;
 }
 
@@ -1790,6 +1797,12 @@ static BOOL create_pattern_brush_bits( dib_brush *brush )
     DWORD size = brush->dib.height * abs(brush->dib.stride);
     DWORD *brush_bits = brush->dib.bits.ptr;
     DWORD *and_bits, *xor_bits;
+
+    if (brush->rop == R2_COPYPEN)
+    {
+        brush->masks.xor = brush_bits;  /* use the pattern bits directly */
+        return TRUE;
+    }
 
     if (!alloc_brush_mask_bits( brush )) return FALSE;
 
@@ -1838,7 +1851,7 @@ static BOOL create_hatch_brush_bits(dibdrv_physdev *pdev, dib_brush *brush, BOOL
 
     if (!init_hatch_brush( pdev, brush )) return FALSE;
 
-    get_color_masks( pdev, brush->rop, brush->colorref, GetBkMode(pdev->dev.hdc),
+    get_color_masks( pdev->dev.hdc, &pdev->dib, brush->rop, brush->colorref, GetBkMode(pdev->dev.hdc),
                      &fg_mask, &bg_mask );
 
     if (brush->colorref & (1 << 24))  /* PALETTEINDEX */
@@ -1980,7 +1993,7 @@ static BOOL pattern_brush(dibdrv_physdev *pdev, dib_brush *brush, dib_info *dib,
         brush->rop = rop;
     }
 
-    if(brush->masks.and == NULL)
+    if(brush->masks.xor == NULL)
     {
         switch(brush->style)
         {
@@ -2005,6 +2018,7 @@ static BOOL pattern_brush(dibdrv_physdev *pdev, dib_brush *brush, dib_info *dib,
             ERR("Unexpected brush style %d\n", brush->style);
             return FALSE;
         }
+        if (!rop_needs_and_mask( brush->rop )) brush->masks.and = NULL;  /* ignore the and mask */
     }
 
     GetBrushOrgEx(pdev->dev.hdc, &origin);

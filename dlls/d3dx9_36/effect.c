@@ -3406,7 +3406,7 @@ static HRESULT WINAPI ID3DXEffectImpl_SetArrayRange(ID3DXEffect *iface, D3DXHAND
 }
 
 /*** ID3DXEffect methods ***/
-static HRESULT WINAPI ID3DXEffectImpl_GetPool(ID3DXEffect *iface, LPD3DXEFFECTPOOL *pool)
+static HRESULT WINAPI ID3DXEffectImpl_GetPool(ID3DXEffect *iface, ID3DXEffectPool **pool)
 {
     struct ID3DXEffectImpl *This = impl_from_ID3DXEffect(iface);
 
@@ -3609,7 +3609,7 @@ static HRESULT WINAPI ID3DXEffectImpl_OnResetDevice(ID3DXEffect* iface)
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI ID3DXEffectImpl_SetStateManager(ID3DXEffect *iface, LPD3DXEFFECTSTATEMANAGER manager)
+static HRESULT WINAPI ID3DXEffectImpl_SetStateManager(ID3DXEffect *iface, ID3DXEffectStateManager *manager)
 {
     struct ID3DXEffectImpl *This = impl_from_ID3DXEffect(iface);
 
@@ -3623,7 +3623,7 @@ static HRESULT WINAPI ID3DXEffectImpl_SetStateManager(ID3DXEffect *iface, LPD3DX
     return D3D_OK;
 }
 
-static HRESULT WINAPI ID3DXEffectImpl_GetStateManager(ID3DXEffect *iface, LPD3DXEFFECTSTATEMANAGER *manager)
+static HRESULT WINAPI ID3DXEffectImpl_GetStateManager(ID3DXEffect *iface, ID3DXEffectStateManager **manager)
 {
     struct ID3DXEffectImpl *This = impl_from_ID3DXEffect(iface);
 
@@ -4395,7 +4395,7 @@ static HRESULT WINAPI ID3DXEffectCompilerImpl_GetLiteral(ID3DXEffectCompiler *if
 }
 
 static HRESULT WINAPI ID3DXEffectCompilerImpl_CompileEffect(ID3DXEffectCompiler *iface, DWORD flags,
-        LPD3DXBUFFER *effect, LPD3DXBUFFER *error_msgs)
+        ID3DXBuffer **effect, ID3DXBuffer **error_msgs)
 {
     struct ID3DXEffectCompilerImpl *This = impl_from_ID3DXEffectCompiler(iface);
 
@@ -5969,7 +5969,7 @@ static const struct ID3DXEffectPoolVtbl ID3DXEffectPool_Vtbl =
     ID3DXEffectPoolImpl_Release
 };
 
-HRESULT WINAPI D3DXCreateEffectPool(LPD3DXEFFECTPOOL *pool)
+HRESULT WINAPI D3DXCreateEffectPool(ID3DXEffectPool **pool)
 {
     struct ID3DXEffectPoolImpl *object;
 

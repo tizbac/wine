@@ -1328,10 +1328,10 @@
 @ cdecl -arch=i386,x86_64 longjmp(ptr long) MSVCRT_longjmp
 @ cdecl malloc(long) MSVCRT_malloc
 @ cdecl mblen(ptr long) MSVCRT_mblen
-# stub mbrlen(ptr long ptr)
-# stub mbrtowc(ptr str long ptr)
+@ cdecl mbrlen(ptr long ptr) MSVCRT_mbrlen
+@ cdecl mbrtowc(ptr str long ptr) MSVCRT_mbrtowc
 # stub mbsdup_dbg(wstr long ptr long)
-# stub mbsrtowcs(ptr ptr long ptr)
+@ cdecl mbsrtowcs(ptr ptr long ptr) MSVCRT_mbsrtowcs
 # stub mbsrtowcs_s(ptr ptr long ptr long ptr)
 @ cdecl mbstowcs(ptr str long) MSVCRT_mbstowcs
 @ cdecl mbstowcs_s(ptr ptr long str long) MSVCRT__mbstowcs_s
@@ -1445,7 +1445,7 @@
 @ cdecl vswprintf_s(ptr long wstr ptr) MSVCRT_vswprintf_s
 @ cdecl vwprintf(wstr ptr) MSVCRT_vwprintf
 @ cdecl vwprintf_s(wstr ptr) MSVCRT_vwprintf_s
-# stub wcrtomb(ptr long ptr)
+@ cdecl wcrtomb(ptr long ptr) MSVCRT_wcrtomb
 # stub wcrtomb_s(ptr ptr long long ptr)
 @ cdecl wcscat(wstr wstr) ntdll.wcscat
 @ cdecl wcscat_s(wstr long wstr) MSVCRT_wcscat_s

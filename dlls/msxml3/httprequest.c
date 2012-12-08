@@ -82,8 +82,8 @@ typedef struct
     /* request */
     BINDVERB verb;
     BSTR custom;
-    BSTR siteurl;
-    BSTR url;
+    IUri *uri;
+    IUri *base_uri;
     BOOL async;
     struct list reqheaders;
     /* cached resulting custom request headers string length in WCHARs */
@@ -699,13 +699,13 @@ static HRESULT BindStatusCallback_create(httprequest* This, BindStatusCallback *
             size++;
             break;
         }
+        default:
+            FIXME("unsupported body data type %d\n", V_VT(body));
+            /* fall through */
         case VT_EMPTY:
         case VT_ERROR:
             ptr = NULL;
             size = 0;
-            break;
-        default:
-            FIXME("unsupported body data type %d\n", V_VT(body));
             break;
         }
 
@@ -736,7 +736,7 @@ static HRESULT BindStatusCallback_create(httprequest* This, BindStatusCallback *
     {
         IMoniker *moniker;
 
-        hr = CreateURLMoniker(NULL, This->url, &moniker);
+        hr = CreateURLMonikerEx2(NULL, This->uri, &moniker, URL_MK_UNIFORM);
         if (hr == S_OK)
         {
             IStream *stream;
@@ -758,6 +758,53 @@ static HRESULT BindStatusCallback_create(httprequest* This, BindStatusCallback *
     return hr;
 }
 
+static HRESULT verify_uri(httprequest *This, IUri *uri)
+{
+    DWORD scheme, base_scheme;
+    BSTR host, base_host;
+    HRESULT hr;
+
+    if(!(This->safeopt & INTERFACESAFE_FOR_UNTRUSTED_DATA))
+        return S_OK;
+
+    if(!This->base_uri)
+        return E_ACCESSDENIED;
+
+    hr = IUri_GetScheme(uri, &scheme);
+    if(FAILED(hr))
+        return hr;
+
+    hr = IUri_GetScheme(This->base_uri, &base_scheme);
+    if(FAILED(hr))
+        return hr;
+
+    if(scheme != base_scheme) {
+        WARN("Schemes don't match\n");
+        return E_ACCESSDENIED;
+    }
+
+    if(scheme == INTERNET_SCHEME_UNKNOWN) {
+        FIXME("Unknown scheme\n");
+        return E_ACCESSDENIED;
+    }
+
+    hr = IUri_GetHost(uri, &host);
+    if(FAILED(hr))
+        return hr;
+
+    hr = IUri_GetHost(This->base_uri, &base_host);
+    if(SUCCEEDED(hr)) {
+        if(strcmpiW(host, base_host)) {
+            WARN("Hosts don't match\n");
+            hr = E_ACCESSDENIED;
+        }
+        SysFreeString(base_host);
+    }
+
+    SysFreeString(host);
+    return hr;
+}
+
 static HRESULT httprequest_open(httprequest *This, BSTR method, BSTR url,
         VARIANT async, VARIANT user, VARIANT password)
 {
@@ -767,15 +814,20 @@ static HRESULT httprequest_open(httprequest *This, BSTR method, BSTR url,
     static const WCHAR MethodDeleteW[] = {'D','E','L','E','T','E',0};
     static const WCHAR MethodPropFindW[] = {'P','R','O','P','F','I','N','D',0};
     VARIANT str, is_async;
+    IUri *uri;
     HRESULT hr;
 
     if (!method || !url) return E_INVALIDARG;
 
     /* free previously set data */
-    SysFreeString(This->url);
+    if(This->uri) {
+        IUri_Release(This->uri);
+        This->uri = NULL;
+    }
+
     SysFreeString(This->user);
     SysFreeString(This->password);
-    This->url = This->user = This->password = NULL;
+    This->user = This->password = NULL;
 
     if (!strcmpiW(method, MethodGetW))
     {
@@ -802,22 +854,22 @@ static HRESULT httprequest_open(httprequest *This, BSTR method, BSTR url,
         return E_FAIL;
     }
 
-    /* try to combine with site url */
-    if (This->siteurl && PathIsRelativeW(url))
-    {
-        DWORD len = INTERNET_MAX_URL_LENGTH;
-        WCHAR *fullW = heap_alloc(len*sizeof(WCHAR));
-
-        hr = UrlCombineW(This->siteurl, url, fullW, &len, 0);
-        if (hr == S_OK)
-        {
-            TRACE("combined url %s\n", debugstr_w(fullW));
-            This->url = SysAllocString(fullW);
-        }
-        heap_free(fullW);
-    }
+    if(This->base_uri)
+        hr = CoInternetCombineUrlEx(This->base_uri, url, 0, &uri, 0);
     else
-        This->url = SysAllocString(url);
+        hr = CreateUri(url, 0, 0, &uri);
+    if(FAILED(hr)) {
+        WARN("Could not create IUri object: %08x\n", hr);
+        return hr;
+    }
+
+    hr = verify_uri(This, uri);
+    if(FAILED(hr)) {
+        IUri_Release(uri);
+        return hr;
+    }
+
+    This->uri = uri;
 
     VariantInit(&is_async);
     hr = VariantChangeType(&is_async, &async, 0, VT_BOOL);
@@ -1141,10 +1193,12 @@ static void httprequest_release(httprequest *This)
 
     if (This->site)
         IUnknown_Release( This->site );
+    if (This->uri)
+        IUri_Release(This->uri);
+    if (This->base_uri)
+        IUri_Release(This->base_uri);
 
     SysFreeString(This->custom);
-    SysFreeString(This->siteurl);
-    SysFreeString(This->url);
     SysFreeString(This->user);
     SysFreeString(This->password);
 
@@ -1233,16 +1287,13 @@ static HRESULT WINAPI XMLHTTPRequest_GetTypeInfoCount(IXMLHTTPRequest *iface, UI
 }
 
 static HRESULT WINAPI XMLHTTPRequest_GetTypeInfo(IXMLHTTPRequest *iface, UINT iTInfo,
-        LCID lcid, ITypeInfo **ti)
+        LCID lcid, ITypeInfo **ppTInfo)
 {
     httprequest *This = impl_from_IXMLHTTPRequest( iface );
-    HRESULT hr;
 
-    TRACE("(%p)->(%u %u %p)\n", This, iTInfo, lcid, ti);
+    TRACE("(%p)->(%u %u %p)\n", This, iTInfo, lcid, ppTInfo);
 
-    hr = get_typeinfo(IXMLHTTPRequest_tid, ti);
-    ITypeInfo_AddRef(*ti);
-    return hr;
+    return get_typeinfo(IXMLHTTPRequest_tid, ppTInfo);
 }
 
 static HRESULT WINAPI XMLHTTPRequest_GetIDsOfNames(IXMLHTTPRequest *iface, REFIID riid,
@@ -1260,7 +1311,10 @@ static HRESULT WINAPI XMLHTTPRequest_GetIDsOfNames(IXMLHTTPRequest *iface, REFII
 
     hr = get_typeinfo(IXMLHTTPRequest_tid, &typeinfo);
     if(SUCCEEDED(hr))
+    {
         hr = ITypeInfo_GetIDsOfNames(typeinfo, rgszNames, cNames, rgDispId);
+        ITypeInfo_Release(typeinfo);
+    }
 
     return hr;
 }
@@ -1278,8 +1332,11 @@ static HRESULT WINAPI XMLHTTPRequest_Invoke(IXMLHTTPRequest *iface, DISPID dispI
 
     hr = get_typeinfo(IXMLHTTPRequest_tid, &typeinfo);
     if(SUCCEEDED(hr))
+    {
         hr = ITypeInfo_Invoke(typeinfo, &This->IXMLHTTPRequest_iface, dispIdMember, wFlags,
                 pDispParams, pVarResult, pExcepInfo, puArgErr);
+        ITypeInfo_Release(typeinfo);
+    }
 
     return hr;
 }
@@ -1441,37 +1498,55 @@ static HRESULT WINAPI httprequest_ObjectWithSite_GetSite( IObjectWithSite *iface
     return IUnknown_QueryInterface( This->site, iid, ppvSite );
 }
 
+static void get_base_uri(httprequest *This)
+{
+    IServiceProvider *provider;
+    IHTMLDocument2 *doc;
+    IUri *uri;
+    BSTR url;
+    HRESULT hr;
+
+    hr = IUnknown_QueryInterface(This->site, &IID_IServiceProvider, (void**)&provider);
+    if(FAILED(hr))
+        return;
+
+    hr = IServiceProvider_QueryService(provider, &SID_SContainerDispatch, &IID_IHTMLDocument2, (void**)&doc);
+    IServiceProvider_Release(provider);
+    if(FAILED(hr))
+        return;
+
+    hr = IHTMLDocument2_get_URL(doc, &url);
+    IHTMLDocument2_Release(doc);
+    if(FAILED(hr) || !url || !*url)
+        return;
+
+    TRACE("host url %s\n", debugstr_w(url));
+
+    hr = CreateUri(url, 0, 0, &uri);
+    SysFreeString(url);
+    if(FAILED(hr))
+        return;
+
+    This->base_uri = uri;
+}
+
 static HRESULT WINAPI httprequest_ObjectWithSite_SetSite( IObjectWithSite *iface, IUnknown *punk )
 {
     httprequest *This = impl_from_IObjectWithSite(iface);
-    IServiceProvider *provider;
-    HRESULT hr;
 
-    TRACE("(%p)->(%p)\n", iface, punk);
-
-    if (punk)
-        IUnknown_AddRef( punk );
+    TRACE("(%p)->(%p)\n", This, punk);
 
     if(This->site)
         IUnknown_Release( This->site );
+    if(This->base_uri)
+        IUri_Release(This->base_uri);
 
     This->site = punk;
 
-    hr = IUnknown_QueryInterface(This->site, &IID_IServiceProvider, (void**)&provider);
-    if (hr == S_OK)
+    if (punk)
     {
-        IHTMLDocument2 *doc;
-
-        hr = IServiceProvider_QueryService(provider, &SID_SContainerDispatch, &IID_IHTMLDocument2, (void**)&doc);
-        if (hr == S_OK)
-        {
-            SysFreeString(This->siteurl);
-
-            hr = IHTMLDocument2_get_URL(doc, &This->siteurl);
-            IHTMLDocument2_Release(doc);
-            TRACE("host url %s, 0x%08x\n", debugstr_w(This->siteurl), hr);
-        }
-        IServiceProvider_Release(provider);
+        IUnknown_AddRef( punk );
+        get_base_uri(This);
     }
 
     return S_OK;
@@ -1603,16 +1678,13 @@ static HRESULT WINAPI ServerXMLHTTPRequest_GetTypeInfoCount(IServerXMLHTTPReques
 }
 
 static HRESULT WINAPI ServerXMLHTTPRequest_GetTypeInfo(IServerXMLHTTPRequest *iface, UINT iTInfo,
-        LCID lcid, ITypeInfo **ti)
+        LCID lcid, ITypeInfo **ppTInfo)
 {
     serverhttp *This = impl_from_IServerXMLHTTPRequest( iface );
-    HRESULT hr;
 
-    TRACE("(%p)->(%u %u %p)\n", This, iTInfo, lcid, ti);
+    TRACE("(%p)->(%u %u %p)\n", This, iTInfo, lcid, ppTInfo);
 
-    hr = get_typeinfo(IServerXMLHTTPRequest_tid, ti);
-    ITypeInfo_AddRef(*ti);
-    return hr;
+    return get_typeinfo(IServerXMLHTTPRequest_tid, ppTInfo);
 }
 
 static HRESULT WINAPI ServerXMLHTTPRequest_GetIDsOfNames(IServerXMLHTTPRequest *iface, REFIID riid,
@@ -1630,7 +1702,10 @@ static HRESULT WINAPI ServerXMLHTTPRequest_GetIDsOfNames(IServerXMLHTTPRequest *
 
     hr = get_typeinfo(IServerXMLHTTPRequest_tid, &typeinfo);
     if(SUCCEEDED(hr))
+    {
         hr = ITypeInfo_GetIDsOfNames(typeinfo, rgszNames, cNames, rgDispId);
+        ITypeInfo_Release(typeinfo);
+    }
 
     return hr;
 }
@@ -1648,8 +1723,11 @@ static HRESULT WINAPI ServerXMLHTTPRequest_Invoke(IServerXMLHTTPRequest *iface, 
 
     hr = get_typeinfo(IServerXMLHTTPRequest_tid, &typeinfo);
     if(SUCCEEDED(hr))
+    {
         hr = ITypeInfo_Invoke(typeinfo, &This->IServerXMLHTTPRequest_iface, dispIdMember, wFlags,
                 pDispParams, pVarResult, pExcepInfo, puArgErr);
+        ITypeInfo_Release(typeinfo);
+    }
 
     return hr;
 }
@@ -1822,7 +1900,8 @@ static void init_httprequest(httprequest *req)
     req->async = FALSE;
     req->verb = -1;
     req->custom = NULL;
-    req->url = req->siteurl = req->user = req->password = NULL;
+    req->uri = req->base_uri = NULL;
+    req->user = req->password = NULL;
 
     req->state = READYSTATE_UNINITIALIZED;
     req->sink = NULL;

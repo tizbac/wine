@@ -101,6 +101,8 @@ static BOOL (WINAPI *pSetFileSecurityA)(LPCSTR, SECURITY_INFORMATION,
 static DWORD (WINAPI *pGetNamedSecurityInfoA)(LPSTR, SE_OBJECT_TYPE, SECURITY_INFORMATION,
                                               PSID*, PSID*, PACL*, PACL*,
                                               PSECURITY_DESCRIPTOR*);
+static DWORD (WINAPI *pSetNamedSecurityInfoA)(LPTSTR, SE_OBJECT_TYPE, SECURITY_INFORMATION,
+                                              PSID, PSID, PACL, PACL);
 static PDWORD (WINAPI *pGetSidSubAuthority)(PSID, DWORD);
 static PUCHAR (WINAPI *pGetSidSubAuthorityCount)(PSID);
 static BOOL (WINAPI *pIsValidSid)(PSID);
@@ -170,6 +172,7 @@ static void init(void)
     pSetFileSecurityA = (void *)GetProcAddress(hmod, "SetFileSecurityA" );
     pCreateWellKnownSid = (void *)GetProcAddress( hmod, "CreateWellKnownSid" );
     pGetNamedSecurityInfoA = (void *)GetProcAddress(hmod, "GetNamedSecurityInfoA");
+    pSetNamedSecurityInfoA = (void *)GetProcAddress(hmod, "SetNamedSecurityInfoA");
     pGetSidSubAuthority = (void *)GetProcAddress(hmod, "GetSidSubAuthority");
     pGetSidSubAuthorityCount = (void *)GetProcAddress(hmod, "GetSidSubAuthorityCount");
     pIsValidSid = (void *)GetProcAddress(hmod, "IsValidSid");
@@ -3002,40 +3005,67 @@ static void test_SetEntriesInAclA(void)
 
 static void test_GetNamedSecurityInfoA(void)
 {
-    PSECURITY_DESCRIPTOR pSecDesc;
-    DWORD revision;
+    char admin_ptr[sizeof(SID)+sizeof(ULONG)*SID_MAX_SUB_AUTHORITIES], dacl[100], *user;
+    DWORD sid_size = sizeof(admin_ptr), user_size;
+    char invalid_path[] = "/an invalid file path";
+    PSID admin_sid = (PSID) admin_ptr, user_sid;
+    char sd[SECURITY_DESCRIPTOR_MIN_LENGTH];
     SECURITY_DESCRIPTOR_CONTROL control;
-    PSID owner;
-    PSID group;
-    PACL dacl;
+    ACL_SIZE_INFORMATION acl_size;
+    CHAR windows_dir[MAX_PATH];
+    PSECURITY_DESCRIPTOR pSD;
+    ACCESS_ALLOWED_ACE *ace;
+    BOOL bret = TRUE, isNT4;
+    char tmpfile[MAX_PATH];
+    DWORD error, revision;
     BOOL owner_defaulted;
     BOOL group_defaulted;
-    DWORD error;
-    BOOL ret, isNT4;
-    CHAR windows_dir[MAX_PATH];
+    HANDLE token, hTemp;
+    PSID owner, group;
+    PACL pDacl;
 
-    if (!pGetNamedSecurityInfoA)
+    if (!pSetNamedSecurityInfoA || !pGetNamedSecurityInfoA || !pCreateWellKnownSid)
     {
-        win_skip("GetNamedSecurityInfoA is not available\n");
+        win_skip("Required functions are not available\n");
         return;
     }
 
-    ret = GetWindowsDirectoryA(windows_dir, MAX_PATH);
-    ok(ret, "GetWindowsDirectory failed with error %d\n", GetLastError());
+    if (!OpenThreadToken(GetCurrentThread(), TOKEN_READ, TRUE, &token))
+    {
+        if (GetLastError() != ERROR_NO_TOKEN) bret = FALSE;
+        else if (!OpenProcessToken(GetCurrentProcess(), TOKEN_READ, &token)) bret = FALSE;
+    }
+    if (!bret)
+    {
+        win_skip("Failed to get current user token\n");
+        return;
+    }
+    bret = GetTokenInformation(token, TokenUser, NULL, 0, &user_size);
+    ok(!bret && (GetLastError() == ERROR_INSUFFICIENT_BUFFER),
+        "GetTokenInformation(TokenUser) failed with error %d\n", GetLastError());
+    user = HeapAlloc(GetProcessHeap(), 0, user_size);
+    bret = GetTokenInformation(token, TokenUser, user, user_size, &user_size);
+    ok(bret, "GetTokenInformation(TokenUser) failed with error %d\n", GetLastError());
+    CloseHandle( token );
+    user_sid = ((TOKEN_USER *)user)->User.Sid;
+
+    bret = GetWindowsDirectoryA(windows_dir, MAX_PATH);
+    ok(bret, "GetWindowsDirectory failed with error %d\n", GetLastError());
 
     SetLastError(0xdeadbeef);
     error = pGetNamedSecurityInfoA(windows_dir, SE_FILE_OBJECT,
         OWNER_SECURITY_INFORMATION|GROUP_SECURITY_INFORMATION|DACL_SECURITY_INFORMATION,
-        NULL, NULL, NULL, NULL, &pSecDesc);
+        NULL, NULL, NULL, NULL, &pSD);
     if (error != ERROR_SUCCESS && (GetLastError() == ERROR_CALL_NOT_IMPLEMENTED))
     {
         win_skip("GetNamedSecurityInfoA is not implemented\n");
+        HeapFree(GetProcessHeap(), 0, user);
         return;
     }
     ok(!error, "GetNamedSecurityInfo failed with error %d\n", error);
 
-    ret = GetSecurityDescriptorControl(pSecDesc, &control, &revision);
-    ok(ret, "GetSecurityDescriptorControl failed with error %d\n", GetLastError());
+    bret = GetSecurityDescriptorControl(pSD, &control, &revision);
+    ok(bret, "GetSecurityDescriptorControl failed with error %d\n", GetLastError());
     ok((control & (SE_SELF_RELATIVE|SE_DACL_PRESENT)) == (SE_SELF_RELATIVE|SE_DACL_PRESENT) ||
         broken((control & (SE_SELF_RELATIVE|SE_DACL_PRESENT)) == SE_DACL_PRESENT), /* NT4 */
         "control (0x%x) doesn't have (SE_SELF_RELATIVE|SE_DACL_PRESENT) flags set\n", control);
@@ -3043,20 +3073,21 @@ static void test_GetNamedSecurityInfoA(void)
 
     isNT4 = (control & (SE_SELF_RELATIVE|SE_DACL_PRESENT)) == SE_DACL_PRESENT;
 
-    ret = GetSecurityDescriptorOwner(pSecDesc, &owner, &owner_defaulted);
-    ok(ret, "GetSecurityDescriptorOwner failed with error %d\n", GetLastError());
+    bret = GetSecurityDescriptorOwner(pSD, &owner, &owner_defaulted);
+    ok(bret, "GetSecurityDescriptorOwner failed with error %d\n", GetLastError());
     ok(owner != NULL, "owner should not be NULL\n");
 
-    ret = GetSecurityDescriptorGroup(pSecDesc, &group, &group_defaulted);
-    ok(ret, "GetSecurityDescriptorGroup failed with error %d\n", GetLastError());
+    bret = GetSecurityDescriptorGroup(pSD, &group, &group_defaulted);
+    ok(bret, "GetSecurityDescriptorGroup failed with error %d\n", GetLastError());
     ok(group != NULL, "group should not be NULL\n");
-    LocalFree(pSecDesc);
+    LocalFree(pSD);
 
 
     /* NULL descriptor tests */
     if(isNT4)
     {
         win_skip("NT4 does not support GetNamedSecutityInfo with a NULL descriptor\n");
+        HeapFree(GetProcessHeap(), 0, user);
         return;
     }
 
@@ -3065,13 +3096,85 @@ static void test_GetNamedSecurityInfoA(void)
     ok(error==ERROR_INVALID_PARAMETER, "GetNamedSecurityInfo failed with error %d\n", error);
 
     error = pGetNamedSecurityInfoA(windows_dir, SE_FILE_OBJECT,DACL_SECURITY_INFORMATION,
-        NULL, NULL, &dacl, NULL, NULL);
+        NULL, NULL, &pDacl, NULL, NULL);
     ok(!error, "GetNamedSecurityInfo failed with error %d\n", error);
-    ok(dacl != NULL, "dacl should not be NULL\n");
+    ok(pDacl != NULL, "DACL should not be NULL\n");
 
     error = pGetNamedSecurityInfoA(windows_dir, SE_FILE_OBJECT,OWNER_SECURITY_INFORMATION,
-        NULL, NULL, &dacl, NULL, NULL);
+        NULL, NULL, &pDacl, NULL, NULL);
     ok(error==ERROR_INVALID_PARAMETER, "GetNamedSecurityInfo failed with error %d\n", error);
+
+    /* Test behavior of SetNamedSecurityInfo with an invalid path */
+    SetLastError(0xdeadbeef);
+    error = pSetNamedSecurityInfoA(invalid_path, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, NULL,
+                                   NULL, NULL, NULL);
+    ok(error == ERROR_FILE_NOT_FOUND, "Unexpected error returned: 0x%x\n", error);
+    ok(GetLastError() == 0xdeadbeef, "Expected last error to remain unchanged.\n");
+
+    /* Create security descriptor information and test that it comes back the same */
+    pSD = &sd;
+    pDacl = (PACL)&dacl;
+    InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION);
+    pCreateWellKnownSid(WinBuiltinAdministratorsSid, NULL, admin_sid, &sid_size);
+    bret = InitializeAcl(pDacl, sizeof(dacl), ACL_REVISION);
+    ok(bret, "Failed to initialize ACL.\n");
+    bret = pAddAccessAllowedAceEx(pDacl, ACL_REVISION, 0, GENERIC_ALL, user_sid);
+    HeapFree(GetProcessHeap(), 0, user);
+    ok(bret, "Failed to add Current User to ACL.\n");
+    bret = pAddAccessAllowedAceEx(pDacl, ACL_REVISION, 0, GENERIC_ALL, admin_sid);
+    ok(bret, "Failed to add Administrator Group to ACL.\n");
+    bret = SetSecurityDescriptorDacl(pSD, TRUE, pDacl, FALSE);
+    ok(bret, "Failed to add ACL to security desciptor.\n");
+    GetTempFileNameA(".", "foo", 0, tmpfile);
+    hTemp = CreateFileA(tmpfile, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                        FILE_FLAG_DELETE_ON_CLOSE, NULL);
+    SetLastError(0xdeadbeef);
+    error = pSetNamedSecurityInfoA(tmpfile, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, NULL,
+                                   NULL, pDacl, NULL);
+    if (error != ERROR_SUCCESS && (GetLastError() == ERROR_CALL_NOT_IMPLEMENTED))
+    {
+        win_skip("SetNamedSecurityInfoA is not implemented\n");
+        CloseHandle(hTemp);
+        return;
+    }
+    ok(!error, "SetNamedSecurityInfoA failed with error %d\n", error);
+    SetLastError(0xdeadbeef);
+    error = pGetNamedSecurityInfoA(tmpfile, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
+                                   NULL, NULL, &pDacl, NULL, &pSD);
+    if (error != ERROR_SUCCESS && (GetLastError() == ERROR_CALL_NOT_IMPLEMENTED))
+    {
+        win_skip("GetNamedSecurityInfoA is not implemented\n");
+        return;
+    }
+    ok(!error, "GetNamedSecurityInfo failed with error %d\n", error);
+
+    bret = pGetAclInformation(pDacl, &acl_size, sizeof(acl_size), AclSizeInformation);
+    ok(bret, "GetAclInformation failed\n");
+    if (acl_size.AceCount > 0)
+    {
+        bret = pGetAce(pDacl, 0, (VOID **)&ace);
+        ok(bret, "Failed to get Current User ACE.\n");
+        bret = EqualSid(&ace->SidStart, user_sid);
+        todo_wine ok(bret, "Current User ACE != Current User SID.\n");
+        ok(((ACE_HEADER *)ace)->AceFlags == 0,
+           "Current User ACE has unexpected flags (0x%x != 0x0)\n", ((ACE_HEADER *)ace)->AceFlags);
+        ok(ace->Mask == 0x1f01ff, "Current User ACE has unexpected mask (0x%x != 0x1f01ff)\n",
+                                  ace->Mask);
+    }
+    if (acl_size.AceCount > 1)
+    {
+        bret = pGetAce(pDacl, 1, (VOID **)&ace);
+        ok(bret, "Failed to get Administators Group ACE.\n");
+        bret = EqualSid(&ace->SidStart, admin_sid);
+        todo_wine ok(bret || broken(!bret) /* win2k */,
+                     "Administators Group ACE != Administators Group SID.\n");
+        ok(((ACE_HEADER *)ace)->AceFlags == 0,
+           "Administators Group ACE has unexpected flags (0x%x != 0x0)\n", ((ACE_HEADER *)ace)->AceFlags);
+        ok(ace->Mask == 0x1f01ff || broken(ace->Mask == GENERIC_ALL) /* win2k */,
+           "Administators Group ACE has unexpected mask (0x%x != 0x1f01ff)\n", ace->Mask);
+    }
+    LocalFree(pSD);
+    CloseHandle(hTemp);
 }
 
 static void test_ConvertStringSecurityDescriptor(void)
@@ -3662,8 +3765,6 @@ static void test_GetSecurityInfo(void)
         ok(ace->Mask == 0x1f01ff, "Administators Group ACE has unexpected mask (0x%x != 0x1f01ff)\n",
                                   ace->Mask);
     }
-    LocalFree(pSD);
-
     CloseHandle(obj);
 }
 
