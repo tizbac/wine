@@ -822,15 +822,6 @@ extern const struct wined3d_shader_backend_ops glsl_shader_backend DECLSPEC_HIDD
 extern const struct wined3d_shader_backend_ops arb_program_shader_backend DECLSPEC_HIDDEN;
 extern const struct wined3d_shader_backend_ops none_shader_backend DECLSPEC_HIDDEN;
 
-#define ENTER_GL() do {} while(0)
-#define LEAVE_GL() do {} while(0)
-
-/*****************************************************************************
- * Defines
- */
-
-/* GL related defines */
-/* ------------------ */
 #define GL_EXTCALL(f) (gl_info->gl_ops.ext.p_##f)
 
 #define D3DCOLOR_B_R(dw) (((dw) >> 16) & 0xff)
@@ -2319,6 +2310,7 @@ struct wined3d_state
 
     struct wined3d_shader *pixel_shader;
     struct wined3d_buffer *ps_cb[MAX_CONSTANT_BUFFERS];
+    struct wined3d_sampler *ps_sampler[MAX_SAMPLER_OBJECTS];
     BOOL ps_consts_b[MAX_CONST_B];
     INT ps_consts_i[MAX_CONST_I * 4];
     float *ps_consts_f;

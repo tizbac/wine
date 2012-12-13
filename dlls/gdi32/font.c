@@ -395,15 +395,6 @@ HFONT WINAPI CreateFontIndirectExW( const ENUMLOGFONTEXDVW *penumex )
 
     fontPtr->logfont = *plf;
 
-    if (plf->lfEscapement != plf->lfOrientation)
-    {
-        /* this should really depend on whether GM_ADVANCED is set */
-        fontPtr->logfont.lfOrientation = fontPtr->logfont.lfEscapement;
-        WARN("orientation angle %f set to "
-             "escapement angle %f for new font %p\n",
-             plf->lfOrientation/10., plf->lfEscapement/10., fontPtr);
-    }
-
     if (!(hFont = alloc_gdi_handle( fontPtr, OBJ_FONT, &font_funcs )))
     {
         HeapFree( GetProcessHeap(), 0, fontPtr );
@@ -643,8 +634,6 @@ static INT FONT_GetObjectW( HGDIOBJ handle, INT count, LPVOID buffer )
 static BOOL FONT_DeleteObject( HGDIOBJ handle )
 {
     FONTOBJ *obj;
-
-    WineEngDestroyFontInstance( handle );
 
     if (!(obj = free_gdi_handle( handle ))) return FALSE;
     return HeapFree( GetProcessHeap(), 0, obj );
@@ -1200,7 +1189,7 @@ BOOL WINAPI GetTextExtentExPointW( HDC hdc, LPCWSTR str, INT count,
     /* Perform device size to world size transformations.  */
     if (ret)
     {
-	INT extra      = dc->charExtra,
+	INT extra = abs(INTERNAL_XWSTODS(dc, dc->charExtra)),
         breakExtra = dc->breakExtra,
         breakRem   = dc->breakRem,
         i;
@@ -1209,7 +1198,6 @@ BOOL WINAPI GetTextExtentExPointW( HDC hdc, LPCWSTR str, INT count,
 	{
 	    for (i = 0; i < count; ++i)
 	    {
-		dxs[i] = abs(INTERNAL_XDSTOWS(dc, dxs[i]));
 		dxs[i] += (i+1) * extra;
                 if (count > 1 && (breakExtra || breakRem) && str[i] == tm.tmBreakChar)
                 {
@@ -1220,15 +1208,12 @@ BOOL WINAPI GetTextExtentExPointW( HDC hdc, LPCWSTR str, INT count,
                         dxs[i]++;
                     }
                 }
+		dxs[i] = abs(INTERNAL_XDSTOWS(dc, dxs[i]));
 		if (dxs[i] <= maxExt)
 		    ++nFit;
 	    }
-            breakRem = dc->breakRem;
 	}
-	size->cx = abs(INTERNAL_XDSTOWS(dc, size->cx));
-	size->cy = abs(INTERNAL_YDSTOWS(dc, size->cy));
-
-        if (!dxs && count > 1 && (breakExtra || breakRem))
+        else if (count > 1 && (breakExtra || breakRem))
         {
             for (i = 0; i < count; i++)
             {
@@ -1243,6 +1228,9 @@ BOOL WINAPI GetTextExtentExPointW( HDC hdc, LPCWSTR str, INT count,
                 }
             }
         }
+        size->cx += count * extra;
+	size->cx = abs(INTERNAL_XDSTOWS(dc, size->cx));
+	size->cy = abs(INTERNAL_YDSTOWS(dc, size->cy));
     }
 
     if (lpnFit)
@@ -2276,10 +2264,6 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
                 if (dc->vport2WorldValid && dc->xformWorld2Vport.eM22 < 0)
                     desired[1].y = -desired[1].y;
             }
-            else
-            {
-                if (layout & LAYOUT_RTL) desired[1].x = -desired[1].x;
-            }
 
             deltas[i].x = desired[1].x - width.x;
             deltas[i].y = desired[1].y - width.y;
@@ -2290,6 +2274,8 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     }
     else
     {
+        POINT desired[2];
+
         if(!done_extents)
         {
             if(flags & ETO_GLYPH_INDEX)
@@ -2298,8 +2284,21 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
                 GetTextExtentPointW(hdc, reordered_str, count, &sz);
             done_extents = TRUE;
         }
-        width.x = abs(INTERNAL_XWSTODS(dc, sz.cx));
-        width.y = 0;
+        desired[0].x = desired[0].y = 0;
+        desired[1].x = sz.cx;
+        desired[1].y = 0;
+        LPtoDP(hdc, desired, 2);
+        desired[1].x -= desired[0].x;
+        desired[1].y -= desired[0].y;
+
+        if (dc->GraphicsMode == GM_COMPATIBLE)
+        {
+            if (dc->vport2WorldValid && dc->xformWorld2Vport.eM11 < 0)
+                desired[1].x = -desired[1].x;
+            if (dc->vport2WorldValid && dc->xformWorld2Vport.eM22 < 0)
+                desired[1].y = -desired[1].y;
+        }
+        width = desired[1];
     }
 
     tm.tmAscent = abs(INTERNAL_YWSTODS(dc, tm.tmAscent));

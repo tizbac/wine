@@ -774,13 +774,11 @@ static int get_ansi_notification(UINT unicodeNotificationCode)
 }
 
 /* forwards header notifications to listview parent */
-static LRESULT notify_forward_header(const LISTVIEW_INFO *infoPtr, const NMHEADERW *lpnmh)
+static LRESULT notify_forward_header(const LISTVIEW_INFO *infoPtr, NMHEADERW *lpnmhW)
 {
-    NMHEADERA nmhA;
-    HDITEMA hditema;
-    HD_TEXTFILTERA textfilter;
-    LPSTR text = NULL, filter = NULL;
+    LPCWSTR text = NULL, filter = NULL;
     LRESULT ret;
+    NMHEADERA *lpnmh = (NMHEADERA*) lpnmhW;
 
     /* on unicode format exit earlier */
     if (infoPtr->notifyFormat == NFR_UNICODE)
@@ -789,37 +787,38 @@ static LRESULT notify_forward_header(const LISTVIEW_INFO *infoPtr, const NMHEADE
 
     /* header always supplies unicode notifications,
        all we have to do is to convert strings to ANSI */
-    nmhA = *(const NMHEADERA*)lpnmh;
     if (lpnmh->pitem)
     {
-        hditema = *(HDITEMA*)lpnmh->pitem;
-        nmhA.pitem = &hditema;
         /* convert item text */
         if (lpnmh->pitem->mask & HDI_TEXT)
         {
-            hditema.pszText = NULL;
-            Str_SetPtrWtoA(&hditema.pszText, lpnmh->pitem->pszText);
-            text = hditema.pszText;
+            text = (LPCWSTR)lpnmh->pitem->pszText;
+            Str_SetPtrWtoA(&lpnmh->pitem->pszText, text);
         }
         /* convert filter text */
         if ((lpnmh->pitem->mask & HDI_FILTER) && (lpnmh->pitem->type == HDFT_ISSTRING) &&
              lpnmh->pitem->pvFilter)
         {
-            hditema.pvFilter = &textfilter;
-            textfilter = *(HD_TEXTFILTERA*)(lpnmh->pitem->pvFilter);
-            textfilter.pszText = NULL;
-            Str_SetPtrWtoA(&textfilter.pszText, ((HD_TEXTFILTERW*)lpnmh->pitem->pvFilter)->pszText);
-            filter = textfilter.pszText;
+            filter = (LPCWSTR)((HD_TEXTFILTERA*)lpnmh->pitem->pvFilter)->pszText;
+            Str_SetPtrWtoA(&((HD_TEXTFILTERA*)lpnmh->pitem->pvFilter)->pszText, filter);
         }
     }
-    nmhA.hdr.code = get_ansi_notification(lpnmh->hdr.code);
+    lpnmh->hdr.code = get_ansi_notification(lpnmh->hdr.code);
 
-    ret = SendMessageW(infoPtr->hwndNotify, WM_NOTIFY, nmhA.hdr.idFrom,
-                       (LPARAM)&nmhA);
+    ret = SendMessageW(infoPtr->hwndNotify, WM_NOTIFY, lpnmh->hdr.idFrom,
+                       (LPARAM)lpnmh);
 
     /* cleanup */
-    Free(text);
-    Free(filter);
+    if(text)
+    {
+        Free(lpnmh->pitem->pszText);
+        lpnmh->pitem->pszText = (LPSTR)text;
+    }
+    if(filter)
+    {
+        Free(((HD_TEXTFILTERA*)lpnmh->pitem->pvFilter)->pszText);
+        ((HD_TEXTFILTERA*)lpnmh->pitem->pvFilter)->pszText = (LPSTR)filter;
+    }
 
     return ret;
 }
@@ -4954,6 +4953,8 @@ static void LISTVIEW_RefreshReportGrid(LISTVIEW_INFO *infoPtr, HDC hdc)
         SelectObject( hdc, hOldPen );
         DeleteObject( hPen );
     }
+    else
+        ranges_destroy(colRanges);
 }
 
 /***
@@ -10236,9 +10237,9 @@ static LRESULT LISTVIEW_NCDestroy(LISTVIEW_INFO *infoPtr)
  * RETURN:
  * Zero
  */
-static LRESULT LISTVIEW_Notify(LISTVIEW_INFO *infoPtr, const NMHDR *lpnmhdr)
+static LRESULT LISTVIEW_Notify(LISTVIEW_INFO *infoPtr, NMHDR *lpnmhdr)
 {
-    const NMHEADERW *lpnmh;
+    NMHEADERW *lpnmh;
     
     TRACE("(lpnmhdr=%p)\n", lpnmhdr);
 
@@ -10246,7 +10247,7 @@ static LRESULT LISTVIEW_Notify(LISTVIEW_INFO *infoPtr, const NMHDR *lpnmhdr)
 
     /* remember: HDN_LAST < HDN_FIRST */
     if (lpnmhdr->code > HDN_FIRST || lpnmhdr->code < HDN_LAST) return 0;
-    lpnmh = (const NMHEADERW *)lpnmhdr;
+    lpnmh = (NMHEADERW *)lpnmhdr;
 
     if (lpnmh->iItem < 0 || lpnmh->iItem >= DPA_GetPtrCount(infoPtr->hdpaColumns)) return 0;
 
@@ -10271,26 +10272,25 @@ static LRESULT LISTVIEW_Notify(LISTVIEW_INFO *infoPtr, const NMHDR *lpnmhdr)
             LISTVIEW_GetOrigin(infoPtr, &ptOrigin);
             infoPtr->xTrackLine = x + ptOrigin.x;
             LISTVIEW_DrawTrackLine(infoPtr);
-            break;
+            return notify_forward_header(infoPtr, lpnmh);
 	}
-	
+
 	case HDN_ENDTRACKA:
 	case HDN_ENDTRACKW:
 	    /* remove the track line (if any) */
 	    LISTVIEW_DrawTrackLine(infoPtr);
 	    infoPtr->xTrackLine = -1;
-	    break;
+            return notify_forward_header(infoPtr, lpnmh);
 
         case HDN_BEGINDRAG:
-            notify_forward_header(infoPtr, lpnmh);
-            return (infoPtr->dwLvExStyle & LVS_EX_HEADERDRAGDROP) == 0;
+            if ((infoPtr->dwLvExStyle & LVS_EX_HEADERDRAGDROP) == 0) return 1;
+            return notify_forward_header(infoPtr, lpnmh);
 
         case HDN_ENDDRAG:
             infoPtr->colRectsDirty = TRUE;
             LISTVIEW_InvalidateList(infoPtr);
-            notify_forward_header(infoPtr, lpnmh);
-            return FALSE;
-            
+            return notify_forward_header(infoPtr, lpnmh);
+
 	case HDN_ITEMCHANGEDW:
 	case HDN_ITEMCHANGEDA:
 	{
@@ -10370,8 +10370,8 @@ static LRESULT LISTVIEW_Notify(LISTVIEW_INFO *infoPtr, const NMHDR *lpnmhdr)
 		    LISTVIEW_InvalidateRect(infoPtr, &rcCol);
 		}
 	    }
-	}
-	break;
+	    break;
+        }
 
 	case HDN_ITEMCLICKW:
 	case HDN_ITEMCLICKA:
@@ -10383,9 +10383,8 @@ static LRESULT LISTVIEW_Notify(LISTVIEW_INFO *infoPtr, const NMHDR *lpnmhdr)
             nmlv.iItem = -1;
             nmlv.iSubItem = lpnmh->iItem;
             notify_listview(infoPtr, LVN_COLUMNCLICK, &nmlv);
-            notify_forward_header(infoPtr, lpnmh);
+            return notify_forward_header(infoPtr, lpnmh);
         }
-	break;
 
 	case HDN_DIVIDERDBLCLICKW:
 	case HDN_DIVIDERDBLCLICKA:
@@ -10393,10 +10392,8 @@ static LRESULT LISTVIEW_Notify(LISTVIEW_INFO *infoPtr, const NMHDR *lpnmhdr)
                       we should use LVSCW_AUTOSIZE_USEHEADER, helper rework or
                       split needed for that */
             LISTVIEW_SetColumnWidth(infoPtr, lpnmh->iItem, LVSCW_AUTOSIZE);
-            notify_forward_header(infoPtr, lpnmh);
-            break;
+            return notify_forward_header(infoPtr, lpnmh);
     }
-
     return 0;
 }
 

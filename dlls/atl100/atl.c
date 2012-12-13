@@ -22,7 +22,7 @@
 
 #include "wine/debug.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(atl);
+WINE_DEFAULT_DEBUG_CHANNEL(atl100);
 
 /***********************************************************************
  *           AtlAdvise         [atl100.@]
@@ -227,9 +227,95 @@ HRESULT WINAPI AtlIPersistStreamInit_Save(LPSTREAM pStm, BOOL fClearDirty,
 }
 
 /***********************************************************************
+ *           AtlModuleAddTermFunc            [atl100.@]
+ */
+HRESULT WINAPI AtlModuleAddTermFunc(_ATL_MODULE *pM, _ATL_TERMFUNC *pFunc, DWORD_PTR dw)
+{
+    _ATL_TERMFUNC_ELEM *termfunc_elem;
+
+    TRACE("(%p %p %ld)\n", pM, pFunc, dw);
+
+    termfunc_elem = HeapAlloc(GetProcessHeap(), 0, sizeof(_ATL_TERMFUNC_ELEM));
+    termfunc_elem->pFunc = pFunc;
+    termfunc_elem->dw = dw;
+    termfunc_elem->pNext = pM->m_pTermFuncs;
+
+    pM->m_pTermFuncs = termfunc_elem;
+
+    return S_OK;
+}
+
+/***********************************************************************
+ *           AtlCallTermFunc              [atl100.@]
+ */
+void WINAPI AtlCallTermFunc(_ATL_MODULE *pM)
+{
+    _ATL_TERMFUNC_ELEM *iter = pM->m_pTermFuncs, *tmp;
+
+    TRACE("(%p)\n", pM);
+
+    while(iter) {
+        iter->pFunc(iter->dw);
+        tmp = iter;
+        iter = iter->pNext;
+        HeapFree(GetProcessHeap(), 0, tmp);
+    }
+
+    pM->m_pTermFuncs = NULL;
+}
+
+/***********************************************************************
+ *           AtlLoadTypeLib             [atl100.@]
+ */
+HRESULT WINAPI AtlLoadTypeLib(HINSTANCE inst, LPCOLESTR lpszIndex,
+        BSTR *pbstrPath, ITypeLib **ppTypeLib)
+{
+    OLECHAR path[MAX_PATH+8]; /* leave some space for index */
+    HRESULT hres;
+
+    TRACE("(%p %s %p %p)\n", inst, debugstr_w(lpszIndex), pbstrPath, ppTypeLib);
+
+    GetModuleFileNameW(inst, path, MAX_PATH);
+    if(lpszIndex)
+        lstrcatW(path, lpszIndex);
+
+    hres = LoadTypeLib(path, ppTypeLib);
+    if(FAILED(hres))
+        return hres;
+
+    *pbstrPath = SysAllocString(path);
+    return S_OK;
+}
+
+/***********************************************************************
+ *           AtlWinModuleAddCreateWndData              [atl100.43]
+ */
+void WINAPI AtlWinModuleAddCreateWndData(_ATL_WIN_MODULE *pM, _AtlCreateWndData *pData, void *pvObject)
+{
+    TRACE("(%p, %p, %p)\n", pM, pData, pvObject);
+
+    pData->m_pThis = pvObject;
+    pData->m_dwThreadID = GetCurrentThreadId();
+
+    EnterCriticalSection(&pM->m_csWindowCreate);
+    pData->m_pNext = pM->m_pCreateWndList;
+    pM->m_pCreateWndList = pData;
+    LeaveCriticalSection(&pM->m_csWindowCreate);
+}
+
+/***********************************************************************
+ *           AtlRegisterClassCategoriesHelper          [atl100.49]
+ */
+HRESULT WINAPI AtlRegisterClassCategoriesHelper(REFCLSID clsid, const struct _ATL_CATMAP_ENTRY *catmap, BOOL reg)
+{
+    FIXME("(%s %p %x)\n", debugstr_guid(clsid), catmap, reg);
+    return E_NOTIMPL;
+}
+
+/***********************************************************************
  *           AtlGetVersion              [atl100.@]
  */
 DWORD WINAPI AtlGetVersion(void *pReserved)
 {
-   return 0x0a00;
+   return _ATL_VER;
 }

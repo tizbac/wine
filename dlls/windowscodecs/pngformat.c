@@ -630,8 +630,12 @@ static HRESULT WINAPI PngDecoder_GetMetadataQueryReader(IWICBitmapDecoder *iface
 static HRESULT WINAPI PngDecoder_GetPreview(IWICBitmapDecoder *iface,
     IWICBitmapSource **ppIBitmapSource)
 {
-    FIXME("(%p,%p): stub\n", iface, ppIBitmapSource);
-    return E_NOTIMPL;
+    TRACE("(%p,%p)\n", iface, ppIBitmapSource);
+
+    if (!ppIBitmapSource) return E_INVALIDARG;
+
+    *ppIBitmapSource = NULL;
+    return WINCODEC_ERR_UNSUPPORTEDOPERATION;
 }
 
 static HRESULT WINAPI PngDecoder_GetColorContexts(IWICBitmapDecoder *iface,
@@ -645,6 +649,10 @@ static HRESULT WINAPI PngDecoder_GetThumbnail(IWICBitmapDecoder *iface,
     IWICBitmapSource **ppIThumbnail)
 {
     TRACE("(%p,%p)\n", iface, ppIThumbnail);
+
+    if (!ppIThumbnail) return E_INVALIDARG;
+
+    *ppIThumbnail = NULL;
     return WINCODEC_ERR_CODECNOTHUMBNAIL;
 }
 
@@ -895,8 +903,12 @@ static HRESULT WINAPI PngDecoder_Frame_GetColorContexts(IWICBitmapFrameDecode *i
 static HRESULT WINAPI PngDecoder_Frame_GetThumbnail(IWICBitmapFrameDecode *iface,
     IWICBitmapSource **ppIThumbnail)
 {
-    FIXME("(%p,%p): stub\n", iface, ppIThumbnail);
-    return E_NOTIMPL;
+    TRACE("(%p,%p)\n", iface, ppIThumbnail);
+
+    if (!ppIThumbnail) return E_INVALIDARG;
+
+    *ppIThumbnail = NULL;
+    return WINCODEC_ERR_CODECNOTHUMBNAIL;
 }
 
 static const IWICBitmapFrameDecodeVtbl PngDecoder_FrameVtbl = {

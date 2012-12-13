@@ -306,7 +306,7 @@
 @ cdecl _atoflt_l(ptr str ptr) MSVCRT__atoflt_l
 @ cdecl -ret64 _atoi64(str) ntdll._atoi64
 # stub -ret64 _atoi64_l(str ptr)
-# stub _atoi_l(str ptr)
+@ cdecl _atoi_l(str ptr) MSVCRT__atoi_l
 # stub _atol_l(str ptr)
 @ cdecl _atoldbl(ptr str) MSVCRT__atoldbl
 # stub _atoldbl_l(ptr str ptr)
@@ -462,7 +462,7 @@
 @ cdecl _futime(long ptr)
 @ cdecl _futime32(long ptr)
 @ cdecl _futime64(long ptr)
-# stub _fwprintf_l(ptr wstr ptr)
+@ varargs _fwprintf_l(ptr wstr ptr) MSVCRT__fwprintf_l
 # stub _fwprintf_p(ptr wstr)
 # stub _fwprintf_p_l(ptr wstr ptr)
 # stub _fwprintf_s_l(ptr wstr ptr)
@@ -690,7 +690,7 @@
 @ cdecl _mbscmp(str str)
 # stub _mbscmp_l(str str ptr)
 @ cdecl _mbscoll(str str)
-# stub _mbscoll_l(str str ptr)
+@ cdecl _mbscoll_l(str str ptr)
 @ cdecl _mbscpy(ptr str)
 # stub _mbscpy_s(ptr long str)
 # stub _mbscpy_s_l(ptr long str ptr)
@@ -703,7 +703,7 @@
 @ cdecl _mbsicmp(str str)
 # stub _mbsicmp_l(str str ptr)
 @ cdecl _mbsicoll(str str)
-# stub _mbsicoll_l(str str ptr)
+@ cdecl _mbsicoll_l(str str ptr)
 @ cdecl _mbsinc(str)
 # stub _mbsinc_l(str ptr)
 @ cdecl _mbslen(str)
@@ -720,16 +720,16 @@
 # stub _mbsnbcmp_l(str str long ptr)
 @ cdecl _mbsnbcnt(ptr long)
 # stub _mbsnbcnt_l(ptr long ptr)
-@ stub _mbsnbcoll(str str long)
-# stub _mbsnbcoll_l(str str long ptr)
+@ cdecl _mbsnbcoll(str str long)
+@ cdecl _mbsnbcoll_l(str str long ptr)
 @ cdecl _mbsnbcpy(ptr str long)
 # stub _mbsnbcpy_l(ptr str long ptr)
 @ cdecl _mbsnbcpy_s(ptr long str long)
 # stub _mbsnbcpy_s_l(ptr long str long ptr)
 @ cdecl _mbsnbicmp(str str long)
 # stub _mbsnbicmp_l(str str long ptr)
-@ stub _mbsnbicoll(str str long)
-# stub _mbsnbicoll_l(str str long ptr)
+@ cdecl _mbsnbicoll(str str long)
+@ cdecl _mbsnbicoll_l(str str long ptr)
 @ cdecl _mbsnbset(ptr long long)
 # stub _mbsnbset_l(str long long ptr)
 # stub _mbsnbset_s(ptr long long long)
@@ -1018,7 +1018,7 @@
 # stub _vfprintf_p(ptr str ptr)
 # stub _vfprintf_p_l(ptr str ptr ptr)
 # stub _vfprintf_s_l(ptr str ptr ptr)
-# stub _vfwprintf_l(ptr wstr ptr ptr)
+@ cdecl _vfwprintf_l(ptr wstr ptr ptr) MSVCRT__vfwprintf_l
 # stub _vfwprintf_p(ptr wstr ptr)
 # stub _vfwprintf_p_l(ptr wstr ptr ptr)
 # stub _vfwprintf_s_l(ptr wstr ptr ptr)
@@ -1199,7 +1199,7 @@
 @ cdecl _wtoi(wstr) ntdll._wtoi
 @ cdecl -ret64 _wtoi64(wstr) ntdll._wtoi64
 # stub -ret64 _wtoi64_l(wstr ptr)
-# stub _wtoi_l(wstr ptr)
+@ cdecl _wtoi_l(wstr ptr) MSVCRT__wtoi_l
 @ cdecl _wtol(wstr) ntdll._wtol
 # stub _wtol_l(wstr ptr)
 @ cdecl _wunlink(wstr) MSVCRT__wunlink

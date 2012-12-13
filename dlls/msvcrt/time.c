@@ -24,12 +24,7 @@
 
 #include "config.h"
 
-#define _POSIX_PTHREAD_SEMANTICS /* switch to a 2 arg style asctime_r on Solaris */
-#include <time.h>
-#ifdef HAVE_SYS_TIMES_H
-# include <sys/times.h>
-#endif
-#include <limits.h>
+#include <stdlib.h>
 
 #include "msvcrt.h"
 #include "mtdll.h"
@@ -51,34 +46,6 @@ static inline int IsLeapYear(int Year)
     return Year % 4 == 0 && (Year % 100 != 0 || Year % 400 == 0);
 }
 
-static inline void msvcrt_tm_to_unix( struct tm *dest, const struct MSVCRT_tm *src )
-{
-    memset( dest, 0, sizeof(*dest) );
-    dest->tm_sec   = src->tm_sec;
-    dest->tm_min   = src->tm_min;
-    dest->tm_hour  = src->tm_hour;
-    dest->tm_mday  = src->tm_mday;
-    dest->tm_mon   = src->tm_mon;
-    dest->tm_year  = src->tm_year;
-    dest->tm_wday  = src->tm_wday;
-    dest->tm_yday  = src->tm_yday;
-    dest->tm_isdst = src->tm_isdst;
-}
-
-static inline void unix_tm_to_msvcrt( struct MSVCRT_tm *dest, const struct tm *src )
-{
-    memset( dest, 0, sizeof(*dest) );
-    dest->tm_sec   = src->tm_sec;
-    dest->tm_min   = src->tm_min;
-    dest->tm_hour  = src->tm_hour;
-    dest->tm_mday  = src->tm_mday;
-    dest->tm_mon   = src->tm_mon;
-    dest->tm_year  = src->tm_year;
-    dest->tm_wday  = src->tm_wday;
-    dest->tm_yday  = src->tm_yday;
-    dest->tm_isdst = src->tm_isdst;
-}
-
 static inline void write_invalid_msvcrt_tm( struct MSVCRT_tm *tm )
 {
     tm->tm_sec = -1;
@@ -92,6 +59,141 @@ static inline void write_invalid_msvcrt_tm( struct MSVCRT_tm *tm )
     tm->tm_isdst = -1;
 }
 
+/*********************************************************************
+ *		_daylight (MSVCRT.@)
+ */
+int MSVCRT___daylight = 1;
+
+/*********************************************************************
+ *		_timezone (MSVCRT.@)
+ */
+MSVCRT_long MSVCRT___timezone = 28800;
+
+/*********************************************************************
+ *		_dstbias (MSVCRT.@)
+ */
+int MSVCRT__dstbias = -3600;
+
+/*********************************************************************
+ *		_tzname (MSVCRT.@)
+ * NOTES
+ *  Some apps (notably Mozilla) insist on writing to these, so the buffer
+ *  must be large enough.
+ */
+static char tzname_std[64] = "PST";
+static char tzname_dst[64] = "PDT";
+char *MSVCRT__tzname[2] = { tzname_std, tzname_dst };
+
+static TIME_ZONE_INFORMATION tzi = {0};
+/*********************************************************************
+ *		_tzset (MSVCRT.@)
+ */
+void CDECL MSVCRT__tzset(void)
+{
+    char *tz = MSVCRT_getenv("TZ");
+    BOOL error;
+
+    _mlock(_TIME_LOCK);
+    if(tz && tz[0]) {
+        BOOL neg_zone = FALSE;
+
+        memset(&tzi, 0, sizeof(tzi));
+
+        /* Parse timezone information: tzn[+|-]hh[:mm[:ss]][dzn] */
+        lstrcpynA(MSVCRT__tzname[0], tz, 3);
+        tz += 3;
+
+        if(*tz == '-') {
+            neg_zone = TRUE;
+            tz++;
+        }else if(*tz == '+') {
+            tz++;
+        }
+        MSVCRT___timezone = strtol(tz, &tz, 10)*3600;
+        if(*tz == ':') {
+            MSVCRT___timezone += strtol(tz+1, &tz, 10)*60;
+            if(*tz == ':')
+                MSVCRT___timezone += strtol(tz+1, &tz, 10);
+        }
+        if(neg_zone)
+            MSVCRT___timezone = -MSVCRT___timezone;
+
+        MSVCRT___daylight = *tz;
+        lstrcpynA(MSVCRT__tzname[1], tz, 3);
+    }else if(GetTimeZoneInformation(&tzi) != TIME_ZONE_ID_INVALID) {
+        MSVCRT___timezone = tzi.Bias*60;
+        if(tzi.StandardDate.wMonth)
+            MSVCRT___timezone += tzi.StandardBias*60;
+
+        if(tzi.DaylightDate.wMonth) {
+            MSVCRT___daylight = 1;
+            MSVCRT__dstbias = (tzi.DaylightBias-tzi.StandardBias)*60;
+        }else {
+            MSVCRT___daylight = 0;
+            MSVCRT__dstbias = 0;
+        }
+
+        if(!WideCharToMultiByte(CP_ACP, 0, tzi.StandardName, -1, MSVCRT__tzname[0],
+                    sizeof(tzname_std), NULL, &error) || error)
+            *MSVCRT__tzname[0] = 0;
+        if(!WideCharToMultiByte(CP_ACP, 0, tzi.DaylightName, -1, MSVCRT__tzname[1],
+                    sizeof(tzname_dst), NULL, &error) || error)
+            *MSVCRT__tzname[0] = 0;
+    }
+    _munlock(_TIME_LOCK);
+}
+
+static void _tzset_init(void)
+{
+    static BOOL init = FALSE;
+
+    if(!init) {
+        _mlock(_TIME_LOCK);
+        if(!init) {
+            MSVCRT__tzset();
+            init = TRUE;
+        }
+        _munlock(_TIME_LOCK);
+    }
+}
+
+static BOOL is_dst(const SYSTEMTIME *st)
+{
+    TIME_ZONE_INFORMATION tmp;
+    SYSTEMTIME out;
+
+    if(!MSVCRT___daylight)
+        return FALSE;
+
+    if(tzi.DaylightDate.wMonth) {
+        tmp = tzi;
+    }else if(st->wYear >= 2007) {
+        memset(&tmp, 0, sizeof(tmp));
+        tmp.StandardDate.wMonth = 11;
+        tmp.StandardDate.wDay = 1;
+        tmp.StandardDate.wHour = 2;
+        tmp.DaylightDate.wMonth = 3;
+        tmp.DaylightDate.wDay = 2;
+        tmp.DaylightDate.wHour = 2;
+    }else {
+        memset(&tmp, 0, sizeof(tmp));
+        tmp.StandardDate.wMonth = 10;
+        tmp.StandardDate.wDay = 5;
+        tmp.StandardDate.wHour = 2;
+        tmp.DaylightDate.wMonth = 4;
+        tmp.DaylightDate.wDay = 1;
+        tmp.DaylightDate.wHour = 2;
+    }
+
+    tmp.Bias = 0;
+    tmp.StandardBias = 0;
+    tmp.DaylightBias = MSVCRT__dstbias/60;
+    if(!SystemTimeToTzSpecificLocalTime(&tmp, st, &out))
+        return FALSE;
+
+    return memcmp(st, &out, sizeof(SYSTEMTIME));
+}
+
 #define SECSPERDAY        86400
 /* 1601 to 1970 is 369 years plus 89 leap days */
 #define SECS_1601_TO_1970  ((369 * 365 + 89) * (ULONGLONG)SECSPERDAY)
@@ -99,19 +201,100 @@ static inline void write_invalid_msvcrt_tm( struct MSVCRT_tm *tm )
 #define TICKSPERMSEC      10000
 #define TICKS_1601_TO_1970 (SECS_1601_TO_1970 * TICKSPERSEC)
 
+static MSVCRT___time64_t mktime_helper(struct MSVCRT_tm *mstm, BOOL local)
+{
+    SYSTEMTIME st;
+    FILETIME ft;
+    MSVCRT___time64_t ret = 0;
+    int i;
+    BOOL use_dst = FALSE;
+
+    ret = mstm->tm_year + mstm->tm_mon/12;
+    mstm->tm_mon %= 12;
+    if(mstm->tm_mon < 0) {
+        mstm->tm_mon += 12;
+        ret--;
+    }
+
+    if(ret<70 || ret>1100) {
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return -1;
+    }
+
+    memset(&st, 0, sizeof(SYSTEMTIME));
+    st.wDay = 1;
+    st.wMonth = mstm->tm_mon+1;
+    st.wYear = ret+1900;
+
+    if(!SystemTimeToFileTime(&st, &ft)) {
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return -1;
+    }
+
+    ret = ((MSVCRT___time64_t)ft.dwHighDateTime<<32)+ft.dwLowDateTime;
+    ret += (MSVCRT___time64_t)mstm->tm_sec*TICKSPERSEC;
+    ret += (MSVCRT___time64_t)mstm->tm_min*60*TICKSPERSEC;
+    ret += (MSVCRT___time64_t)mstm->tm_hour*60*60*TICKSPERSEC;
+    ret += (MSVCRT___time64_t)(mstm->tm_mday-1)*SECSPERDAY*TICKSPERSEC;
+
+    ft.dwLowDateTime = ret & 0xffffffff;
+    ft.dwHighDateTime = ret >> 32;
+    FileTimeToSystemTime(&ft, &st);
+
+    if(local) {
+        _tzset_init();
+        use_dst = is_dst(&st);
+        if((mstm->tm_isdst<=-1 && use_dst) || (mstm->tm_isdst>=1)) {
+            SYSTEMTIME tmp;
+
+            ret += (MSVCRT___time64_t)MSVCRT__dstbias*TICKSPERSEC;
+
+            ft.dwLowDateTime = ret & 0xffffffff;
+            ft.dwHighDateTime = ret >> 32;
+            FileTimeToSystemTime(&ft, &tmp);
+
+            if(!is_dst(&tmp)) {
+                st = tmp;
+                use_dst = FALSE;
+            }else {
+                use_dst = TRUE;
+            }
+        }else if(mstm->tm_isdst==0 && use_dst) {
+            ret -= (MSVCRT___time64_t)MSVCRT__dstbias*TICKSPERSEC;
+            ft.dwLowDateTime = ret & 0xffffffff;
+            ft.dwHighDateTime = ret >> 32;
+            FileTimeToSystemTime(&ft, &st);
+            ret += (MSVCRT___time64_t)MSVCRT__dstbias*TICKSPERSEC;
+        }
+        ret += (MSVCRT___time64_t)MSVCRT___timezone*TICKSPERSEC;
+    }
+
+    mstm->tm_sec = st.wSecond;
+    mstm->tm_min = st.wMinute;
+    mstm->tm_hour = st.wHour;
+    mstm->tm_mday = st.wDay;
+    mstm->tm_mon = st.wMonth-1;
+    mstm->tm_year = st.wYear-1900;
+    mstm->tm_wday = st.wDayOfWeek;
+    for(i=mstm->tm_yday=0; i<st.wMonth-1; i++)
+        mstm->tm_yday += MonthLengths[IsLeapYear(st.wYear)][i];
+    mstm->tm_yday += st.wDay-1;
+    mstm->tm_isdst = use_dst ? 1 : 0;
+
+    if(ret < TICKS_1601_TO_1970) {
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return -1;
+    }
+    ret = (ret-TICKS_1601_TO_1970)/TICKSPERSEC;
+    return ret;
+}
+
 /**********************************************************************
  *		_mktime64 (MSVCRT.@)
  */
 MSVCRT___time64_t CDECL MSVCRT__mktime64(struct MSVCRT_tm *mstm)
 {
-    time_t secs;
-    struct tm tm;
-
-    msvcrt_tm_to_unix( &tm, mstm );
-    secs = mktime( &tm );
-    unix_tm_to_msvcrt( mstm, &tm );
-
-    return secs < 0 ? -1 : secs;
+    return mktime_helper(mstm, TRUE);
 }
 
 /**********************************************************************
@@ -119,7 +302,8 @@ MSVCRT___time64_t CDECL MSVCRT__mktime64(struct MSVCRT_tm *mstm)
  */
 MSVCRT___time32_t CDECL MSVCRT__mktime32(struct MSVCRT_tm *mstm)
 {
-    return MSVCRT__mktime64( mstm );
+    MSVCRT___time64_t ret = MSVCRT__mktime64( mstm );
+    return ret == (MSVCRT___time32_t)ret ? ret : -1;
 }
 
 /**********************************************************************
@@ -144,32 +328,7 @@ MSVCRT___time32_t CDECL MSVCRT_mktime(struct MSVCRT_tm *mstm)
  */
 MSVCRT___time64_t CDECL MSVCRT__mkgmtime64(struct MSVCRT_tm *time)
 {
-    SYSTEMTIME st;
-    FILETIME ft;
-    MSVCRT___time64_t ret;
-    int i;
-
-    st.wMilliseconds = 0;
-    st.wSecond = time->tm_sec;
-    st.wMinute = time->tm_min;
-    st.wHour = time->tm_hour;
-    st.wDay = time->tm_mday;
-    st.wMonth = time->tm_mon+1;
-    st.wYear = time->tm_year+1900;
-
-    if(!SystemTimeToFileTime(&st, &ft))
-        return -1;
-
-    FileTimeToSystemTime(&ft, &st);
-    time->tm_wday = st.wDayOfWeek;
-
-    for(i=time->tm_yday=0; i<st.wMonth-1; i++)
-        time->tm_yday += MonthLengths[IsLeapYear(st.wYear)][i];
-    time->tm_yday += st.wDay-1;
-
-    ret = ((MSVCRT___time64_t)ft.dwHighDateTime<<32)+ft.dwLowDateTime;
-    ret = (ret-TICKS_1601_TO_1970)/TICKSPERSEC;
-    return ret;
+    return mktime_helper(time, FALSE);
 }
 
 /**********************************************************************
@@ -177,7 +336,8 @@ MSVCRT___time64_t CDECL MSVCRT__mkgmtime64(struct MSVCRT_tm *time)
  */
 MSVCRT___time32_t CDECL MSVCRT__mkgmtime32(struct MSVCRT_tm *time)
 {
-    return MSVCRT__mkgmtime64(time);
+    MSVCRT___time64_t ret = MSVCRT__mkgmtime64(time);
+    return ret == (MSVCRT___time32_t)ret ? ret : -1;
 }
 
 /**********************************************************************
@@ -196,62 +356,66 @@ MSVCRT___time32_t CDECL MSVCRT__mkgmtime(struct MSVCRT_tm *time)
 #endif
 
 /*********************************************************************
+ *      _localtime64_s (MSVCRT.@)
+ */
+int CDECL _localtime64_s(struct MSVCRT_tm *res, const MSVCRT___time64_t *secs)
+{
+    int i;
+    FILETIME ft;
+    SYSTEMTIME st;
+    ULONGLONG time;
+
+    if (!res || !secs || *secs < 0 || *secs > _MAX__TIME64_T)
+    {
+        if (res)
+            write_invalid_msvcrt_tm(res);
+
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+
+    _tzset_init();
+    time = (*secs - MSVCRT___timezone) * (ULONGLONG)TICKSPERSEC + TICKS_1601_TO_1970;
+
+    ft.dwHighDateTime = (UINT)(time >> 32);
+    ft.dwLowDateTime  = (UINT)time;
+    FileTimeToSystemTime(&ft, &st);
+
+    res->tm_isdst = is_dst(&st) ? 1 : 0;
+    if(res->tm_isdst) {
+        time -= MSVCRT__dstbias * (ULONGLONG)TICKSPERSEC;
+        ft.dwHighDateTime = (UINT)(time >> 32);
+        ft.dwLowDateTime  = (UINT)time;
+        FileTimeToSystemTime(&ft, &st);
+    }
+
+    res->tm_sec  = st.wSecond;
+    res->tm_min  = st.wMinute;
+    res->tm_hour = st.wHour;
+    res->tm_mday = st.wDay;
+    res->tm_year = st.wYear - 1900;
+    res->tm_mon  = st.wMonth - 1;
+    res->tm_wday = st.wDayOfWeek;
+    for (i = res->tm_yday = 0; i < st.wMonth - 1; i++)
+        res->tm_yday += MonthLengths[IsLeapYear(st.wYear)][i];
+    res->tm_yday += st.wDay - 1;
+
+    return 0;
+}
+
+/*********************************************************************
  *      _localtime64 (MSVCRT.@)
  */
 struct MSVCRT_tm* CDECL MSVCRT__localtime64(const MSVCRT___time64_t* secs)
 {
-    struct tm *tm;
-    thread_data_t *data;
-    time_t seconds = *secs;
+    thread_data_t *data = msvcrt_get_thread_data();
 
-    if (seconds < 0) return NULL;
-
-    _mlock(_TIME_LOCK);
-    if (!(tm = localtime( &seconds))) {
-        _munlock(_TIME_LOCK);
-        return NULL;
-    }
-
-    data = msvcrt_get_thread_data();
     if(!data->time_buffer)
         data->time_buffer = MSVCRT_malloc(sizeof(struct MSVCRT_tm));
 
-    unix_tm_to_msvcrt( data->time_buffer, tm );
-    _munlock(_TIME_LOCK);
-
+    if(_localtime64_s(data->time_buffer, secs))
+        return NULL;
     return data->time_buffer;
-}
-
-/*********************************************************************
- *      _localtime64_s (MSVCRT.@)
- */
-int CDECL _localtime64_s(struct MSVCRT_tm *time, const MSVCRT___time64_t *secs)
-{
-    struct tm *tm;
-    time_t seconds;
-
-    if (!time || !secs || *secs < 0 || *secs > _MAX__TIME64_T)
-    {
-        if (time)
-            write_invalid_msvcrt_tm(time);
-
-        *MSVCRT__errno() = MSVCRT_EINVAL;
-        return MSVCRT_EINVAL;
-    }
-
-    seconds = *secs;
-
-    _mlock(_TIME_LOCK);
-    if (!(tm = localtime(&seconds)))
-    {
-        _munlock(_TIME_LOCK);
-        *MSVCRT__errno() = MSVCRT_EINVAL;
-        return MSVCRT_EINVAL;
-    }
-
-    unix_tm_to_msvcrt(time, tm);
-    _munlock(_TIME_LOCK);
-    return 0;
 }
 
 /*********************************************************************
@@ -259,7 +423,12 @@ int CDECL _localtime64_s(struct MSVCRT_tm *time, const MSVCRT___time64_t *secs)
  */
 struct MSVCRT_tm* CDECL MSVCRT__localtime32(const MSVCRT___time32_t* secs)
 {
-    MSVCRT___time64_t secs64 = *secs;
+    MSVCRT___time64_t secs64;
+
+    if(!secs)
+        return NULL;
+
+    secs64 = *secs;
     return MSVCRT__localtime64( &secs64 );
 }
 
@@ -308,7 +477,7 @@ int CDECL MSVCRT__gmtime64_s(struct MSVCRT_tm *res, const MSVCRT___time64_t *sec
     SYSTEMTIME st;
     ULONGLONG time;
 
-    if (!res || !secs || *secs < 0) {
+    if (!res || !secs || *secs < 0 || *secs > _MAX__TIME64_T) {
         if (res) {
             write_invalid_msvcrt_tm(res);
         }
@@ -701,22 +870,12 @@ MSVCRT___time32_t CDECL MSVCRT_time(MSVCRT___time32_t* buf)
 #endif
 
 /*********************************************************************
- *		_daylight (MSVCRT.@)
- */
-int MSVCRT___daylight = 0;
-
-/*********************************************************************
  *		__p_daylight (MSVCRT.@)
  */
 int * CDECL MSVCRT___p__daylight(void)
 {
 	return &MSVCRT___daylight;
 }
-
-/*********************************************************************
- *		_dstbias (MSVCRT.@)
- */
-int MSVCRT__dstbias = 0;
 
 /*********************************************************************
  *		__p_dstbias (MSVCRT.@)
@@ -727,28 +886,12 @@ int * CDECL __p__dstbias(void)
 }
 
 /*********************************************************************
- *		_timezone (MSVCRT.@)
- */
-MSVCRT_long MSVCRT___timezone = 0;
-
-/*********************************************************************
  *		__p_timezone (MSVCRT.@)
  */
 MSVCRT_long * CDECL MSVCRT___p__timezone(void)
 {
 	return &MSVCRT___timezone;
 }
-
-/*********************************************************************
- *		_tzname (MSVCRT.@)
- * NOTES
- *  Some apps (notably Mozilla) insist on writing to these, so the buffer
- *  must be large enough.  The size is picked based on observation of
- *  Windows XP.
- */
-static char tzname_std[64] = "PST";
-static char tzname_dst[64] = "PDT";
-char *MSVCRT__tzname[2] = { tzname_std, tzname_dst };
 
 /*********************************************************************
  *		_get_tzname (MSVCRT.@)
@@ -790,41 +933,6 @@ int CDECL MSVCRT__get_tzname(MSVCRT_size_t *ret, char *buf, MSVCRT_size_t bufsiz
 char ** CDECL __p__tzname(void)
 {
 	return MSVCRT__tzname;
-}
-
-/*********************************************************************
- *		_tzset (MSVCRT.@)
- */
-void CDECL MSVCRT__tzset(void)
-{
-    tzset();
-#if defined(HAVE_TIMEZONE) && defined(HAVE_DAYLIGHT)
-    MSVCRT___daylight = daylight;
-    MSVCRT___timezone = timezone;
-#else
-    {
-        static const time_t seconds_in_year = (365 * 24 + 6) * 3600;
-        time_t t;
-        struct tm *tmp;
-        int zone_january, zone_july;
-
-        _mlock(_TIME_LOCK);
-        t = (time(NULL) / seconds_in_year) * seconds_in_year;
-        tmp = localtime(&t);
-        zone_january = -tmp->tm_gmtoff;
-        t += seconds_in_year / 2;
-        tmp = localtime(&t);
-        zone_july = -tmp->tm_gmtoff;
-        _munlock(_TIME_LOCK);
-
-        MSVCRT___daylight = (zone_january != zone_july);
-        MSVCRT___timezone = max(zone_january, zone_july);
-    }
-#endif
-    lstrcpynA(tzname_std, tzname[0], sizeof(tzname_std));
-    tzname_std[sizeof(tzname_std) - 1] = '\0';
-    lstrcpynA(tzname_dst, tzname[1], sizeof(tzname_dst));
-    tzname_dst[sizeof(tzname_dst) - 1] = '\0';
 }
 
 static inline BOOL strftime_date(char *str, MSVCRT_size_t *pos, MSVCRT_size_t max,

@@ -570,6 +570,108 @@ float4 main(const float4 color : COLOR) : SV_TARGET
     ok(!refcount, "Device has %u references left.\n", refcount);
 }
 
+static void test_create_sampler_state(void)
+{
+    ID3D10SamplerState *sampler_state1, *sampler_state2;
+    D3D10_SAMPLER_DESC sampler_desc;
+    ID3D10Device *device;
+    ULONG refcount;
+    HRESULT hr;
+
+    if (!(device = create_device()))
+    {
+        skip("Failed to create device, skipping tests.\n");
+        return;
+    }
+
+    hr = ID3D10Device_CreateSamplerState(device, NULL, &sampler_state1);
+    ok(hr == E_INVALIDARG, "Got unexpected hr %#x.\n", hr);
+
+    sampler_desc.Filter = D3D10_FILTER_MIN_MAG_MIP_LINEAR;
+    sampler_desc.AddressU = D3D10_TEXTURE_ADDRESS_WRAP;
+    sampler_desc.AddressV = D3D10_TEXTURE_ADDRESS_WRAP;
+    sampler_desc.AddressW = D3D10_TEXTURE_ADDRESS_WRAP;
+    sampler_desc.MipLODBias = 0.0f;
+    sampler_desc.MaxAnisotropy = 16;
+    sampler_desc.ComparisonFunc = D3D10_COMPARISON_ALWAYS;
+    sampler_desc.BorderColor[0] = 0.0f;
+    sampler_desc.BorderColor[1] = 1.0f;
+    sampler_desc.BorderColor[2] = 0.0f;
+    sampler_desc.BorderColor[3] = 1.0f;
+    sampler_desc.MinLOD = 0.0f;
+    sampler_desc.MaxLOD = 16.0f;
+
+    hr = ID3D10Device_CreateSamplerState(device, &sampler_desc, &sampler_state1);
+    ok(SUCCEEDED(hr), "Failed to create sampler state, hr %#x.\n", hr);
+    hr = ID3D10Device_CreateSamplerState(device, &sampler_desc, &sampler_state2);
+    ok(SUCCEEDED(hr), "Failed to create sampler state, hr %#x.\n", hr);
+    ok(sampler_state1 == sampler_state2, "Got different sampler state objects.\n");
+
+    refcount = ID3D10SamplerState_Release(sampler_state2);
+    ok(refcount == 1, "Got unexpected refcount %u.\n", refcount);
+    refcount = ID3D10SamplerState_Release(sampler_state1);
+    ok(!refcount, "Got unexpected refcount %u.\n", refcount);
+
+    refcount = ID3D10Device_Release(device);
+    ok(!refcount, "Device has %u references left.\n", refcount);
+}
+
+static void test_create_blend_state(void)
+{
+    ID3D10BlendState *blend_state1, *blend_state2;
+    D3D10_BLEND_DESC blend_desc;
+    ID3D10Device *device;
+    ULONG refcount;
+    HRESULT hr;
+
+    if (!(device = create_device()))
+    {
+        skip("Failed to create device, skipping tests.\n");
+        return;
+    }
+
+    hr = ID3D10Device_CreateBlendState(device, NULL, &blend_state1);
+    ok(hr == E_INVALIDARG, "Got unexpected hr %#x.\n", hr);
+
+    blend_desc.AlphaToCoverageEnable = FALSE;
+    blend_desc.BlendEnable[0] = FALSE;
+    blend_desc.BlendEnable[1] = FALSE;
+    blend_desc.BlendEnable[2] = FALSE;
+    blend_desc.BlendEnable[3] = FALSE;
+    blend_desc.BlendEnable[4] = FALSE;
+    blend_desc.BlendEnable[5] = FALSE;
+    blend_desc.BlendEnable[6] = FALSE;
+    blend_desc.BlendEnable[7] = FALSE;
+    blend_desc.SrcBlend = D3D10_BLEND_ONE;
+    blend_desc.DestBlend = D3D10_BLEND_ZERO;
+    blend_desc.BlendOp = D3D10_BLEND_OP_ADD;
+    blend_desc.SrcBlendAlpha = D3D10_BLEND_ONE;
+    blend_desc.DestBlendAlpha = D3D10_BLEND_ZERO;
+    blend_desc.BlendOpAlpha = D3D10_BLEND_OP_ADD;
+    blend_desc.RenderTargetWriteMask[0] = D3D10_COLOR_WRITE_ENABLE_ALL;
+    blend_desc.RenderTargetWriteMask[1] = D3D10_COLOR_WRITE_ENABLE_ALL;
+    blend_desc.RenderTargetWriteMask[2] = D3D10_COLOR_WRITE_ENABLE_ALL;
+    blend_desc.RenderTargetWriteMask[3] = D3D10_COLOR_WRITE_ENABLE_ALL;
+    blend_desc.RenderTargetWriteMask[4] = D3D10_COLOR_WRITE_ENABLE_ALL;
+    blend_desc.RenderTargetWriteMask[5] = D3D10_COLOR_WRITE_ENABLE_ALL;
+    blend_desc.RenderTargetWriteMask[6] = D3D10_COLOR_WRITE_ENABLE_ALL;
+    blend_desc.RenderTargetWriteMask[7] = D3D10_COLOR_WRITE_ENABLE_ALL;
+
+    hr = ID3D10Device_CreateBlendState(device, &blend_desc, &blend_state1);
+    ok(SUCCEEDED(hr), "Failed to create blend state, hr %#x.\n", hr);
+    hr = ID3D10Device_CreateBlendState(device, &blend_desc, &blend_state2);
+    ok(SUCCEEDED(hr), "Failed to create blend state, hr %#x.\n", hr);
+    ok(blend_state1 == blend_state2, "Got different blend state objects.\n");
+
+    refcount = ID3D10BlendState_Release(blend_state2);
+    ok(refcount == 1, "Got unexpected refcount %u.\n", refcount);
+    refcount = ID3D10BlendState_Release(blend_state1);
+    ok(!refcount, "Got unexpected refcount %u.\n", refcount);
+
+    refcount = ID3D10Device_Release(device);
+    ok(!refcount, "Device has %u references left.\n", refcount);
+}
+
 START_TEST(device)
 {
     test_device_interfaces();
@@ -579,4 +681,6 @@ START_TEST(device)
     test_create_rendertarget_view();
     test_create_shader_resource_view();
     test_create_shader();
+    test_create_sampler_state();
+    test_create_blend_state();
 }

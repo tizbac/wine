@@ -29,7 +29,6 @@
 #include "config.h"
 #include "wine/port.h"
 
-#include <time.h>
 #include <stdarg.h>
 #include <stdio.h>
 #ifdef HAVE_UNISTD_H
@@ -3435,23 +3434,13 @@ int CDECL MSVCRT_fgetpos(MSVCRT_FILE* file, MSVCRT_fpos_t *pos)
  */
 int CDECL MSVCRT_fputs(const char *s, MSVCRT_FILE* file)
 {
-    MSVCRT_size_t i, len = strlen(s);
+    MSVCRT_size_t len = strlen(s);
     int ret;
 
     MSVCRT__lock_file(file);
-    if (!(msvcrt_get_ioinfo(file->_file)->wxflag & WX_TEXT)) {
-      ret = MSVCRT_fwrite(s,sizeof(*s),len,file) == len ? 0 : MSVCRT_EOF;
-      MSVCRT__unlock_file(file);
-      return ret;
-    }
-    for (i=0; i<len; i++)
-      if (MSVCRT_fputc(s[i], file) == MSVCRT_EOF)  {
-        MSVCRT__unlock_file(file);
-        return MSVCRT_EOF;
-      }
-
+    ret = MSVCRT_fwrite(s, sizeof(*s), len, file) == len ? 0 : MSVCRT_EOF;
     MSVCRT__unlock_file(file);
-    return 0;
+    return ret;
 }
 
 /*********************************************************************
@@ -3859,6 +3848,23 @@ int CDECL MSVCRT_vfwprintf_s(MSVCRT_FILE* file, const MSVCRT_wchar_t *format, __
 }
 
 /*********************************************************************
+ *              _vfwprintf_l (MSVCRT.@)
+ */
+int CDECL MSVCRT__vfwprintf_l(MSVCRT_FILE* file, const MSVCRT_wchar_t *format,
+        MSVCRT__locale_t locale, __ms_va_list valist)
+{
+    int ret;
+
+    if (!MSVCRT_CHECK_PMT( file != NULL )) return -1;
+
+    MSVCRT__lock_file(file);
+    ret = pf_printf_w(puts_clbk_file_w, file, format, locale, FALSE, FALSE, arg_clbk_valist, NULL, &valist);
+    MSVCRT__unlock_file(file);
+
+    return ret;
+}
+
+/*********************************************************************
  *		vprintf (MSVCRT.@)
  */
 int CDECL MSVCRT_vprintf(const char *format, __ms_va_list valist)
@@ -3938,6 +3944,19 @@ int CDECL MSVCRT_fwprintf_s(MSVCRT_FILE* file, const MSVCRT_wchar_t *format, ...
     int res;
     __ms_va_start(valist, format);
     res = MSVCRT_vfwprintf_s(file, format, valist);
+    __ms_va_end(valist);
+    return res;
+}
+
+/*********************************************************************
+ *              _fwprintf_l (MSVCRT.@)
+ */
+int CDECL MSVCRT__fwprintf_l(MSVCRT_FILE* file, const MSVCRT_wchar_t *format, MSVCRT__locale_t locale, ...)
+{
+    __ms_va_list valist;
+    int res;
+    __ms_va_start(valist, locale);
+    res = MSVCRT__vfwprintf_l(file, format, locale, valist);
     __ms_va_end(valist);
     return res;
 }

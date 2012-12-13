@@ -432,7 +432,7 @@ typedef struct _DDHAL_DDMISCELLANEOUS2CALLBACKS {
     LPDDHAL_DESTROYDDLOCAL		DestroyDDLocal;
 } DDHAL_DDMISCELLANEOUS2CALLBACKS,*LPDDHAL_DDMISCELLANEOUS2CALLBACKS;
 
-typedef HRESULT (WINAPI *LPDDGAMMACALIBRATORPROC)(LPDDGAMMARAMP, LPBYTE);
+typedef HRESULT (WINAPI *LPDDGAMMACALIBRATORPROC)(DDGAMMARAMP *, BYTE *);
 
 /*****************************************************************************
  * driver info structure
@@ -906,7 +906,7 @@ typedef struct _DDRAWI_DDRAWSURFACE_GBL_MORE {
     DWORD			cPageUnlocks;
     ULONG_PTR			hKernelSurface;
     DWORD			dwKernelRefCnt;
-    LPDDCOLORCONTROL		lpColorInfo;
+    DDCOLORCONTROL             *lpColorInfo;
     FLATPTR			fpNTAlias;
     DWORD			dwContentsStamp;
     LPVOID			lpvUnswappedDriverReserved;
@@ -936,7 +936,7 @@ typedef struct _DDRAWI_DDRAWSURFACE_MORE {
     DWORD			dwOverlayFlags;
     VOID			*rgjunc;
     LPDDRAWI_DDVIDEOPORT_LCL	lpVideoPort;
-    LPDDOVERLAYFX		lpddOverlayFX;
+    DDOVERLAYFX                *lpddOverlayFX;
     DDSCAPSEX			ddsCapsEx;
     DWORD			dwTextureStage;
     LPVOID			lpDDRAWReserved;
