@@ -51,6 +51,7 @@
 #include <assert.h>
 #ifdef HAVE_ZLIB
 #  include <zlib.h>
+#include <wchar.h>
 #endif
 
 #include "windef.h"
@@ -4211,6 +4212,8 @@ static BOOL HTTP_ParseDateAsAsctime(LPCWSTR value, FILETIME *ft)
 static BOOL HTTP_ParseRfc1123Date(LPCWSTR value, FILETIME *ft)
 {
     static const WCHAR gmt[]= { 'G','M','T',0 };
+    static const WCHAR est[]= { 'E','S','T',0 };
+    static const WCHAR pst[]= { 'P','S','T',0 };
     WCHAR *nextPtr, day[4], month[4], *monthPtr;
     LPCWSTR ptr;
     unsigned long num;
@@ -4281,8 +4284,57 @@ static BOOL HTTP_ParseRfc1123Date(LPCWSTR value, FILETIME *ft)
 
     if (strcmpW(ptr, gmt))
     {
-        ERR("unexpected time zone %s\n", debugstr_w(ptr));
-        return FALSE;
+        if ( !strcmpW(ptr,est))
+        {
+            st.wHour += 5;
+            if ( st.wHour > 23 )
+            {
+                st.wDay++;
+                st.wHour = st.wHour % 24;
+            }
+            printf("EST\n");
+            
+        }else if (*ptr == '+' || *ptr == '-') //Implicit UTC/GMT + offset[4 digit]
+        {
+            int offset;
+            if ( *ptr == '+' )
+            {
+                swscanf((const wchar_t*)ptr,"+%04d",&offset);
+            }else{
+                swscanf((const wchar_t*)ptr,"-%04d",&offset);
+            }
+            printf("GMT offset %d\n",offset);
+            if ( st.wHour < -offset )
+            {
+                st.wDay--;
+                st.wHour = (24 + offset) % 24;
+                
+            }else{
+                st.wHour+= offset;
+                if ( st.wHour > 23 )
+                {
+                    st.wDay++;
+                    st.wHour = st.wHour % 24;
+                }
+            }
+        }else if ( !strcmpW(ptr,pst))
+        {
+            st.wHour += 7;
+            if ( st.wHour > 23 )
+            {
+                st.wDay++;
+                st.wHour = st.wHour % 24;
+            }
+            printf("PST\n");
+            
+        }
+        else{
+            
+            
+            ERR("unexpected time zone %s\n", debugstr_w(ptr));
+            return FALSE;
+        }
+        
     }
     return SystemTimeToFileTime(&st, ft);
 }

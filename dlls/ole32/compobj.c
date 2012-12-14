@@ -2544,6 +2544,11 @@ HRESULT WINAPI CoGetClassObject(
 
     TRACE("CLSID: %s,IID: %s\n", debugstr_guid(rclsid), debugstr_guid(iid));
 
+    if(CLSCTX_LOCAL_SERVER == dwClsContext) {
+        dwClsContext = CLSCTX_INPROC_SERVER;
+        WARN("forcing CLSCTX_INPROC_SERVER instead of CLSCTX_LOCAL_SERVER\n");
+    }
+
     if (!ppv)
         return E_INVALIDARG;
 

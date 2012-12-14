@@ -248,7 +248,10 @@ static DWORD netconn_verify_cert(netconn_t *conn, PCCERT_CONTEXT cert, HCERTSTOR
             err = ERROR_INTERNET_SEC_CERT_REV_FAILED;
             if(conn->mask_errors)
                 conn->security_flags |= _SECURITY_FLAG_CERT_REV_FAILED;
-            if(!(conn->security_flags & SECURITY_FLAG_IGNORE_REVOCATION))
+            int r = MessageBoxA(NULL,"Certificate validation failed because of partial chain, do you want to proceed with connection anyway?","Warning",MB_YESNO | MB_ICONWARNING );
+            if ( r == IDYES )
+                err = 0;
+            if(!(conn->security_flags & SECURITY_FLAG_IGNORE_REVOCATION) && !(r == IDYES))
                 break;
         }
 
@@ -836,12 +839,51 @@ static DWORD netcon_secure_connect_setup(netconn_t *connection, long tls_option)
         res = ERROR_INTERNET_SECURITY_CHANNEL_ERROR;
         goto fail;
     }
-    if (pSSL_connect(ssl_s) <= 0)
+    int ret;
+    ret =  pSSL_connect(ssl_s);
+    if (ret <= 0)
     {
+        int err = pSSL_get_error(ssl_s,ret);
         res = (DWORD_PTR)pSSL_get_ex_data(ssl_s, error_idx);
         if (!res)
             res = ERROR_INTERNET_SECURITY_CHANNEL_ERROR;
-        ERR("SSL_connect failed: %d\n", res);
+        
+        char errstr[128];
+        pERR_error_string(err,errstr);
+       /* switch (err)
+        {
+            case SSL_ERROR_NONE:
+                strcpy(errstr,"SSL_ERROR_NONE");
+                break;
+            case SSL_ERROR_ZERO_RETURN:
+                strcpy(errstr,"SSL_ERROR_ZERO_RETURN");
+                break;
+            case SSL_ERROR_WANT_READ:
+                strcpy(errstr,"SSL_ERROR_WANT_READ");
+                break;
+            case SSL_ERROR_WANT_WRITE:
+                strcpy(errstr,"SSL_ERROR_WANT_WRITE");
+                break;
+            case SSL_ERROR_WANT_CONNECT:
+                strcpy(errstr,"SSL_ERROR_WANT_CONNECT");
+                break;
+            case SSL_ERROR_WANT_ACCEPT:
+                strcpy(errstr,"SSL_ERROR_WANT_ACCEPT");
+                break;
+            case SSL_ERROR_WANT_X509_LOOKUP:
+                strcpy(errstr,"SSL_ERROR_WANT_X509_LOOKUP");
+                break;
+            case SSL_ERROR_SYSCALL:
+                strcpy(errstr,"SSL_ERROR_SYSCALL");
+                break;
+            case SSL_ERROR_SSL:
+                strcpy(errstr,"SSL_ERROR_SSL");
+                break;
+            default:
+                strcpy(errstr,"UNK");
+            
+        }*/
+        ERR("SSL_connect failed: %d %s %d\n", res,errstr,ret);
         goto fail;
     }
 

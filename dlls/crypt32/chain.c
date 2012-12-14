@@ -2648,6 +2648,7 @@ static void CRYPT_VerifyChainRevocation(PCERT_CHAIN_CONTEXT chain,
                         WARN("unmapped error %08x\n", revocationStatus.dwError);
                         error = 0;
                     }
+                    ERR("rev err: %d\n",error);
                     if (element)
                     {
                         /* FIXME: set element's pRevocationInfo member */

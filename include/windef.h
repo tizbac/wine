@@ -53,11 +53,7 @@ extern "C" {
 #ifndef __stdcall
 # ifdef __i386__
 #  ifdef __GNUC__
-#   ifdef __APPLE__ /* Mac OS X uses a 16-byte aligned stack and not a 4-byte one */
-#    define __stdcall __attribute__((__stdcall__)) __attribute__((__force_align_arg_pointer__))
-#   else
-#    define __stdcall __attribute__((__stdcall__))
-#   endif
+#   define __stdcall __attribute__((__stdcall__)) __attribute__((__force_align_arg_pointer__))
 #  elif defined(_MSC_VER)
     /* Nothing needs to be done. __stdcall already exists */
 #  else
@@ -72,11 +68,7 @@ extern "C" {
 
 #ifndef __cdecl
 # if defined(__i386__) && defined(__GNUC__)
-#  ifdef __APPLE__ /* Mac OS X uses 16-byte aligned stack and not a 4-byte one */
-#   define __cdecl __attribute__((__cdecl__)) __attribute__((__force_align_arg_pointer__))
-#  else
-#   define __cdecl __attribute__((__cdecl__))
-#  endif
+#  define __cdecl __attribute__((__cdecl__)) __attribute__((__force_align_arg_pointer__))
 # elif defined(__x86_64__) && defined (__GNUC__)
 #  define __cdecl __attribute__((ms_abi))
 # elif !defined(_MSC_VER)
