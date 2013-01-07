@@ -804,6 +804,32 @@ static void apple_main_thread( void (*init_func)(void) )
 
 
 /***********************************************************************
+ *           set_rttime_limit
+ *
+ * set a limit on the cpu time used
+ */
+static void set_rttime_limit(void)
+{
+#if defined(HAVE_SETRLIMIT) && defined(__linux__)
+#ifndef RLIMIT_RTTIME
+#define RLIMIT_RTTIME 15
+#endif
+    struct rlimit rlimit;
+
+    if (!getrlimit( RLIMIT_RTTIME, &rlimit ))
+    {
+        /* 50 ms realtime, then 10 ms to undo realtime */
+        if (rlimit.rlim_max > 150000000ULL)
+            rlimit.rlim_max = 150000000ULL;
+        rlimit.rlim_cur = rlimit.rlim_max - 10000000ULL;
+
+        setrlimit( RLIMIT_RTTIME, &rlimit );
+    }
+#endif
+}
+
+
+/***********************************************************************
  *           wine_init
  *
  * Main Wine initialisation.
@@ -822,6 +848,7 @@ void wine_init( int argc, char *argv[], char *error, int error_size )
 #ifdef RLIMIT_AS
     set_max_limit( RLIMIT_AS );
 #endif
+    set_rttime_limit();
 
     wine_init_argv0_path( argv[0] );
     build_dll_path();
