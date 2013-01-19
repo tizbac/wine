@@ -1193,6 +1193,7 @@ struct fragment_pipeline
 
 extern const struct StateEntryTemplate misc_state_template[] DECLSPEC_HIDDEN;
 extern const struct StateEntryTemplate ffp_vertexstate_template[] DECLSPEC_HIDDEN;
+extern const struct fragment_pipeline none_fragment_pipe DECLSPEC_HIDDEN;
 extern const struct fragment_pipeline ffp_fragment_pipeline DECLSPEC_HIDDEN;
 extern const struct fragment_pipeline atifs_fragment_pipeline DECLSPEC_HIDDEN;
 extern const struct fragment_pipeline arbfp_fragment_pipeline DECLSPEC_HIDDEN;
@@ -1415,6 +1416,7 @@ enum wined3d_pci_device
     CARD_NVIDIA_GEFORCE_GTX465      = 0x06c4,
     CARD_NVIDIA_GEFORCE_GTX470      = 0x06cd,
     CARD_NVIDIA_GEFORCE_GTX480      = 0x06c0,
+    CARD_NVIDIA_GEFORCE_GT520       = 0x1040,
     CARD_NVIDIA_GEFORCE_GT540M      = 0x0df4,
     CARD_NVIDIA_GEFORCE_GTX550      = 0x1244,
     CARD_NVIDIA_GEFORCE_GT555M      = 0x04b8,
@@ -1422,9 +1424,14 @@ enum wined3d_pci_device
     CARD_NVIDIA_GEFORCE_GTX560      = 0x1201,
     CARD_NVIDIA_GEFORCE_GTX570      = 0x1081,
     CARD_NVIDIA_GEFORCE_GTX580      = 0x1080,
+    CARD_NVIDIA_GEFORCE_GT610       = 0x104a,
     CARD_NVIDIA_GEFORCE_GT630M      = 0x0de9,
     CARD_NVIDIA_GEFORCE_GT640M      = 0x0fd2,
     CARD_NVIDIA_GEFORCE_GT650M      = 0x0fd1,
+    CARD_NVIDIA_GEFORCE_GTX650      = 0x0fc6,
+    CARD_NVIDIA_GEFORCE_GTX650TI    = 0x11c6,
+    CARD_NVIDIA_GEFORCE_GTX660      = 0x11c0,
+    CARD_NVIDIA_GEFORCE_GTX660TI    = 0x1183,
     CARD_NVIDIA_GEFORCE_GTX670      = 0x1189,
     CARD_NVIDIA_GEFORCE_GTX680      = 0x1180,
 
@@ -1562,8 +1569,6 @@ struct wined3d_driver_info
 struct wined3d_adapter
 {
     UINT ordinal;
-    BOOL                    opengl;
-
     POINT monitorPoint;
     enum wined3d_format_id screen_format;
 
@@ -1700,9 +1705,6 @@ struct wined3d_device
     /* X and GL Information */
     GLenum                  offscreenBuffer;
 
-    /* Selected capabilities */
-    int vs_selected_mode;
-    int ps_selected_mode;
     const struct wined3d_shader_backend_ops *shader_backend;
     void *shader_priv;
     void *fragment_priv;
@@ -2046,7 +2048,6 @@ struct wined3d_surface
 
     DWORD flags;
 
-    enum wined3d_surface_type surface_type;
     UINT                      pow2Width;
     UINT                      pow2Height;
 
@@ -2290,7 +2291,6 @@ struct wined3d_state
     struct wined3d_vertex_declaration *vertex_declaration;
     struct wined3d_stream_output stream_output[MAX_STREAM_OUT];
     struct wined3d_stream_state streams[MAX_STREAMS + 1 /* tesselated pseudo-stream */];
-    BOOL user_stream;
     struct wined3d_buffer *index_buffer;
     enum wined3d_format_id index_format;
     INT base_vertex_index;

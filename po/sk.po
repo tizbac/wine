@@ -491,7 +491,7 @@ msgstr "&Od:"
 msgid "&To:"
 msgstr "&Do:"
 
-#: comdlg32.rc:209
+#: comdlg32.rc:209 wineps.rc:39
 msgid "Print &Quality:"
 msgstr "&Kvalita tlače:"
 
@@ -7081,7 +7081,7 @@ msgstr "Hodiny"
 msgid "split button"
 msgstr ""
 
-#: oleacc.rc:90 ipconfig.rc:33
+#: oleacc.rc:90
 msgid "IP address"
 msgstr ""
 
@@ -7272,7 +7272,7 @@ msgctxt "unit: bits"
 msgid "b"
 msgstr ""
 
-#: sane.rc:34 winecfg.rc:174
+#: sane.rc:34 wineps.rc:46 winecfg.rc:174
 msgctxt "unit: dots/inch"
 msgid "dpi"
 msgstr ""
@@ -8252,21 +8252,21 @@ msgstr "Inštalovať/Odinštalovať"
 
 #: urlmon.rc:40
 msgid ""
-"When installed, ActiveX has full access to your computer.Do not click "
-"install unless you have absolute trust in the above source."
-msgstr ""
-
-#: urlmon.rc:47
-msgid "Installation of component failed: %08x"
+"When installed, an ActiveX component has full access to your computer. Do "
+"not click install unless you have absolute trust in the above source."
 msgstr ""
 
 #: urlmon.rc:48
+msgid "Installation of component failed: %08x"
+msgstr ""
+
+#: urlmon.rc:49
 #, fuzzy
 #| msgid "&Install"
 msgid "Install (%d)"
 msgstr "&Inštalovať"
 
-#: urlmon.rc:49
+#: urlmon.rc:50
 #, fuzzy
 #| msgid "&Install"
 msgid "Install"
@@ -9760,6 +9760,30 @@ msgid ""
 "Can't recognize '%1' as an internal or external command, or batch script.\n"
 msgstr ""
 
+#: cmd.rc:357
+msgid "Division by zero error.\n"
+msgstr ""
+
+#: cmd.rc:358
+msgid "Expected an operand.\n"
+msgstr ""
+
+#: cmd.rc:359
+#, fuzzy
+#| msgid "Unexpected network error.\n"
+msgid "Expected an operator.\n"
+msgstr "Neočakávaná sieťová chyba.\n"
+
+#: cmd.rc:360
+msgid "Mismatch in parentheses.\n"
+msgstr ""
+
+#: cmd.rc:361
+msgid ""
+"Badly formed number - must be one of decimal (12),\n"
+" hexadecimal (0x34) or octal (056).\n"
+msgstr ""
+
 #: dxdiag.rc:27
 msgid "DirectX Diagnostic Tool"
 msgstr ""
@@ -9806,6 +9830,12 @@ msgstr ""
 msgid "Connection-specific DNS suffix"
 msgstr ""
 
+#: ipconfig.rc:33
+#, fuzzy
+#| msgid "IP Address="
+msgid "IPv4 address"
+msgstr "IP adresa="
+
 #: ipconfig.rc:34
 msgid "Hostname"
 msgstr ""
@@ -9845,6 +9875,12 @@ msgstr ""
 #: ipconfig.rc:46
 msgid "Default gateway"
 msgstr ""
+
+#: ipconfig.rc:47
+#, fuzzy
+#| msgid "IP Address="
+msgid "IPv6 address"
+msgstr "IP adresa="
 
 #: net.rc:27
 msgid ""
@@ -9961,6 +9997,79 @@ msgstr ""
 #: net.rc:40
 msgid "The following services are running:\n"
 msgstr ""
+
+#: netstat.rc:27
+#, fuzzy
+#| msgid "Activation"
+msgid "Active Connections"
+msgstr "Aktivácia"
+
+#: netstat.rc:28
+msgid "Proto"
+msgstr ""
+
+#: netstat.rc:29
+#, fuzzy
+#| msgid "Email Address"
+msgid "Local Address"
+msgstr "Email adresa"
+
+#: netstat.rc:30
+#, fuzzy
+#| msgid "Street Address"
+msgid "Foreign Address"
+msgstr "Ulica"
+
+#: netstat.rc:31
+#, fuzzy
+#| msgid "Status:"
+msgid "State"
+msgstr "Stav:"
+
+#: netstat.rc:32
+#, fuzzy
+#| msgid "Internet Settings"
+msgid "Interface Statistics"
+msgstr "Nastavenia internetu"
+
+#: netstat.rc:33
+msgid "Sent"
+msgstr ""
+
+#: netstat.rc:34
+msgid "Received"
+msgstr ""
+
+#: netstat.rc:35
+#, fuzzy
+#| msgid "bytes"
+msgid "Bytes"
+msgstr "bajtov"
+
+#: netstat.rc:36
+msgid "Unicast packets"
+msgstr ""
+
+#: netstat.rc:37
+msgid "Non-unicast packets"
+msgstr ""
+
+#: netstat.rc:38
+#, fuzzy
+#| msgid "Disclaimer"
+msgid "Discards"
+msgstr "Odvolanie"
+
+#: netstat.rc:39
+#, fuzzy
+#| msgid "Error; "
+msgid "Errors"
+msgstr "Chyba; "
+
+#: netstat.rc:40
+#, fuzzy
+msgid "Unknown protocols"
+msgstr "Neznámy ovládač tlačiarne.\n"
 
 #: notepad.rc:27
 msgid "&New\tCtrl+N"

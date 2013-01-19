@@ -81,6 +81,7 @@ DEFINE_EXPECT(global_propget_i);
 DEFINE_EXPECT(global_propput_d);
 DEFINE_EXPECT(global_propput_i);
 DEFINE_EXPECT(global_propdelete_d);
+DEFINE_EXPECT(global_nopropdelete_d);
 DEFINE_EXPECT(global_success_d);
 DEFINE_EXPECT(global_success_i);
 DEFINE_EXPECT(global_notexists_d);
@@ -89,7 +90,10 @@ DEFINE_EXPECT(global_propargput_i);
 DEFINE_EXPECT(global_testargtypes_i);
 DEFINE_EXPECT(puredisp_prop_d);
 DEFINE_EXPECT(puredisp_noprop_d);
-DEFINE_EXPECT(testobj_delete);
+DEFINE_EXPECT(puredisp_value);
+DEFINE_EXPECT(dispexfunc_value);
+DEFINE_EXPECT(testobj_delete_test);
+DEFINE_EXPECT(testobj_delete_nodelete);
 DEFINE_EXPECT(testobj_value);
 DEFINE_EXPECT(testobj_prop_d);
 DEFINE_EXPECT(testobj_withprop_d);
@@ -101,6 +105,7 @@ DEFINE_EXPECT(GetItemInfo_testVal);
 DEFINE_EXPECT(ActiveScriptSite_OnScriptError);
 DEFINE_EXPECT(invoke_func);
 DEFINE_EXPECT(DeleteMemberByDispID);
+DEFINE_EXPECT(DeleteMemberByDispID_false);
 
 #define DISPID_GLOBAL_TESTPROPGET   0x1000
 #define DISPID_GLOBAL_TESTPROPPUT   0x1001
@@ -128,8 +133,10 @@ DEFINE_EXPECT(DeleteMemberByDispID);
 #define DISPID_GLOBAL_DISPUNK       0x1017
 #define DISPID_GLOBAL_TESTRES       0x1018
 #define DISPID_GLOBAL_TESTNORES     0x1019
+#define DISPID_GLOBAL_DISPEXFUNC    0x101a
 
-#define DISPID_GLOBAL_TESTPROPDELETE  0x2000
+#define DISPID_GLOBAL_TESTPROPDELETE    0x2000
+#define DISPID_GLOBAL_TESTNOPROPDELETE  0x2001
 
 #define DISPID_TESTOBJ_PROP         0x2000
 #define DISPID_TESTOBJ_ONLYDISPID   0x2001
@@ -240,18 +247,6 @@ static HRESULT WINAPI DispatchEx_GetIDsOfNames(IDispatchEx *iface, REFIID riid,
                                                 LPOLESTR *rgszNames, UINT cNames,
                                                 LCID lcid, DISPID *rgDispId)
 {
-    ok(IsEqualGUID(riid, &IID_NULL), "Expected IID_NULL\n");
-    ok(cNames==1, "cNames = %d\n", cNames);
-
-    if(!strcmp_wa(*rgszNames, "prop")) {
-        CHECK_EXPECT(puredisp_prop_d);
-        *rgDispId = DISPID_TESTOBJ_PROP;
-        return S_OK;
-    } else if(!strcmp_wa(*rgszNames, "noprop")) {
-        CHECK_EXPECT(puredisp_noprop_d);
-        return DISP_E_UNKNOWNNAME;
-    }
-
     ok(0, "unexpected call\n");
     return E_NOTIMPL;
 }
@@ -259,6 +254,12 @@ static HRESULT WINAPI DispatchEx_GetIDsOfNames(IDispatchEx *iface, REFIID riid,
 static HRESULT WINAPI DispatchEx_Invoke(IDispatchEx *iface, DISPID dispIdMember,
                             REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams,
                             VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI DispatchEx_GetDispID(IDispatchEx *iface, BSTR bstrName, DWORD grfdex, DISPID *pid)
 {
     ok(0, "unexpected call\n");
     return E_NOTIMPL;
@@ -402,11 +403,19 @@ static HRESULT WINAPI testObj_InvokeEx(IDispatchEx *iface, DISPID id, LCID lcid,
 
 static HRESULT WINAPI testObj_DeleteMemberByName(IDispatchEx *iface, BSTR bstrName, DWORD grfdex)
 {
-    CHECK_EXPECT(testobj_delete);
+    if(!strcmp_wa(bstrName, "deleteTest")) {
+        CHECK_EXPECT(testobj_delete_test);
+        test_grfdex(grfdex, fdexNameCaseSensitive);
+        return S_OK;
+    }
+    if(!strcmp_wa(bstrName, "noDeleteTest")) {
+        CHECK_EXPECT(testobj_delete_nodelete);
+        test_grfdex(grfdex, fdexNameCaseSensitive);
+        return S_FALSE;
+    }
 
-    ok(!strcmp_wa(bstrName, "deleteTest"), "unexpected name %s\n", wine_dbgstr_w(bstrName));
-    test_grfdex(grfdex, fdexNameCaseSensitive);
-    return S_OK;
+    ok(0, "unexpected name %s\n", wine_dbgstr_w(bstrName));
+    return E_FAIL;
 }
 
 static IDispatchExVtbl testObjVtbl = {
@@ -429,6 +438,60 @@ static IDispatchExVtbl testObjVtbl = {
 
 static IDispatchEx testObj = { &testObjVtbl };
 
+static HRESULT WINAPI dispexFunc_InvokeEx(IDispatchEx *iface, DISPID id, LCID lcid, WORD wFlags, DISPPARAMS *pdp,
+        VARIANT *res, EXCEPINFO *pei, IServiceProvider *pspCaller)
+{
+    ok(pspCaller != NULL, "pspCaller = NULL\n");
+
+    switch(id) {
+    case DISPID_VALUE:
+        CHECK_EXPECT(dispexfunc_value);
+
+        ok(pdp != NULL, "pdp == NULL\n");
+        ok(pdp->rgvarg != NULL, "rgvarg == NULL\n");
+        ok(pdp->rgdispidNamedArgs != NULL, "rgdispidNamedArgs != NULL\n");
+        ok(*pdp->rgdispidNamedArgs == DISPID_THIS, "*rgdispidNamedArgs = %d\n", *pdp->rgdispidNamedArgs);
+        ok(pdp->cArgs == 2, "cArgs = %d\n", pdp->cArgs);
+        ok(pdp->cNamedArgs == 1, "cNamedArgs = %d\n", pdp->cNamedArgs);
+        ok(res != NULL, "res == NULL\n");
+        ok(wFlags == (DISPATCH_PROPERTYGET|DISPATCH_METHOD), "wFlags = %x\n", wFlags);
+        ok(pei != NULL, "pei == NULL\n");
+
+        ok(V_VT(pdp->rgvarg+1) == VT_BOOL, "V_VT(pdp->rgvarg+1) = %d\n", V_VT(pdp->rgvarg+1));
+        ok(!V_BOOL(pdp->rgvarg+1), "V_BOOL(pdp->rgvarg+1) = %x\n", V_BOOL(pdp->rgvarg+1));
+
+        ok(V_VT(pdp->rgvarg) == VT_DISPATCH, "V_VT(pdp->rgvarg) = %d\n", V_VT(pdp->rgvarg));
+        ok(V_DISPATCH(pdp->rgvarg) != NULL, "V_DISPATCH(pdp->rgvarg) == NULL\n");
+
+        if(res)
+            V_VT(res) = VT_NULL;
+        return S_OK;
+    default:
+        ok(0, "unexpected call %x\n", id);
+        return DISP_E_MEMBERNOTFOUND;
+    }
+}
+
+static IDispatchExVtbl dispexFuncVtbl = {
+    DispatchEx_QueryInterface,
+    DispatchEx_AddRef,
+    DispatchEx_Release,
+    DispatchEx_GetTypeInfoCount,
+    DispatchEx_GetTypeInfo,
+    DispatchEx_GetIDsOfNames,
+    DispatchEx_Invoke,
+    DispatchEx_GetDispID,
+    dispexFunc_InvokeEx,
+    DispatchEx_DeleteMemberByName,
+    DispatchEx_DeleteMemberByDispID,
+    DispatchEx_GetMemberProperties,
+    DispatchEx_GetMemberName,
+    DispatchEx_GetNextDispID,
+    DispatchEx_GetNameSpaceParent
+};
+
+static IDispatchEx dispexFunc = { &dispexFuncVtbl };
+
 static HRESULT WINAPI pureDisp_QueryInterface(IDispatchEx *iface, REFIID riid, void **ppv)
 {
     if(IsEqualGUID(riid, &IID_IUnknown) || IsEqualGUID(riid, &IID_IDispatch)) {
@@ -440,14 +503,65 @@ static HRESULT WINAPI pureDisp_QueryInterface(IDispatchEx *iface, REFIID riid, v
     return E_NOINTERFACE;
 }
 
+static HRESULT WINAPI pureDisp_GetIDsOfNames(IDispatchEx *iface, REFIID riid,
+                                                LPOLESTR *rgszNames, UINT cNames,
+                                                LCID lcid, DISPID *rgDispId)
+{
+    ok(IsEqualGUID(riid, &IID_NULL), "Expected IID_NULL\n");
+    ok(cNames==1, "cNames = %d\n", cNames);
+
+    if(!strcmp_wa(*rgszNames, "prop")) {
+        CHECK_EXPECT(puredisp_prop_d);
+        *rgDispId = DISPID_TESTOBJ_PROP;
+        return S_OK;
+    } else if(!strcmp_wa(*rgszNames, "noprop")) {
+        CHECK_EXPECT(puredisp_noprop_d);
+        return DISP_E_UNKNOWNNAME;
+    }
+
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI pureDisp_Invoke(IDispatchEx *iface, DISPID dispIdMember, REFIID riid, LCID lcid,
+        WORD wFlags, DISPPARAMS *pdp, VARIANT *res, EXCEPINFO *ei, UINT *puArgErr)
+{
+    ok(IsEqualGUID(&IID_NULL, riid), "unexpected riid\n");
+
+    switch(dispIdMember) {
+    case DISPID_VALUE:
+        CHECK_EXPECT(puredisp_value);
+
+        ok(pdp != NULL, "pdp == NULL\n");
+        ok(pdp->rgvarg != NULL, "rgvarg == NULL\n");
+        ok(!pdp->rgdispidNamedArgs, "rgdispidNamedArgs != NULL\n");
+        ok(pdp->cArgs == 1, "cArgs = %d\n", pdp->cArgs);
+        ok(!pdp->cNamedArgs, "cNamedArgs = %d\n", pdp->cNamedArgs);
+        ok(res != NULL, "res == NULL\n");
+        ok(wFlags == (DISPATCH_PROPERTYGET|DISPATCH_METHOD), "wFlags = %x\n", wFlags);
+        ok(ei != NULL, "ei == NULL\n");
+        ok(puArgErr != NULL, "puArgErr == NULL\n");
+
+        ok(V_VT(pdp->rgvarg) == VT_BOOL, "V_VT(pdp->rgvarg) = %d\n", V_VT(pdp->rgvarg));
+        ok(!V_BOOL(pdp->rgvarg), "V_BOOL(pdp->rgvarg) = %x\n", V_BOOL(pdp->rgvarg));
+
+        if(res)
+            V_VT(res) = VT_NULL;
+        return S_OK;
+    default:
+        ok(0, "unexpected call\n");
+        return E_NOTIMPL;
+    }
+}
+
 static IDispatchExVtbl pureDispVtbl = {
     pureDisp_QueryInterface,
     DispatchEx_AddRef,
     DispatchEx_Release,
     DispatchEx_GetTypeInfoCount,
     DispatchEx_GetTypeInfo,
-    DispatchEx_GetIDsOfNames,
-    DispatchEx_Invoke
+    pureDisp_GetIDsOfNames,
+    pureDisp_Invoke
 };
 
 static IDispatchEx pureDisp = { &pureDispVtbl };
@@ -486,6 +600,12 @@ static HRESULT WINAPI Global_GetDispID(IDispatchEx *iface, BSTR bstrName, DWORD 
         CHECK_EXPECT(global_propdelete_d);
         test_grfdex(grfdex, fdexNameCaseSensitive);
         *pid = DISPID_GLOBAL_TESTPROPDELETE;
+        return S_OK;
+    }
+    if(!strcmp_wa(bstrName, "testNoPropDelete")) {
+        CHECK_EXPECT(global_nopropdelete_d);
+        test_grfdex(grfdex, fdexNameCaseSensitive);
+        *pid = DISPID_GLOBAL_TESTNOPROPDELETE;
         return S_OK;
     }
     if(!strcmp_wa(bstrName, "getVT")) {
@@ -607,6 +727,11 @@ static HRESULT WINAPI Global_GetDispID(IDispatchEx *iface, BSTR bstrName, DWORD 
 
     if(!strcmp_wa(bstrName, "testNoRes")) {
         *pid = DISPID_GLOBAL_TESTNORES;
+        return S_OK;
+    }
+
+    if(!strcmp_wa(bstrName, "dispexFunc")) {
+        *pid = DISPID_GLOBAL_DISPEXFUNC;
         return S_OK;
     }
 
@@ -749,8 +874,10 @@ static HRESULT WINAPI Global_InvokeEx(IDispatchEx *iface, DISPID id, LCID lcid, 
 
     case DISPID_GLOBAL_TESTRES:
         ok(pvarRes != NULL, "pvarRes = NULL\n");
-        if(pvarRes)
-            V_VT(pvarRes) = VT_NULL;
+        if(pvarRes) {
+            V_VT(pvarRes) = VT_BOOL;
+            V_BOOL(pvarRes) = VARIANT_TRUE;
+        }
         return S_OK;
 
     case DISPID_GLOBAL_TESTNORES:
@@ -787,6 +914,11 @@ static HRESULT WINAPI Global_InvokeEx(IDispatchEx *iface, DISPID id, LCID lcid, 
 
         V_VT(pvarRes) = VT_DISPATCH;
         V_DISPATCH(pvarRes) = (IDispatch*)&pureDisp;
+        return S_OK;
+
+    case DISPID_GLOBAL_DISPEXFUNC:
+        V_VT(pvarRes) = VT_DISPATCH;
+        V_DISPATCH(pvarRes) = (IDispatch*)&dispexFunc;
         return S_OK;
 
     case DISPID_GLOBAL_GETNULLBSTR:
@@ -1071,9 +1203,18 @@ static HRESULT WINAPI Global_InvokeEx(IDispatchEx *iface, DISPID id, LCID lcid, 
 
 static HRESULT WINAPI Global_DeleteMemberByDispID(IDispatchEx *iface, DISPID id)
 {
-    CHECK_EXPECT(DeleteMemberByDispID);
-    ok(id == DISPID_GLOBAL_TESTPROPDELETE, "id = %d\n", id);
-    return S_OK;
+    switch(id) {
+    case DISPID_GLOBAL_TESTPROPDELETE:
+        CHECK_EXPECT(DeleteMemberByDispID);
+        return S_OK;
+    case DISPID_GLOBAL_TESTNOPROPDELETE:
+        CHECK_EXPECT(DeleteMemberByDispID_false);
+        return S_FALSE;
+    default:
+        ok(0, "id = %d\n", id);
+    }
+
+    return E_FAIL;
 }
 
 static IDispatchExVtbl GlobalVtbl = {
@@ -1834,15 +1975,49 @@ static BOOL run_tests(void)
     CHECK_CALLED(global_success_d);
     CHECK_CALLED(global_success_i);
 
-    SET_EXPECT(testobj_delete);
-    parse_script_a("delete testObj.deleteTest;");
-    CHECK_CALLED(testobj_delete);
+    SET_EXPECT(testobj_delete_test);
+    parse_script_a("ok((delete testObj.deleteTest) === true, 'delete testObj.deleteTest did not return true');");
+    CHECK_CALLED(testobj_delete_test);
+
+    SET_EXPECT(testobj_delete_nodelete);
+    parse_script_a("ok((delete testObj.noDeleteTest) === false, 'delete testObj.noDeleteTest did not return false');");
+    CHECK_CALLED(testobj_delete_nodelete);
 
     SET_EXPECT(global_propdelete_d);
     SET_EXPECT(DeleteMemberByDispID);
-    parse_script_a("delete testPropDelete;");
+    parse_script_a("ok((delete testPropDelete) === true, 'delete testPropDelete did not return true');");
     CHECK_CALLED(global_propdelete_d);
     CHECK_CALLED(DeleteMemberByDispID);
+
+    SET_EXPECT(global_nopropdelete_d);
+    SET_EXPECT(DeleteMemberByDispID_false);
+    parse_script_a("ok((delete testNoPropDelete) === false, 'delete testPropDelete did not return false');");
+    CHECK_CALLED(global_nopropdelete_d);
+    CHECK_CALLED(DeleteMemberByDispID_false);
+
+    SET_EXPECT(puredisp_prop_d);
+    parse_script_a("ok((delete pureDisp.prop) === false, 'delete pureDisp.prop did not return true');");
+    CHECK_CALLED(puredisp_prop_d);
+
+    SET_EXPECT(puredisp_noprop_d);
+    parse_script_a("ok((delete pureDisp.noprop) === true, 'delete pureDisp.noprop did not return false');");
+    CHECK_CALLED(puredisp_noprop_d);
+
+    SET_EXPECT(puredisp_value);
+    parse_script_a("var t=pureDisp; t=t(false);");
+    CHECK_CALLED(puredisp_value);
+
+    SET_EXPECT(puredisp_value);
+    parse_script_a("var t = {func: pureDisp}; t = t.func(false);");
+    CHECK_CALLED(puredisp_value);
+
+    SET_EXPECT(dispexfunc_value);
+    parse_script_a("var t = dispexFunc; t = t(false);");
+    CHECK_CALLED(dispexfunc_value);
+
+    SET_EXPECT(dispexfunc_value);
+    parse_script_a("var t = {func: dispexFunc}; t = t.func(false);");
+    CHECK_CALLED(dispexfunc_value);
 
     parse_script_a("(function reportSuccess() {})()");
 

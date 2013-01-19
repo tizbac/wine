@@ -22,6 +22,7 @@
 #define __WINE_ATLBASE_H__
 
 #include <atliface.h>
+#include <comcat.h>
 
 /* Wine extension: we (ab)use _ATL_VER to handle struct layout differences between ATL versions. */
 #define _ATL_VER_30  0x0300
@@ -89,7 +90,7 @@ typedef struct _ATL_OBJMAP_ENTRYW_TAG
     _ATL_DESCRIPTIONFUNCW* pfnGetObjectDescription;
     _ATL_CATMAPFUNC* pfnGetCategoryMap;
     void (WINAPI *pfnObjectMain)(BOOL bStarting);
-} _ATL_OBJMAP_ENTRYW;
+} _ATL_OBJMAP_ENTRYW, _ATL_OBJMAP_ENTRY30, _ATL_OBJMAP_ENTRY;
 
 
 typedef struct _ATL_TERMFUNC_ELEM_TAG
@@ -183,6 +184,15 @@ typedef struct _ATL_WIN_MODULE70
     CSimpleArray /* <ATOM> */ m_rgWindowClassAtoms;
 } _ATL_WIN_MODULE70;
 
+typedef struct _ATL_COM_MODULE70
+{
+    UINT cbSize;
+    HINSTANCE m_hInstTypeLib;
+    _ATL_OBJMAP_ENTRY **m_ppAutoObjMapFirst;
+    _ATL_OBJMAP_ENTRY **m_ppAutoObjMapLast;
+    CComCriticalSection m_csObjMap;
+} _ATL_COM_MODULE70, _ATL_COM_MODULE;
+
 #if _ATL_VER >= _ATL_VER_70
 typedef _ATL_MODULE70 _ATL_MODULE;
 typedef _ATL_WIN_MODULE70 _ATL_WIN_MODULE;
@@ -204,6 +214,16 @@ struct _ATL_REGMAP_ENTRY
     LPCOLESTR szData;
 };
 
+struct _ATL_CATMAP_ENTRY
+{
+    int iType;
+    const CATID *pcatid;
+};
+
+#define _ATL_CATMAP_ENTRY_END 0
+#define _ATL_CATMAP_ENTRY_IMPLEMENTED 1
+#define _ATL_CATMAP_ENTRY_REQUIRED 2
+
 HRESULT WINAPI AtlAdvise(IUnknown *pUnkCP, IUnknown *pUnk, const IID * iid, LPDWORD dpw);
 HRESULT WINAPI AtlAxAttachControl(IUnknown*,HWND,IUnknown**);
 HRESULT WINAPI AtlAxCreateControl(LPCOLESTR,HWND,IStream*,IUnknown**);
@@ -212,7 +232,9 @@ HRESULT WINAPI AtlFreeMarshalStream(IStream *pStream);
 HRESULT WINAPI AtlInternalQueryInterface(void* pThis, const _ATL_INTMAP_ENTRY* pEntries, REFIID iid, void** ppvObject);
 HRESULT WINAPI AtlMarshalPtrInProc(IUnknown *pUnk, const IID *iid, IStream **ppStream);
 void    WINAPI AtlModuleAddCreateWndData(_ATL_MODULEW *pM, _AtlCreateWndData *pData, void* pvObject);
+HRESULT WINAPI AtlWinModuleInit(_ATL_WIN_MODULE*);
 void    WINAPI AtlWinModuleAddCreateWndData(_ATL_WIN_MODULE*,_AtlCreateWndData*,void*);
+void*   WINAPI AtlWinModuleExtractCreateWndData(_ATL_WIN_MODULE*);
 HRESULT WINAPI AtlModuleAddTermFunc(_ATL_MODULE *pM, _ATL_TERMFUNC *pFunc, DWORD_PTR dw);
 void WINAPI AtlCallTermFunc(_ATL_MODULE*);
 void*  WINAPI AtlModuleExtractCreateWndData(_ATL_MODULEW *pM);
@@ -230,6 +252,11 @@ HRESULT WINAPI AtlUnmarshalPtr(IStream *pStream, const IID *iid, IUnknown **ppUn
 HRESULT WINAPI AtlCreateRegistrar(IRegistrar**);
 HRESULT WINAPI AtlUpdateRegistryFromResourceD(HINSTANCE,LPCOLESTR,BOOL,struct _ATL_REGMAP_ENTRY*,IRegistrar*);
 HRESULT WINAPI AtlLoadTypeLib(HINSTANCE,LPCOLESTR,BSTR*,ITypeLib**);
+HRESULT WINAPI AtlRegisterTypeLib(HINSTANCE,LPCOLESTR);
 HRESULT WINAPI AtlRegisterClassCategoriesHelper(REFCLSID,const struct _ATL_CATMAP_ENTRY*,BOOL);
+HRESULT WINAPI AtlComModuleGetClassObject(_ATL_COM_MODULE*,REFCLSID,REFIID,void**);
+HRESULT WINAPI AtlComModuleUnregisterServer(_ATL_COM_MODULE*,BOOL,const CLSID*);
+BOOL WINAPI AtlWaitWithMessageLoop(HANDLE);
+HRESULT WINAPI AtlGetObjectSourceInterface(IUnknown*,GUID*,IID*,unsigned short*,unsigned short*);
 
 #endif /* __WINE_ATLBASE_H__ */

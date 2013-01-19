@@ -5,7 +5,7 @@ msgstr ""
 "Project-Id-Version: Wine\n"
 "Report-Msgid-Bugs-To: http://bugs.winehq.org\n"
 "POT-Creation-Date: N/A\n"
-"PO-Revision-Date: 2012-12-13 02:22+0100\n"
+"PO-Revision-Date: 2013-01-09 01:25+0100\n"
 "Last-Translator: Julian Rüger\n"
 "Language-Team: none\n"
 "Language: German\n"
@@ -473,7 +473,7 @@ msgstr "&Von:"
 msgid "&To:"
 msgstr "&Bis:"
 
-#: comdlg32.rc:209
+#: comdlg32.rc:209 wineps.rc:39
 msgid "Print &Quality:"
 msgstr "Druck&qualität:"
 
@@ -7116,7 +7116,7 @@ msgstr "Uhr"
 msgid "split button"
 msgstr "Split-Knopf"
 
-#: oleacc.rc:90 ipconfig.rc:33
+#: oleacc.rc:90
 msgid "IP address"
 msgstr "IP-Adresse"
 
@@ -7321,7 +7321,7 @@ msgctxt "unit: bits"
 msgid "b"
 msgstr "b"
 
-#: sane.rc:34 winecfg.rc:174
+#: sane.rc:34 wineps.rc:46 winecfg.rc:174
 msgctxt "unit: dots/inch"
 msgid "dpi"
 msgstr "dpi"
@@ -8295,22 +8295,22 @@ msgstr "Nicht installieren"
 
 #: urlmon.rc:40
 msgid ""
-"When installed, ActiveX has full access to your computer.Do not click "
-"install unless you have absolute trust in the above source."
+"When installed, an ActiveX component has full access to your computer. Do "
+"not click install unless you have absolute trust in the above source."
 msgstr ""
-"Wenn ActiveX installiert ist, hat es Vollzugriff auf ihren Computer. Klicken "
-"Sie nicht auf Installieren, wenn Sie der obigen Quelle nicht absolut "
+"Eine installierte ActiveX-Komponente hat Vollzugriff auf ihren Computer. "
+"Klicken Sie nicht auf Installieren, wenn Sie der obigen Quelle nicht absolut "
 "vertrauen."
 
-#: urlmon.rc:47
+#: urlmon.rc:48
 msgid "Installation of component failed: %08x"
 msgstr "Installation der Komponente fehlgeschlagen: %08x"
 
-#: urlmon.rc:48
+#: urlmon.rc:49
 msgid "Install (%d)"
 msgstr "Installieren (%d)"
 
-#: urlmon.rc:49
+#: urlmon.rc:50
 msgid "Install"
 msgstr "Installieren"
 
@@ -10194,6 +10194,30 @@ msgstr ""
 "'%1' konnte nicht als interner oder externer Befehl, oder als Batchscript\n"
 "erkannt werden.\n"
 
+#: cmd.rc:357
+msgid "Division by zero error.\n"
+msgstr "'Division durch Null'-Fehler.\n"
+
+#: cmd.rc:358
+msgid "Expected an operand.\n"
+msgstr "Operand erwartet.\n"
+
+#: cmd.rc:359
+msgid "Expected an operator.\n"
+msgstr "Operator erwartet.\n"
+
+#: cmd.rc:360
+msgid "Mismatch in parentheses.\n"
+msgstr "Klammern stimmen nicht überein.\n"
+
+#: cmd.rc:361
+msgid ""
+"Badly formed number - must be one of decimal (12),\n"
+" hexadecimal (0x34) or octal (056).\n"
+msgstr ""
+"Zahl ungültig formatiert - muss dezimal (12),\n"
+" hexadezimal (0x34) oder oktal (056) sein.\n"
+
 #: dxdiag.rc:27
 msgid "DirectX Diagnostic Tool"
 msgstr "DirectX Diagnosewerkzeug"
@@ -10242,6 +10266,10 @@ msgstr "Ethernet"
 msgid "Connection-specific DNS suffix"
 msgstr "Verbindungsspezifisches DNS-Suffix"
 
+#: ipconfig.rc:33
+msgid "IPv4 address"
+msgstr "IPv4 Adresse"
+
 #: ipconfig.rc:34
 msgid "Hostname"
 msgstr "Hostname"
@@ -10281,6 +10309,10 @@ msgstr "DHCP aktiviert"
 #: ipconfig.rc:46
 msgid "Default gateway"
 msgstr "Standard Gateway"
+
+#: ipconfig.rc:47
+msgid "IPv6 address"
+msgstr "IPv6 Adresse"
 
 #: net.rc:27
 msgid ""
@@ -10411,6 +10443,62 @@ msgstr "Erneuter Verbindungsaufbau"
 #: net.rc:40
 msgid "The following services are running:\n"
 msgstr "Die folgenden Dienste laufen:\n"
+
+#: netstat.rc:27
+msgid "Active Connections"
+msgstr "Aktive Verbindungen"
+
+#: netstat.rc:28
+msgid "Proto"
+msgstr "Proto"
+
+#: netstat.rc:29
+msgid "Local Address"
+msgstr "Lokale Adresse"
+
+#: netstat.rc:30
+msgid "Foreign Address"
+msgstr "Entfernte Adresse"
+
+#: netstat.rc:31
+msgid "State"
+msgstr "Zustand"
+
+#: netstat.rc:32
+msgid "Interface Statistics"
+msgstr "Schnittstellen-Statistik"
+
+#: netstat.rc:33
+msgid "Sent"
+msgstr "Gesendet"
+
+#: netstat.rc:34
+msgid "Received"
+msgstr "Empfangen"
+
+#: netstat.rc:35
+msgid "Bytes"
+msgstr "Bytes"
+
+#: netstat.rc:36
+msgid "Unicast packets"
+msgstr "Unicast Pakete"
+
+#: netstat.rc:37
+msgid "Non-unicast packets"
+msgstr "Nicht-Unicast Pakete"
+
+#: netstat.rc:38
+msgid "Discards"
+msgstr "Verworfen"
+
+#: netstat.rc:39
+msgid "Errors"
+msgstr "Fehler"
+
+#: netstat.rc:40
+msgid "Unknown protocols"
+msgstr "Unbekannte Protokolle"
 
 #: notepad.rc:27
 msgid "&New\tCtrl+N"

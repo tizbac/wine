@@ -69,6 +69,7 @@ static HRESULT exec_query( IWbemServices *services, const WCHAR *str, IEnumWbemC
 
 static void test_select( IWbemServices *services )
 {
+    static const WCHAR emptyW[] = {0};
     static const WCHAR sqlW[] = {'S','Q','L',0};
     static const WCHAR query1[] =
         {'S','E','L','E','C','T',' ','H','O','T','F','I','X','I','D',' ','F','R','O','M',' ',
@@ -111,6 +112,11 @@ static void test_select( IWbemServices *services )
     ok( hr == WBEM_E_INVALID_QUERY_TYPE, "query failed %08x\n", hr );
 
     hr = IWbemServices_ExecQuery( services, sql, NULL, 0, NULL, &result );
+    ok( hr == WBEM_E_INVALID_PARAMETER, "query failed %08x\n", hr );
+
+    SysFreeString( query );
+    query = SysAllocString( emptyW );
+    hr = IWbemServices_ExecQuery( services, wql, query, 0, NULL, &result );
     ok( hr == WBEM_E_INVALID_PARAMETER, "query failed %08x\n", hr );
 
     for (i = 0; i < sizeof(test)/sizeof(test[0]); i++)
@@ -210,6 +216,70 @@ static void test_Win32_Service( IWbemServices *services )
     VariantClear( &state );
     IWbemClassObject_Release( service );
     SysFreeString( class );
+}
+
+static void test_Win32_Process( IWbemServices *services )
+{
+    static const WCHAR returnvalueW[] = {'R','e','t','u','r','n','V','a','l','u','e',0};
+    static const WCHAR getownerW[] = {'G','e','t','O','w','n','e','r',0};
+    static const WCHAR userW[] = {'U','s','e','r',0};
+    static const WCHAR domainW[] = {'D','o','m','a','i','n',0};
+    static const WCHAR processW[] = {'W','i','n','3','2','_','P','r','o','c','e','s','s',0};
+    static const WCHAR fmtW[] = {'W','i','n','3','2','_','P','r','o','c','e','s','s','.',
+        'H','a','n','d','l','e','=','"','%','u','"',0};
+    BSTR class, method;
+    IWbemClassObject *process, *out;
+    VARIANT user, domain, retval;
+    CIMTYPE type;
+    HRESULT hr;
+
+    class = SysAllocString( processW );
+    hr = IWbemServices_GetObject( services, class, 0, NULL, &process, NULL );
+    SysFreeString( class );
+    if (hr != S_OK)
+    {
+        win_skip( "Win32_Process not available\n" );
+        return;
+    }
+    hr = IWbemClassObject_GetMethod( process, getownerW, 0, NULL, NULL );
+    ok( hr == S_OK, "failed to get GetOwner method %08x\n", hr );
+
+    out = NULL;
+    method = SysAllocString( getownerW );
+    class = SysAllocStringLen( NULL, sizeof(fmtW)/sizeof(fmtW[0]) + 10 );
+    wsprintfW( class, fmtW, GetCurrentProcessId() );
+    hr = IWbemServices_ExecMethod( services, class, method, 0, NULL, NULL, &out, NULL );
+    ok( hr == S_OK, "failed to execute method %08x\n", hr );
+    SysFreeString( method );
+    SysFreeString( class );
+
+    type = 0xdeadbeef;
+    VariantInit( &retval );
+    hr = IWbemClassObject_Get( out, returnvalueW, 0, &retval, &type, NULL );
+    ok( hr == S_OK, "failed to get return value %08x\n", hr );
+    ok( V_VT( &retval ) == VT_I4, "unexpected variant type 0x%x\n", V_VT( &retval ) );
+    ok( !V_I4( &retval ), "unexpected error %u\n", V_I4( &retval ) );
+    ok( type == CIM_UINT32, "unexpected type 0x%x\n", type );
+
+    type = 0xdeadbeef;
+    VariantInit( &user );
+    hr = IWbemClassObject_Get( out, userW, 0, &user, &type, NULL );
+    ok( hr == S_OK, "failed to get user %08x\n", hr );
+    ok( V_VT( &user ) == VT_BSTR, "unexpected variant type 0x%x\n", V_VT( &user ) );
+    ok( type == CIM_STRING, "unexpected type 0x%x\n", type );
+    trace("%s\n", wine_dbgstr_w(V_BSTR(&user)));
+
+    type = 0xdeadbeef;
+    VariantInit( &domain );
+    hr = IWbemClassObject_Get( out, domainW, 0, &domain, &type, NULL );
+    ok( hr == S_OK, "failed to get domain %08x\n", hr );
+    ok( V_VT( &domain ) == VT_BSTR, "unexpected variant type 0x%x\n", V_VT( &domain ) );
+    ok( type == CIM_STRING, "unexpected type 0x%x\n", type );
+    trace("%s\n", wine_dbgstr_w(V_BSTR(&domain)));
+
+    VariantClear( &user );
+    VariantClear( &domain );
+    IWbemClassObject_Release( out );
 }
 
 static void test_StdRegProv( IWbemServices *services )
@@ -414,6 +484,7 @@ START_TEST(query)
     ok( hr == S_OK, "failed to set proxy blanket %08x\n", hr );
 
     test_select( services );
+    test_Win32_Process( services );
     test_Win32_Service( services );
     test_StdRegProv( services );
 

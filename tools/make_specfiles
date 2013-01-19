@@ -43,8 +43,8 @@ my @dll_groups =
   "msvcrt",
   "msvcp90",
   "msvcp100",
-  "msvcp80",
   "msvcp71",
+  "msvcp80",
   "msvcp70",
   "msvcp60",
  ],
@@ -115,6 +115,37 @@ my @dll_groups =
   "atl100",
   "atl",
   "atl80",
+ ],
+ [
+  "advapi32",
+  "api-ms-win-downlevel-advapi32-l1-1-0",
+  "api-ms-win-downlevel-advapi32-l2-1-0",
+  "api-ms-win-security-base-l1-1-0",
+ ],
+ [
+  "kernel32",
+  "api-ms-win-downlevel-normaliz-l1-1-0",
+ ],
+ [
+  "ole32",
+  "api-ms-win-downlevel-ole32-l1-1-0",
+ ],
+ [
+  "shell32",
+  "api-ms-win-downlevel-shell32-l1-1-0",
+ ],
+ [
+  "shlwapi",
+  "api-ms-win-downlevel-shlwapi-l1-1-0",
+  "api-ms-win-downlevel-shlwapi-l2-1-0",
+ ],
+ [
+  "user32",
+  "api-ms-win-downlevel-user32-l1-1-0",
+ ],
+ [
+  "version",
+  "api-ms-win-downlevel-version-l1-1-0",
  ],
 );
 
@@ -219,7 +250,12 @@ sub update_spec_file($)
             goto done;
         }
 
-        my $flags = ($parent{callconv} ne "stub" || $update_flags) ? $parent{flags} : $descr{flags};
+        my $flags = $descr{flags};
+        if ($parent{callconv} ne "stub" || $update_flags)
+        {
+            $flags = $parent{flags};
+            $flags =~ s/-ordinal\s*// if $descr{ordinal} eq "@";
+        }
 
         if ($parent{callconv} ne "stub" || $parent{args})
         {

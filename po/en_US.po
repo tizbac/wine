@@ -472,7 +472,7 @@ msgstr "&From:"
 msgid "&To:"
 msgstr "&To:"
 
-#: comdlg32.rc:209
+#: comdlg32.rc:209 wineps.rc:39
 msgid "Print &Quality:"
 msgstr "Print &Quality:"
 
@@ -7104,7 +7104,7 @@ msgstr "clock"
 msgid "split button"
 msgstr "split button"
 
-#: oleacc.rc:90 ipconfig.rc:33
+#: oleacc.rc:90
 msgid "IP address"
 msgstr "IP address"
 
@@ -7309,7 +7309,7 @@ msgctxt "unit: bits"
 msgid "b"
 msgstr "b"
 
-#: sane.rc:34 winecfg.rc:174
+#: sane.rc:34 wineps.rc:46 winecfg.rc:174
 msgctxt "unit: dots/inch"
 msgid "dpi"
 msgstr "dpi"
@@ -8277,21 +8277,21 @@ msgstr "Don't install"
 
 #: urlmon.rc:40
 msgid ""
-"When installed, ActiveX has full access to your computer.Do not click "
-"install unless you have absolute trust in the above source."
+"When installed, an ActiveX component has full access to your computer. Do "
+"not click install unless you have absolute trust in the above source."
 msgstr ""
-"When installed, ActiveX has full access to your computer.Do not click "
-"install unless you have absolute trust in the above source."
+"When installed, an ActiveX component has full access to your computer. Do "
+"not click install unless you have absolute trust in the above source."
 
-#: urlmon.rc:47
+#: urlmon.rc:48
 msgid "Installation of component failed: %08x"
 msgstr "Installation of component failed: %08x"
 
-#: urlmon.rc:48
+#: urlmon.rc:49
 msgid "Install (%d)"
 msgstr "Install (%d)"
 
-#: urlmon.rc:49
+#: urlmon.rc:50
 msgid "Install"
 msgstr "Install"
 
@@ -10118,6 +10118,30 @@ msgid ""
 msgstr ""
 "Can't recognize '%1' as an internal or external command, or batch script.\n"
 
+#: cmd.rc:357
+msgid "Division by zero error.\n"
+msgstr "Division by zero error.\n"
+
+#: cmd.rc:358
+msgid "Expected an operand.\n"
+msgstr "Expected an operand.\n"
+
+#: cmd.rc:359
+msgid "Expected an operator.\n"
+msgstr "Expected an operator.\n"
+
+#: cmd.rc:360
+msgid "Mismatch in parentheses.\n"
+msgstr "Mismatch in parentheses.\n"
+
+#: cmd.rc:361
+msgid ""
+"Badly formed number - must be one of decimal (12),\n"
+" hexadecimal (0x34) or octal (056).\n"
+msgstr ""
+"Badly formed number - must be one of decimal (12),\n"
+" hexadecimal (0x34) or octal (056).\n"
+
 #: dxdiag.rc:27
 msgid "DirectX Diagnostic Tool"
 msgstr "DirectX Diagnostic Tool"
@@ -10166,6 +10190,10 @@ msgstr "Ethernet"
 msgid "Connection-specific DNS suffix"
 msgstr "Connection-specific DNS suffix"
 
+#: ipconfig.rc:33
+msgid "IPv4 address"
+msgstr "IPv4 address"
+
 #: ipconfig.rc:34
 msgid "Hostname"
 msgstr "Hostname"
@@ -10205,6 +10233,10 @@ msgstr "DHCP enabled"
 #: ipconfig.rc:46
 msgid "Default gateway"
 msgstr "Default gateway"
+
+#: ipconfig.rc:47
+msgid "IPv6 address"
+msgstr "IPv6 address"
 
 #: net.rc:27
 msgid ""
@@ -10335,6 +10367,62 @@ msgstr "Reconnecting"
 #: net.rc:40
 msgid "The following services are running:\n"
 msgstr "The following services are running:\n"
+
+#: netstat.rc:27
+msgid "Active Connections"
+msgstr "Active Connections"
+
+#: netstat.rc:28
+msgid "Proto"
+msgstr "Proto"
+
+#: netstat.rc:29
+msgid "Local Address"
+msgstr "Local Address"
+
+#: netstat.rc:30
+msgid "Foreign Address"
+msgstr "Foreign Address"
+
+#: netstat.rc:31
+msgid "State"
+msgstr "State"
+
+#: netstat.rc:32
+msgid "Interface Statistics"
+msgstr "Interface Statistics"
+
+#: netstat.rc:33
+msgid "Sent"
+msgstr "Sent"
+
+#: netstat.rc:34
+msgid "Received"
+msgstr "Received"
+
+#: netstat.rc:35
+msgid "Bytes"
+msgstr "Bytes"
+
+#: netstat.rc:36
+msgid "Unicast packets"
+msgstr "Unicast packets"
+
+#: netstat.rc:37
+msgid "Non-unicast packets"
+msgstr "Non-unicast packets"
+
+#: netstat.rc:38
+msgid "Discards"
+msgstr "Discards"
+
+#: netstat.rc:39
+msgid "Errors"
+msgstr "Errors"
+
+#: netstat.rc:40
+msgid "Unknown protocols"
+msgstr "Unknown protocols"
 
 #: notepad.rc:27
 msgid "&New\tCtrl+N"

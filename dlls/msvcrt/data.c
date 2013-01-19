@@ -31,6 +31,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(msvcrt);
 
 int MSVCRT___argc = 0;
 static int argc_expand;
+static int wargc_expand;
 unsigned int MSVCRT_basemajor = 0;/* FIXME: */
 unsigned int MSVCRT_baseminor = 0;/* FIXME: */
 unsigned int MSVCRT_baseversion = 0; /* FIXME: */
@@ -51,6 +52,7 @@ double MSVCRT__HUGE = 0;
 char **MSVCRT___argv = NULL;
 static char **argv_expand;
 MSVCRT_wchar_t **MSVCRT___wargv = NULL;
+static MSVCRT_wchar_t **wargv_expand;
 char *MSVCRT__acmdln = NULL;
 MSVCRT_wchar_t *MSVCRT__wcmdln = NULL;
 char **MSVCRT__environ = NULL;
@@ -182,6 +184,31 @@ int CDECL _get_wpgmptr(WCHAR** p)
  *		__p__fmode (MSVCRT.@)
  */
 unsigned int* CDECL __p__fmode(void) { return &MSVCRT__fmode; }
+
+/***********************************************************************
+ *              _set_fmode (MSVCRT.@)
+ */
+int CDECL _set_fmode(int mode)
+{
+    /* TODO: support _O_WTEXT */
+    if(!MSVCRT_CHECK_PMT(mode==MSVCRT__O_TEXT || mode==MSVCRT__O_BINARY))
+        return MSVCRT_EINVAL;
+
+    MSVCRT__fmode = mode;
+    return 0;
+}
+
+/***********************************************************************
+ *              _get_fmode (MSVCRT.@)
+ */
+int CDECL _get_fmode(int *mode)
+{
+    if(!MSVCRT_CHECK_PMT(mode))
+        return MSVCRT_EINVAL;
+
+    *mode = MSVCRT__fmode;
+    return 0;
+}
 
 /***********************************************************************
  *		__p__osver (MSVCRT.@)
@@ -361,11 +388,13 @@ void msvcrt_free_args(void)
   HeapFree(GetProcessHeap(), 0, MSVCRT__pgmptr);
   HeapFree(GetProcessHeap(), 0, MSVCRT__wpgmptr);
   HeapFree(GetProcessHeap(), 0, argv_expand);
+  HeapFree(GetProcessHeap(), 0, wargv_expand);
 }
 
 static int build_expanded_argv(int *argc, char **argv)
 {
-    int i, size=0, args_no=0;
+    int i, size=0, args_no=0, path_len;
+    BOOL is_expandable;
     HANDLE h;
 
     args_no = 0;
@@ -373,7 +402,20 @@ static int build_expanded_argv(int *argc, char **argv)
         WIN32_FIND_DATAA data;
         int len = 0;
 
-        h = FindFirstFileA(__wine_main_argv[i], &data);
+        is_expandable = FALSE;
+        for(path_len = strlen(__wine_main_argv[i])-1; path_len>=0; path_len--) {
+            if(__wine_main_argv[i][path_len]=='*' || __wine_main_argv[i][path_len]=='?')
+                is_expandable = TRUE;
+            else if(__wine_main_argv[i][path_len]=='\\' || __wine_main_argv[i][path_len]=='/')
+                break;
+        }
+        path_len++;
+
+        if(is_expandable)
+            h = FindFirstFileA(__wine_main_argv[i], &data);
+        else
+            h = INVALID_HANDLE_VALUE;
+
         if(h != INVALID_HANDLE_VALUE) {
             do {
                 if(data.cFileName[0]=='.' && (data.cFileName[1]=='\0' ||
@@ -382,11 +424,12 @@ static int build_expanded_argv(int *argc, char **argv)
 
                 len = strlen(data.cFileName)+1;
                 if(argv) {
-                    argv[args_no] = (char*)(argv+*argc)+size;
-                    memcpy(argv[args_no], data.cFileName, len*sizeof(char));
+                    argv[args_no] = (char*)(argv+*argc+1)+size;
+                    memcpy(argv[args_no], __wine_main_argv[i], path_len*sizeof(char));
+                    memcpy(argv[args_no]+path_len, data.cFileName, len*sizeof(char));
                 }
                 args_no++;
-                size += len;
+                size += len+path_len;
             }while(FindNextFileA(h, &data));
             CloseHandle(h);
         }
@@ -394,7 +437,7 @@ static int build_expanded_argv(int *argc, char **argv)
         if(!len) {
             len = strlen(__wine_main_argv[i])+1;
             if(argv) {
-                argv[args_no] = (char*)(argv+*argc)+size;
+                argv[args_no] = (char*)(argv+*argc+1)+size;
                 memcpy(argv[args_no], __wine_main_argv[i], len*sizeof(char));
             }
             args_no++;
@@ -402,7 +445,9 @@ static int build_expanded_argv(int *argc, char **argv)
         }
     }
 
-    size += args_no*sizeof(char*);
+    if(argv)
+        argv[args_no] = NULL;
+    size += (args_no+1)*sizeof(char*);
     *argc = args_no;
     return size;
 }
@@ -443,22 +488,104 @@ void CDECL __getmainargs(int *argc, char** *argv, char** *envp,
         MSVCRT__set_new_mode( *new_mode );
 }
 
+static int build_expanded_wargv(int *argc, MSVCRT_wchar_t **argv)
+{
+    int i, size=0, args_no=0, path_len;
+    BOOL is_expandable;
+    HANDLE h;
+
+    args_no = 0;
+    for(i=0; i<__wine_main_argc; i++) {
+        WIN32_FIND_DATAW data;
+        int len = 0;
+
+        is_expandable = FALSE;
+        for(path_len = strlenW(__wine_main_wargv[i])-1; path_len>=0; path_len--) {
+            if(__wine_main_wargv[i][path_len]=='*' || __wine_main_wargv[i][path_len]=='?')
+                is_expandable = TRUE;
+            else if(__wine_main_wargv[i][path_len]=='\\' || __wine_main_wargv[i][path_len]=='/')
+                break;
+        }
+        path_len++;
+
+        if(is_expandable)
+            h = FindFirstFileW(__wine_main_wargv[i], &data);
+        else
+            h = INVALID_HANDLE_VALUE;
+
+        if(h != INVALID_HANDLE_VALUE) {
+            do {
+                if(data.cFileName[0]=='.' && (data.cFileName[1]=='\0' ||
+                            (data.cFileName[1]=='.' && data.cFileName[2]=='\0')))
+                    continue;
+
+                len = strlenW(data.cFileName)+1;
+                if(argv) {
+                    argv[args_no] = (MSVCRT_wchar_t*)(argv+*argc+1)+size;
+                    memcpy(argv[args_no], __wine_main_wargv[i], path_len*sizeof(MSVCRT_wchar_t));
+                    memcpy(argv[args_no]+path_len, data.cFileName, len*sizeof(MSVCRT_wchar_t));
+                }
+                args_no++;
+                size += len+path_len;
+            }while(FindNextFileW(h, &data));
+            CloseHandle(h);
+        }
+
+        if(!len) {
+            len = strlenW(__wine_main_wargv[i])+1;
+            if(argv) {
+                argv[args_no] = (MSVCRT_wchar_t*)(argv+*argc+1)+size;
+                memcpy(argv[args_no], __wine_main_wargv[i], len*sizeof(MSVCRT_wchar_t));
+            }
+            args_no++;
+            size += len;
+        }
+    }
+
+    if(argv)
+        argv[args_no] = NULL;
+    size *= sizeof(MSVCRT_wchar_t);
+    size += (args_no+1)*sizeof(MSVCRT_wchar_t*);
+    *argc = args_no;
+    return size;
+}
+
 /*********************************************************************
  *		__wgetmainargs (MSVCRT.@)
  */
 void CDECL __wgetmainargs(int *argc, MSVCRT_wchar_t** *wargv, MSVCRT_wchar_t** *wenvp,
                           int expand_wildcards, int *new_mode)
 {
-  TRACE("(%p,%p,%p,%d,%p).\n", argc, wargv, wenvp, expand_wildcards, new_mode);
+    TRACE("(%p,%p,%p,%d,%p).\n", argc, wargv, wenvp, expand_wildcards, new_mode);
 
-  /* Initialize the _wenviron array if it's not already created. */
-  if (!MSVCRT__wenviron)
-    MSVCRT__wenviron = msvcrt_SnapshotOfEnvironmentW(NULL);
-  *argc = MSVCRT___argc;
-  *wargv = MSVCRT___wargv;
-  *wenvp = MSVCRT___winitenv;
-  if (new_mode)
-    MSVCRT__set_new_mode( *new_mode );
+    if (expand_wildcards) {
+        HeapFree(GetProcessHeap(), 0, wargv_expand);
+        wargv_expand = NULL;
+
+        wargv_expand = HeapAlloc(GetProcessHeap(), 0,
+                build_expanded_wargv(&wargc_expand, NULL));
+        if (wargv_expand) {
+            build_expanded_wargv(&wargc_expand, wargv_expand);
+
+            MSVCRT___argc = wargc_expand;
+            MSVCRT___wargv = wargv_expand;
+        }else {
+            expand_wildcards = 0;
+        }
+    }
+    if (!expand_wildcards) {
+        MSVCRT___argc = __wine_main_argc;
+        MSVCRT___wargv = __wine_main_wargv;
+    }
+
+    /* Initialize the _wenviron array if it's not already created. */
+    if (!MSVCRT__wenviron)
+        MSVCRT__wenviron = msvcrt_SnapshotOfEnvironmentW(NULL);
+    *argc = MSVCRT___argc;
+    *wargv = MSVCRT___wargv;
+    *wenvp = MSVCRT___winitenv;
+    if (new_mode)
+        MSVCRT__set_new_mode( *new_mode );
 }
 
 /*********************************************************************

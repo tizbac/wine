@@ -1447,22 +1447,13 @@ static HRESULT add_eval(script_ctx_t *ctx, jsval_t lval, jsval_t rval, jsval_t *
             hres = to_string(ctx, r, &rstr);
 
         if(SUCCEEDED(hres)) {
-            unsigned len1, len2;
             jsstr_t *ret_str;
 
-            len1 = jsstr_length(lstr);
-            len2 = jsstr_length(rstr);
-
-            ret_str = jsstr_alloc_buf(len1+len2);
-            if(ret_str) {
-                if(len1)
-                    memcpy(ret_str->str, lstr->str, len1*sizeof(WCHAR));
-                if(len2)
-                    memcpy(ret_str->str+len1, rstr->str, len2*sizeof(WCHAR));
+            ret_str = jsstr_concat(lstr, rstr);
+            if(ret_str)
                 *ret = jsval_string(ret_str);
-            }else {
+            else
                 hres = E_OUTOFMEMORY;
-            }
         }
 
         jsstr_release(lstr);
@@ -1631,16 +1622,22 @@ static HRESULT interp_delete_ident(exec_ctx_t *ctx)
     if(FAILED(hres))
         return hres;
 
-    if(exprval.type != EXPRVAL_IDREF) {
+    switch(exprval.type) {
+    case EXPRVAL_IDREF:
+        hres = disp_delete(exprval.u.idref.disp, exprval.u.idref.id, &ret);
+        IDispatch_Release(exprval.u.idref.disp);
+        if(FAILED(hres))
+            return ret;
+        break;
+    case EXPRVAL_INVALID:
+        ret = TRUE;
+        break;
+    default:
         FIXME("Unsupported exprval\n");
         exprval_release(&exprval);
         return E_NOTIMPL;
     }
 
-    hres = disp_delete(exprval.u.idref.disp, exprval.u.idref.id, &ret);
-    IDispatch_Release(exprval.u.idref.disp);
-    if(FAILED(hres))
-        return ret;
 
     return stack_push(ctx, jsval_bool(ret));
 }
@@ -2339,9 +2336,11 @@ static HRESULT interp_jmp_z(exec_ctx_t *ctx)
 
 static HRESULT interp_pop(exec_ctx_t *ctx)
 {
-    TRACE("\n");
+    const unsigned arg = get_op_uint(ctx, 0);
 
-    stack_popn(ctx, 1);
+    TRACE("%u\n", arg);
+
+    stack_popn(ctx, arg);
     return S_OK;
 }
 

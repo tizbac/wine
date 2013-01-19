@@ -82,6 +82,8 @@ static ULONG STDMETHODCALLTYPE d3d10_device_inner_Release(IUnknown *iface)
         if (device->wined3d_device)
             wined3d_device_decref(device->wined3d_device);
         wine_rb_destroy(&device->sampler_states, NULL, NULL);
+        wine_rb_destroy(&device->rasterizer_states, NULL, NULL);
+        wine_rb_destroy(&device->depthstencil_states, NULL, NULL);
         wine_rb_destroy(&device->blend_states, NULL, NULL);
     }
 
@@ -1430,10 +1432,26 @@ static HRESULT STDMETHODCALLTYPE d3d10_device_CreateBlendState(ID3D10Device *ifa
 static HRESULT STDMETHODCALLTYPE d3d10_device_CreateDepthStencilState(ID3D10Device *iface,
         const D3D10_DEPTH_STENCIL_DESC *desc, ID3D10DepthStencilState **depth_stencil_state)
 {
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
     struct d3d10_depthstencil_state *object;
+    struct wine_rb_entry *entry;
     HRESULT hr;
 
     TRACE("iface %p, desc %p, depth_stencil_state %p.\n", iface, desc, depth_stencil_state);
+
+    if (!desc)
+        return E_INVALIDARG;
+
+    if ((entry = wine_rb_get(&device->depthstencil_states, desc)))
+    {
+        object = WINE_RB_ENTRY_VALUE(entry, struct d3d10_depthstencil_state, entry);
+
+        TRACE("Returning existing depthstencil state %p.\n", object);
+        *depth_stencil_state = &object->ID3D10DepthStencilState_iface;
+        ID3D10DepthStencilState_AddRef(*depth_stencil_state);
+
+        return S_OK;
+    }
 
     object = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*object));
     if (!object)
@@ -1442,8 +1460,7 @@ static HRESULT STDMETHODCALLTYPE d3d10_device_CreateDepthStencilState(ID3D10Devi
         return E_OUTOFMEMORY;
     }
 
-    hr = d3d10_depthstencil_state_init(object);
-    if (FAILED(hr))
+    if (FAILED(hr = d3d10_depthstencil_state_init(object, device, desc)))
     {
         WARN("Failed to initialize depthstencil state, hr %#x.\n", hr);
         HeapFree(GetProcessHeap(), 0, object);
@@ -1459,10 +1476,27 @@ static HRESULT STDMETHODCALLTYPE d3d10_device_CreateDepthStencilState(ID3D10Devi
 static HRESULT STDMETHODCALLTYPE d3d10_device_CreateRasterizerState(ID3D10Device *iface,
         const D3D10_RASTERIZER_DESC *desc, ID3D10RasterizerState **rasterizer_state)
 {
+    struct d3d10_device *device = impl_from_ID3D10Device(iface);
     struct d3d10_rasterizer_state *object;
+    struct wine_rb_entry *entry;
     HRESULT hr;
 
     TRACE("iface %p, desc %p, rasterizer_state %p.\n", iface, desc, rasterizer_state);
+
+    if (!desc)
+        return E_INVALIDARG;
+
+    if ((entry = wine_rb_get(&device->rasterizer_states, desc)))
+    {
+        object = WINE_RB_ENTRY_VALUE(entry, struct d3d10_rasterizer_state, entry);
+
+        TRACE("Returning existing rasterizer state %p.\n", object);
+        *rasterizer_state = &object->ID3D10RasterizerState_iface;
+        ID3D10RasterizerState_AddRef(*rasterizer_state);
+
+        return S_OK;
+    }
+
 
     object = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*object));
     if (!object)
@@ -1471,8 +1505,7 @@ static HRESULT STDMETHODCALLTYPE d3d10_device_CreateRasterizerState(ID3D10Device
         return E_OUTOFMEMORY;
     }
 
-    hr = d3d10_rasterizer_state_init(object);
-    if (FAILED(hr))
+    if (FAILED(hr = d3d10_rasterizer_state_init(object, device, desc)))
     {
         WARN("Failed to initialize rasterizer state, hr %#x.\n", hr);
         HeapFree(GetProcessHeap(), 0, object);
@@ -1829,8 +1862,7 @@ static HRESULT CDECL device_parent_create_texture_surface(struct wined3d_device_
             device_parent, container_parent, width, height, format, usage, pool, sub_resource_idx, surface);
 
     return wined3d_surface_create(device->wined3d_device, width, height, format, usage, pool,
-            WINED3D_MULTISAMPLE_NONE, 0, WINED3D_SURFACE_TYPE_OPENGL, 0, container_parent,
-            &d3d10_null_wined3d_parent_ops, surface);
+            WINED3D_MULTISAMPLE_NONE, 0, 0, container_parent, &d3d10_null_wined3d_parent_ops, surface);
 }
 
 static HRESULT CDECL device_parent_create_swapchain_surface(struct wined3d_device_parent *device_parent,
@@ -1985,6 +2017,39 @@ static const struct wine_rb_functions d3d10_blend_state_rb_ops =
     d3d10_blend_state_compare,
 };
 
+static int d3d10_depthstencil_state_compare(const void *key, const struct wine_rb_entry *entry)
+{
+    const D3D10_DEPTH_STENCIL_DESC *ka = key;
+    const D3D10_DEPTH_STENCIL_DESC *kb = &WINE_RB_ENTRY_VALUE(entry,
+            const struct d3d10_depthstencil_state, entry)->desc;
+
+    return memcmp(ka, kb, sizeof(*ka));
+}
+
+static const struct wine_rb_functions d3d10_depthstencil_state_rb_ops =
+{
+    d3d10_rb_alloc,
+    d3d10_rb_realloc,
+    d3d10_rb_free,
+    d3d10_depthstencil_state_compare,
+};
+
+static int d3d10_rasterizer_state_compare(const void *key, const struct wine_rb_entry *entry)
+{
+    const D3D10_RASTERIZER_DESC *ka = key;
+    const D3D10_RASTERIZER_DESC *kb = &WINE_RB_ENTRY_VALUE(entry, const struct d3d10_rasterizer_state, entry)->desc;
+
+    return memcmp(ka, kb, sizeof(*ka));
+}
+
+static const struct wine_rb_functions d3d10_rasterizer_state_rb_ops =
+{
+    d3d10_rb_alloc,
+    d3d10_rb_realloc,
+    d3d10_rb_free,
+    d3d10_rasterizer_state_compare,
+};
+
 HRESULT d3d10_device_init(struct d3d10_device *device, void *outer_unknown)
 {
     device->ID3D10Device_iface.lpVtbl = &d3d10_device_vtbl;
@@ -2001,9 +2066,26 @@ HRESULT d3d10_device_init(struct d3d10_device *device, void *outer_unknown)
         return E_FAIL;
     }
 
+    if (wine_rb_init(&device->depthstencil_states, &d3d10_depthstencil_state_rb_ops) == -1)
+    {
+        WARN("Failed to initialize depthstencil state rbtree.\n");
+        wine_rb_destroy(&device->blend_states, NULL, NULL);
+        return E_FAIL;
+    }
+
+    if (wine_rb_init(&device->rasterizer_states, &d3d10_rasterizer_state_rb_ops) == -1)
+    {
+        WARN("Failed to initialize rasterizer state rbtree.\n");
+        wine_rb_destroy(&device->depthstencil_states, NULL, NULL);
+        wine_rb_destroy(&device->blend_states, NULL, NULL);
+        return E_FAIL;
+    }
+
     if (wine_rb_init(&device->sampler_states, &d3d10_sampler_state_rb_ops) == -1)
     {
         WARN("Failed to initialize sampler state rbtree.\n");
+        wine_rb_destroy(&device->rasterizer_states, NULL, NULL);
+        wine_rb_destroy(&device->depthstencil_states, NULL, NULL);
         wine_rb_destroy(&device->blend_states, NULL, NULL);
         return E_FAIL;
     }

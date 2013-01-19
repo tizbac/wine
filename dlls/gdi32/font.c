@@ -308,6 +308,85 @@ static UINT get_default_smoothing( HKEY key )
     return GGO_GRAY4_BITMAP;
 }
 
+/* compute positions for text rendering, in device coords */
+static BOOL get_char_positions( DC *dc, const WCHAR *str, INT count, INT *dx, SIZE *size )
+{
+    TEXTMETRICW tm;
+    PHYSDEV dev;
+
+    size->cx = size->cy = 0;
+    if (!count) return TRUE;
+
+    dev = GET_DC_PHYSDEV( dc, pGetTextMetrics );
+    dev->funcs->pGetTextMetrics( dev, &tm );
+
+    dev = GET_DC_PHYSDEV( dc, pGetTextExtentExPoint );
+    if (!dev->funcs->pGetTextExtentExPoint( dev, str, count, dx )) return FALSE;
+
+    if (dc->breakExtra || dc->breakRem)
+    {
+        int i, space = 0, rem = dc->breakRem;
+
+        for (i = 0; i < count; i++)
+        {
+            if (str[i] == tm.tmBreakChar)
+            {
+                space += dc->breakExtra;
+                if (rem > 0)
+                {
+                    space++;
+                    rem--;
+                }
+            }
+            dx[i] += space;
+        }
+    }
+    size->cx = dx[count - 1];
+    size->cy = tm.tmHeight;
+    return TRUE;
+}
+
+/* compute positions for text rendering, in device coords */
+static BOOL get_char_positions_indices( DC *dc, const WORD *indices, INT count, INT *dx, SIZE *size )
+{
+    TEXTMETRICW tm;
+    PHYSDEV dev;
+
+    size->cx = size->cy = 0;
+    if (!count) return TRUE;
+
+    dev = GET_DC_PHYSDEV( dc, pGetTextMetrics );
+    dev->funcs->pGetTextMetrics( dev, &tm );
+
+    dev = GET_DC_PHYSDEV( dc, pGetTextExtentExPoint );
+    if (!dev->funcs->pGetTextExtentExPointI( dev, indices, count, dx )) return FALSE;
+
+    if (dc->breakExtra || dc->breakRem)
+    {
+        WORD space_index;
+        int i, space = 0, rem = dc->breakRem;
+
+        dev = GET_DC_PHYSDEV( dc, pGetGlyphIndices );
+        dev->funcs->pGetGlyphIndices( dev, &tm.tmBreakChar, 1, &space_index, 0 );
+
+        for (i = 0; i < count; i++)
+        {
+            if (indices[i] == space_index)
+            {
+                space += dc->breakExtra;
+                if (rem > 0)
+                {
+                    space++;
+                    rem--;
+                }
+            }
+            dx[i] += space;
+        }
+    }
+    size->cx = dx[count - 1];
+    size->cy = tm.tmHeight;
+    return TRUE;
+}
 
 /***********************************************************************
  *           GdiGetCodePage   (GDI32.@)
@@ -1015,20 +1094,45 @@ BOOL WINAPI GetTextExtentPoint32W(
 BOOL WINAPI GetTextExtentExPointI( HDC hdc, const WORD *indices, INT count, INT max_ext,
                                    LPINT nfit, LPINT dxs, LPSIZE size )
 {
-    PHYSDEV dev;
-    BOOL ret;
     DC *dc;
+    int i;
+    BOOL ret;
+    INT buffer[256], *pos = dxs;
 
     if (count < 0) return FALSE;
 
     dc = get_dc_ptr( hdc );
     if (!dc) return FALSE;
 
-    dev = GET_DC_PHYSDEV( dc, pGetTextExtentExPointI );
-    ret = dev->funcs->pGetTextExtentExPointI( dev, indices, count, max_ext, nfit, dxs, size );
-    size->cx = abs(INTERNAL_XDSTOWS(dc, size->cx));
-    size->cy = abs(INTERNAL_YDSTOWS(dc, size->cy));
-    size->cx += count * dc->charExtra;
+    if (!dxs)
+    {
+        pos = buffer;
+        if (count > 256 && !(pos = HeapAlloc( GetProcessHeap(), 0, count * sizeof(*pos) )))
+        {
+            release_dc_ptr( dc );
+            return FALSE;
+        }
+    }
+
+    ret = get_char_positions_indices( dc, indices, count, pos, size );
+    if (ret)
+    {
+        if (dxs || nfit)
+        {
+            for (i = 0; i < count; i++)
+            {
+                unsigned int dx = abs( INTERNAL_XDSTOWS( dc, pos[i] )) + (i + 1) * dc->charExtra;
+                if (dx > (unsigned int)max_ext) break;
+                if (dxs) dxs[i] = dx;
+            }
+            if (nfit) *nfit = i;
+        }
+
+        size->cx = abs( INTERNAL_XDSTOWS( dc, size->cx )) + count * dc->charExtra;
+        size->cy = abs( INTERNAL_YDSTOWS( dc, size->cy ));
+    }
+
+    if (pos != buffer && pos != dxs) HeapFree( GetProcessHeap(), 0, pos );
     release_dc_ptr( dc );
 
     TRACE("(%p %p %d %p): returning %d x %d\n",
@@ -1091,6 +1195,7 @@ BOOL WINAPI GetTextExtentExPointA( HDC hdc, LPCSTR str, INT count,
     LPWSTR p = NULL;
 
     if (count < 0) return FALSE;
+    if (maxExt < -1) return FALSE;
 
     if (alpDx)
     {
@@ -1122,126 +1227,52 @@ BOOL WINAPI GetTextExtentExPointA( HDC hdc, LPCSTR str, INT count,
  *
  * Return the size of the string as it would be if it was output properly by
  * e.g. TextOut.
- *
- * This should include
- * - Intercharacter spacing
- * - justification spacing (not yet done)
- * - kerning? see below
- *
- * Kerning.  Since kerning would be carried out by the rendering code it should
- * be done by the driver.  However they don't support it yet.  Also I am not
- * yet persuaded that (certainly under Win95) any kerning is actually done.
- *
- * str: According to MSDN this should be null-terminated.  That is not true; a
- *      null will not terminate it early.
- * size: Certainly under Win95 this appears buggy or weird if *lpnFit is less
- *       than count.  I have seen it be either the size of the full string or
- *       1 less than the size of the full string.  I have not seen it bear any
- *       resemblance to the portion that would fit.
- * lpnFit: What exactly is fitting?  Stupidly, in my opinion, it includes the
- *         trailing intercharacter spacing and any trailing justification.
- *
- * FIXME
- * Currently we do this by measuring each character etc.  We should do it by
- * passing the request to the driver, perhaps by extending the
- * pGetTextExtentPoint function to take the alpDx argument.  That would avoid
- * thinking about kerning issues and rounding issues in the justification.
  */
-
-BOOL WINAPI GetTextExtentExPointW( HDC hdc, LPCWSTR str, INT count,
-				   INT maxExt, LPINT lpnFit,
-				   LPINT alpDx, LPSIZE size )
+BOOL WINAPI GetTextExtentExPointW( HDC hdc, LPCWSTR str, INT count, INT max_ext,
+                                   LPINT nfit, LPINT dxs, LPSIZE size )
 {
-    INT nFit = 0;
-    LPINT dxs = NULL;
     DC *dc;
-    BOOL ret = FALSE;
-    TEXTMETRICW tm;
-    PHYSDEV dev;
-
-    TRACE("(%p, %s, %d)\n",hdc,debugstr_wn(str,count),maxExt);
+    int i;
+    BOOL ret;
+    INT buffer[256], *pos = dxs;
 
     if (count < 0) return FALSE;
 
     dc = get_dc_ptr(hdc);
     if (!dc) return FALSE;
 
-    GetTextMetricsW(hdc, &tm);
-
-    /* If we need to calculate nFit, then we need the partial extents even if
-       the user hasn't provided us with an array.  */
-    if (lpnFit)
+    if (!dxs)
     {
-	dxs = alpDx ? alpDx : HeapAlloc(GetProcessHeap(), 0, count * sizeof alpDx[0]);
-	if (! dxs)
-	{
-	    release_dc_ptr(dc);
-	    SetLastError(ERROR_OUTOFMEMORY);
-	    return FALSE;
-	}
+        pos = buffer;
+        if (count > 256 && !(pos = HeapAlloc( GetProcessHeap(), 0, count * sizeof(*pos) )))
+        {
+            release_dc_ptr( dc );
+            return FALSE;
+        }
     }
-    else
-	dxs = alpDx;
 
-    dev = GET_DC_PHYSDEV( dc, pGetTextExtentExPoint );
-    ret = dev->funcs->pGetTextExtentExPoint(dev, str, count, 0, NULL, dxs, size);
-
-    /* Perform device size to world size transformations.  */
+    ret = get_char_positions( dc, str, count, pos, size );
     if (ret)
     {
-	INT extra = abs(INTERNAL_XWSTODS(dc, dc->charExtra)),
-        breakExtra = dc->breakExtra,
-        breakRem   = dc->breakRem,
-        i;
-
-	if (dxs)
-	{
-	    for (i = 0; i < count; ++i)
-	    {
-		dxs[i] += (i+1) * extra;
-                if (count > 1 && (breakExtra || breakRem) && str[i] == tm.tmBreakChar)
-                {
-                    dxs[i] += breakExtra;
-                    if (breakRem > 0)
-                    {
-                        breakRem--;
-                        dxs[i]++;
-                    }
-                }
-		dxs[i] = abs(INTERNAL_XDSTOWS(dc, dxs[i]));
-		if (dxs[i] <= maxExt)
-		    ++nFit;
-	    }
-	}
-        else if (count > 1 && (breakExtra || breakRem))
+        if (dxs || nfit)
         {
             for (i = 0; i < count; i++)
             {
-                if (str[i] == tm.tmBreakChar)
-                {
-                    size->cx += breakExtra;
-                    if (breakRem > 0)
-                    {
-                        breakRem--;
-                        (size->cx)++;
-                    }
-                }
+                unsigned int dx = abs( INTERNAL_XDSTOWS( dc, pos[i] )) + (i + 1) * dc->charExtra;
+                if (dx > (unsigned int)max_ext) break;
+		if (dxs) dxs[i] = dx;
             }
+            if (nfit) *nfit = i;
         }
-        size->cx += count * extra;
-	size->cx = abs(INTERNAL_XDSTOWS(dc, size->cx));
-	size->cy = abs(INTERNAL_YDSTOWS(dc, size->cy));
+
+        size->cx = abs( INTERNAL_XDSTOWS( dc, size->cx )) + count * dc->charExtra;
+        size->cy = abs( INTERNAL_YDSTOWS( dc, size->cy ));
     }
 
-    if (lpnFit)
-	*lpnFit = nFit;
-
-    if (! alpDx)
-        HeapFree(GetProcessHeap(), 0, dxs);
-
+    if (pos != buffer && pos != dxs) HeapFree( GetProcessHeap(), 0, pos );
     release_dc_ptr( dc );
 
-    TRACE("returning %d %d x %d\n",nFit,size->cx,size->cy);
+    TRACE("(%p, %s, %d) returning %dx%d\n", hdc, debugstr_wn(str,count), max_ext, size->cx, size->cy );
     return ret;
 }
 
@@ -2068,7 +2099,6 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     INT char_extra;
     SIZE sz;
     RECT rc;
-    BOOL done_extents = FALSE;
     POINT *deltas = NULL, width = {0, 0};
     DWORD type;
     DC * dc = get_dc_ptr( hdc );
@@ -2095,9 +2125,6 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
         release_dc_ptr( dc );
         return ret;
     }
-
-    if (!lprect)
-        flags &= ~ETO_CLIPPED;
 
     if (flags & ETO_RTLREADING) align |= TA_RTLREADING;
     if (layout & LAYOUT_RTL)
@@ -2160,34 +2187,15 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
         sinEsc = 0;
     }
 
-    if(flags & (ETO_CLIPPED | ETO_OPAQUE))
+    if (lprect)
     {
-        if(!lprect)
-        {
-            if(flags & ETO_GLYPH_INDEX)
-                GetTextExtentPointI(hdc, glyphs, count, &sz);
-            else
-                GetTextExtentPointW(hdc, reordered_str, count, &sz);
-
-            done_extents = TRUE;
-            rc.left = x;
-            rc.top = y;
-            rc.right = x + sz.cx;
-            rc.bottom = y + sz.cy;
-        }
-        else
-        {
-            rc = *lprect;
-        }
-
+        rc = *lprect;
         LPtoDP(hdc, (POINT*)&rc, 2);
-
-        if(rc.left > rc.right) {INT tmp = rc.left; rc.left = rc.right; rc.right = tmp;}
-        if(rc.top > rc.bottom) {INT tmp = rc.top; rc.top = rc.bottom; rc.bottom = tmp;}
+        order_rect( &rc );
+        if (flags & ETO_OPAQUE)
+            physdev->funcs->pExtTextOut( physdev, 0, 0, ETO_OPAQUE, &rc, NULL, 0, NULL );
     }
-
-    if (lprect && (flags & ETO_OPAQUE))
-        physdev->funcs->pExtTextOut( physdev, 0, 0, ETO_OPAQUE, &rc, NULL, 0, NULL );
+    else flags &= ~ETO_CLIPPED;
 
     if(count == 0)
     {
@@ -2205,46 +2213,49 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     if(char_extra || dc->breakExtra || breakRem || lpDx || lf.lfEscapement != 0)
     {
         UINT i;
-        SIZE tmpsz;
         POINT total = {0, 0}, desired[2];
 
         deltas = HeapAlloc(GetProcessHeap(), 0, count * sizeof(*deltas));
-        for(i = 0; i < count; i++)
+        if (lpDx)
         {
-            if(lpDx)
+            if (flags & ETO_PDY)
             {
-                if(flags & ETO_PDY)
+                for (i = 0; i < count; i++)
                 {
                     deltas[i].x = lpDx[i * 2] + char_extra;
                     deltas[i].y = -lpDx[i * 2 + 1];
                 }
-                else
+            }
+            else
+            {
+                for (i = 0; i < count; i++)
                 {
                     deltas[i].x = lpDx[i] + char_extra;
                     deltas[i].y = 0;
                 }
-
             }
-            else
-            {
-                if(flags & ETO_GLYPH_INDEX)
-                    GetTextExtentPointI(hdc, glyphs + i, 1, &tmpsz);
-                else
-                    GetTextExtentPointW(hdc, reordered_str + i, 1, &tmpsz);
+        }
+        else
+        {
+            INT *dx = HeapAlloc( GetProcessHeap(), 0, count * sizeof(*dx) );
 
-                deltas[i].x = tmpsz.cx;
+            if (flags & ETO_GLYPH_INDEX)
+                GetTextExtentExPointI( hdc, glyphs, count, -1, NULL, dx, &sz );
+            else
+                GetTextExtentExPointW( hdc, reordered_str, count, -1, NULL, dx, &sz );
+
+            deltas[0].x = dx[0];
+            deltas[0].y = 0;
+            for (i = 1; i < count; i++)
+            {
+                deltas[i].x = dx[i] - dx[i - 1];
                 deltas[i].y = 0;
             }
-            
-            if (!(flags & ETO_GLYPH_INDEX) && (dc->breakExtra || breakRem) && reordered_str[i] == tm.tmBreakChar)
-            {
-                deltas[i].x = deltas[i].x + dc->breakExtra;
-                if (breakRem > 0)
-                {
-                    breakRem--;
-                    deltas[i].x++;
-                }
-            }
+            HeapFree( GetProcessHeap(), 0, dx );
+        }
+
+        for(i = 0; i < count; i++)
+        {
             total.x += deltas[i].x;
             total.y += deltas[i].y;
 
@@ -2276,14 +2287,10 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     {
         POINT desired[2];
 
-        if(!done_extents)
-        {
-            if(flags & ETO_GLYPH_INDEX)
-                GetTextExtentPointI(hdc, glyphs, count, &sz);
-            else
-                GetTextExtentPointW(hdc, reordered_str, count, &sz);
-            done_extents = TRUE;
-        }
+        if(flags & ETO_GLYPH_INDEX)
+            GetTextExtentPointI(hdc, glyphs, count, &sz);
+        else
+            GetTextExtentPointW(hdc, reordered_str, count, &sz);
         desired[0].x = desired[0].y = 0;
         desired[1].x = sz.cx;
         desired[1].y = 0;
@@ -3129,13 +3136,13 @@ GetCharacterPlacementA(HDC hdc, LPCSTR lpString, INT uCount,
  */
 DWORD WINAPI
 GetCharacterPlacementW(
-		HDC hdc,		/* [in] Device context for which the rendering is to be done */
-		LPCWSTR lpString,	/* [in] The string for which information is to be returned */
-		INT uCount,		/* [in] Number of WORDS in string. */
-		INT nMaxExtent,		/* [in] Maximum extent the string is to take (in HDC logical units) */
-		GCP_RESULTSW *lpResults,/* [in/out] A pointer to a GCP_RESULTSW struct */
-		DWORD dwFlags 		/* [in] Flags specifying how to process the string */
-		)
+        HDC hdc,                    /* [in] Device context for which the rendering is to be done */
+        LPCWSTR lpString,           /* [in] The string for which information is to be returned */
+        INT uCount,                 /* [in] Number of WORDS in string. */
+        INT nMaxExtent,             /* [in] Maximum extent the string is to take (in HDC logical units) */
+        GCP_RESULTSW *lpResults,    /* [in/out] A pointer to a GCP_RESULTSW struct */
+        DWORD dwFlags               /* [in] Flags specifying how to process the string */
+        )
 {
     DWORD ret=0;
     SIZE size;
@@ -3146,66 +3153,69 @@ GetCharacterPlacementW(
 
     TRACE("lStructSize=%d, lpOutString=%p, lpOrder=%p, lpDx=%p, lpCaretPos=%p\n"
           "lpClass=%p, lpGlyphs=%p, nGlyphs=%u, nMaxFit=%d\n",
-	    lpResults->lStructSize, lpResults->lpOutString, lpResults->lpOrder,
-	    lpResults->lpDx, lpResults->lpCaretPos, lpResults->lpClass,
-	    lpResults->lpGlyphs, lpResults->nGlyphs, lpResults->nMaxFit);
+          lpResults->lStructSize, lpResults->lpOutString, lpResults->lpOrder,
+          lpResults->lpDx, lpResults->lpCaretPos, lpResults->lpClass,
+          lpResults->lpGlyphs, lpResults->nGlyphs, lpResults->nMaxFit);
 
-    if(dwFlags&(~GCP_REORDER))			FIXME("flags 0x%08x ignored\n", dwFlags);
-    if(lpResults->lpClass)	FIXME("classes not implemented\n");
+    if(dwFlags&(~GCP_REORDER))
+        FIXME("flags 0x%08x ignored\n", dwFlags);
+    if(lpResults->lpClass)
+        FIXME("classes not implemented\n");
     if (lpResults->lpCaretPos && (dwFlags & GCP_REORDER))
         FIXME("Caret positions for complex scripts not implemented\n");
 
-	nSet = (UINT)uCount;
-	if(nSet > lpResults->nGlyphs)
-		nSet = lpResults->nGlyphs;
+    nSet = (UINT)uCount;
+    if(nSet > lpResults->nGlyphs)
+        nSet = lpResults->nGlyphs;
 
-	/* return number of initialized fields */
-	lpResults->nGlyphs = nSet;
+    /* return number of initialized fields */
+    lpResults->nGlyphs = nSet;
 
-	if((dwFlags&GCP_REORDER)==0 )
-	{
-		/* Treat the case where no special handling was requested in a fastpath way */
-		/* copy will do if the GCP_REORDER flag is not set */
-		if(lpResults->lpOutString)
-                    memcpy( lpResults->lpOutString, lpString, nSet * sizeof(WCHAR));
+    if((dwFlags&GCP_REORDER)==0 )
+    {
+        /* Treat the case where no special handling was requested in a fastpath way */
+        /* copy will do if the GCP_REORDER flag is not set */
+        if(lpResults->lpOutString)
+            memcpy( lpResults->lpOutString, lpString, nSet * sizeof(WCHAR));
 
-		if(lpResults->lpOrder)
-		{
-			for(i = 0; i < nSet; i++)
-				lpResults->lpOrder[i] = i;
-		}
-	} else
-	{
-            BIDI_Reorder(NULL, lpString, uCount, dwFlags, WINE_GCPW_FORCE_LTR, lpResults->lpOutString,
-                          nSet, lpResults->lpOrder, NULL, NULL );
-	}
+        if(lpResults->lpOrder)
+        {
+            for(i = 0; i < nSet; i++)
+                lpResults->lpOrder[i] = i;
+        }
+    }
+    else
+    {
+        BIDI_Reorder(NULL, lpString, uCount, dwFlags, WINE_GCPW_FORCE_LTR, lpResults->lpOutString,
+                     nSet, lpResults->lpOrder, NULL, NULL );
+    }
 
-	/* FIXME: Will use the placement chars */
-	if (lpResults->lpDx)
-	{
-		int c;
-		for (i = 0; i < nSet; i++)
-		{
-			if (GetCharWidth32W(hdc, lpString[i], lpString[i], &c))
-				lpResults->lpDx[i]= c;
-		}
-	}
+    /* FIXME: Will use the placement chars */
+    if (lpResults->lpDx)
+    {
+        int c;
+        for (i = 0; i < nSet; i++)
+        {
+            if (GetCharWidth32W(hdc, lpString[i], lpString[i], &c))
+                lpResults->lpDx[i]= c;
+        }
+    }
 
     if (lpResults->lpCaretPos && !(dwFlags & GCP_REORDER))
     {
         int pos = 0;
-       
+
         lpResults->lpCaretPos[0] = 0;
         for (i = 1; i < nSet; i++)
             if (GetTextExtentPoint32W(hdc, &(lpString[i - 1]), 1, &size))
                 lpResults->lpCaretPos[i] = (pos += size.cx);
     }
-   
+
     if(lpResults->lpGlyphs)
-	GetGlyphIndicesW(hdc, lpString, nSet, lpResults->lpGlyphs, 0);
+        GetGlyphIndicesW(hdc, lpString, nSet, lpResults->lpGlyphs, 0);
 
     if (GetTextExtentPoint32W(hdc, lpString, uCount, &size))
-      ret = MAKELONG(size.cx, size.cy);
+        ret = MAKELONG(size.cx, size.cy);
 
     return ret;
 }
@@ -3395,16 +3405,41 @@ static void *map_file( const WCHAR *filename, LARGE_INTEGER *size )
     return ptr;
 }
 
-static WCHAR *get_scalable_filename( const WCHAR *res )
+static void *find_resource( BYTE *ptr, WORD type, DWORD rsrc_off, DWORD size, DWORD *len )
+{
+    WORD align, type_id, count;
+    DWORD res_off;
+
+    if (size < rsrc_off + 10) return NULL;
+    align = *(WORD *)(ptr + rsrc_off);
+    rsrc_off += 2;
+    type_id = *(WORD *)(ptr + rsrc_off);
+    while (type_id && type_id != type)
+    {
+        count = *(WORD *)(ptr + rsrc_off + 2);
+        rsrc_off += 8 + count * 12;
+        if (size < rsrc_off + 8) return NULL;
+        type_id = *(WORD *)(ptr + rsrc_off);
+    }
+    if (!type_id) return NULL;
+    count = *(WORD *)(ptr + rsrc_off + 2);
+    if (size < rsrc_off + 8 + count * 12) return NULL;
+    res_off = *(WORD *)(ptr + rsrc_off + 8) << align;
+    *len = *(WORD *)(ptr + rsrc_off + 10) << align;
+    if (size < res_off + *len) return NULL;
+    return ptr + res_off;
+}
+
+static WCHAR *get_scalable_filename( const WCHAR *res, BOOL *hidden )
 {
     LARGE_INTEGER size;
     BYTE *ptr = map_file( res, &size );
     const IMAGE_DOS_HEADER *dos;
     const IMAGE_OS2_HEADER *ne;
+    WORD *fontdir;
+    char *data;
     WCHAR *name = NULL;
-    WORD rsrc_off, align, type_id, count;
-    DWORD res_off, res_len, i;
-    int len;
+    DWORD len;
 
     if (!ptr) return NULL;
 
@@ -3413,33 +3448,18 @@ static WCHAR *get_scalable_filename( const WCHAR *res )
     if (dos->e_magic != IMAGE_DOS_SIGNATURE) goto fail;
     if (size.u.LowPart < dos->e_lfanew + sizeof( *ne )) goto fail;
     ne = (const IMAGE_OS2_HEADER *)(ptr + dos->e_lfanew);
-    rsrc_off = dos->e_lfanew + ne->ne_rsrctab;
-    if (size.u.LowPart < rsrc_off + 10) goto fail;
-    align = *(WORD *)(ptr + rsrc_off);
-    rsrc_off += 2;
-    type_id = *(WORD *)(ptr + rsrc_off);
-    while (type_id && type_id != 0x80cc)
-    {
-        count = *(WORD *)(ptr + rsrc_off + 2);
-        rsrc_off += 8 + count * 12;
-        if (size.u.LowPart < rsrc_off + 8) goto fail;
-        type_id = *(WORD *)(ptr + rsrc_off);
-    }
-    if (!type_id) goto fail;
-    count = *(WORD *)(ptr + rsrc_off + 2);
-    if (size.u.LowPart < rsrc_off + 8 + count * 12) goto fail;
 
-    res_off = *(WORD *)(ptr + rsrc_off + 8) << align;
-    res_len = *(WORD *)(ptr + rsrc_off + 10) << align;
-    if (size.u.LowPart < res_off + res_len) goto fail;
+    fontdir = find_resource( ptr, 0x8007, dos->e_lfanew + ne->ne_rsrctab, size.u.LowPart, &len );
+    if (!fontdir) goto fail;
+    *hidden = (fontdir[35] & 0x80) != 0;  /* fontdir->dfType */
 
-    for (i = 0; i < res_len; i++)
-        if (ptr[ res_off + i ] == 0) break;
-    if (i == res_len) goto fail;
+    data = find_resource( ptr, 0x80cc, dos->e_lfanew + ne->ne_rsrctab, size.u.LowPart, &len );
+    if (!data) goto fail;
+    if (!memchr( data, 0, len )) goto fail;
 
-    len = MultiByteToWideChar( CP_ACP, 0, (char *)ptr + res_off, -1, NULL, 0 );
+    len = MultiByteToWideChar( CP_ACP, 0, data, -1, NULL, 0 );
     name = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) );
-    if (name) MultiByteToWideChar( CP_ACP, 0, (char *)ptr + res_off, -1, name, len );
+    if (name) MultiByteToWideChar( CP_ACP, 0, data, -1, name, len );
 
 fail:
     UnmapViewOfFile( ptr );
@@ -3453,6 +3473,7 @@ INT WINAPI AddFontResourceExW( LPCWSTR str, DWORD fl, PVOID pdv )
 {
     int ret = WineEngAddFontResourceEx(str, fl, pdv);
     WCHAR *filename;
+    BOOL hidden;
 
     if (ret == 0)
     {
@@ -3469,8 +3490,9 @@ INT WINAPI AddFontResourceExW( LPCWSTR str, DWORD fl, PVOID pdv )
                 ret = num_resources;
             FreeLibrary(hModule);
         }
-        else if ((filename = get_scalable_filename( str )) != NULL)
+        else if ((filename = get_scalable_filename( str, &hidden )) != NULL)
         {
+            if (hidden) fl |= FR_PRIVATE | FR_NOT_ENUM;
             ret = WineEngAddFontResourceEx( filename, fl, pdv );
             HeapFree( GetProcessHeap(), 0, filename );
         }
@@ -3555,7 +3577,27 @@ BOOL WINAPI RemoveFontResourceExA( LPCSTR str, DWORD fl, PVOID pdv )
  */
 BOOL WINAPI RemoveFontResourceExW( LPCWSTR str, DWORD fl, PVOID pdv )
 {
-    return WineEngRemoveFontResourceEx(str, fl, pdv);
+    int ret = WineEngRemoveFontResourceEx( str, fl, pdv );
+    WCHAR *filename;
+    BOOL hidden;
+
+    if (ret == 0)
+    {
+        /* FreeType <2.3.5 has problems reading resources wrapped in PE files. */
+        HMODULE hModule = LoadLibraryExW(str, NULL, LOAD_LIBRARY_AS_DATAFILE);
+        if (hModule != NULL)
+        {
+            WARN("Can't unload resources from PE file %s\n", wine_dbgstr_w(str));
+            FreeLibrary(hModule);
+        }
+        else if ((filename = get_scalable_filename( str, &hidden )) != NULL)
+        {
+            if (hidden) fl |= FR_PRIVATE | FR_NOT_ENUM;
+            ret = WineEngRemoveFontResourceEx( filename, fl, pdv );
+            HeapFree( GetProcessHeap(), 0, filename );
+        }
+    }
+    return ret;
 }
 
 /***********************************************************************

@@ -915,9 +915,9 @@ static BOOL get_font_entry( union sysparam_all_entry *entry, UINT int_param, voi
         switch (load_entry( &entry->hdr, &font, sizeof(font) ))
         {
         case sizeof(font):
-            entry->font.val = font;
             if (font.lfHeight > 0) /* positive height value means points ( inch/72 ) */
                 font.lfHeight = -MulDiv( font.lfHeight, get_display_dpi(), 72 );
+            entry->font.val = font;
             break;
         case sizeof(LOGFONT16): /* win9x-winME format */
             SYSPARAMS_LogFont16To32W( (LOGFONT16 *)&font, &entry->font.val );
@@ -1126,8 +1126,8 @@ static BOOL set_entry( void *ptr, UINT int_param, void *ptr_param, UINT flags )
                                                     name ##_VALNAME }, data, sizeof(data) }
 
 #define PATH_ENTRY(name) \
-    struct sysparam_binary_entry entry_##name = { { get_path_entry, set_path_entry, init_path_entry, \
-                                                    name ##_VALNAME } }
+    struct sysparam_path_entry entry_##name = { { get_path_entry, set_path_entry, init_path_entry, \
+                                                  name ##_VALNAME } }
 
 #define FONT_ENTRY(name,weight) \
     struct sysparam_font_entry entry_##name = { { get_font_entry, set_font_entry, init_font_entry, \
@@ -2419,6 +2419,7 @@ INT WINAPI GetSystemMetrics( INT index )
     case SM_RESERVED4:
         return 0;
     case SM_CXMIN:
+        ncm.cbSize = sizeof(ncm);
         SystemParametersInfoW( SPI_GETNONCLIENTMETRICS, 0, &ncm, 0 );
         get_text_metr_size( get_display_dc(), &ncm.lfCaptionFont, NULL, &ret );
         return 3 * ncm.iCaptionWidth + ncm.iCaptionHeight + 4 * ret + 2 * GetSystemMetrics(SM_CXFRAME) + 4;
@@ -2428,6 +2429,7 @@ INT WINAPI GetSystemMetrics( INT index )
         get_entry( &entry_CAPTIONWIDTH, 0, &ret );
         return max( 8, ret );
     case SM_CYSIZE:
+        ncm.cbSize = sizeof(ncm);
         SystemParametersInfoW( SPI_GETNONCLIENTMETRICS, 0, &ncm, 0 );
         return ncm.iCaptionHeight;
     case SM_CXFRAME:
@@ -2486,12 +2488,14 @@ INT WINAPI GetSystemMetrics( INT index )
         get_entry( &entry_SMCAPTIONWIDTH, 0, &ret );
         return ret;
     case SM_CYSMSIZE:
+        ncm.cbSize = sizeof(ncm);
         SystemParametersInfoW( SPI_GETNONCLIENTMETRICS, 0, &ncm, 0 );
         return ncm.iSmCaptionHeight;
     case SM_CXMENUSIZE:
         get_entry( &entry_MENUWIDTH, 0, &ret );
         return ret;
     case SM_CYMENUSIZE:
+        ncm.cbSize = sizeof(ncm);
         SystemParametersInfoW( SPI_GETNONCLIENTMETRICS, 0, &ncm, 0 );
         return ncm.iMenuHeight;
     case SM_ARRANGE:
@@ -2529,6 +2533,7 @@ INT WINAPI GetSystemMetrics( INT index )
     case SM_CYMENUCHECK:
     {
         TEXTMETRICW tm;
+        ncm.cbSize = sizeof(ncm);
         SystemParametersInfoW( SPI_GETNONCLIENTMETRICS, 0, &ncm, 0 );
         get_text_metr_size( get_display_dc(), &ncm.lfMenuFont, &tm, NULL);
         return tm.tmHeight <= 0 ? 13 : ((tm.tmHeight + tm.tmExternalLeading + 1) / 2) * 2 - 1;

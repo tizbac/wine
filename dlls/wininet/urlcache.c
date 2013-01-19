@@ -2901,6 +2901,9 @@ BOOL WINAPI CreateUrlCacheEntryW(
             break;
         }
     }
+    if(!bFound)
+        lpszUrlPart++;
+
     if (!lstrcmpW(lpszUrlPart, szWWW))
     {
         lpszUrlPart += lstrlenW(szWWW);
@@ -4119,6 +4122,16 @@ BOOL WINAPI DeleteUrlCacheGroup(GROUPID GroupId, DWORD dwFlags, LPVOID lpReserve
 {
     FIXME("(0x%08x%08x, 0x%08x, %p) stub\n",
           (ULONG)(GroupId >> 32), (ULONG)GroupId, dwFlags, lpReserved);
+    return FALSE;
+}
+
+/***********************************************************************
+ *           DeleteWpadCacheForNetworks (WININET.@)
+ *    Undocumented, added in IE8
+ */
+BOOL WINAPI DeleteWpadCacheForNetworks(DWORD unk1)
+{
+    FIXME("(%d) stub\n", unk1);
     return FALSE;
 }
 

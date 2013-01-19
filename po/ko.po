@@ -472,7 +472,7 @@ msgstr "시작(&F):"
 msgid "&To:"
 msgstr "끝(&T):"
 
-#: comdlg32.rc:209
+#: comdlg32.rc:209 wineps.rc:39
 msgid "Print &Quality:"
 msgstr "인쇄 품질(&Q):"
 
@@ -3530,7 +3530,7 @@ msgstr "끝나지 않은 문자열 상수"
 
 #: jscript.rc:39
 msgid "'return' statement outside of function"
-msgstr ""
+msgstr "함수 밖에 'return'문장이 있음 "
 
 #: jscript.rc:40
 msgid "Can't have 'break' outside of loop"
@@ -3542,7 +3542,7 @@ msgstr "루프 바깥에는 'continue'를 사용할 수 없음"
 
 #: jscript.rc:42
 msgid "Label redefined"
-msgstr "라벨이 정의되지 않음"
+msgstr "라벨이 중복정의됨"
 
 #: jscript.rc:43
 msgid "Label not found"
@@ -7093,7 +7093,7 @@ msgstr "시계"
 msgid "split button"
 msgstr "나누기 단추"
 
-#: oleacc.rc:90 ipconfig.rc:33
+#: oleacc.rc:90
 msgid "IP address"
 msgstr "IP 주소"
 
@@ -7295,7 +7295,7 @@ msgctxt "unit: bits"
 msgid "b"
 msgstr "비트"
 
-#: sane.rc:34 winecfg.rc:174
+#: sane.rc:34 wineps.rc:46 winecfg.rc:174
 msgctxt "unit: dots/inch"
 msgid "dpi"
 msgstr "dpi"
@@ -8257,22 +8257,26 @@ msgid "Don't install"
 msgstr "설치 안  함"
 
 #: urlmon.rc:40
+#, fuzzy
+#| msgid ""
+#| "When installed, ActiveX has full access to your computer.Do not click "
+#| "install unless you have absolute trust in the above source."
 msgid ""
-"When installed, ActiveX has full access to your computer.Do not click "
-"install unless you have absolute trust in the above source."
+"When installed, an ActiveX component has full access to your computer. Do "
+"not click install unless you have absolute trust in the above source."
 msgstr ""
 "설치할 때,ActiveX는 당신의 컴퓨터에 완전한 접근권한을 가질 것입니다. 당신이"
 "이 원본을 완전히 신뢰하지 않는다면 설치를 클릭하지 마십시오."
 
-#: urlmon.rc:47
+#: urlmon.rc:48
 msgid "Installation of component failed: %08x"
 msgstr "구성요소 설치가 실패함: %08x"
 
-#: urlmon.rc:48
+#: urlmon.rc:49
 msgid "Install (%d)"
 msgstr "설치 (%d)"
 
-#: urlmon.rc:49
+#: urlmon.rc:50
 msgid "Install"
 msgstr "설치"
 
@@ -10080,6 +10084,30 @@ msgid ""
 "Can't recognize '%1' as an internal or external command, or batch script.\n"
 msgstr "'%1'을 내부나 외부 명령어,나 배치 스크립트로 인식할 수 없습니다.\n"
 
+#: cmd.rc:357
+msgid "Division by zero error.\n"
+msgstr "0으로 나눈 에러가 발생했습니다.\n"
+
+#: cmd.rc:358
+msgid "Expected an operand.\n"
+msgstr "피연산자가 요구됩니다.\n"
+
+#: cmd.rc:359
+msgid "Expected an operator.\n"
+msgstr "연산자가 요구됩니다.\n"
+
+#: cmd.rc:360
+msgid "Mismatch in parentheses.\n"
+msgstr "괄호가 일치하지 않습니다\n"
+
+#: cmd.rc:361
+msgid ""
+"Badly formed number - must be one of decimal (12),\n"
+" hexadecimal (0x34) or octal (056).\n"
+msgstr ""
+"잘못된 형식의 숫자 - 십진수(12)나,\n"
+"16진수(0x34)나 팔진수(056)중의 하나이어야 합니다.\n"
+
 #: dxdiag.rc:27
 msgid "DirectX Diagnostic Tool"
 msgstr "다이렉트엑스 진단 도구"
@@ -10127,6 +10155,12 @@ msgstr "이더넷"
 msgid "Connection-specific DNS suffix"
 msgstr "연결에 지정된 DNS 접미사"
 
+#: ipconfig.rc:33
+#, fuzzy
+#| msgid "IP address"
+msgid "IPv4 address"
+msgstr "IP 주소"
+
 #: ipconfig.rc:34
 msgid "Hostname"
 msgstr "호스트이름"
@@ -10166,6 +10200,12 @@ msgstr "DHCP 가능"
 #: ipconfig.rc:46
 msgid "Default gateway"
 msgstr "기본 게이트웨이"
+
+#: ipconfig.rc:47
+#, fuzzy
+#| msgid "IP address"
+msgid "IPv6 address"
+msgstr "IP 주소"
 
 #: net.rc:27
 msgid ""
@@ -10296,6 +10336,72 @@ msgstr "다시 연결중"
 #: net.rc:40
 msgid "The following services are running:\n"
 msgstr "다음 서비스가 실행중임:\n"
+
+#: netstat.rc:27
+msgid "Active Connections"
+msgstr "활성화된 연결"
+
+#: netstat.rc:28
+msgid "Proto"
+msgstr "프로토콜"
+
+#: netstat.rc:29
+msgid "Local Address"
+msgstr "지역 주소"
+
+#: netstat.rc:30
+msgid "Foreign Address"
+msgstr "외부 주소"
+
+#: netstat.rc:31
+msgid "State"
+msgstr "상태"
+
+#: netstat.rc:32
+#, fuzzy
+#| msgid "Interfaces"
+msgid "Interface Statistics"
+msgstr "인터페이스"
+
+#: netstat.rc:33
+msgid "Sent"
+msgstr ""
+
+#: netstat.rc:34
+msgid "Received"
+msgstr ""
+
+#: netstat.rc:35
+#, fuzzy
+#| msgid "bytes"
+msgid "Bytes"
+msgstr "바이트"
+
+#: netstat.rc:36
+msgid "Unicast packets"
+msgstr ""
+
+#: netstat.rc:37
+msgid "Non-unicast packets"
+msgstr ""
+
+#: netstat.rc:38
+#, fuzzy
+#| msgid "Disclaimer"
+msgid "Discards"
+msgstr "거부"
+
+#: netstat.rc:39
+#, fuzzy
+#| msgid "Error"
+msgid "Errors"
+msgstr "오류"
+
+#: netstat.rc:40
+#, fuzzy
+#| msgid "Unknown port.\n"
+msgid "Unknown protocols"
+msgstr "알 수 없는 포트.\n"
 
 #: notepad.rc:27
 msgid "&New\tCtrl+N"

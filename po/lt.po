@@ -1,11 +1,11 @@
 # Lithuanian translations for Wine
-# Aurimas Fišeras <aurimas@members.fsf.org>, 2011, 2012.
+# Aurimas Fišeras <aurimas@members.fsf.org>, 2011, 2012, 2013.
 msgid ""
 msgstr ""
 "Project-Id-Version: Wine\n"
 "Report-Msgid-Bugs-To: http://bugs.winehq.org\n"
 "POT-Creation-Date: N/A\n"
-"PO-Revision-Date: 2012-12-01 13:07+0300\n"
+"PO-Revision-Date: 2013-01-08 22:47+0300\n"
 "Last-Translator: Aurimas Fišeras <aurimas@members.fsf.org>\n"
 "Language-Team: komp_lt@konf.lt\n"
 "Language: Lithuanian\n"
@@ -473,7 +473,7 @@ msgstr "n&uo:"
 msgid "&To:"
 msgstr "&iki:"
 
-#: comdlg32.rc:209
+#: comdlg32.rc:209 wineps.rc:39
 msgid "Print &Quality:"
 msgstr "Spausdinimo &kokybė:"
 
@@ -3544,7 +3544,7 @@ msgstr "Nebaigta eilutės konstanta"
 
 #: jscript.rc:39
 msgid "'return' statement outside of function"
-msgstr ""
+msgstr "Sakinys „return“ ne funkcijoje"
 
 #: jscript.rc:40
 msgid "Can't have 'break' outside of loop"
@@ -7111,7 +7111,7 @@ msgstr "laikrodis"
 msgid "split button"
 msgstr "išskleidimo mygtukas"
 
-#: oleacc.rc:90 ipconfig.rc:33
+#: oleacc.rc:90
 msgid "IP address"
 msgstr "IP adresas"
 
@@ -7313,7 +7313,7 @@ msgctxt "unit: bits"
 msgid "b"
 msgstr "b"
 
-#: sane.rc:34 winecfg.rc:174
+#: sane.rc:34 wineps.rc:46 winecfg.rc:174
 msgctxt "unit: dots/inch"
 msgid "dpi"
 msgstr "tašk./col."
@@ -8281,21 +8281,21 @@ msgstr "Nediegti"
 
 #: urlmon.rc:40
 msgid ""
-"When installed, ActiveX has full access to your computer.Do not click "
-"install unless you have absolute trust in the above source."
+"When installed, an ActiveX component has full access to your computer. Do "
+"not click install unless you have absolute trust in the above source."
 msgstr ""
-"Kai įdiegta, ActiveX turi visišką prieigą prie kompiuterio. Nespauskite "
-"„Įdiegti“, nebent visiškai pasitikite šaltiniu aukščiau."
+"Kai įdiegtas, ActiveX komponentas turi visišką prieigą prie kompiuterio. "
+"Nespauskite „Įdiegti“, nebent visiškai pasitikite šaltiniu aukščiau."
 
-#: urlmon.rc:47
+#: urlmon.rc:48
 msgid "Installation of component failed: %08x"
 msgstr "Nepavyko įdiegti komponento: %08x"
 
-#: urlmon.rc:48
+#: urlmon.rc:49
 msgid "Install (%d)"
 msgstr "Įdiegti (%d)"
 
-#: urlmon.rc:49
+#: urlmon.rc:50
 msgid "Install"
 msgstr "Įdiegti"
 
@@ -9457,12 +9457,12 @@ msgid ""
 "\n"
 "GOTO has no effect when used interactively.\n"
 msgstr ""
-"GOTO komanda perduoda vykdymą kitam teiginiui komandų faile.\n"
+"GOTO komanda nukreipia vykdymą į kitą sakinį komandų faile.\n"
 "\n"
-"Žymė, kuri yra GOTO komandos tikslas gali būti 255 simbolių ilgio,\n"
+"Žymė, kuri yra GOTO komandos tikslas, gali būti 255 simbolių ilgio,\n"
 "bet be tarpų (tai skiriasi nuo kitų operacinių sistemų). Jei komandų\n"
 "faile egzistuoja dvi ar daugiau identiškos žymės, visuomet bus vykdoma\n"
-"pirmoji. Mėginimas perduoti vykdymą į neegzistuojančią žymę nutraukia\n"
+"pirmoji. Mėginimas nukreipti vykdymą į neegzistuojančią žymę nutraukia\n"
 "komandų failo vykdymą.\n"
 "\n"
 "GOTO neturi poveikio naudojant interaktyviai.\n"
@@ -10127,6 +10127,30 @@ msgstr ""
 "Nepavyko atpažinti „%1“ kaip vidinės ar išorinės komandos, ar komandų "
 "failo.\n"
 
+#: cmd.rc:357
+msgid "Division by zero error.\n"
+msgstr "Dalybos iš nulio klaida.\n"
+
+#: cmd.rc:358
+msgid "Expected an operand.\n"
+msgstr "Tikėtasi operando.\n"
+
+#: cmd.rc:359
+msgid "Expected an operator.\n"
+msgstr "Tikėtasi operacijos ženklo.\n"
+
+#: cmd.rc:360
+msgid "Mismatch in parentheses.\n"
+msgstr "Skliaustų neatitiktis.\n"
+
+#: cmd.rc:361
+msgid ""
+"Badly formed number - must be one of decimal (12),\n"
+" hexadecimal (0x34) or octal (056).\n"
+msgstr ""
+"Blogai sudarytas skaičius – privalo būti dešimtainis (12),\n"
+" šešioliktainis (0x34) arba aštuntainis (056).\n"
+
 #: dxdiag.rc:27
 msgid "DirectX Diagnostic Tool"
 msgstr "DirectX diagnostikos įrankis"
@@ -10175,6 +10199,10 @@ msgstr "Eterneto"
 msgid "Connection-specific DNS suffix"
 msgstr "Ryšiui būdingas DNS sufiksas"
 
+#: ipconfig.rc:33
+msgid "IPv4 address"
+msgstr "IPv4 adresas"
+
 #: ipconfig.rc:34
 msgid "Hostname"
 msgstr "Kompiuterio vardas"
@@ -10214,6 +10242,10 @@ msgstr "DHCP įjungta"
 #: ipconfig.rc:46
 msgid "Default gateway"
 msgstr "Numatytasis šliuzas"
+
+#: ipconfig.rc:47
+msgid "IPv6 address"
+msgstr "IPv6 adresas"
 
 #: net.rc:27
 msgid ""
@@ -10344,6 +10376,62 @@ msgstr "Jungiamasi iš naujo"
 #: net.rc:40
 msgid "The following services are running:\n"
 msgstr "Šios tarnybos vykdomos:\n"
+
+#: netstat.rc:27
+msgid "Active Connections"
+msgstr "Aktyvūs ryšiai"
+
+#: netstat.rc:28
+msgid "Proto"
+msgstr "Prot."
+
+#: netstat.rc:29
+msgid "Local Address"
+msgstr "Vietinis adresas"
+
+#: netstat.rc:30
+msgid "Foreign Address"
+msgstr "Svetimas adresas"
+
+#: netstat.rc:31
+msgid "State"
+msgstr "Būsena"
+
+#: netstat.rc:32
+msgid "Interface Statistics"
+msgstr "Sąsajos statistika"
+
+#: netstat.rc:33
+msgid "Sent"
+msgstr "Išsiųsta"
+
+#: netstat.rc:34
+msgid "Received"
+msgstr "Gauta"
+
+#: netstat.rc:35
+msgid "Bytes"
+msgstr "Baitų"
+
+#: netstat.rc:36
+msgid "Unicast packets"
+msgstr "„Unicast“ paketų"
+
+#: netstat.rc:37
+msgid "Non-unicast packets"
+msgstr "Ne „unicast“ paketų"
+
+#: netstat.rc:38
+msgid "Discards"
+msgstr "Atmetimai"
+
+#: netstat.rc:39
+msgid "Errors"
+msgstr "Klaidos"
+
+#: netstat.rc:40
+msgid "Unknown protocols"
+msgstr "Nežinomi protokolai"
 
 #: notepad.rc:27
 msgid "&New\tCtrl+N"

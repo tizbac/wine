@@ -750,12 +750,6 @@ enum wined3d_decl_usage
     WINED3D_DECL_USAGE_SAMPLE               = 13
 };
 
-enum wined3d_surface_type
-{
-    WINED3D_SURFACE_TYPE_OPENGL,                    /* OpenGL surface: Renders using libGL, needed for 3D */
-    WINED3D_SURFACE_TYPE_GDI,                       /* User surface. No 3D, DirectDraw rendering with GDI */
-};
-
 enum wined3d_sysval_semantic
 {
     WINED3D_SV_DEPTH = 0xffffffff,
@@ -1222,6 +1216,7 @@ enum wined3d_display_rotation
 #define WINED3DDEVCAPS_NPATCHES                                 0x01000000
 
 #define WINED3D_LEGACY_DEPTH_BIAS                               0x00000001
+#define WINED3D_NO3D                                            0x00000002
 
 /* dwDDFX */
 /* arithmetic stretching along y axis */
@@ -2025,8 +2020,7 @@ HRESULT __cdecl wined3d_check_depth_stencil_match(const struct wined3d *wined3d,
         enum wined3d_format_id render_target_format_id, enum wined3d_format_id depth_stencil_format_id);
 HRESULT __cdecl wined3d_check_device_format(const struct wined3d *wined3d, UINT adaper_idx,
         enum wined3d_device_type device_type, enum wined3d_format_id adapter_format_id, DWORD usage,
-        enum wined3d_resource_type resource_type, enum wined3d_format_id check_format_id,
-        enum wined3d_surface_type surface_type);
+        enum wined3d_resource_type resource_type, enum wined3d_format_id check_format_id);
 HRESULT __cdecl wined3d_check_device_format_conversion(const struct wined3d *wined3d, UINT adapter_idx,
         enum wined3d_device_type device_type, enum wined3d_format_id source_format_id,
         enum wined3d_format_id target_format_id);
@@ -2096,14 +2090,9 @@ void __cdecl wined3d_device_draw_indexed_primitive_instanced(struct wined3d_devi
 HRESULT __cdecl wined3d_device_draw_indexed_primitive_strided(struct wined3d_device *device, UINT index_count,
         const struct wined3d_strided_data *strided_data, UINT vertex_count, const void *index_data,
         enum wined3d_format_id index_data_format_id);
-HRESULT __cdecl wined3d_device_draw_indexed_primitive_up(struct wined3d_device *device,
-        UINT index_count, const void *index_data, enum wined3d_format_id index_data_format_id,
-        const void *stream_data, UINT stream_stride);
 HRESULT __cdecl wined3d_device_draw_primitive(struct wined3d_device *device, UINT start_vertex, UINT vertex_count);
 HRESULT __cdecl wined3d_device_draw_primitive_strided(struct wined3d_device *device,
         UINT vertex_count, const struct wined3d_strided_data *strided_data);
-HRESULT __cdecl wined3d_device_draw_primitive_up(struct wined3d_device *device,
-        UINT vertex_count, const void *stream_data, UINT stream_stride);
 HRESULT __cdecl wined3d_device_draw_rect_patch(struct wined3d_device *device, UINT handle,
         const float *num_segs, const struct wined3d_rect_patch_info *rect_patch_info);
 HRESULT __cdecl wined3d_device_draw_tri_patch(struct wined3d_device *device, UINT handle,
@@ -2345,9 +2334,8 @@ HRESULT __cdecl wined3d_surface_blt(struct wined3d_surface *dst_surface, const R
         const WINEDDBLTFX *blt_fx, enum wined3d_texture_filter_type filter);
 HRESULT __cdecl wined3d_surface_create(struct wined3d_device *device, UINT width, UINT height,
         enum wined3d_format_id format_id, DWORD usage, enum wined3d_pool pool,
-        enum wined3d_multisample_type multisample_type, DWORD multisample_quality,
-        enum wined3d_surface_type surface_type, DWORD flags, void *parent,
-        const struct wined3d_parent_ops *parent_ops, struct wined3d_surface **surface);
+        enum wined3d_multisample_type multisample_type, DWORD multisample_quality, DWORD flags,
+        void *parent, const struct wined3d_parent_ops *parent_ops, struct wined3d_surface **surface);
 ULONG __cdecl wined3d_surface_decref(struct wined3d_surface *surface);
 HRESULT __cdecl wined3d_surface_flip(struct wined3d_surface *surface, struct wined3d_surface *override, DWORD flags);
 struct wined3d_surface * __cdecl wined3d_surface_from_resource(struct wined3d_resource *resource);
@@ -2384,9 +2372,8 @@ HRESULT __cdecl wined3d_surface_update_overlay(struct wined3d_surface *surface, 
 HRESULT __cdecl wined3d_surface_update_overlay_z_order(struct wined3d_surface *surface,
         DWORD flags, struct wined3d_surface *ref);
 
-HRESULT __cdecl wined3d_swapchain_create(struct wined3d_device *device,
-        struct wined3d_swapchain_desc *desc, enum wined3d_surface_type surface_type, void *parent,
-        const struct wined3d_parent_ops *parent_ops, struct wined3d_swapchain **swapchain);
+HRESULT __cdecl wined3d_swapchain_create(struct wined3d_device *device, struct wined3d_swapchain_desc *desc,
+        void *parent, const struct wined3d_parent_ops *parent_ops, struct wined3d_swapchain **swapchain);
 ULONG __cdecl wined3d_swapchain_decref(struct wined3d_swapchain *swapchain);
 struct wined3d_surface * __cdecl wined3d_swapchain_get_back_buffer(const struct wined3d_swapchain *swapchain,
         UINT backbuffer_idx, enum wined3d_backbuffer_type backbuffer_type);

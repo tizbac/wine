@@ -59,6 +59,23 @@ TestConstant "vbDataObject", vbDataObject, 13
 TestConstant "vbDecimal", vbDecimal, 14
 TestConstant "vbByte", vbByte, 17
 TestConstant "vbArray", vbArray, 8192
+TestConstant "vbCritical", vbCritical, 16
+TestConstant "vbQuestion", vbQuestion, 32
+TestConstant "vbExclamation", vbExclamation, 48
+TestConstant "vbInformation", vbInformation, 64
+TestConstant "vbDefaultButton1", vbDefaultButton1, 0
+TestConstant "vbDefaultButton2", vbDefaultButton2, 256
+TestConstant "vbDefaultButton3", vbDefaultButton3, 512
+TestConstant "vbDefaultButton4", vbDefaultButton4, 768
+TestConstant "vbApplicationModal", vbApplicationModal, 0
+TestConstant "vbSystemModal", vbSystemModal, 4096
+TestConstant "vbUseSystem", vbUseSystem, 0
+TestConstant "vbUseSystemDayOfWeek", vbUseSystemDayOfWeek, 0
+TestConstant "vbFirstJan1", vbFirstJan1, 1
+TestConstant "vbFirstFourDays", vbFirstFourDays, 2
+TestConstant "vbFirstFullWeek", vbFirstFullWeek, 3
+TestConstant "vbTrue", vbTrue, -1
+TestConstant "vbFalse", vbFalse, 0
 
 Sub TestCStr(arg, exval)
     dim x

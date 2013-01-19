@@ -678,7 +678,7 @@
 @ extern _acmdln msvcrt._acmdln
 @ cdecl _aligned_free(ptr) msvcrt._aligned_free
 @ cdecl _aligned_malloc(long long) msvcrt._aligned_malloc
-@ stub _aligned_msize
+@ cdecl _aligned_msize(ptr long long)
 @ cdecl _aligned_offset_malloc(long long long) msvcrt._aligned_offset_malloc
 @ cdecl _aligned_offset_realloc(ptr long long long) msvcrt._aligned_offset_realloc
 @ stub _aligned_offset_recalloc
@@ -687,7 +687,7 @@
 @ cdecl _amsg_exit(long) msvcrt._amsg_exit
 @ cdecl _assert(str str long) msvcrt._assert
 @ cdecl _atodbl(ptr str) msvcrt._atodbl
-@ stub _atodbl_l
+@ cdecl _atodbl_l(ptr str ptr) msvcrt._atodbl_l
 @ cdecl _atof_l(str ptr) msvcrt._atof_l
 @ cdecl _atoflt(ptr str)
 @ cdecl _atoflt_l(ptr str ptr) msvcrt._atoflt_l
@@ -850,7 +850,7 @@
 @ cdecl _ftime32_s(ptr) msvcrt._ftime32_s
 @ cdecl _ftime64(ptr) msvcrt._ftime64
 @ cdecl _ftime64_s(ptr) msvcrt._ftime64_s
-@ cdecl -ret64 _ftol() msvcrt._ftol
+@ cdecl -arch=i386 -ret64 _ftol() msvcrt._ftol
 @ cdecl _fullpath(ptr str long) msvcrt._fullpath
 @ cdecl _futime32(long ptr) msvcrt._futime32
 @ cdecl _futime64(long ptr) msvcrt._futime64
@@ -868,7 +868,7 @@
 @ cdecl _get_doserrno(ptr) msvcrt._get_doserrno
 @ stub _get_dstbias
 @ cdecl _get_errno(ptr) msvcrt._get_errno
-@ stub _get_fmode
+@ cdecl _get_fmode(ptr) msvcrt._get_fmode
 @ cdecl _get_heap_handle() msvcrt._get_heap_handle
 @ cdecl _get_invalid_parameter_handler() msvcrt._get_invalid_parameter_handler
 @ cdecl _get_osfhandle(long) msvcrt._get_osfhandle
@@ -1266,7 +1266,7 @@
 @ cdecl _set_doserrno(long) msvcrt._set_doserrno
 @ cdecl _set_errno(long) msvcrt._set_errno
 @ cdecl _set_error_mode(long) msvcrt._set_error_mode
-@ stub _set_fmode
+@ cdecl _set_fmode(long) msvcrt._set_fmode
 @ cdecl _set_invalid_parameter_handler(ptr) msvcrt._set_invalid_parameter_handler
 @ stub _set_malloc_crt_max_wait
 @ stub _set_output_format
@@ -1331,7 +1331,7 @@
 @ stub _strerror_s
 @ stub _strftime_l
 @ cdecl _stricmp(str str) msvcrt._stricmp
-@ stub _stricmp_l
+@ cdecl _stricmp_l(str str ptr) msvcrt._stricmp_l
 @ cdecl _stricoll(str str) msvcrt._stricoll
 @ cdecl _stricoll_l(str str ptr) msvcrt._stricoll_l
 @ cdecl _strlwr(str) msvcrt._strlwr
@@ -1341,7 +1341,7 @@
 @ cdecl _strncoll(str str long) msvcrt._strncoll
 @ cdecl _strncoll_l(str str long ptr) msvcrt._strncoll_l
 @ cdecl _strnicmp(str str long) msvcrt._strnicmp
-@ stub _strnicmp_l
+@ cdecl _strnicmp_l(str str long ptr) msvcrt._strnicmp_l
 @ cdecl _strnicoll(str str long) msvcrt._strnicoll
 @ cdecl _strnicoll_l(str str long ptr) msvcrt._strnicoll_l
 @ cdecl _strnset(str long long) msvcrt._strnset

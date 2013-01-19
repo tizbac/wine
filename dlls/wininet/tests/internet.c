@@ -164,6 +164,12 @@ static void test_InternetQueryOptionA(void)
   int retval;
   BOOL res;
 
+  SetLastError(0xdeadbeef);
+  len = 0xdeadbeef;
+  retval = InternetQueryOptionA(NULL, INTERNET_OPTION_PROXY, NULL, &len);
+  ok(!retval && GetLastError() == ERROR_INSUFFICIENT_BUFFER, "Got wrong error %x(%u)\n", retval, GetLastError());
+  ok(len >= sizeof(INTERNET_PROXY_INFO) && len != 0xdeadbeef,"len = %u\n", len);
+
   hinet = InternetOpenA(useragent,INTERNET_OPEN_TYPE_DIRECT,NULL,NULL, 0);
   ok((hinet != 0x0),"InternetOpen Failed\n");
 
@@ -414,6 +420,13 @@ static void test_complicated_cookie(void)
   ok(strstr(buffer,"M=N")==NULL,"M=N present\n");
   ok(strstr(buffer,"O=P")==NULL,"O=P present\n");
 
+  len = 10;
+  memset(buffer, 0xac, sizeof(buffer));
+  ret = InternetGetCookie("http://testing.example.com", NULL, buffer, &len);
+  ok(!ret && GetLastError() == ERROR_INSUFFICIENT_BUFFER,
+     "InternetGetCookie returned: %x(%u), expected ERROR_INSUFFICIENT_BUFFER\n", ret, GetLastError());
+  ok(len == 19, "len = %u\n", len);
+
   len = 1024;
   ret = InternetGetCookieW(testing_example_comW, NULL, NULL, &len);
   ok(ret == TRUE,"InternetGetCookieW failed\n");
@@ -425,6 +438,13 @@ static void test_complicated_cookie(void)
   ok(ret == TRUE,"InternetGetCookieW failed\n");
   ok(len == 19, "len = %u\n", len);
   ok(lstrlenW(wbuf) == 18, "strlenW(wbuf) = %u\n", lstrlenW(wbuf));
+
+  len = 10;
+  memset(wbuf, 0xac, sizeof(wbuf));
+  ret = InternetGetCookieW(testing_example_comW, NULL, wbuf, &len);
+  ok(!ret && GetLastError() == ERROR_INSUFFICIENT_BUFFER,
+     "InternetGetCookieW returned: %x(%u), expected ERROR_INSUFFICIENT_BUFFER\n", ret, GetLastError());
+  ok(len == 38, "len = %u\n", len);
 
   len = 1024;
   ret = InternetGetCookie("http://testing.example.com/foobar", NULL, buffer, &len);
@@ -641,9 +661,7 @@ static void test_null(void)
   ok(r == FALSE, "return wrong\n");
 
   r = InternetSetCookieW(szServer, NULL, szServer);
-  todo_wine {
   ok(GetLastError() == ERROR_INTERNET_UNRECOGNIZED_SCHEME, "wrong error\n");
-  }
   ok(r == FALSE, "return wrong\n");
 
   sz = 0;

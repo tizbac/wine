@@ -472,7 +472,7 @@ typedef struct _D3DTRANSFORMDATA {
   DWORD           dwInSize;
   LPVOID          lpOut;
   DWORD           dwOutSize;
-  LPD3DHVERTEX    lpHOut;
+  D3DHVERTEX      *lpHOut;
   DWORD           dwClip;
   DWORD           dwClipIntersection;
   DWORD           dwClipUnion;
@@ -597,9 +597,9 @@ typedef struct _D3DLIGHT2 {
 
 typedef struct _D3DLIGHTDATA {
   DWORD                dwSize;
-  LPD3DLIGHTINGELEMENT lpIn;
+  D3DLIGHTINGELEMENT   *lpIn;
   DWORD                dwInSize;
-  LPD3DTLVERTEX        lpOut;
+  D3DTLVERTEX          *lpOut;
   DWORD                dwOutSize;
 } D3DLIGHTDATA, *LPD3DLIGHTDATA;
 

@@ -464,7 +464,7 @@ msgstr "&Di:"
 msgid "&To:"
 msgstr "&A:"
 
-#: comdlg32.rc:209
+#: comdlg32.rc:209 wineps.rc:39
 msgid "Print &Quality:"
 msgstr "&Cwalité po rexhe:"
 
@@ -7059,7 +7059,7 @@ msgstr "Ôrlodje"
 msgid "split button"
 msgstr ""
 
-#: oleacc.rc:90 ipconfig.rc:33
+#: oleacc.rc:90
 msgid "IP address"
 msgstr ""
 
@@ -7248,7 +7248,7 @@ msgctxt "unit: bits"
 msgid "b"
 msgstr ""
 
-#: sane.rc:34 winecfg.rc:174
+#: sane.rc:34 wineps.rc:46 winecfg.rc:174
 msgctxt "unit: dots/inch"
 msgid "dpi"
 msgstr ""
@@ -8210,20 +8210,20 @@ msgstr ""
 
 #: urlmon.rc:40
 msgid ""
-"When installed, ActiveX has full access to your computer.Do not click "
-"install unless you have absolute trust in the above source."
-msgstr ""
-
-#: urlmon.rc:47
-msgid "Installation of component failed: %08x"
+"When installed, an ActiveX component has full access to your computer. Do "
+"not click install unless you have absolute trust in the above source."
 msgstr ""
 
 #: urlmon.rc:48
+msgid "Installation of component failed: %08x"
+msgstr ""
+
+#: urlmon.rc:49
 #, fuzzy
 msgid "Install (%d)"
 msgstr "&Sicrîre..."
 
-#: urlmon.rc:49
+#: urlmon.rc:50
 #, fuzzy
 msgid "Install"
 msgstr "&Sicrîre..."
@@ -9717,6 +9717,28 @@ msgid ""
 "Can't recognize '%1' as an internal or external command, or batch script.\n"
 msgstr ""
 
+#: cmd.rc:357
+msgid "Division by zero error.\n"
+msgstr ""
+
+#: cmd.rc:358
+msgid "Expected an operand.\n"
+msgstr ""
+
+#: cmd.rc:359
+msgid "Expected an operator.\n"
+msgstr ""
+
+#: cmd.rc:360
+msgid "Mismatch in parentheses.\n"
+msgstr ""
+
+#: cmd.rc:361
+msgid ""
+"Badly formed number - must be one of decimal (12),\n"
+" hexadecimal (0x34) or octal (056).\n"
+msgstr ""
+
 #: dxdiag.rc:27
 msgid "DirectX Diagnostic Tool"
 msgstr ""
@@ -9763,6 +9785,10 @@ msgstr ""
 msgid "Connection-specific DNS suffix"
 msgstr ""
 
+#: ipconfig.rc:33
+msgid "IPv4 address"
+msgstr ""
+
 #: ipconfig.rc:34
 msgid "Hostname"
 msgstr ""
@@ -9801,6 +9827,10 @@ msgstr ""
 
 #: ipconfig.rc:46
 msgid "Default gateway"
+msgstr ""
+
+#: ipconfig.rc:47
+msgid "IPv6 address"
 msgstr ""
 
 #: net.rc:27
@@ -9910,6 +9940,62 @@ msgstr ""
 
 #: net.rc:40
 msgid "The following services are running:\n"
+msgstr ""
+
+#: netstat.rc:27
+msgid "Active Connections"
+msgstr ""
+
+#: netstat.rc:28
+msgid "Proto"
+msgstr ""
+
+#: netstat.rc:29
+msgid "Local Address"
+msgstr ""
+
+#: netstat.rc:30
+msgid "Foreign Address"
+msgstr ""
+
+#: netstat.rc:31
+msgid "State"
+msgstr ""
+
+#: netstat.rc:32
+msgid "Interface Statistics"
+msgstr ""
+
+#: netstat.rc:33
+msgid "Sent"
+msgstr ""
+
+#: netstat.rc:34
+msgid "Received"
+msgstr ""
+
+#: netstat.rc:35
+msgid "Bytes"
+msgstr ""
+
+#: netstat.rc:36
+msgid "Unicast packets"
+msgstr ""
+
+#: netstat.rc:37
+msgid "Non-unicast packets"
+msgstr ""
+
+#: netstat.rc:38
+msgid "Discards"
+msgstr ""
+
+#: netstat.rc:39
+msgid "Errors"
+msgstr ""
+
+#: netstat.rc:40
+msgid "Unknown protocols"
 msgstr ""
 
 #: notepad.rc:27

@@ -325,7 +325,7 @@ static inline IDirect3DRMMeshBuilderImpl *impl_from_IDirect3DRMMeshBuilder3(IDir
 
 static void clean_mesh_builder_data(IDirect3DRMMeshBuilderImpl *mesh_builder)
 {
-    int i;
+    DWORD i;
 
     HeapFree(GetProcessHeap(), 0, mesh_builder->name);
     mesh_builder->name = NULL;
@@ -801,14 +801,22 @@ static HRESULT WINAPI IDirect3DRMMeshBuilder2Impl_GetVertices(IDirect3DRMMeshBui
 
     TRACE("(%p)->(%p,%p,%p,%p,%p,%p)\n", This, vcount, vertices, ncount, normals, face_data_size, face_data);
 
+    if (vertices && (!vcount || (*vcount < This->nb_vertices)))
+        return D3DRMERR_BADVALUE;
     if (vcount)
         *vcount = This->nb_vertices;
     if (vertices && This->nb_vertices)
         memcpy(vertices, This->pVertices, This->nb_vertices * sizeof(D3DVECTOR));
+
+    if (normals && (!ncount || (*ncount < This->nb_normals)))
+        return D3DRMERR_BADVALUE;
     if (ncount)
         *ncount = This->nb_normals;
     if (normals && This->nb_normals)
         memcpy(normals, This->pNormals, This->nb_normals * sizeof(D3DVECTOR));
+
+    if (face_data && (!face_data_size || (*face_data_size < This->face_data_size)))
+        return D3DRMERR_BADVALUE;
     if (face_data_size)
         *face_data_size = This->face_data_size;
     if (face_data && This->face_data_size)
@@ -1129,14 +1137,13 @@ static HRESULT WINAPI IDirect3DRMMeshBuilder3Impl_GetClassName(IDirect3DRMMeshBu
     return D3DRM_OK;
 }
 
-HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
+HRESULT load_mesh_data(IDirect3DRMMeshBuilder3 *iface, IDirectXFileData *pData, D3DRMLOADTEXTURECALLBACK load_texture_proc, void *arg)
 {
     IDirect3DRMMeshBuilderImpl *This = impl_from_IDirect3DRMMeshBuilder3(iface);
-    LPDIRECTXFILEOBJECT pObject = NULL;
-    LPDIRECTXFILEDATA pData2 = NULL;
-    const GUID* pGuid;
+    IDirectXFileData *pData2 = NULL;
+    const GUID* guid;
     DWORD size;
-    LPBYTE ptr;
+    BYTE *ptr;
     HRESULT hr;
     HRESULT ret = D3DRMERR_BADOBJECT;
     DWORD* faces_vertex_idx_data = NULL;
@@ -1186,12 +1193,14 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
     memcpy(faces_vertex_idx_data, ptr + sizeof(DWORD) + This->nb_vertices * sizeof(D3DVECTOR) + sizeof(DWORD), faces_vertex_idx_size);
 
     /* Each vertex index will have its normal index counterpart so just allocate twice the size */
-    This->pFaceData = HeapAlloc(GetProcessHeap(), 0, faces_vertex_idx_size*2);
+    This->pFaceData = HeapAlloc(GetProcessHeap(), 0, faces_vertex_idx_size * 2);
     faces_data_ptr = (DWORD*)This->pFaceData;
 
     while (1)
     {
-        hr =  IDirectXFileData_GetNextObject(pData, &pObject);
+        IDirectXFileObject *object;
+
+        hr =  IDirectXFileData_GetNextObject(pData, &object);
         if (hr == DXFILEERR_NOMOREOBJECTS)
         {
             TRACE("No more object\n");
@@ -1200,18 +1209,18 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
         if (hr != DXFILE_OK)
            goto end;
 
-        hr = IDirectXFileObject_QueryInterface(pObject, &IID_IDirectXFileData, (void**)&pData2);
-        IDirectXFileObject_Release(pObject);
+        hr = IDirectXFileObject_QueryInterface(object, &IID_IDirectXFileData, (void**)&pData2);
+        IDirectXFileObject_Release(object);
         if (hr != DXFILE_OK)
             goto end;
 
-        hr = IDirectXFileData_GetType(pData2, &pGuid);
+        hr = IDirectXFileData_GetType(pData2, &guid);
         if (hr != DXFILE_OK)
             goto end;
 
-        TRACE("Found object type whose GUID = %s\n", debugstr_guid(pGuid));
+        TRACE("Found object type whose GUID = %s\n", debugstr_guid(guid));
 
-        if (IsEqualGUID(pGuid, &TID_D3DRMMeshNormals))
+        if (IsEqualGUID(guid, &TID_D3DRMMeshNormals))
         {
             DWORD nb_faces_normals;
             DWORD faces_normal_idx_size;
@@ -1230,11 +1239,11 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
             This->pNormals = HeapAlloc(GetProcessHeap(), 0, This->nb_normals * sizeof(D3DVECTOR));
             memcpy(This->pNormals, ptr + sizeof(DWORD), This->nb_normals * sizeof(D3DVECTOR));
 
-            faces_normal_idx_size = size - (2*sizeof(DWORD) + This->nb_normals * sizeof(D3DVECTOR));
+            faces_normal_idx_size = size - (2 * sizeof(DWORD) + This->nb_normals * sizeof(D3DVECTOR));
             faces_normal_idx_ptr = faces_normal_idx_data = HeapAlloc(GetProcessHeap(), 0, faces_normal_idx_size);
             memcpy(faces_normal_idx_data, ptr + sizeof(DWORD) + This->nb_normals * sizeof(D3DVECTOR) + sizeof(DWORD), faces_normal_idx_size);
         }
-        else if (IsEqualGUID(pGuid, &TID_D3DRMMeshTextureCoords))
+        else if (IsEqualGUID(guid, &TID_D3DRMMeshTextureCoords))
         {
             hr = IDirectXFileData_GetData(pData2, NULL, &size, (void**)&ptr);
             if (hr != DXFILE_OK)
@@ -1248,12 +1257,12 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
             memcpy(This->pCoords2d, ptr + sizeof(DWORD), This->nb_coords2d * sizeof(Coords2d));
 
         }
-        else if (IsEqualGUID(pGuid, &TID_D3DRMMeshMaterialList))
+        else if (IsEqualGUID(guid, &TID_D3DRMMeshMaterialList))
         {
             DWORD nb_materials;
             DWORD nb_face_indices;
             DWORD data_size;
-            LPDIRECTXFILEOBJECT child;
+            IDirectXFileObject *child;
             DWORD i = 0;
             float* values;
 
@@ -1287,9 +1296,9 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
 
             while (SUCCEEDED(hr = IDirectXFileData_GetNextObject(pData2, &child)) && (i < nb_materials))
             {
-                LPDIRECTXFILEDATA data;
-                LPDIRECTXFILEDATAREFERENCE reference;
-                LPDIRECTXFILEOBJECT material_child;
+                IDirectXFileData *data;
+                IDirectXFileDataReference *reference;
+                IDirectXFileObject *material_child;
 
                 hr = IDirectXFileObject_QueryInterface(child, &IID_IDirectXFileData, (void **)&data);
                 if (FAILED(hr))
@@ -1341,13 +1350,13 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
                 hr = IDirectXFileData_GetNextObject(data, &material_child);
                 if (hr == S_OK)
                 {
-                    LPDIRECTXFILEDATA data;
-                    char** filename;
+                    IDirectXFileData *data;
+                    char **filename;
 
                     hr = IDirectXFileObject_QueryInterface(material_child, &IID_IDirectXFileData, (void **)&data);
                     if (FAILED(hr))
                     {
-                        LPDIRECTXFILEDATAREFERENCE reference;
+                        IDirectXFileDataReference *reference;
 
                         hr = IDirectXFileObject_QueryInterface(material_child, &IID_IDirectXFileDataReference, (void **)&reference);
                         if (FAILED(hr))
@@ -1359,10 +1368,10 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
                             goto end;
                     }
 
-                    hr = IDirectXFileData_GetType(data, &pGuid);
+                    hr = IDirectXFileData_GetType(data, &guid);
                     if (hr != DXFILE_OK)
                         goto end;
-                    if (!IsEqualGUID(pGuid, &TID_D3DRMTextureFilename))
+                    if (!IsEqualGUID(guid, &TID_D3DRMTextureFilename))
                     {
                          WARN("Not a texture filename\n");
                          goto end;
@@ -1372,19 +1381,33 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
                     hr = IDirectXFileData_GetData(data, NULL, &size, (void**)&filename);
                     if (SUCCEEDED(hr))
                     {
-                        HANDLE file;
-
-                        /* If the texture file is not found, no texture is associated with the material */
-                        file = CreateFileA(*filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-                        if (file != INVALID_HANDLE_VALUE)
+                        if (load_texture_proc)
                         {
-                            CloseHandle(file);
+                            IDirect3DRMTexture *texture;
 
-                            hr = Direct3DRMTexture_create(&IID_IDirect3DRMTexture3, (LPUNKNOWN*)&This->materials[i].texture);
-                            if (FAILED(hr))
+                            hr = load_texture_proc(*filename, arg, &texture);
+                            if (SUCCEEDED(hr))
                             {
-                                IDirectXFileData_Release(data);
-                                goto end;
+                                hr = IDirect3DTexture_QueryInterface(texture, &IID_IDirect3DRMTexture3, (void**)&This->materials[i].texture);
+                                IDirect3DTexture_Release(texture);
+                            }
+                        }
+                        else
+                        {
+                            HANDLE file;
+
+                            /* If the texture file is not found, no texture is associated with the material */
+                            file = CreateFileA(*filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+                            if (file != INVALID_HANDLE_VALUE)
+                            {
+                                CloseHandle(file);
+
+                                hr = Direct3DRMTexture_create(&IID_IDirect3DRMTexture3, (IUnknown**)&This->materials[i].texture);
+                                if (FAILED(hr))
+                                {
+                                    IDirectXFileData_Release(data);
+                                    goto end;
+                                }
                             }
                         }
                     }
@@ -1411,7 +1434,7 @@ HRESULT load_mesh_data(IDirect3DRMMeshBuilder3* iface, LPDIRECTXFILEDATA pData)
         }
         else
         {
-            FIXME("Unknown GUID %s, ignoring...\n", debugstr_guid(pGuid));
+            FIXME("Unknown GUID %s, ignoring...\n", debugstr_guid(guid));
         }
 
         IDirectXFileData_Release(pData2);
@@ -1532,19 +1555,18 @@ end:
 
 /*** IDirect3DRMMeshBuilder3 methods ***/
 static HRESULT WINAPI IDirect3DRMMeshBuilder3Impl_Load(IDirect3DRMMeshBuilder3* iface,
-                                                       LPVOID filename, LPVOID name,
+                                                       void *filename, void *name,
                                                        D3DRMLOADOPTIONS loadflags,
-                                                       D3DRMLOADTEXTURE3CALLBACK cb, LPVOID arg)
+                                                       D3DRMLOADTEXTURE3CALLBACK cb, void *arg)
 {
     IDirect3DRMMeshBuilderImpl *This = impl_from_IDirect3DRMMeshBuilder3(iface);
     DXFILELOADOPTIONS load_options;
-    LPDIRECTXFILE pDXFile = NULL;
-    LPDIRECTXFILEENUMOBJECT pEnumObject = NULL;
-    LPDIRECTXFILEDATA pData = NULL;
-    LPDIRECTXFILEDATA pData2 = NULL;
-    const GUID* pGuid;
+    IDirectXFile *dxfile = NULL;
+    IDirectXFileEnumObject *enum_object = NULL;
+    IDirectXFileData *data = NULL;
+    const GUID* guid;
     DWORD size;
-    Header* pHeader;
+    Header* header;
     HRESULT hr;
     HRESULT ret = D3DRMERR_BADOBJECT;
 
@@ -1567,83 +1589,82 @@ static HRESULT WINAPI IDirect3DRMMeshBuilder3Impl_Load(IDirect3DRMMeshBuilder3* 
         return E_NOTIMPL;
     }
 
-    hr = DirectXFileCreate(&pDXFile);
+    hr = DirectXFileCreate(&dxfile);
     if (hr != DXFILE_OK)
         goto end;
 
-    hr = IDirectXFile_RegisterTemplates(pDXFile, templates, strlen(templates));
+    hr = IDirectXFile_RegisterTemplates(dxfile, templates, strlen(templates));
     if (hr != DXFILE_OK)
         goto end;
 
-    hr = IDirectXFile_CreateEnumObject(pDXFile, filename, load_options, &pEnumObject);
+    hr = IDirectXFile_CreateEnumObject(dxfile, filename, load_options, &enum_object);
     if (hr != DXFILE_OK)
         goto end;
 
-    hr = IDirectXFileEnumObject_GetNextDataObject(pEnumObject, &pData);
+    hr = IDirectXFileEnumObject_GetNextDataObject(enum_object, &data);
     if (hr != DXFILE_OK)
         goto end;
 
-    hr = IDirectXFileData_GetType(pData, &pGuid);
+    hr = IDirectXFileData_GetType(data, &guid);
     if (hr != DXFILE_OK)
         goto end;
 
-    TRACE("Found object type whose GUID = %s\n", debugstr_guid(pGuid));
+    TRACE("Found object type whose GUID = %s\n", debugstr_guid(guid));
 
-    if (!IsEqualGUID(pGuid, &TID_DXFILEHeader))
+    if (!IsEqualGUID(guid, &TID_DXFILEHeader))
     {
         ret = D3DRMERR_BADFILE;
         goto end;
     }
 
-    hr = IDirectXFileData_GetData(pData, NULL, &size, (void**)&pHeader);
+    hr = IDirectXFileData_GetData(data, NULL, &size, (void**)&header);
     if ((hr != DXFILE_OK) || (size != sizeof(Header)))
         goto end;
 
-    TRACE("Version is %d %d %d\n", pHeader->major, pHeader->minor, pHeader->flags);
+    TRACE("Version is %d %d %d\n", header->major, header->minor, header->flags);
 
     /* Version must be 1.0.x */
-    if ((pHeader->major != 1) || (pHeader->minor != 0))
+    if ((header->major != 1) || (header->minor != 0))
     {
         ret = D3DRMERR_BADFILE;
         goto end;
     }
 
-    IDirectXFileData_Release(pData);
-    pData = NULL;
+    IDirectXFileData_Release(data);
+    data = NULL;
 
-    hr = IDirectXFileEnumObject_GetNextDataObject(pEnumObject, &pData);
+    hr = IDirectXFileEnumObject_GetNextDataObject(enum_object, &data);
     if (hr != DXFILE_OK)
     {
         ret = D3DRMERR_NOTFOUND;
         goto end;
     }
 
-    hr = IDirectXFileData_GetType(pData, &pGuid);
+    hr = IDirectXFileData_GetType(data, &guid);
     if (hr != DXFILE_OK)
         goto end;
 
-    TRACE("Found object type whose GUID = %s\n", debugstr_guid(pGuid));
+    TRACE("Found object type whose GUID = %s\n", debugstr_guid(guid));
 
-    if (!IsEqualGUID(pGuid, &TID_D3DRMMesh))
+    if (!IsEqualGUID(guid, &TID_D3DRMMesh))
     {
         ret = D3DRMERR_NOTFOUND;
         goto end;
     }
 
-    hr = load_mesh_data(iface, pData);
+    /* We don't care about the texture interface version since we rely on QueryInterface */
+    hr = load_mesh_data(iface, data, (D3DRMLOADTEXTURECALLBACK)cb, arg);
     if (hr == S_OK)
         ret = D3DRM_OK;
 
 end:
 
-    if (pData2)
-        IDirectXFileData_Release(pData2);
-    if (pData)
-        IDirectXFileData_Release(pData);
-    if (pEnumObject)
-        IDirectXFileEnumObject_Release(pEnumObject);
-    if (pDXFile)
-        IDirectXFile_Release(pDXFile);
+    if (data)
+        IDirectXFileData_Release(data);
+    if (enum_object)
+        IDirectXFileEnumObject_Release(enum_object);
+    if (dxfile)
+        IDirectXFile_Release(dxfile);
 
     if (ret != D3DRM_OK)
         clean_mesh_builder_data(This);
@@ -1666,7 +1687,7 @@ static HRESULT WINAPI IDirect3DRMMeshBuilder3Impl_Scale(IDirect3DRMMeshBuilder3*
                                                         D3DVALUE sx, D3DVALUE sy, D3DVALUE sz)
 {
     IDirect3DRMMeshBuilderImpl *This = impl_from_IDirect3DRMMeshBuilder3(iface);
-    int i;
+    DWORD i;
 
     TRACE("(%p)->(%f,%f,%f)\n", This, sx, sy, sz);
 
@@ -2085,7 +2106,8 @@ static HRESULT WINAPI IDirect3DRMMeshBuilder3Impl_CreateMesh(IDirect3DRMMeshBuil
     /* If there is mesh data, create a group and put data inside */
     if (This->nb_vertices)
     {
-        int i, j, k;
+        DWORD i, j;
+        int k;
         D3DRMVERTEX* vertices;
 
         vertices = HeapAlloc(GetProcessHeap(), 0, This->nb_vertices * sizeof(D3DRMVERTEX));
@@ -2120,6 +2142,7 @@ static HRESULT WINAPI IDirect3DRMMeshBuilder3Impl_CreateMesh(IDirect3DRMMeshBuil
             face_data = HeapAlloc(GetProcessHeap(), 0, This->face_data_size * sizeof(*face_data));
             if (!face_data)
             {
+                HeapFree(GetProcessHeap(), 0, used_vertices);
                 IDirect3DRMMesh_Release(*mesh);
                 return E_OUTOFMEMORY;
             }
@@ -2564,7 +2587,7 @@ static ULONG WINAPI IDirect3DRMMeshImpl_Release(IDirect3DRMMesh* iface)
 
     if (!ref)
     {
-        int i;
+        DWORD i;
 
         for (i = 0; i < This->nb_groups; i++)
         {
@@ -2752,7 +2775,7 @@ static HRESULT WINAPI IDirect3DRMMeshImpl_AddGroup(IDirect3DRMMesh* iface,
     }
     else
     {
-        int i;
+        unsigned i;
         unsigned nb_indices;
         unsigned* face_data_ptr = face_data;
         group->face_data_size = 0;
@@ -2928,7 +2951,7 @@ static HRESULT WINAPI IDirect3DRMMeshImpl_GetGroup(IDirect3DRMMesh* iface,
     if (face_data_size)
         *face_data_size = This->groups[id].face_data_size;
     if (face_data)
-        memcpy(face_data, This->groups[id].face_data, This->groups[id].face_data_size);
+        memcpy(face_data, This->groups[id].face_data, This->groups[id].face_data_size * sizeof(DWORD));
 
     return D3DRM_OK;
 }

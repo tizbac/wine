@@ -262,7 +262,11 @@ static Window thread_selection_wnd(void)
         w = XCreateWindow(thread_data->display, root_window, 0, 0, 1, 1, 0, CopyFromParent,
                           InputOnly, CopyFromParent, 0, NULL);
         if (w)
+        {
             thread_data->selection_wnd = w;
+
+            XSelectInput(thread_data->display, w, PropertyChangeMask);
+        }
         else
             FIXME("Failed to create window. Fetching selection data will fail.\n");
     }
@@ -2343,6 +2347,12 @@ static BOOL X11DRV_CLIPBOARD_GetProperty(Display *display, Window w, Atom prop,
 }
 
 
+struct clipboard_data_packet {
+    struct list entry;
+    unsigned long size;
+    unsigned char *data;
+};
+
 /**************************************************************************
  *		X11DRV_CLIPBOARD_ReadProperty
  *  Reads the contents of the X selection property.
@@ -2356,21 +2366,29 @@ static BOOL X11DRV_CLIPBOARD_ReadProperty(Display *display, Window w, Atom prop,
     if (prop == None)
         return FALSE;
 
-    if (!X11DRV_CLIPBOARD_GetProperty(display, w, prop, &atype, data, datasize))
-        return FALSE;
-
     while (XCheckTypedWindowEvent(display, w, PropertyNotify, &xe))
         ;
 
+    if (!X11DRV_CLIPBOARD_GetProperty(display, w, prop, &atype, data, datasize))
+        return FALSE;
+
     if (atype == x11drv_atom(INCR))
     {
-        unsigned char *buf = *data;
+        unsigned char *buf;
         unsigned long bufsize = 0;
+        struct list packets;
+        struct clipboard_data_packet *packet, *packet2;
+        BOOL res;
+
+        HeapFree(GetProcessHeap(), 0, *data);
+        *data = NULL;
+
+        list_init(&packets);
 
         for (;;)
         {
             int i;
-            unsigned char *prop_data, *tmp;
+            unsigned char *prop_data;
             unsigned long prop_size;
 
             /* Wait until PropertyNotify is received */
@@ -2388,32 +2406,58 @@ static BOOL X11DRV_CLIPBOARD_ReadProperty(Display *display, Window w, Atom prop,
             if (i >= SELECTION_RETRIES ||
                 !X11DRV_CLIPBOARD_GetProperty(display, w, prop, &atype, &prop_data, &prop_size))
             {
-                HeapFree(GetProcessHeap(), 0, buf);
-                return FALSE;
+                res = FALSE;
+                break;
             }
 
             /* Retrieved entire data. */
             if (prop_size == 0)
             {
                 HeapFree(GetProcessHeap(), 0, prop_data);
-                *data = buf;
-                *datasize = bufsize;
-                return TRUE;
+                res = TRUE;
+                break;
             }
 
-            tmp = HeapReAlloc(GetProcessHeap(), 0, buf, bufsize + prop_size + 1);
-            if (!tmp)
+            packet = HeapAlloc(GetProcessHeap(), 0, sizeof(*packet));
+            if (!packet)
             {
-                HeapFree(GetProcessHeap(), 0, buf);
                 HeapFree(GetProcessHeap(), 0, prop_data);
-                return FALSE;
+                res = FALSE;
+                break;
             }
 
-            buf = tmp;
-            memcpy(buf + bufsize, prop_data, prop_size + 1);
+            packet->size = prop_size;
+            packet->data = prop_data;
+            list_add_tail(&packets, &packet->entry);
             bufsize += prop_size;
-            HeapFree(GetProcessHeap(), 0, prop_data);
         }
+
+        if (res)
+        {
+            buf = HeapAlloc(GetProcessHeap(), 0, bufsize + 1);
+            if (buf)
+            {
+                unsigned long bytes_copied = 0;
+                *datasize = bufsize;
+                LIST_FOR_EACH_ENTRY( packet, &packets, struct clipboard_data_packet, entry)
+                {
+                    memcpy(&buf[bytes_copied], packet->data, packet->size);
+                    bytes_copied += packet->size;
+                }
+                buf[bufsize] = 0;
+                *data = buf;
+            }
+            else
+                res = FALSE;
+        }
+
+        LIST_FOR_EACH_ENTRY_SAFE( packet, packet2, &packets, struct clipboard_data_packet, entry)
+        {
+            HeapFree(GetProcessHeap(), 0, packet->data);
+            HeapFree(GetProcessHeap(), 0, packet);
+        }
+
+        return res;
     }
 
     return TRUE;

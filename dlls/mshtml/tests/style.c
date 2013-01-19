@@ -465,6 +465,7 @@ static void test_body_style(IHTMLStyle *style)
     float f;
     BSTR sOverflowDefault;
     BSTR sDefault;
+    LONG l;
     VARIANT vDefault;
 
     test_style_csstext(style, NULL);
@@ -904,6 +905,11 @@ static void test_body_style(IHTMLStyle *style)
     ok(!V_BSTR(&v), "V_BSTR(v) != NULL\n");
     VariantClear(&v);
 
+    l = 0xdeadbeef;
+    hres = IHTMLStyle_get_pixelLeft(style, &l);
+    ok(hres == S_OK, "get_pixelLeft failed: %08x\n", hres);
+    ok(!l, "pixelLeft = %d\n", l);
+
     /* Test posLeft */
     hres = IHTMLStyle_get_posLeft(style, NULL);
     ok(hres == E_POINTER, "get_posLeft failed: %08x\n", hres);
@@ -943,12 +949,28 @@ static void test_body_style(IHTMLStyle *style)
     ok(hres == S_OK, "get_posLeft failed: %08x\n", hres);
     ok(f == 3.0, "expected 3.0 got %f\n", f);
 
+    l = 0xdeadbeef;
+    hres = IHTMLStyle_get_pixelLeft(style, &l);
+    ok(hres == S_OK, "get_pixelLeft failed: %08x\n", hres);
+    ok(l == 3, "pixelLeft = %d\n", l);
+
     V_VT(&v) = VT_EMPTY;
     hres = IHTMLStyle_get_left(style, &v);
     ok(hres == S_OK, "get_left failed: %08x\n", hres);
     ok(V_VT(&v) == VT_BSTR, "V_VT(v)=%d\n", V_VT(&v));
     ok(!strcmp_wa(V_BSTR(&v), "3px"), "V_BSTR(v) = %s\n", wine_dbgstr_w(V_BSTR(&v)));
     VariantClear(&v);
+
+    V_VT(&v) = VT_BSTR;
+    V_BSTR(&v) = a2bstr("4.99");
+    hres = IHTMLStyle_put_left(style, v);
+    ok(hres == S_OK, "put_left failed: %08x\n", hres);
+    VariantClear(&v);
+
+    l = 0xdeadbeef;
+    hres = IHTMLStyle_get_pixelLeft(style, &l);
+    ok(hres == S_OK, "get_pixelLeft failed: %08x\n", hres);
+    ok(l == 4, "pixelLeft = %d\n", l);
 
     V_VT(&v) = VT_NULL;
     hres = IHTMLStyle_put_left(style, v);
@@ -966,6 +988,26 @@ static void test_body_style(IHTMLStyle *style)
     ok(hres == S_OK, "get_top failed: %08x\n", hres);
     ok(V_VT(&v) == VT_BSTR, "V_VT(v)=%d\n", V_VT(&v));
     ok(!V_BSTR(&v), "V_BSTR(v) != NULL\n");
+    VariantClear(&v);
+
+    l = 0xdeadbeef;
+    hres = IHTMLStyle_get_pixelLeft(style, &l);
+    ok(hres == S_OK, "get_pixelLeft failed: %08x\n", hres);
+    ok(!l, "pixelLeft = %d\n", l);
+
+    hres = IHTMLStyle_put_pixelLeft(style, 6);
+    ok(hres == S_OK, "put_pixelLeft failed: %08x\n", hres);
+
+    l = 0xdeadbeef;
+    hres = IHTMLStyle_get_pixelLeft(style, &l);
+    ok(hres == S_OK, "get_pixelLeft failed: %08x\n", hres);
+    ok(l == 6, "pixelLeft = %d\n", l);
+
+    V_VT(&v) = VT_EMPTY;
+    hres = IHTMLStyle_get_left(style, &v);
+    ok(hres == S_OK, "get_left failed: %08x\n", hres);
+    ok(V_VT(&v) == VT_BSTR, "V_VT(v)=%d\n", V_VT(&v));
+    ok(!strcmp_wa(V_BSTR(&v), "6px"), "V_BSTR(v) = %s\n", wine_dbgstr_w(V_BSTR(&v)));
     VariantClear(&v);
 
     /* Test posTop */

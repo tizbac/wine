@@ -48,28 +48,29 @@ static const PSDRV_DEVMODE DefaultDevmode =
 /* dmDriverVersion */	0x001,
 /* dmSize */		sizeof(DEVMODEW),
 /* dmDriverExtra */	sizeof(PSDRV_DEVMODE)-sizeof(DEVMODEW),
-/* dmFields */		DM_ORIENTATION | DM_PAPERSIZE | DM_SCALE |
-			DM_COPIES | DM_DEFAULTSOURCE | DM_COLOR |
-		        DM_YRESOLUTION | DM_TTOPTION,
+/* dmFields */		DM_ORIENTATION | DM_PAPERSIZE | DM_PAPERLENGTH | DM_PAPERWIDTH |
+			DM_SCALE | DM_COPIES | DM_DEFAULTSOURCE | DM_PRINTQUALITY |
+			DM_COLOR | DM_DUPLEX | DM_YRESOLUTION | DM_TTOPTION |
+			DM_COLLATE | DM_FORMNAME,
    { /* u1 */
      { /* s1 */
 /* dmOrientation */	DMORIENT_PORTRAIT,
 /* dmPaperSize */	DMPAPER_LETTER,
 /* dmPaperLength */	2794,
 /* dmPaperWidth */      2159,
-/* dmScale */		100, /* ?? */
+/* dmScale */		100,
 /* dmCopies */		1,
 /* dmDefaultSource */	DMBIN_AUTO,
-/* dmPrintQuality */	0
+/* dmPrintQuality */	300
      }
    },
 /* dmColor */		DMCOLOR_COLOR,
 /* dmDuplex */		DMDUP_SIMPLEX,
-/* dmYResolution */	0,
+/* dmYResolution */	300,
 /* dmTTOption */	DMTT_SUBDEV,
-/* dmCollate */		0,
-/* dmFormName */        {},
-/* dmUnusedPadding */   0,
+/* dmCollate */		DMCOLLATE_FALSE,
+/* dmFormName */	{'L','e','t','t','e','r',0},
+/* dmLogPixels */	0,
 /* dmBitsPerPel */	0,
 /* dmPelsWidth */	0,
 /* dmPelsHeight */	0,
@@ -150,7 +151,43 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, LPVOID reserved )
 static void PSDRV_UpdateDevCaps( PSDRV_PDEVICE *physDev )
 {
     PAGESIZE *page;
-    INT width = 0, height = 0;
+    RESOLUTION *res;
+    INT width = 0, height = 0, resx = 0, resy = 0;
+
+    if (physDev->Devmode->dmPublic.dmFields & (DM_PRINTQUALITY | DM_YRESOLUTION | DM_LOGPIXELS))
+    {
+        if (physDev->Devmode->dmPublic.dmFields & DM_PRINTQUALITY)
+            resx = resy = physDev->Devmode->dmPublic.u1.s1.dmPrintQuality;
+
+        if (physDev->Devmode->dmPublic.dmFields & DM_YRESOLUTION)
+            resy = physDev->Devmode->dmPublic.dmYResolution;
+
+        if (physDev->Devmode->dmPublic.dmFields & DM_LOGPIXELS)
+            resx = resy = physDev->Devmode->dmPublic.dmLogPixels;
+
+        LIST_FOR_EACH_ENTRY(res, &physDev->pi->ppd->Resolutions, RESOLUTION, entry)
+        {
+            if (res->resx == resx && res->resy == resy)
+            {
+                physDev->logPixelsX = resx;
+                physDev->logPixelsY = resy;
+                break;
+            }
+        }
+
+        if (&res->entry == &physDev->pi->ppd->Resolutions)
+        {
+            WARN("Requested resolution %dx%d is not supported by device\n", resx, resy);
+            physDev->logPixelsX = physDev->pi->ppd->DefaultResolution;
+            physDev->logPixelsY = physDev->logPixelsX;
+        }
+    }
+    else
+    {
+        WARN("Using default device resolution %d\n", physDev->pi->ppd->DefaultResolution);
+        physDev->logPixelsX = physDev->pi->ppd->DefaultResolution;
+        physDev->logPixelsY = physDev->logPixelsX;
+    }
 
     if(physDev->Devmode->dmPublic.dmFields & DM_PAPERSIZE) {
         LIST_FOR_EACH_ENTRY(page, &physDev->pi->ppd->PageSizes, PAGESIZE, entry) {
@@ -287,7 +324,7 @@ static BOOL PSDRV_CreateDC( PHYSDEV *pdev, LPCWSTR driver, LPCWSTR device,
     if (output && *output) physDev->job.output = strdupW( output );
 
     if(initData)
-        PSDRV_MergeDevmodes(physDev->Devmode, (PSDRV_DEVMODE *)initData, pi);
+        PSDRV_MergeDevmodes(physDev->Devmode, (const PSDRV_DEVMODE *)initData, pi);
 
     PSDRV_UpdateDevCaps(physDev);
     SelectObject( (*pdev)->hdc, PSDRV_DefaultFont );
@@ -342,7 +379,7 @@ static HDC PSDRV_ResetDC( PHYSDEV dev, const DEVMODEW *lpInitData )
 
     if (lpInitData)
     {
-        PSDRV_MergeDevmodes(physDev->Devmode, (PSDRV_DEVMODE *)lpInitData, physDev->pi);
+        PSDRV_MergeDevmodes(physDev->Devmode, (const PSDRV_DEVMODE *)lpInitData, physDev->pi);
         PSDRV_UpdateDevCaps(physDev);
     }
     return dev->hdc;
@@ -354,6 +391,8 @@ static HDC PSDRV_ResetDC( PHYSDEV dev, const DEVMODEW *lpInitData )
 static INT PSDRV_GetDeviceCaps( PHYSDEV dev, INT cap )
 {
     PSDRV_PDEVICE *physDev = get_psdrv_dev( dev );
+
+    TRACE("%p,%d\n", dev->hdc, cap);
 
     switch(cap)
     {
@@ -405,14 +444,13 @@ static INT PSDRV_GetDeviceCaps( PHYSDEV dev, INT cap )
     case RASTERCAPS:
         return (RC_BITBLT | RC_BITMAP64 | RC_GDI20_OUTPUT | RC_DIBTODEV |
                 RC_STRETCHBLT | RC_STRETCHDIB); /* psdrv 0x6e99 */
-    /* Are aspect[XY] and logPixels[XY] correct? */
-    /* Need to handle different res in x and y => fix ppd */
     case ASPECTX:
+        return physDev->logPixelsX;
     case ASPECTY:
-        return physDev->pi->ppd->DefaultResolution;
+        return physDev->logPixelsY;
     case ASPECTXY:
-        return (int)hypot( (double)physDev->pi->ppd->DefaultResolution,
-                           (double)physDev->pi->ppd->DefaultResolution );
+        return (int)hypot( (double)physDev->logPixelsX,
+                           (double)physDev->logPixelsY );
     case LOGPIXELSX:
         return MulDiv(physDev->logPixelsX,
 		      physDev->Devmode->dmPublic.u1.s1.dmScale, 100);
@@ -574,7 +612,6 @@ static struct list printer_list = LIST_INIT( printer_list );
  */
 PRINTERINFO *PSDRV_FindPrinterInfo(LPCWSTR name)
 {
-    DWORD needed, res, dwPaperSize;
     PRINTERINFO *pi;
     FONTNAME *font;
     const AFM *afm;
@@ -638,22 +675,6 @@ PRINTERINFO *PSDRV_FindPrinterInfo(LPCWSTR name)
         dm.dmPublic.dmFields = DM_PAPERSIZE;
         dm.dmPublic.u1.s1.dmPaperSize = pi->ppd->DefaultPageSize->WinPage;
         PSDRV_MergeDevmodes(pi->Devmode, &dm, pi);
-    }
-
-    /*
-     *	This is a hack.  The default paper size should be read in as part of
-     *	the Devmode structure, but Wine doesn't currently provide a convenient
-     *	way to configure printers.
-     */
-    res = GetPrinterDataExA(hPrinter, "PrinterDriverData", "Paper Size", NULL,
-                            (LPBYTE)&dwPaperSize, sizeof(DWORD), &needed);
-    if (res == ERROR_SUCCESS)
-	pi->Devmode->dmPublic.u1.s1.dmPaperSize = (SHORT) dwPaperSize;
-    else if (res == ERROR_FILE_NOT_FOUND)
-	TRACE ("No 'Paper Size' for printer '%s'\n", debugstr_w(name));
-    else {
-	ERR ("GetPrinterDataA returned %i\n", res);
-	goto fail;
     }
 
     /* Duplex is indicated by the setting of the DM_DUPLEX bit in dmFields.

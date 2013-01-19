@@ -1628,13 +1628,12 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHICON(HICON hicon, GpBitmap** bitmap)
     ICONINFO iinfo;
     BITMAP bm;
     int ret;
-    UINT width, height;
+    UINT width, height, stride;
     GpRect rect;
     BitmapData lockeddata;
     HDC screendc;
     BOOL has_alpha;
     int x, y;
-    BYTE *bits;
     BITMAPINFOHEADER bih;
     DWORD *src;
     BYTE *dst_row;
@@ -1654,24 +1653,13 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHICON(HICON hicon, GpBitmap** bitmap)
     }
 
     width = bm.bmWidth;
+    height = iinfo.hbmColor ? abs(bm.bmHeight) : abs(bm.bmHeight) / 2;
+    stride = width * 4;
 
-    if (iinfo.hbmColor)
-        height = abs(bm.bmHeight);
-    else /* combined bitmap + mask */
-        height = abs(bm.bmHeight) / 2;
-
-    bits = HeapAlloc(GetProcessHeap(), 0, 4*width*height);
-    if (!bits) {
-        DeleteObject(iinfo.hbmColor);
-        DeleteObject(iinfo.hbmMask);
-        return OutOfMemory;
-    }
-
-    stat = GdipCreateBitmapFromScan0(width, height, 0, PixelFormat32bppARGB, NULL, bitmap);
+    stat = GdipCreateBitmapFromScan0(width, height, stride, PixelFormat32bppARGB, NULL, bitmap);
     if (stat != Ok) {
         DeleteObject(iinfo.hbmColor);
         DeleteObject(iinfo.hbmMask);
-        HeapFree(GetProcessHeap(), 0, bits);
         return stat;
     }
 
@@ -1684,14 +1672,13 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHICON(HICON hicon, GpBitmap** bitmap)
     if (stat != Ok) {
         DeleteObject(iinfo.hbmColor);
         DeleteObject(iinfo.hbmMask);
-        HeapFree(GetProcessHeap(), 0, bits);
         GdipDisposeImage((GpImage*)*bitmap);
         return stat;
     }
 
     bih.biSize = sizeof(bih);
     bih.biWidth = width;
-    bih.biHeight = -height;
+    bih.biHeight = iinfo.hbmColor ? -height: -height * 2;
     bih.biPlanes = 1;
     bih.biBitCount = 32;
     bih.biCompression = BI_RGB;
@@ -1704,14 +1691,14 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHICON(HICON hicon, GpBitmap** bitmap)
     screendc = GetDC(0);
     if (iinfo.hbmColor)
     {
-        GetDIBits(screendc, iinfo.hbmColor, 0, height, bits, (BITMAPINFO*)&bih, DIB_RGB_COLORS);
+        GetDIBits(screendc, iinfo.hbmColor, 0, height, lockeddata.Scan0, (BITMAPINFO*)&bih, DIB_RGB_COLORS);
 
         if (bm.bmBitsPixel == 32)
         {
             has_alpha = FALSE;
 
             /* If any pixel has a non-zero alpha, ignore hbmMask */
-            src = (DWORD*)bits;
+            src = (DWORD*)lockeddata.Scan0;
             for (x=0; x<width && !has_alpha; x++)
                 for (y=0; y<height && !has_alpha; y++)
                     if ((*src++ & 0xff000000) != 0)
@@ -1721,24 +1708,16 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHICON(HICON hicon, GpBitmap** bitmap)
     }
     else
     {
-        GetDIBits(screendc, iinfo.hbmMask, 0, height, bits, (BITMAPINFO*)&bih, DIB_RGB_COLORS);
+        GetDIBits(screendc, iinfo.hbmMask, 0, height, lockeddata.Scan0, (BITMAPINFO*)&bih, DIB_RGB_COLORS);
         has_alpha = FALSE;
-    }
-
-    /* copy the image data to the Bitmap */
-    src = (DWORD*)bits;
-    dst_row = lockeddata.Scan0;
-    for (y=0; y<height; y++)
-    {
-        memcpy(dst_row, src, width*4);
-        src += width;
-        dst_row += lockeddata.Stride;
     }
 
     if (!has_alpha)
     {
         if (iinfo.hbmMask)
         {
+            BYTE *bits = HeapAlloc(GetProcessHeap(), 0, height * stride);
+
             /* read alpha data from the mask */
             if (iinfo.hbmColor)
                 GetDIBits(screendc, iinfo.hbmMask, 0, height, bits, (BITMAPINFO*)&bih, DIB_RGB_COLORS);
@@ -1760,11 +1739,13 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHICON(HICON hicon, GpBitmap** bitmap)
                 }
                 dst_row += lockeddata.Stride;
             }
+
+            HeapFree(GetProcessHeap(), 0, bits);
         }
         else
         {
             /* set constant alpha of 255 */
-            dst_row = bits;
+            dst_row = lockeddata.Scan0;
             for (y=0; y<height; y++)
             {
                 dst = (DWORD*)dst_row;
@@ -1781,8 +1762,6 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHICON(HICON hicon, GpBitmap** bitmap)
     DeleteObject(iinfo.hbmMask);
 
     GdipBitmapUnlockBits(*bitmap, &lockeddata);
-
-    HeapFree(GetProcessHeap(), 0, bits);
 
     return Ok;
 }
@@ -4694,28 +4673,21 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHBITMAP(HBITMAP hbm, HPALETTE hpal, GpBi
         if (retval == Ok)
         {
             HDC hdc;
-            BITMAPINFO *pbmi;
+            char bmibuf[FIELD_OFFSET(BITMAPINFO, bmiColors[256])];
+            BITMAPINFO *pbmi = (BITMAPINFO *)bmibuf;
             INT src_height;
 
             hdc = CreateCompatibleDC(NULL);
-            pbmi = GdipAlloc(sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD));
 
-            if (pbmi)
-            {
-                pbmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                pbmi->bmiHeader.biBitCount = 0;
+            pbmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+            pbmi->bmiHeader.biBitCount = 0;
 
-                GetDIBits(hdc, hbm, 0, 0, NULL, pbmi, DIB_RGB_COLORS);
+            GetDIBits(hdc, hbm, 0, 0, NULL, pbmi, DIB_RGB_COLORS);
 
-                src_height = abs(pbmi->bmiHeader.biHeight);
-                pbmi->bmiHeader.biHeight = -src_height;
+            src_height = abs(pbmi->bmiHeader.biHeight);
+            pbmi->bmiHeader.biHeight = -src_height;
 
-                GetDIBits(hdc, hbm, 0, src_height, lockeddata.Scan0, pbmi, DIB_RGB_COLORS);
-
-                GdipFree(pbmi);
-            }
-            else
-                retval = OutOfMemory;
+            GetDIBits(hdc, hbm, 0, src_height, lockeddata.Scan0, pbmi, DIB_RGB_COLORS);
 
             DeleteDC(hdc);
 
@@ -4724,28 +4696,17 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHBITMAP(HBITMAP hbm, HPALETTE hpal, GpBi
 
         if (retval == Ok && hpal)
         {
-            WORD num_palette_entries;
-            PALETTEENTRY *palette_entries=NULL;
+            PALETTEENTRY entry[256];
             ColorPalette *palette=NULL;
-            int i;
+            int i, num_palette_entries;
 
-            if (!GetObjectW(hpal, sizeof(num_palette_entries), &num_palette_entries))
+            num_palette_entries = GetPaletteEntries(hpal, 0, 256, entry);
+            if (!num_palette_entries)
                 retval = GenericError;
 
-            if (retval == Ok)
-            {
-                palette_entries = GdipAlloc(sizeof(PALETTEENTRY) * num_palette_entries);
-                palette = GdipAlloc(sizeof(ColorPalette) + sizeof(ARGB) * (num_palette_entries-1));
-
-                if (!palette_entries || !palette)
-                    retval = OutOfMemory;
-            }
-
-            if (retval == Ok)
-            {
-                if (!GetPaletteEntries(hpal, 0, num_palette_entries, palette_entries))
-                    retval = GenericError;
-            }
+            palette = GdipAlloc(sizeof(ColorPalette) + sizeof(ARGB) * (num_palette_entries-1));
+            if (!palette)
+                retval = OutOfMemory;
 
             if (retval == Ok)
             {
@@ -4754,15 +4715,13 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHBITMAP(HBITMAP hbm, HPALETTE hpal, GpBi
 
                 for (i=0; i<num_palette_entries; i++)
                 {
-                    PALETTEENTRY * entry = &palette_entries[i];
-                    palette->Entries[i] = 0xff000000 | entry->peRed << 16 |
-                        entry->peGreen << 8 | entry->peBlue;
+                    palette->Entries[i] = 0xff000000 | entry[i].peRed << 16 |
+                                          entry[i].peGreen << 8 | entry[i].peBlue;
                 }
 
                 retval = GdipSetImagePalette((GpImage*)*bitmap, palette);
             }
 
-            GdipFree(palette_entries);
             GdipFree(palette);
         }
 

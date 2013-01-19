@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
 #endif
@@ -170,11 +171,12 @@ static BOOL load_persistent_cookie(LPCWSTR domain, LPCWSTR path)
     if(!cookie)
         return FALSE;
 
-    if(!(str = heap_alloc(size)) || !ReadUrlCacheEntryStream(cookie, 0, str, &size, 0)) {
+    if(!(str = heap_alloc(size+1)) || !ReadUrlCacheEntryStream(cookie, 0, str, &size, 0)) {
         UnlockUrlCacheEntryStream(cookie, 0);
         heap_free(str);
         return FALSE;
     }
+    str[size] = 0;
     UnlockUrlCacheEntryStream(cookie, 0);
 
     LIST_FOR_EACH(iter, &domain_list)
@@ -528,9 +530,10 @@ static void COOKIE_deleteDomain(cookie_domain *deadDomain)
     heap_free(deadDomain);
 }
 
-BOOL get_cookie(const WCHAR *host, const WCHAR *path, WCHAR *cookie_data, DWORD *size)
+DWORD get_cookie(const WCHAR *host, const WCHAR *path, WCHAR *cookie_data, DWORD *size)
 {
-    unsigned cnt = 0, len, domain_count = 0, cookie_count = 0;
+    unsigned cnt = 0, len, name_len, domain_count = 0, cookie_count = 0;
+    WCHAR *ptr = cookie_data;
     cookie_domain *domain;
     FILETIME tm;
 
@@ -561,49 +564,62 @@ BOOL get_cookie(const WCHAR *host, const WCHAR *path, WCHAR *cookie_data, DWORD 
                 continue;
             }
 
-            if(!cookie_data) { /* return the size of the buffer required to lpdwSize */
-                if (cookie_count)
-                    cnt += 2; /* '; ' */
-                cnt += strlenW(cookie_iter->lpCookieName);
-                if ((len = strlenW(cookie_iter->lpCookieData))) {
-                    cnt += 1; /* = */
-                    cnt += len;
-                }
-            }else {
-                static const WCHAR szsc[] = { ';',' ',0 };
-                static const WCHAR szname[] = { '%','s',0 };
-                static const WCHAR szdata[] = { '=','%','s',0 };
-
-                if (cookie_count) cnt += snprintfW(cookie_data + cnt, *size - cnt, szsc);
-                cnt += snprintfW(cookie_data + cnt, *size - cnt, szname, cookie_iter->lpCookieName);
-
-                if (cookie_iter->lpCookieData[0])
-                    cnt += snprintfW(cookie_data + cnt, *size - cnt, szdata, cookie_iter->lpCookieData);
-
-                TRACE("Cookie: %s\n", debugstr_w(cookie_data));
+            if (cookie_count)
+                cnt += 2; /* '; ' */
+            cnt += name_len = strlenW(cookie_iter->lpCookieName);
+            if ((len = strlenW(cookie_iter->lpCookieData))) {
+                cnt += 1; /* = */
+                cnt += len;
             }
+
+            if(ptr) {
+                if(*size > cnt) {
+                    if(cookie_count) {
+                        *ptr++ = ';';
+                        *ptr++ = ' ';
+                    }
+
+                    memcpy(ptr, cookie_iter->lpCookieName, name_len*sizeof(WCHAR));
+                    ptr += name_len;
+
+                    if(len) {
+                        *ptr++ = '=';
+                        memcpy(ptr, cookie_iter->lpCookieData, len*sizeof(WCHAR));
+                        ptr += len;
+                    }
+
+                    assert(cookie_data+cnt == ptr);
+                    TRACE("Cookie: %s\n", debugstr_wn(cookie_data, cnt));
+                }else {
+                    /* Stop writing data, just compute the size */
+                    ptr = NULL;
+                }
+            }
+
             cookie_count++;
         }
     }
 
     LeaveCriticalSection(&cookie_cs);
 
-    if (!domain_count) {
+    if(ptr)
+        *ptr = 0;
+
+    if (!cnt) {
         TRACE("no cookies found for %s\n", debugstr_w(host));
-        SetLastError(ERROR_NO_MORE_ITEMS);
-        return FALSE;
+        return ERROR_NO_MORE_ITEMS;
     }
 
-    if(!cookie_data) {
+    if(!cookie_data || !ptr) {
         *size = (cnt + 1) * sizeof(WCHAR);
         TRACE("returning %u\n", *size);
-        return TRUE;
+        return cookie_data ? ERROR_INSUFFICIENT_BUFFER : ERROR_SUCCESS;
     }
 
     *size = cnt + 1;
 
     TRACE("Returning %u (from %u domains): %s\n", cnt, domain_count, debugstr_w(cookie_data));
-    return cnt != 0;
+    return ERROR_SUCCESS;
 }
 
 /***********************************************************************
@@ -623,6 +639,7 @@ BOOL WINAPI InternetGetCookieW(LPCWSTR lpszUrl, LPCWSTR lpszCookieName,
     LPWSTR lpCookieData, LPDWORD lpdwSize)
 {
     WCHAR host[INTERNET_MAX_HOST_NAME_LENGTH], path[INTERNET_MAX_PATH_LENGTH];
+    DWORD res;
     BOOL ret;
 
     TRACE("(%s, %s, %p, %p)\n", debugstr_w(lpszUrl),debugstr_w(lpszCookieName), lpCookieData, lpdwSize);
@@ -640,7 +657,10 @@ BOOL WINAPI InternetGetCookieW(LPCWSTR lpszUrl, LPCWSTR lpszCookieName,
         return FALSE;
     }
 
-    return get_cookie(host, path, lpCookieData, lpdwSize);
+    res = get_cookie(host, path, lpCookieData, lpdwSize);
+    if(res != ERROR_SUCCESS)
+        SetLastError(res);
+    return res == ERROR_SUCCESS;
 }
 
 
@@ -658,7 +678,7 @@ BOOL WINAPI InternetGetCookieA(LPCSTR lpszUrl, LPCSTR lpszCookieName,
     LPSTR lpCookieData, LPDWORD lpdwSize)
 {
     WCHAR *url, *name;
-    DWORD len;
+    DWORD len, size;
     BOOL r;
 
     TRACE("(%s %s %p %p(%u))\n", debugstr_a(lpszUrl), debugstr_a(lpszCookieName),
@@ -681,8 +701,18 @@ BOOL WINAPI InternetGetCookieA(LPCSTR lpszUrl, LPCSTR lpszCookieName,
         {
             r = InternetGetCookieW( url, name, szCookieData, &len );
 
-            *lpdwSize = WideCharToMultiByte( CP_ACP, 0, szCookieData, len,
-                                             lpCookieData, lpCookieData ? *lpdwSize : 0, NULL, NULL );
+            if(r) {
+                size = WideCharToMultiByte( CP_ACP, 0, szCookieData, len, NULL, 0, NULL, NULL);
+                if(lpCookieData) {
+                    if(*lpdwSize >= size) {
+                        WideCharToMultiByte( CP_ACP, 0, szCookieData, len, lpCookieData, *lpdwSize, NULL, NULL);
+                    }else {
+                        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+                        r = FALSE;
+                    }
+                }
+                *lpdwSize = size;
+            }
 
             heap_free( szCookieData );
         }

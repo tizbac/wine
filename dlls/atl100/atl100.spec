@@ -3,12 +3,12 @@
 12 stdcall AtlFreeMarshalStream(ptr)
 13 stdcall AtlMarshalPtrInProc(ptr ptr ptr)
 14 stdcall AtlUnmarshalPtr(ptr ptr ptr)
-15 stub AtlComModuleGetClassObject
+15 stdcall AtlComModuleGetClassObject(ptr ptr ptr ptr)
 17 stub AtlComModuleRegisterClassObjects
 20 stub AtlComModuleRevokeClassObjects
-22 stub AtlComModuleUnregisterServer
+22 stdcall AtlComModuleUnregisterServer(ptr long ptr)
 23 stdcall AtlUpdateRegistryFromResourceD(long wstr long ptr ptr)
-24 stub AtlWaitWithMessageLoop
+24 stdcall AtlWaitWithMessageLoop(long)
 25 stub AtlSetErrorInfo
 26 stdcall AtlCreateTargetDC(long ptr)
 27 stdcall AtlHiMetricToPixel(ptr ptr)
@@ -18,8 +18,8 @@
 31 stdcall AtlComQIPtrAssign(ptr ptr ptr)
 32 stdcall AtlInternalQueryInterface(ptr ptr ptr ptr)
 34 stdcall AtlGetVersion(ptr)
-35 stub AtlAxDialogBoxW
-36 stub AtlAxDialogBoxA
+35 stdcall AtlAxDialogBoxW(long wstr long ptr long)
+36 stdcall AtlAxDialogBoxA(long str long ptr long)
 37 stdcall AtlAxCreateDialogW(long wstr long ptr long)
 38 stdcall AtlAxCreateDialogA(long str long ptr long)
 39 stdcall AtlAxCreateControl(ptr ptr ptr ptr)
@@ -27,7 +27,7 @@
 41 stdcall AtlAxAttachControl(ptr ptr ptr)
 42 stdcall AtlAxWinInit()
 43 stdcall AtlWinModuleAddCreateWndData(ptr ptr ptr)
-44 stub AtlWinModuleExtractCreateWndData
+44 stdcall AtlWinModuleExtractCreateWndData(ptr)
 45 stub AtlWinModuleRegisterWndClassInfoW
 46 stub AtlWinModuleRegisterWndClassInfoA
 47 stdcall AtlAxGetControl(long ptr)
@@ -37,7 +37,7 @@
 51 stdcall AtlIPersistStreamInit_Save(ptr long ptr ptr ptr)
 52 stub AtlIPersistPropertyBag_Load
 53 stub AtlIPersistPropertyBag_Save
-54 stub AtlGetObjectSourceInterface
+54 stdcall AtlGetObjectSourceInterface(ptr ptr ptr ptr ptr)
 56 stdcall AtlLoadTypeLib(long wstr ptr ptr)
 58 stdcall AtlModuleAddTermFunc(ptr ptr long)
 59 stub AtlAxCreateControlLic
@@ -46,7 +46,7 @@
 62 stub AtlWinModuleRegisterClassExW
 63 stub AtlWinModuleRegisterClassExA
 64 stdcall AtlCallTermFunc(ptr)
-65 stub AtlWinModuleInit
+65 stdcall AtlWinModuleInit(ptr)
 66 stub AtlWinModuleTerm
 67 stub AtlSetPerUserRegistration
 68 stub AtlGetPerUserRegistration

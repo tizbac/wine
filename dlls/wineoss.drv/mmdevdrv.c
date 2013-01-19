@@ -1481,12 +1481,12 @@ static void CALLBACK oss_period_callback(void *user, BOOLEAN timer)
             oss_write_data(This);
         else if(This->dataflow == eCapture)
             oss_read_data(This);
-
-        if(This->event)
-            SetEvent(This->event);
     }
 
     LeaveCriticalSection(&This->lock);
+
+    if(This->event)
+        SetEvent(This->event);
 }
 
 static HRESULT WINAPI AudioClient_Start(IAudioClient *iface)
@@ -1618,6 +1618,12 @@ static HRESULT WINAPI AudioClient_SetEventHandle(IAudioClient *iface,
     if(!(This->flags & AUDCLNT_STREAMFLAGS_EVENTCALLBACK)){
         LeaveCriticalSection(&This->lock);
         return AUDCLNT_E_EVENTHANDLE_NOT_EXPECTED;
+    }
+
+    if (This->event){
+        LeaveCriticalSection(&This->lock);
+        FIXME("called twice\n");
+        return HRESULT_FROM_WIN32(ERROR_INVALID_NAME);
     }
 
     This->event = event;

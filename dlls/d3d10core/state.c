@@ -202,14 +202,15 @@ static ULONG STDMETHODCALLTYPE d3d10_depthstencil_state_AddRef(ID3D10DepthStenci
 
 static ULONG STDMETHODCALLTYPE d3d10_depthstencil_state_Release(ID3D10DepthStencilState *iface)
 {
-    struct d3d10_depthstencil_state *This = impl_from_ID3D10DepthStencilState(iface);
-    ULONG refcount = InterlockedDecrement(&This->refcount);
+    struct d3d10_depthstencil_state *state = impl_from_ID3D10DepthStencilState(iface);
+    ULONG refcount = InterlockedDecrement(&state->refcount);
 
-    TRACE("%p decreasing refcount to %u.\n", This, refcount);
+    TRACE("%p decreasing refcount to %u.\n", state, refcount);
 
     if (!refcount)
     {
-        HeapFree(GetProcessHeap(), 0, This);
+        wine_rb_remove(&state->device->depthstencil_states, &state->desc);
+        HeapFree(GetProcessHeap(), 0, state);
     }
 
     return refcount;
@@ -253,7 +254,11 @@ static HRESULT STDMETHODCALLTYPE d3d10_depthstencil_state_SetPrivateDataInterfac
 static void STDMETHODCALLTYPE d3d10_depthstencil_state_GetDesc(ID3D10DepthStencilState *iface,
         D3D10_DEPTH_STENCIL_DESC *desc)
 {
-    FIXME("iface %p, desc %p stub!\n", iface, desc);
+    struct d3d10_depthstencil_state *state = impl_from_ID3D10DepthStencilState(iface);
+
+    TRACE("iface %p, desc %p.\n", iface, desc);
+
+    *desc = state->desc;
 }
 
 static const struct ID3D10DepthStencilStateVtbl d3d10_depthstencil_state_vtbl =
@@ -271,10 +276,19 @@ static const struct ID3D10DepthStencilStateVtbl d3d10_depthstencil_state_vtbl =
     d3d10_depthstencil_state_GetDesc,
 };
 
-HRESULT d3d10_depthstencil_state_init(struct d3d10_depthstencil_state *state)
+HRESULT d3d10_depthstencil_state_init(struct d3d10_depthstencil_state *state, struct d3d10_device *device,
+        const D3D10_DEPTH_STENCIL_DESC *desc)
 {
     state->ID3D10DepthStencilState_iface.lpVtbl = &d3d10_depthstencil_state_vtbl;
     state->refcount = 1;
+    state->device = device;
+    state->desc = *desc;
+
+    if (wine_rb_put(&device->depthstencil_states, desc, &state->entry) == -1)
+    {
+        ERR("Failed to insert depthstencil state entry.\n");
+        return E_FAIL;
+    }
 
     return S_OK;
 }
@@ -327,14 +341,15 @@ static ULONG STDMETHODCALLTYPE d3d10_rasterizer_state_AddRef(ID3D10RasterizerSta
 
 static ULONG STDMETHODCALLTYPE d3d10_rasterizer_state_Release(ID3D10RasterizerState *iface)
 {
-    struct d3d10_rasterizer_state *This = impl_from_ID3D10RasterizerState(iface);
-    ULONG refcount = InterlockedDecrement(&This->refcount);
+    struct d3d10_rasterizer_state *state = impl_from_ID3D10RasterizerState(iface);
+    ULONG refcount = InterlockedDecrement(&state->refcount);
 
-    TRACE("%p decreasing refcount to %u.\n", This, refcount);
+    TRACE("%p decreasing refcount to %u.\n", state, refcount);
 
     if (!refcount)
     {
-        HeapFree(GetProcessHeap(), 0, This);
+        wine_rb_remove(&state->device->rasterizer_states, &state->desc);
+        HeapFree(GetProcessHeap(), 0, state);
     }
 
     return refcount;
@@ -378,7 +393,11 @@ static HRESULT STDMETHODCALLTYPE d3d10_rasterizer_state_SetPrivateDataInterface(
 static void STDMETHODCALLTYPE d3d10_rasterizer_state_GetDesc(ID3D10RasterizerState *iface,
         D3D10_RASTERIZER_DESC *desc)
 {
-    FIXME("iface %p, desc %p stub!\n", iface, desc);
+    struct d3d10_rasterizer_state *state = impl_from_ID3D10RasterizerState(iface);
+
+    TRACE("iface %p, desc %p.\n", iface, desc);
+
+    *desc = state->desc;
 }
 
 static const struct ID3D10RasterizerStateVtbl d3d10_rasterizer_state_vtbl =
@@ -396,10 +415,19 @@ static const struct ID3D10RasterizerStateVtbl d3d10_rasterizer_state_vtbl =
     d3d10_rasterizer_state_GetDesc,
 };
 
-HRESULT d3d10_rasterizer_state_init(struct d3d10_rasterizer_state *state)
+HRESULT d3d10_rasterizer_state_init(struct d3d10_rasterizer_state *state, struct d3d10_device *device,
+        const D3D10_RASTERIZER_DESC *desc)
 {
     state->ID3D10RasterizerState_iface.lpVtbl = &d3d10_rasterizer_state_vtbl;
     state->refcount = 1;
+    state->device = device;
+    state->desc = *desc;
+
+    if (wine_rb_put(&device->rasterizer_states, desc, &state->entry) == -1)
+    {
+        ERR("Failed to insert rasterizer state entry.\n");
+        return E_FAIL;
+    }
 
     return S_OK;
 }

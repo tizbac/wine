@@ -138,7 +138,7 @@ static nsresult NSAPI nsInputStream_Close(nsIInputStream *iface)
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-static nsresult NSAPI nsInputStream_Available(nsIInputStream *iface, PRUint32 *_retval)
+static nsresult NSAPI nsInputStream_Available(nsIInputStream *iface, PRUint64 *_retval)
 {
     nsProtocolStream *This = impl_from_nsIInputStream(iface);
     FIXME("(%p)->(%p)\n", This, _retval);
@@ -1001,7 +1001,8 @@ HRESULT bind_mon_to_wstr(HTMLInnerWindow *window, IMoniker *mon, WCHAR **ret)
 
 static HRESULT read_post_data_stream(nsChannelBSC *This, nsChannel *nschannel)
 {
-    PRUint32 data_len = 0, available = 0;
+    PRUint64 available = 0;
+    PRUint32 data_len = 0;
     char *data, *post_data;
     nsresult nsres;
     HRESULT hres = S_OK;
@@ -1248,7 +1249,7 @@ static nsresult NSAPI nsAsyncVerifyRedirectCallback_QueryInterface(nsIAsyncVerif
     nsRedirectCallback *This = impl_from_nsIAsyncVerifyRedirectCallback(iface);
 
     if(IsEqualGUID(&IID_nsISupports, riid)) {
-        TRACE("(%p)->(IID_nsISuports %p)\n", This, result);
+        TRACE("(%p)->(IID_nsISupports %p)\n", This, result);
         *result = &This->nsIAsyncVerifyRedirectCallback_iface;
     }else if(IsEqualGUID(&IID_nsIAsyncVerifyRedirectCallback, riid)) {
         TRACE("(%p)->(IID_nsIAsyncVerifyRedirectCallback %p)\n", This, result);

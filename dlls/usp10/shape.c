@@ -182,6 +182,7 @@ static OPENTYPE_FEATURE_RECORD arabic_gpos_features[] =
 
 static OPENTYPE_FEATURE_RECORD hebrew_features[] =
 {
+    { MS_MAKE_TAG('c','c','m','p'), 1},
     { MS_MAKE_TAG('d','l','i','g'), 0},
 };
 
@@ -457,7 +458,7 @@ static const ScriptShapeData ShapingData[] =
     {{ latin_features, 2}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
     {{ arabic_features, 6}, {arabic_gpos_features, 4}, required_arabic_features, 0, ContextualShape_Arabic, ShapeCharGlyphProp_Arabic},
     {{ arabic_features, 6}, {arabic_gpos_features, 4}, required_arabic_features, 0, ContextualShape_Arabic, ShapeCharGlyphProp_Arabic},
-    {{ hebrew_features, 1}, {hebrew_gpos_features, 2}, NULL, 0, ContextualShape_Hebrew, ShapeCharGlyphProp_Hebrew},
+    {{ hebrew_features, 2}, {hebrew_gpos_features, 2}, NULL, 0, ContextualShape_Hebrew, ShapeCharGlyphProp_Hebrew},
     {{ syriac_features, 4}, {syriac_gpos_features, 3}, required_syriac_features, 0, ContextualShape_Syriac, ShapeCharGlyphProp_None},
     {{ arabic_features, 6}, {arabic_gpos_features, 4}, required_arabic_features, 0, ContextualShape_Arabic, ShapeCharGlyphProp_Arabic},
     {{ NULL, 0}, {NULL, 0}, NULL, 0, ContextualShape_Thaana, ShapeCharGlyphProp_None},
@@ -528,7 +529,7 @@ static const ScriptShapeData ShapingData[] =
     {{ NULL, 0}, {NULL, 0}, NULL, 0, NULL, NULL},
     {{ NULL, 0}, {NULL, 0}, NULL, 0, NULL, NULL},
     {{ NULL, 0}, {NULL, 0}, NULL, 0, NULL, NULL},
-    {{ hebrew_features, 1}, {hebrew_gpos_features, 2}, NULL, 0, ContextualShape_Hebrew, NULL},
+    {{ hebrew_features, 2}, {hebrew_gpos_features, 2}, NULL, 0, ContextualShape_Hebrew, NULL},
     {{ latin_features, 2}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
     {{ thai_features, 1}, {thai_gpos_features, 3}, NULL, 0, ContextualShape_Thai, ShapeCharGlyphProp_Thai},
 };
@@ -602,7 +603,7 @@ static OPENTYPE_TAG get_opentype_script(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCac
     }
 }
 
-static LoadedFeature* load_OT_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache *psc, const char* feat)
+static LoadedFeature* load_OT_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache *psc, char tableType, const char* feat)
 {
     LoadedFeature *feature = NULL;
 
@@ -623,13 +624,13 @@ static LoadedFeature* load_OT_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache
                 language = MS_MAKE_TAG('d','f','l','t');
             attempt--;
 
-            OpenType_GetFontFeatureTags(psc, script, language, FALSE, MS_MAKE_TAG(feat[0],feat[1],feat[2],feat[3]), 1, &tags, &cTags, &feature);
+            OpenType_GetFontFeatureTags(psc, script, language, FALSE, MS_MAKE_TAG(feat[0],feat[1],feat[2],feat[3]), tableType, 1, &tags, &cTags, &feature);
 
         } while(attempt && !feature);
 
         /* try in the default (latin) table */
         if (!feature)
-            OpenType_GetFontFeatureTags(psc, MS_MAKE_TAG('l','a','t','n'), MS_MAKE_TAG('d','f','l','t'), FALSE, MS_MAKE_TAG(feat[0],feat[1],feat[2],feat[3]), 1, &tags, &cTags, &feature);
+            OpenType_GetFontFeatureTags(psc, MS_MAKE_TAG('l','a','t','n'), MS_MAKE_TAG('d','f','l','t'), FALSE, MS_MAKE_TAG(feat[0],feat[1],feat[2],feat[3]), tableType, 1, &tags, &cTags, &feature);
     }
 
     TRACE("Feature %s located at %p\n",debugstr_an(feat,4),feature);
@@ -640,7 +641,7 @@ static INT apply_GSUB_feature_to_glyph(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCach
 {
     LoadedFeature *feature;
 
-    feature = load_OT_feature(hdc, psa, psc, feat);
+    feature = load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, feat);
     if (!feature)
         return GSUB_E_NOFEATURE;
 
@@ -825,7 +826,7 @@ static int apply_GSUB_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache* psc, W
         LoadedFeature *feature;
         int lookup_index;
 
-        feature = load_OT_feature(hdc, psa, psc, feat);
+        feature = load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, feat);
         if (!feature)
             return GSUB_E_NOFEATURE;
 
@@ -859,7 +860,8 @@ static int apply_GSUB_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache* psc, W
     return GSUB_E_NOFEATURE;
 }
 
-static VOID GPOS_apply_feature(LPOUTLINETEXTMETRICW lpotm, LPLOGFONTW lplogfont, INT* piAdvance, LPCVOID header, LoadedFeature *feature, const WORD *glyphs, INT write_dir, INT glyph_count, GOFFSET *pGoffset)
+static VOID GPOS_apply_feature(LPOUTLINETEXTMETRICW lpotm, LPLOGFONTW lplogfont, const SCRIPT_ANALYSIS *analysis, INT* piAdvance,
+                               LPCVOID header, LoadedFeature *feature, const WORD *glyphs, INT glyph_count, GOFFSET *pGoffset)
 {
     int i;
 
@@ -868,7 +870,7 @@ static VOID GPOS_apply_feature(LPOUTLINETEXTMETRICW lpotm, LPLOGFONTW lplogfont,
     {
         int j;
         for (j = 0; j < glyph_count; )
-            j = OpenType_apply_GPOS_lookup(lpotm, lplogfont, piAdvance, header, feature->lookups[i], glyphs, j, write_dir, glyph_count, pGoffset);
+            j = OpenType_apply_GPOS_lookup(lpotm, lplogfont, analysis, piAdvance, header, feature->lookups[i], glyphs, j, glyph_count, pGoffset);
     }
 }
 
@@ -2020,17 +2022,17 @@ static void ShapeIndicSyllables(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa,
 {
     int c;
     int overall_shift = 0;
-    LoadedFeature *locl = (modern)?load_OT_feature(hdc, psa, psc, "locl"):NULL;
-    LoadedFeature *nukt = load_OT_feature(hdc, psa, psc, "nukt");
-    LoadedFeature *akhn = load_OT_feature(hdc, psa, psc, "akhn");
-    LoadedFeature *rkrf = (modern)?load_OT_feature(hdc, psa, psc, "rkrf"):NULL;
-    LoadedFeature *pstf = load_OT_feature(hdc, psa, psc, "pstf");
-    LoadedFeature *vatu = (!rkrf)?load_OT_feature(hdc, psa, psc, "vatu"):NULL;
-    LoadedFeature *cjct = (modern)?load_OT_feature(hdc, psa, psc, "cjct"):NULL;
-    BOOL rphf = (load_OT_feature(hdc, psa, psc, "rphf") != NULL);
-    BOOL pref = (load_OT_feature(hdc, psa, psc, "pref") != NULL);
-    BOOL blwf = (load_OT_feature(hdc, psa, psc, "blwf") != NULL);
-    BOOL half = (load_OT_feature(hdc, psa, psc, "half") != NULL);
+    LoadedFeature *locl = (modern)?load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "locl"):NULL;
+    LoadedFeature *nukt = load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "nukt");
+    LoadedFeature *akhn = load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "akhn");
+    LoadedFeature *rkrf = (modern)?load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "rkrf"):NULL;
+    LoadedFeature *pstf = load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "pstf");
+    LoadedFeature *vatu = (!rkrf)?load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "vatu"):NULL;
+    LoadedFeature *cjct = (modern)?load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "cjct"):NULL;
+    BOOL rphf = (load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "rphf") != NULL);
+    BOOL pref = (load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "pref") != NULL);
+    BOOL blwf = (load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "blwf") != NULL);
+    BOOL half = (load_OT_feature(hdc, psa, psc, FEATURE_GSUB_TABLE, "half") != NULL);
     IndicSyllable glyph_indexs;
 
     for (c = 0; c < syllable_count; c++)
@@ -3284,7 +3286,6 @@ void SHAPE_ApplyOpenTypePositions(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *ps
 {
     const TEXTRANGE_PROPERTIES *rpRangeProperties;
     int i;
-    INT dirL;
 
     rpRangeProperties = &ShapingData[psa->eScript].defaultGPOSTextRange;
 
@@ -3296,22 +3297,17 @@ void SHAPE_ApplyOpenTypePositions(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *ps
     if (!psc->GPOS_Table || !psc->otm)
         return;
 
-    if (!psa->fLogicalOrder && psa->fRTL)
-        dirL = -1;
-    else
-        dirL = 1;
-
     for (i = 0; i < rpRangeProperties->cotfRecords; i++)
     {
         if (rpRangeProperties->potfRecords[i].lParameter > 0)
         {
             LoadedFeature *feature;
 
-            feature = load_OT_feature(hdc, psa, psc, (const char*)&rpRangeProperties->potfRecords[i].tagFeature);
+            feature = load_OT_feature(hdc, psa, psc, FEATURE_GPOS_TABLE, (const char*)&rpRangeProperties->potfRecords[i].tagFeature);
             if (!feature)
                 continue;
 
-            GPOS_apply_feature(psc->otm, &psc->lf, piAdvance, psc->GPOS_Table, feature, pwGlyphs, dirL, cGlyphs, pGoffset);
+            GPOS_apply_feature(psc->otm, &psc->lf, psa, piAdvance, psc->GPOS_Table, feature, pwGlyphs, cGlyphs, pGoffset);
         }
     }
 }
@@ -3330,7 +3326,7 @@ HRESULT SHAPE_CheckFontForRequiredFeatures(HDC hdc, ScriptCache *psc, SCRIPT_ANA
     i = 0;
     while (ShapingData[psa->eScript].requiredFeatures[i])
     {
-        feature = load_OT_feature(hdc, psa, psc, ShapingData[psa->eScript].requiredFeatures[i]);
+        feature = load_OT_feature(hdc, psa, psc, FEATURE_ALL_TABLES, ShapingData[psa->eScript].requiredFeatures[i]);
         if (feature)
             return S_OK;
         i++;
@@ -3401,7 +3397,7 @@ HRESULT SHAPE_GetFontFeatureTags( HDC hdc, ScriptCache *psc,
         filter = TRUE;
     }
 
-    hr = OpenType_GetFontFeatureTags(psc, tagScript, tagLangSys, filter, 0x00000000, cMaxTags, pFeatureTags, pcTags, NULL);
+    hr = OpenType_GetFontFeatureTags(psc, tagScript, tagLangSys, filter, 0x00000000, FEATURE_ALL_TABLES, cMaxTags, pFeatureTags, pcTags, NULL);
 
     if (FAILED(hr))
         *pcTags = 0;

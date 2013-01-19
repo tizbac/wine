@@ -45,6 +45,9 @@
 #ifdef HAVE_ASM_TYPES_H
 #include <asm/types.h>
 #endif
+#ifdef HAVE_LIBV4L1_H
+#include <libv4l1.h>
+#endif
 #ifdef HAVE_LINUX_VIDEODEV_H
 #include <linux/videodev.h>
 #endif
@@ -68,7 +71,7 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(qcap_v4l);
 
-#ifdef HAVE_LINUX_VIDEODEV_H
+#if defined(HAVE_LINUX_VIDEODEV_H) || defined(HAVE_LIBV4L1_H)
 
 static typeof(open) *video_open = open;
 static typeof(close) *video_close = close;
@@ -681,7 +684,6 @@ HRESULT qcap_driver_run(Capture *capBox, FILTER_STATE *state)
         *state = State_Running;
         if (!capBox->iscommitted++)
         {
-            IMemAllocator * pAlloc = NULL;
             ALLOCATOR_PROPERTIES ap, actual;
             BaseOutputPin *out;
 
@@ -695,16 +697,11 @@ HRESULT qcap_driver_run(Capture *capBox, FILTER_STATE *state)
             ap.cbPrefix = 0;
 
             out = (BaseOutputPin *)capBox->pOut;
-            hr = IMemInputPin_GetAllocator(out->pMemInputPin, &pAlloc);
+
+            hr = IMemAllocator_SetProperties(out->pAllocator, &ap, &actual);
 
             if (SUCCEEDED(hr))
-                hr = IMemAllocator_SetProperties(pAlloc, &ap, &actual);
-
-            if (SUCCEEDED(hr))
-                hr = IMemAllocator_Commit(pAlloc);
-
-            if (pAlloc)
-                IMemAllocator_Release(pAlloc);
+                hr = IMemAllocator_Commit(out->pAllocator);
 
             TRACE("Committing allocator: %x\n", hr);
         }
@@ -762,32 +759,14 @@ HRESULT qcap_driver_stop(Capture *capBox, FILTER_STATE *state)
         capBox->thread = 0;
         if (capBox->iscommitted)
         {
-            IMemInputPin *pMem = NULL;
-            IMemAllocator * pAlloc = NULL;
-            IPin *pConnect = NULL;
+            BaseOutputPin *out;
             HRESULT hr;
 
             capBox->iscommitted = 0;
 
-            hr = IPin_ConnectedTo(capBox->pOut, &pConnect);
+            out = (BaseOutputPin*)capBox->pOut;
 
-            if (SUCCEEDED(hr))
-                hr = IPin_QueryInterface(pConnect, &IID_IMemInputPin, (void **) &pMem);
-
-            if (SUCCEEDED(hr))
-                hr = IMemInputPin_GetAllocator(pMem, &pAlloc);
-
-            if (SUCCEEDED(hr))
-                hr = IMemAllocator_Decommit(pAlloc);
-
-            if (pAlloc)
-                IMemAllocator_Release(pAlloc);
-
-            if (pMem)
-                IMemInputPin_Release(pMem);
-
-            if (pConnect)
-                IPin_Release(pConnect);
+            hr = IMemAllocator_Decommit(out->pAllocator);
 
             if (hr != S_OK && hr != VFW_E_NOT_COMMITTED)
                 WARN("Decommitting allocator: %x\n", hr);
@@ -994,4 +973,4 @@ HRESULT qcap_driver_stop(Capture *capBox, FILTER_STATE *state)
     FAIL_WITH_ERR;
 }
 
-#endif /* HAVE_LINUX_VIDEODEV_H */
+#endif /* HAVE_LINUX_VIDEODEV_H || HAVE_LINUX_LIBV4L1_H */

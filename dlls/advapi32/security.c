@@ -801,13 +801,25 @@ BOOL WINAPI CreateRestrictedToken(
     PSID_AND_ATTRIBUTES restrictSids,
     PHANDLE newToken)
 {
+    TOKEN_TYPE type;
+    SECURITY_IMPERSONATION_LEVEL level = TokenImpersonationLevel;
+    DWORD size;
+
     FIXME("(%p, 0x%x, %u, %p, %u, %p, %u, %p, %p): stub\n",
           baseToken, flags, nDisableSids, disableSids,
           nDeletePrivs, deletePrivs,
           nRestrictSids, restrictSids,
           newToken);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+
+    size = sizeof(type);
+    if (!GetTokenInformation( baseToken, TokenType, &type, size, &size )) return FALSE;
+    if (type == TokenImpersonation)
+    {
+        size = sizeof(level);
+        if (!GetTokenInformation( baseToken, TokenImpersonationLevel, &level, size, &size ))
+            return FALSE;
+    }
+    return DuplicateTokenEx( baseToken, MAXIMUM_ALLOWED, NULL, level, type, newToken );
 }
 
 /*	##############################
@@ -3046,7 +3058,26 @@ DWORD WINAPI GetSecurityInfo(
     ULONG n1, n2;
     BOOL present, defaulted;
 
-    status = NtQuerySecurityObject(hObject, SecurityInfo, NULL, 0, &n1);
+    /* A NULL descriptor is allowed if any one of the other pointers is not NULL */
+    if (!(ppsidOwner||ppsidGroup||ppDacl||ppSacl||ppSecurityDescriptor)) return ERROR_INVALID_PARAMETER;
+
+    /* If no descriptor, we have to check that there's a pointer for the requested information */
+    if( !ppSecurityDescriptor && (
+        ((SecurityInfo & OWNER_SECURITY_INFORMATION) && !ppsidOwner)
+    ||  ((SecurityInfo & GROUP_SECURITY_INFORMATION) && !ppsidGroup)
+    ||  ((SecurityInfo & DACL_SECURITY_INFORMATION)  && !ppDacl)
+    ||  ((SecurityInfo & SACL_SECURITY_INFORMATION)  && !ppSacl)  ))
+        return ERROR_INVALID_PARAMETER;
+
+    switch (ObjectType)
+    {
+    case SE_SERVICE:
+        status = SERV_QueryServiceObjectSecurity(hObject, SecurityInfo, NULL, 0, &n1);
+        break;
+    default:
+        status = NtQuerySecurityObject(hObject, SecurityInfo, NULL, 0, &n1);
+        break;
+    }
     if (status != STATUS_BUFFER_TOO_SMALL && status != STATUS_SUCCESS)
         return RtlNtStatusToDosError(status);
 
@@ -3054,7 +3085,15 @@ DWORD WINAPI GetSecurityInfo(
     if (!sd)
         return ERROR_NOT_ENOUGH_MEMORY;
 
-    status = NtQuerySecurityObject(hObject, SecurityInfo, sd, n1, &n2);
+    switch (ObjectType)
+    {
+    case SE_SERVICE:
+        status = SERV_QueryServiceObjectSecurity(hObject, SecurityInfo, sd, n1, &n2);
+        break;
+    default:
+        status = NtQuerySecurityObject(hObject, SecurityInfo, sd, n1, &n2);
+        break;
+    }
     if (status != STATUS_SUCCESS)
     {
         LocalFree(sd);
@@ -4758,7 +4797,7 @@ static BOOL DumpAce(LPVOID pace, WCHAR **pwptr, ULONG *plen)
 static BOOL DumpAcl(PACL pacl, WCHAR **pwptr, ULONG *plen, BOOL protected, BOOL autoInheritReq, BOOL autoInherited)
 {
     WORD count;
-    int i;
+    UINT i;
 
     if (protected)
         DumpString(SDDL_PROTECTED, -1, pwptr, plen);

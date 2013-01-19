@@ -158,6 +158,14 @@ struct d3d8_device
     struct FvfToDecl       *decls;
     UINT                    numConvertedDecls, declArraySize;
 
+    /* User data draws */
+    struct wined3d_buffer *vertex_buffer;
+    UINT                   vertex_buffer_size;
+    UINT                   vertex_buffer_pos;
+    struct wined3d_buffer *index_buffer;
+    UINT                   index_buffer_size;
+    UINT                   index_buffer_pos;
+
     /* Avoids recursion with nested ReleaseRef to 0 */
     BOOL                    inDestruction;
     BOOL lost;

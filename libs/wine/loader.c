@@ -39,12 +39,6 @@
 # include <unistd.h>
 #endif
 
-#define NONAMELESSUNION
-#define NONAMELESSSTRUCT
-#include "windef.h"
-#include "winbase.h"
-#include "wine/library.h"
-
 #ifdef HAVE_VALGRIND_MEMCHECK_H
 #include <valgrind/memcheck.h>
 #endif
@@ -53,10 +47,21 @@
 #include <crt_externs.h>
 #define environ (*_NSGetEnviron())
 #include <CoreFoundation/CoreFoundation.h>
+#define LoadResource MacLoadResource
+#define GetCurrentThread MacGetCurrentThread
+#include <CoreServices/CoreServices.h>
+#undef LoadResource
+#undef GetCurrentThread
 #include <pthread.h>
 #else
 extern char **environ;
 #endif
+
+#define NONAMELESSUNION
+#define NONAMELESSSTRUCT
+#include "windef.h"
+#include "winbase.h"
+#include "wine/library.h"
 
 /* argc/argv for the Windows application */
 int __wine_main_argc = 0;
@@ -379,7 +384,7 @@ static void *map_dll( const IMAGE_NT_HEADERS *nt_descr )
     IMAGE_SECTION_HEADER *sec;
     BYTE *addr;
     DWORD code_start, data_start, data_end;
-    const size_t page_size = getpagesize();
+    const size_t page_size = sysconf( _SC_PAGESIZE );
     const size_t page_mask = page_size - 1;
     int delta, nb_sections = 2;  /* code + data */
     unsigned int i;
@@ -763,6 +768,11 @@ static void apple_main_thread( void (*init_func)(void) )
 {
     CFRunLoopSourceContext source_context = { 0 };
     CFRunLoopSourceRef source;
+
+    /* Multi-processing Services can get confused about the main thread if the
+     * first time it's used is on a secondary thread.  Use it here to make sure
+     * that doesn't happen. */
+    MPTaskIsPreemptive(MPCurrentTaskID());
 
     /* Give ourselves the best chance of having the distributed notification
      * center scheduled on this thread's run loop.  In theory, it's scheduled

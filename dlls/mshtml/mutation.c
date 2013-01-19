@@ -341,7 +341,8 @@ static nsresult run_insert_script(HTMLDocumentNode *doc, nsISupports *script_ifa
     while(!list_empty(&window->script_queue)) {
         iter = LIST_ENTRY(list_head(&window->script_queue), script_queue_entry_t, entry);
         list_remove(&iter->entry);
-        doc_insert_script(window, iter->script);
+        if(!iter->script->parsed)
+            doc_insert_script(window, iter->script);
         IHTMLScriptElement_Release(&iter->script->IHTMLScriptElement_iface);
         heap_free(iter);
     }
@@ -524,27 +525,32 @@ static void NSAPI nsDocumentObserver_CharacterDataChanged(nsIDocumentObserver *i
 }
 
 static void NSAPI nsDocumentObserver_AttributeWillChange(nsIDocumentObserver *iface, nsIDocument *aDocument,
-        nsIContent *aContent, PRInt32 aNameSpaceID, nsIAtom *aAttribute, PRInt32 aModType)
+        nsIContent *aContent, LONG aNameSpaceID, nsIAtom *aAttribute, LONG aModType)
 {
 }
 
 static void NSAPI nsDocumentObserver_AttributeChanged(nsIDocumentObserver *iface, nsIDocument *aDocument,
-        nsIContent *aContent, PRInt32 aNameSpaceID, nsIAtom *aAttribute, PRInt32 aModType)
+        nsIContent *aContent, LONG aNameSpaceID, nsIAtom *aAttribute, LONG aModType)
+{
+}
+
+static void NSAPI nsDocumentObserver_AttributeSetToCurrentValue(nsIDocumentObserver *iface, nsIDocument *aDocument,
+        void *aElement, LONG aNameSpaceID, nsIAtom *aAttribute)
 {
 }
 
 static void NSAPI nsDocumentObserver_ContentAppended(nsIDocumentObserver *iface, nsIDocument *aDocument,
-        nsIContent *aContainer, nsIContent *aFirstNewContent, PRInt32 aNewIndexInContainer)
+        nsIContent *aContainer, nsIContent *aFirstNewContent, LONG aNewIndexInContainer)
 {
 }
 
 static void NSAPI nsDocumentObserver_ContentInserted(nsIDocumentObserver *iface, nsIDocument *aDocument,
-        nsIContent *aContainer, nsIContent *aChild, PRInt32 aIndexInContainer)
+        nsIContent *aContainer, nsIContent *aChild, LONG aIndexInContainer)
 {
 }
 
 static void NSAPI nsDocumentObserver_ContentRemoved(nsIDocumentObserver *iface, nsIDocument *aDocument,
-        nsIContent *aContainer, nsIContent *aChild, PRInt32 aIndexInContainer,
+        nsIContent *aContainer, nsIContent *aChild, LONG aIndexInContainer,
         nsIContent *aProviousSibling)
 {
 }
@@ -715,6 +721,7 @@ static const nsIDocumentObserverVtbl nsDocumentObserverVtbl = {
     nsDocumentObserver_CharacterDataChanged,
     nsDocumentObserver_AttributeWillChange,
     nsDocumentObserver_AttributeChanged,
+    nsDocumentObserver_AttributeSetToCurrentValue,
     nsDocumentObserver_ContentAppended,
     nsDocumentObserver_ContentInserted,
     nsDocumentObserver_ContentRemoved,

@@ -46,6 +46,7 @@
 #define MSVCRT_I64_MAX    (((__int64)0x7fffffff << 32) | 0xffffffff)
 #define MSVCRT_I64_MIN    (-MSVCRT_I64_MAX-1)
 #define MSVCRT_UI64_MAX   (((unsigned __int64)0xffffffff << 32) | 0xffffffff)
+#define MSVCRT_MB_LEN_MAX 2
 
 #define MSVCRT__MAX_DRIVE  3
 #define MSVCRT__MAX_DIR    256
@@ -218,7 +219,7 @@ typedef struct __thread_data thread_data_t;
 
 extern thread_data_t *msvcrt_get_thread_data(void) DECLSPEC_HIDDEN;
 
-LCID MSVCRT_locale_to_LCID(const char *) DECLSPEC_HIDDEN;
+LCID MSVCRT_locale_to_LCID(const char*, unsigned short*) DECLSPEC_HIDDEN;
 extern MSVCRT__locale_t MSVCRT_locale DECLSPEC_HIDDEN;
 extern unsigned int MSVCRT___lc_codepage;
 extern int MSVCRT___lc_collate_cp;
@@ -236,6 +237,8 @@ extern char ** msvcrt_SnapshotOfEnvironmentA(char **) DECLSPEC_HIDDEN;
 extern MSVCRT_wchar_t ** msvcrt_SnapshotOfEnvironmentW(MSVCRT_wchar_t **) DECLSPEC_HIDDEN;
 
 MSVCRT_wchar_t *msvcrt_wstrdupa(const char *) DECLSPEC_HIDDEN;
+
+extern unsigned int MSVCRT__commode;
 
 /* FIXME: This should be declared in new.h but it's not an extern "C" so
  * it would not be much use anyway. Even for Winelib applications.
@@ -266,6 +269,7 @@ extern void msvcrt_init_args(void) DECLSPEC_HIDDEN;
 extern void msvcrt_free_args(void) DECLSPEC_HIDDEN;
 extern void msvcrt_init_signals(void) DECLSPEC_HIDDEN;
 extern void msvcrt_free_signals(void) DECLSPEC_HIDDEN;
+extern void msvcrt_free_popen_data(void) DECLSPEC_HIDDEN;
 
 extern unsigned msvcrt_create_io_inherit_block(WORD*, BYTE**) DECLSPEC_HIDDEN;
 
@@ -712,6 +716,7 @@ struct MSVCRT__stat64 {
 #define MSVCRT__IOERR    0x0020
 #define MSVCRT__IOSTRG   0x0040
 #define MSVCRT__IORW     0x0080
+#define MSVCRT__IOCOMMIT 0x4000
 
 #define MSVCRT__S_IEXEC  0x0040
 #define MSVCRT__S_IWRITE 0x0080
@@ -750,6 +755,9 @@ struct MSVCRT__stat64 {
 #define MSVCRT__O_TEXT          0x4000
 #define MSVCRT__O_BINARY        0x8000
 #define MSVCRT__O_RAW           MSVCRT__O_BINARY
+#define MSVCRT__O_WTEXT         0x10000
+#define MSVCRT__O_U16TEXT       0x20000
+#define MSVCRT__O_U8TEXT        0x40000
 
 /* _statusfp bit flags */
 #define MSVCRT__SW_INEXACT      0x00000001 /* inexact (precision) */
@@ -863,6 +871,8 @@ typedef void (__cdecl *MSVCRT___sighandler_t)(int);
 /* _get_output_format return code */
 #define MSVCRT__TWO_DIGIT_EXPONENT 0x1
 
+#define MSVCRT__NLSCMPERROR ((unsigned int)0x7fffffff)
+
 void  __cdecl    MSVCRT_free(void*);
 void* __cdecl    MSVCRT_malloc(MSVCRT_size_t);
 void* __cdecl    MSVCRT_calloc(MSVCRT_size_t,MSVCRT_size_t);
@@ -880,6 +890,7 @@ int __cdecl      MSVCRT_fgetc(MSVCRT_FILE*);
 int __cdecl      MSVCRT_ungetc(int,MSVCRT_FILE*);
 MSVCRT_wint_t __cdecl MSVCRT_fgetwc(MSVCRT_FILE*);
 MSVCRT_wint_t __cdecl MSVCRT_ungetwc(MSVCRT_wint_t,MSVCRT_FILE*);
+__int64 __cdecl  MSVCRT__ftelli64(MSVCRT_FILE* file);
 void __cdecl     MSVCRT__exit(int);
 void __cdecl     MSVCRT_abort(void);
 MSVCRT_ulong* __cdecl MSVCRT___doserrno(void);
@@ -938,6 +949,7 @@ int*    __cdecl  __p___mb_cur_max(void);
 unsigned int*  __cdecl __p__fmode(void);
 MSVCRT_wchar_t* __cdecl MSVCRT__wcsdup(const MSVCRT_wchar_t*);
 MSVCRT_wchar_t*** __cdecl MSVCRT___p__wenviron(void);
+INT     __cdecl MSVCRT_wctomb(char*,MSVCRT_wchar_t);
 char*   __cdecl MSVCRT__strdate(char* date);
 char*   __cdecl MSVCRT__strtime(char* date);
 int     __cdecl _setmbcp(int);
@@ -986,6 +998,7 @@ int pf_printf_w(puts_clbk_w, void*, const MSVCRT_wchar_t*, MSVCRT__locale_t,
 printf_arg arg_clbk_valist(void*, int, int, __ms_va_list*) DECLSPEC_HIDDEN;
 
 #define MSVCRT_FLT_MIN 1.175494351e-38F
+#define MSVCRT_DBL_MIN 2.2250738585072014e-308
 #define MSVCRT__OVERFLOW  3
 #define MSVCRT__UNDERFLOW 4
 
@@ -993,5 +1006,10 @@ typedef struct
 {
     float f;
 } MSVCRT__CRT_FLOAT;
+
+typedef struct
+{
+    double x;
+} MSVCRT__CRT_DOUBLE;
 
 #endif /* __WINE_MSVCRT_H */

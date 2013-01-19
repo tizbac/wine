@@ -792,6 +792,63 @@ static void test_fgetwc( void )
   free(tempf);
 }
 
+static void test_fputwc(void)
+{
+    char temppath[MAX_PATH];
+    char tempfile[MAX_PATH];
+    FILE *f;
+    char buf[1024];
+    int ret;
+
+    GetTempPath (MAX_PATH, temppath);
+    GetTempFileName (temppath, "", 0, tempfile);
+
+    f = fopen(tempfile, "w");
+    ret = fputwc('a', f);
+    ok(ret == 'a', "fputwc returned %x, expected 'a'\n", ret);
+    ret = fputwc('\n', f);
+    ok(ret == '\n', "fputwc returned %x, expected '\\n'\n", ret);
+    fclose(f);
+
+    f = fopen(tempfile, "rb");
+    ret = fread(buf, 1, sizeof(buf), f);
+    ok(ret == 3, "fread returned %d, expected 3\n", ret);
+    ok(!memcmp(buf, "a\r\n", 3), "incorrect file data\n");
+    fclose(f);
+
+    if(p_fopen_s) {
+        f = fopen(tempfile, "w,ccs=unicode");
+        ret = fputwc('a', f);
+        ok(ret == 'a', "fputwc returned %x, expected 'a'\n", ret);
+        ret = fputwc('\n', f);
+        ok(ret == '\n', "fputwc returned %x, expected '\\n'\n", ret);
+        fclose(f);
+
+        f = fopen(tempfile, "rb");
+        ret = fread(buf, 1, sizeof(buf), f);
+        ok(ret == 8, "fread returned %d, expected 8\n", ret);
+        ok(!memcmp(buf, "\xff\xfe\x61\x00\r\x00\n\x00", 8), "incorrect file data\n");
+        fclose(f);
+
+        f = fopen(tempfile, "w,ccs=utf-8");
+        ret = fputwc('a', f);
+        ok(ret == 'a', "fputwc returned %x, expected 'a'\n", ret);
+        ret = fputwc('\n', f);
+        ok(ret == '\n', "fputwc returned %x, expected '\\n'\n", ret);
+        fclose(f);
+
+        f = fopen(tempfile, "rb");
+        ret = fread(buf, 1, sizeof(buf), f);
+        ok(ret == 6, "fread returned %d, expected 6\n", ret);
+        ok(!memcmp(buf, "\xef\xbb\xbf\x61\r\n", 6), "incorrect file data\n");
+        fclose(f);
+    }else {
+        win_skip("fputwc tests on unicode files\n");
+    }
+
+    _unlink(tempfile);
+}
+
 static void test_ctrlz( void )
 {
   char* tempf;
@@ -956,6 +1013,11 @@ static void test_file_write_read( void )
   _lseek(tempfd, -2, FILE_END);
   ret = _read(tempfd,btext,LLEN);
   ok(ret == 1 && *btext == '\n', "_read expected '\\n' got bad length: %d\n", ret);
+  _lseek(tempfd, -2, FILE_END);
+  ret = _read(tempfd,btext,1);
+  ok(ret == 1 && *btext == '\n', "_read returned %d, buf: %d\n", ret, *btext);
+  ret = read(tempfd,btext,1);
+  ok(ret == 0, "_read returned %d, expected 0\n", ret);
   _lseek(tempfd, -3, FILE_END);
   ret = _read(tempfd,btext,1);
   ok(ret == 1 && *btext == 'e', "_read expected 'e' got \"%.*s\" bad length: %d\n", ret, btext, ret);
@@ -975,7 +1037,7 @@ static void test_file_write_read( void )
   free(tempf);
 
   tempf=_tempnam(".","wne");
-  tempfd = _open(tempf,_O_CREAT|_O_TRUNC|_O_BINARY|_O_RDWR,0);
+  tempfd = _open(tempf, _O_CREAT|_O_TRUNC|_O_BINARY|_O_RDWR, _S_IWRITE);
   ok( tempfd != -1,
      "Can't open '%s': %d\n", tempf, errno); /* open in BINARY mode */
   ok(_write(tempfd,dostext,strlen(dostext)) == lstrlenA(dostext),
@@ -1010,6 +1072,95 @@ static void test_file_write_read( void )
   i = _read(tempfd,btext, strlen(mytext));
   ok(i == strlen(mytext)-1, "_read_i %d\n", i);
   _close(tempfd);
+
+  /* test read/write in unicode mode */
+  if(p_fopen_s)
+  {
+      tempfd = _open(tempf, _O_CREAT|_O_TRUNC|_O_WRONLY|_O_WTEXT, _S_IWRITE);
+      ok(tempfd != -1, "_open failed with error: %d\n", errno);
+      ret = _write(tempfd, "a", 1);
+      ok(ret == -1, "_write returned %d, expected -1\n", ret);
+      ret = _write(tempfd, "a\x00\n\x00\xff\xff", 6);
+      ok(ret == 6, "_write returned %d, expected 6\n", ret);
+      _close(tempfd);
+
+      tempfd = _open(tempf, _O_RDONLY|_O_BINARY, 0);
+      ok(tempfd != -1, "_open failed with error: %d\n", errno);
+      ret = _read(tempfd, btext, sizeof(btext));
+      ok(ret == 10, "_read returned %d, expected 10\n", ret);
+      ok(!memcmp(btext, "\xff\xfe\x61\x00\r\x00\n\x00\xff\xff", 10), "btext is incorrect\n");
+      _close(tempfd);
+
+      tempfd = _open(tempf, _O_RDONLY|_O_WTEXT, 0);
+      ok(tempfd != -1, "_open failed with error: %d\n", errno);
+      errno = 0xdeadbeef;
+      ret = _read(tempfd, btext, 3);
+      ok(ret == -1, "_read returned %d, expected -1\n", ret);
+      ok(errno == 22, "errno = %d\n", errno);
+      ret = _read(tempfd, btext, sizeof(btext));
+      ok(ret == 6, "_read returned %d, expected 6\n", ret);
+      ok(!memcmp(btext, "\x61\x00\n\x00\xff\xff", 6), "btext is incorrect\n");
+      _close(tempfd);
+
+      tempfd = _open(tempf, _O_CREAT|_O_TRUNC|_O_WRONLY|_O_U8TEXT, _S_IWRITE);
+      ok(tempfd != -1, "_open failed with error: %d\n", errno);
+      errno = 0xdeadbeef;
+      ret = _write(tempfd, "a", 1);
+      ok(ret == -1, "_write returned %d, expected -1\n", ret);
+      ok(errno == 22, "errno = %d\n", errno);
+      ret = _write(tempfd, "a\x00\n\x00\x62\x00", 6);
+      ok(ret == 6, "_write returned %d, expected 6\n", ret);
+      _close(tempfd);
+
+      tempfd = _open(tempf, _O_RDONLY|_O_BINARY, 0);
+      ok(tempfd != -1, "_open failed with error: %d\n", errno);
+      ret = _read(tempfd, btext, sizeof(btext));
+      ok(ret == 7, "_read returned %d, expected 7\n", ret);
+      ok(!memcmp(btext, "\xef\xbb\xbf\x61\r\n\x62", 7), "btext is incorrect\n");
+      _close(tempfd);
+
+      tempfd = _open(tempf, _O_RDONLY|_O_WTEXT, 0);
+      ok(tempfd != -1, "_open failed with error: %d\n", errno);
+      ret = _read(tempfd, btext, sizeof(btext));
+      ok(ret == 6, "_read returned %d, expected 6\n", ret);
+      ok(!memcmp(btext, "\x61\x00\n\x00\x62\x00", 6), "btext is incorrect\n");
+
+      /* when buffer is small read sometimes fails in native implementation */
+      lseek(tempfd, 3 /* skip bom */, SEEK_SET);
+      ret = _read(tempfd, btext, 4);
+      todo_wine ok(ret == -1, "_read returned %d, expected -1\n", ret);
+
+      lseek(tempfd, 6, SEEK_SET);
+      ret = _read(tempfd, btext, 2);
+      ok(ret == 2, "_read returned %d, expected 2\n", ret);
+      ok(!memcmp(btext, "\x62\x00", 2), "btext is incorrect\n");
+      _close(tempfd);
+
+      tempfd = _open(tempf, _O_CREAT|_O_TRUNC|_O_WRONLY|_O_BINARY, _S_IWRITE);
+      ok(tempfd != -1, "_open failed with error: %d\n", errno);
+      ret = _write(tempfd, "\xef\xbb\xbf\x61\xc4\x85\x62\xc5\xbc\r\r\n", 12);
+      ok(ret == 12, "_write returned %d, expected 9\n", ret);
+      _close(tempfd);
+
+      tempfd = _open(tempf, _O_RDONLY|_O_WTEXT, 0);
+      ok(tempfd != -1, "_open failed with error: %d\n", errno);
+      ret = _read(tempfd, btext, sizeof(btext));
+      ok(ret == 12, "_read returned %d, expected 12\n", ret);
+      ok(!memcmp(btext, "\x61\x00\x05\x01\x62\x00\x7c\x01\x0d\x00\x0a\x00", 12), "btext is incorrect\n");
+
+      /* test invalid utf8 sequence */
+      lseek(tempfd, 5, SEEK_SET);
+      ret = _read(tempfd, btext, sizeof(btext));
+      todo_wine ok(ret == 10, "_read returned %d, expected 10\n", ret);
+      /* invalid char should be replaced by U+FFFD in MultiByteToWideChar */
+      todo_wine ok(!memcmp(btext, "\xfd\xff", 2), "invalid UTF8 character was not replaced by U+FFFD\n");
+      ok(!memcmp(btext+ret-8, "\x62\x00\x7c\x01\x0d\x00\x0a\x00", 8), "btext is incorrect\n");
+      _close(tempfd);
+  }
+  else
+  {
+      win_skip("unicode mode tests on file\n");
+  }
 
   ret =_chmod (tempf, _S_IREAD | _S_IWRITE);
   ok( ret == 0,
@@ -1320,6 +1471,7 @@ static void test_fopen_s( void )
 {
     const char name[] = "empty1";
     char buff[16];
+    unsigned char *ubuff = (unsigned char*)buff;
     FILE *file;
     int ret;
     int len;
@@ -1347,6 +1499,69 @@ static void test_fopen_s( void )
 
     ret = fclose(file);
     ok(ret != EOF, "File failed to close\n");
+
+    ret = p_fopen_s(&file, name, "w,  ccs=UNIcode");
+    ok(ret == 0, "fopen_s failed with %d\n", ret);
+    ret = fwrite("a", 1, 2, file);
+    ok(ret == 2, "fwrite returned %d\n", ret);
+    fclose(file);
+
+    ret = p_fopen_s(&file, name, "r");
+    ok(ret == 0, "fopen_s failed with %d\n", ret);
+    len = fread(buff, 1, 2, file);
+    ok(len == 2, "len = %d\n", len);
+    ok(ubuff[0]==0xff && ubuff[1]==0xfe, "buff[0]=%02x, buff[1]=%02x\n",
+            ubuff[0], ubuff[1]);
+    fclose(file);
+
+    ret = p_fopen_s(&file, name, "r,ccs=unicode");
+    ok(ret == 0, "fopen_s failed with %d\n", ret);
+    len = fread(buff, 1, 2, file);
+    ok(len == 2, "len = %d\n", len);
+    ok(ubuff[0]=='a' && ubuff[1]==0, "buff[0]=%02x, buff[1]=%02x\n",
+            ubuff[0], ubuff[1]);
+    fclose(file);
+
+    ret = p_fopen_s(&file, name, "r,ccs=utf-16le");
+    ok(ret == 0, "fopen_s failed with %d\n", ret);
+    len = fread(buff, 1, 2, file);
+    ok(len == 2, "len = %d\n", len);
+    ok(ubuff[0]=='a' && ubuff[1]==0, "buff[0]=%02x, buff[1]=%02x\n",
+            ubuff[0], ubuff[1]);
+    fclose(file);
+
+    ret = p_fopen_s(&file, name, "r,ccs=utf-8");
+    ok(ret == 0, "fopen_s failed with %d\n", ret);
+    len = fread(buff, 1, 2, file);
+    ok(len == 2, "len = %d\n", len);
+    ok(ubuff[0]=='a' && ubuff[1]==0, "buff[0]=%02x, buff[1]=%02x\n",
+            ubuff[0], ubuff[1]);
+    fclose(file);
+
+    ret = p_fopen_s(&file, name, "w,ccs=utf-16le");
+    ok(ret == 0, "fopen_s failed with %d\n", ret);
+    fclose(file);
+
+    ret = p_fopen_s(&file, name, "r");
+    ok(ret == 0, "fopen_s failed with %d\n", ret);
+    len = fread(buff, 1, 3, file);
+    ok(len == 2, "len = %d\n", len);
+    ok(ubuff[0]==0xff && ubuff[1]==0xfe, "buff[0]=%02x, buff[1]=%02x\n",
+            ubuff[0], ubuff[1]);
+    fclose(file);
+
+    ret = p_fopen_s(&file, name, "w,ccs=utf-8");
+    ok(ret == 0, "fopen_s failed with %d\n", ret);
+    fclose(file);
+
+    ret = p_fopen_s(&file, name, "r");
+    ok(ret == 0, "fopen_s failed with %d\n", ret);
+    len = fread(buff, 1, 4, file);
+    ok(len == 3, "len = %d\n", len);
+    ok(ubuff[0]==0xef && ubuff[1]==0xbb && ubuff[2]==0xbf,
+            "buff[0]=%02x, buff[1]=%02x, buff[2]=%02x\n",
+            ubuff[0], ubuff[1], ubuff[2]);
+    fclose(file);
 
     ok(_unlink(name) == 0, "Couldn't unlink file named '%s'\n", name);
 }
@@ -1390,6 +1605,61 @@ static void test__wfopen_s( void )
     ok(ret != EOF, "File failed to close\n");
 
     ok(_unlink(name) == 0, "Couldn't unlink file named '%s'\n", name);
+}
+
+static void test_setmode(void)
+{
+    const char name[] = "empty1";
+    int fd, ret;
+
+    if(!p_fopen_s) {
+        win_skip("unicode file modes are not available, skipping setmode tests\n");
+        return;
+    }
+
+    fd = _open(name, _O_CREAT|_O_WRONLY, _S_IWRITE);
+    ok(fd != -1, "failed to open file\n");
+
+    errno = 0xdeadbeef;
+    ret = _setmode(fd, 0xffffffff);
+    ok(ret == -1, "_setmode returned %x, expected -1\n", ret);
+    ok(errno == EINVAL, "errno = %d\n", errno);
+
+    errno = 0xdeadbeef;
+    ret = _setmode(fd, 0);
+    ok(ret == -1, "_setmode returned %x, expected -1\n", ret);
+    ok(errno == EINVAL, "errno = %d\n", errno);
+
+    errno = 0xdeadbeef;
+    ret = _setmode(fd, _O_BINARY|_O_TEXT);
+    ok(ret == -1, "_setmode returned %x, expected -1\n", ret);
+    ok(errno == EINVAL, "errno = %d\n", errno);
+
+    errno = 0xdeadbeef;
+    ret = _setmode(fd, _O_WTEXT|_O_U16TEXT);
+    ok(ret == -1, "_setmode returned %x, expected -1\n", ret);
+    ok(errno == EINVAL, "errno = %d\n", errno);
+
+    ret = _setmode(fd, _O_BINARY);
+    ok(ret == _O_TEXT, "_setmode returned %x, expected _O_TEXT\n", ret);
+
+    ret = _setmode(fd, _O_WTEXT);
+    ok(ret == _O_BINARY, "_setmode returned %x, expected _O_BINARY\n", ret);
+
+    ret = _setmode(fd, _O_TEXT);
+    ok(ret == _O_WTEXT, "_setmode returned %x, expected _O_WTEXT\n", ret);
+
+    ret = _setmode(fd, _O_U16TEXT);
+    ok(ret == _O_TEXT, "_setmode returned %x, expected _O_TEXT\n", ret);
+
+    ret = _setmode(fd, _O_U8TEXT);
+    ok(ret == _O_WTEXT, "_setmode returned %x, expected _O_WTEXT\n", ret);
+
+    ret = _setmode(fd, _O_TEXT);
+    ok(ret == _O_WTEXT, "_setmode returned %x, expected _O_WTEXT\n", ret);
+
+    _close(fd);
+    _unlink(name);
 }
 
 static void test_get_osfhandle(void)
@@ -1444,6 +1714,11 @@ static void test_stat(void)
         ok(buf.st_nlink == 1, "st_nlink is %d, expected 1\n", buf.st_nlink);
         ok(buf.st_size == 0, "st_size is %d, expected 0\n", buf.st_size);
 
+        errno = 0xdeadbeef;
+        ret = stat("stat.tst\\", &buf);
+        ok(ret == -1, "stat returned %d\n", ret);
+        ok(errno == ENOENT, "errno = %d\n", errno);
+
         close(fd);
         remove("stat.tst");
     }
@@ -1483,6 +1758,25 @@ static void test_stat(void)
     }
     else
         skip("pipe failed with errno %d\n", errno);
+
+    /* Tests for directory */
+    if(mkdir("stat.tst") == 0)
+    {
+        ret = stat("stat.tst                         ", &buf);
+        ok(!ret, "stat(directory) failed: errno=%d\n", errno);
+        ok((buf.st_mode & _S_IFMT) == _S_IFDIR, "bad format = %06o\n", buf.st_mode);
+        ok((buf.st_mode & 0777) == 0777, "bad st_mode = %06o\n", buf.st_mode);
+        ok(buf.st_dev == buf.st_rdev, "st_dev (%d) and st_rdev (%d) differ\n", buf.st_dev, buf.st_rdev);
+        ok(buf.st_nlink == 1, "st_nlink is %d, expected 1\n", buf.st_nlink);
+
+        errno = 0xdeadbeef;
+        ret = stat("stat.tst\\ ", &buf);
+        ok(ret == -1, "stat returned %d\n", ret);
+        ok(errno == ENOENT, "errno = %d\n", errno);
+        rmdir( "stat.tst" );
+    }
+    else
+        skip("mkdir failed with errno %d\n", errno);
 }
 
 static const char* pipe_string="Hello world";
@@ -1601,6 +1895,55 @@ static void test_pipes(const char* selfname)
 
     i=fclose(file);
     ok(!i, "unable to close the pipe: %d\n", errno);
+
+    /* test \r handling when it's the last character read */
+    if (_pipe(pipes, 1024, O_BINARY) < 0)
+    {
+        ok(0, "pipe failed with errno %d\n", errno);
+        return;
+    }
+    r = write(pipes[1], "\r\n\rab", 5);
+    ok(r == 5, "write returned %d, errno = %d\n", r, errno);
+    setmode(pipes[0], O_TEXT);
+    r = read(pipes[0], buf, 1);
+    ok(r == 1, "read returned %d, expected 1\n", r);
+    ok(buf[0] == '\n', "buf[0] = %x, expected '\\n'\n", buf[0]);
+    r = read(pipes[0], buf, 1);
+    ok(r == 1, "read returned %d, expected 1\n", r);
+    ok(buf[0] == '\r', "buf[0] = %x, expected '\\r'\n", buf[0]);
+    r = read(pipes[0], buf, 1);
+    ok(r == 1, "read returned %d, expected 1\n", r);
+    ok(buf[0] == 'a', "buf[0] = %x, expected 'a'\n", buf[0]);
+    r = read(pipes[0], buf, 1);
+    ok(r == 1, "read returned %d, expected 1\n", r);
+    ok(buf[0] == 'b', "buf[0] = %x, expected 'b'\n", buf[0]);
+
+    if (p_fopen_s)
+    {
+        /* test utf16 read with insufficient data */
+        r = write(pipes[1], "a\0b", 3);
+        ok(r == 3, "write returned %d, errno = %d\n", r, errno);
+        buf[2] = 'z';
+        buf[3] = 'z';
+        setmode(pipes[0], _O_WTEXT);
+        r = read(pipes[0], buf, 4);
+        ok(r == 2, "read returned %d, expected 2\n", r);
+        ok(!memcmp(buf, "a\0bz", 4), "read returned incorrect data\n");
+        r = write(pipes[1], "\0", 1);
+        ok(r == 1, "write returned %d, errno = %d\n", r, errno);
+        buf[0] = 'z';
+        buf[1] = 'z';
+        r = read(pipes[0], buf, 2);
+        ok(r == 0, "read returned %d, expected 0\n", r);
+        ok(!memcmp(buf, "\0z", 2), "read returned incorrect data\n");
+    }
+    else
+    {
+        win_skip("unicode mode tests on pipe\n");
+    }
+
+    close(pipes[1]);
+    close(pipes[0]);
 }
 
 static void test_unlink(void)
@@ -1656,6 +1999,7 @@ START_TEST(file)
     test_fopen_fclose_fcloseall();
     test_fopen_s();
     test__wfopen_s();
+    test_setmode();
     test_fileops();
     test_asciimode();
     test_asciimode2();
@@ -1668,6 +2012,7 @@ START_TEST(file)
     test_flsbuf();
     test_fflush();
     test_fgetwc();
+    test_fputwc();
     test_ctrlz();
     test_file_put_get();
     test_tmpnam();

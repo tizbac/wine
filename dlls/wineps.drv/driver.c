@@ -45,7 +45,7 @@ static inline int paper_size_from_points( float size )
     return size * 254 / 72;
 }
 
-INPUTSLOT *find_slot( PPD *ppd, PSDRV_DEVMODE *dm )
+INPUTSLOT *find_slot( PPD *ppd, const PSDRV_DEVMODE *dm )
 {
     INPUTSLOT *slot;
 
@@ -56,7 +56,7 @@ INPUTSLOT *find_slot( PPD *ppd, PSDRV_DEVMODE *dm )
     return NULL;
 }
 
-PAGESIZE *find_pagesize( PPD *ppd, PSDRV_DEVMODE *dm )
+PAGESIZE *find_pagesize( PPD *ppd, const PSDRV_DEVMODE *dm )
 {
     PAGESIZE *page;
 
@@ -67,7 +67,7 @@ PAGESIZE *find_pagesize( PPD *ppd, PSDRV_DEVMODE *dm )
     return NULL;
 }
 
-DUPLEX *find_duplex( PPD *ppd, PSDRV_DEVMODE *dm )
+DUPLEX *find_duplex( PPD *ppd, const PSDRV_DEVMODE *dm )
 {
     DUPLEX *duplex;
     WORD win_duplex = dm->dmPublic.dmFields & DM_DUPLEX ? dm->dmPublic.dmDuplex : 0;
@@ -88,7 +88,7 @@ DUPLEX *find_duplex( PPD *ppd, PSDRV_DEVMODE *dm )
  * Updates dm1 with some fields from dm2
  *
  */
-void PSDRV_MergeDevmodes( PSDRV_DEVMODE *dm1, PSDRV_DEVMODE *dm2, PRINTERINFO *pi )
+void PSDRV_MergeDevmodes( PSDRV_DEVMODE *dm1, const PSDRV_DEVMODE *dm2, PRINTERINFO *pi )
 {
     /* some sanity checks here on dm2 */
 
@@ -117,6 +117,12 @@ void PSDRV_MergeDevmodes( PSDRV_DEVMODE *dm1, PSDRV_DEVMODE *dm2, PRINTERINFO *p
 	    TRACE("Changing page to %s %d x %d\n", page->FullName,
 		  dm1->dmPublic.u1.s1.dmPaperWidth,
 		  dm1->dmPublic.u1.s1.dmPaperLength );
+
+            if (dm1->dmPublic.dmSize >= FIELD_OFFSET(DEVMODEW, dmFormName) + CCHFORMNAME * sizeof(WCHAR))
+            {
+                MultiByteToWideChar(CP_ACP, 0, page->FullName, -1, dm1->dmPublic.dmFormName, CCHFORMNAME);
+                dm1->dmPublic.dmFields |= DM_FORMNAME;
+            }
 	}
         else
             TRACE("Trying to change to unsupported pagesize %d\n", dm2->dmPublic.u1.s1.dmPaperSize);
@@ -178,7 +184,7 @@ void PSDRV_MergeDevmodes( PSDRV_DEVMODE *dm1, PSDRV_DEVMODE *dm2, PRINTERINFO *p
    if (dm2->dmPublic.dmFields & DM_COLLATE )
        dm1->dmPublic.dmCollate = dm2->dmPublic.dmCollate;
    if (dm2->dmPublic.dmFields & DM_FORMNAME )
-       lstrcpynA((LPSTR)dm1->dmPublic.dmFormName, (LPCSTR)dm2->dmPublic.dmFormName, CCHFORMNAME);
+       lstrcpynW(dm1->dmPublic.dmFormName, dm2->dmPublic.dmFormName, CCHFORMNAME);
    if (dm2->dmPublic.dmFields & DM_BITSPERPEL )
        dm1->dmPublic.dmBitsPerPel = dm2->dmPublic.dmBitsPerPel;
    if (dm2->dmPublic.dmFields & DM_PELSWIDTH )
@@ -224,10 +230,13 @@ typedef struct
 static INT_PTR CALLBACK PSDRV_PaperDlgProc(HWND hwnd, UINT msg,
                                            WPARAM wParam, LPARAM lParam)
 {
+  static const WCHAR resW[] = {'%','d',0};
+  static const WCHAR resxyW[] = {'%','d','x','%','d',0};
   PSDRV_DLGINFO *di;
   int i, Cursel;
   PAGESIZE *ps;
   DUPLEX *duplex;
+  RESOLUTION *res;
 
   switch(msg) {
   case WM_INITDIALOG:
@@ -243,7 +252,7 @@ static INT_PTR CALLBACK PSDRV_PaperDlgProc(HWND hwnd, UINT msg,
       i++;
     }
     SendDlgItemMessageA(hwnd, IDD_PAPERS, LB_SETCURSEL, Cursel, 0);
-    
+
     CheckRadioButton(hwnd, IDD_ORIENT_PORTRAIT, IDD_ORIENT_LANDSCAPE,
 		     di->pi->Devmode->dmPublic.u1.s1.dmOrientation ==
 		     DMORIENT_PORTRAIT ? IDD_ORIENT_PORTRAIT :
@@ -252,7 +261,7 @@ static INT_PTR CALLBACK PSDRV_PaperDlgProc(HWND hwnd, UINT msg,
     if (list_empty( &di->pi->ppd->Duplexes ))
     {
         ShowWindow(GetDlgItem(hwnd, IDD_DUPLEX), SW_HIDE);
-        ShowWindow(GetDlgItem(hwnd, IDD_DUPLEX_NAME), SW_HIDE);        
+        ShowWindow(GetDlgItem(hwnd, IDD_DUPLEX_NAME), SW_HIDE);
     }
     else
     {
@@ -267,6 +276,57 @@ static INT_PTR CALLBACK PSDRV_PaperDlgProc(HWND hwnd, UINT msg,
         }
         SendDlgItemMessageA(hwnd, IDD_DUPLEX, CB_SETCURSEL, Cursel, 0);
     }
+
+    if (list_empty( &di->pi->ppd->Resolutions ))
+    {
+        int len, res;
+        WCHAR buf[256];
+
+        res = di->pi->ppd->DefaultResolution;
+        len = sprintfW(buf, resW, res);
+        buf[len++] = ' ';
+        LoadStringW(PSDRV_hInstance, IDS_DPI, buf + len, sizeof(buf)/sizeof(buf[0]) - len);
+        SendDlgItemMessageW(hwnd, IDD_QUALITY, CB_ADDSTRING, 0, (LPARAM)buf);
+        SendDlgItemMessageW(hwnd, IDD_QUALITY, CB_SETITEMDATA, 0, MAKELONG(res, res));
+        Cursel = 0;
+    }
+    else
+    {
+        int resx, resy;
+
+        Cursel = 0;
+        resx = resy = di->pi->ppd->DefaultResolution;
+
+        if (di->pi->Devmode->dmPublic.dmFields & DM_PRINTQUALITY)
+            resx = resy = di->pi->Devmode->dmPublic.u1.s1.dmPrintQuality;
+
+        if (di->pi->Devmode->dmPublic.dmFields & DM_YRESOLUTION)
+            resy = di->pi->Devmode->dmPublic.dmYResolution;
+
+        if (di->pi->Devmode->dmPublic.dmFields & DM_LOGPIXELS)
+            resx = resy = di->pi->Devmode->dmPublic.dmLogPixels;
+
+        LIST_FOR_EACH_ENTRY(res, &di->pi->ppd->Resolutions, RESOLUTION, entry)
+        {
+            int len;
+            WCHAR buf[256];
+            DWORD idx;
+
+            if (res->resx == res->resy)
+                len = sprintfW(buf, resW, res->resx);
+            else
+                len = sprintfW(buf, resxyW, res->resx, res->resy);
+            buf[len++] = ' ';
+            LoadStringW(PSDRV_hInstance, IDS_DPI, buf + len, sizeof(buf)/sizeof(buf[0]) - len);
+            idx = SendDlgItemMessageW(hwnd, IDD_QUALITY, CB_ADDSTRING, 0, (LPARAM)buf);
+            SendDlgItemMessageW(hwnd, IDD_QUALITY, CB_SETITEMDATA, idx, MAKELONG(res->resx, res->resy));
+
+            if (res->resx == resx && res->resy == resy)
+                Cursel = idx;
+        }
+    }
+    SendDlgItemMessageW(hwnd, IDD_QUALITY, CB_SETCURSEL, Cursel, 0);
+
     break;
 
   case WM_COMMAND:
@@ -280,8 +340,20 @@ static INT_PTR CALLBACK PSDRV_PaperDlgProc(HWND hwnd, UINT msg,
             if(i >= Cursel) break;
             i++;
         }
-        TRACE("Setting pagesize to item %d Winpage = %d\n", Cursel, ps->WinPage);
+        TRACE("Setting pagesize to item %d, WinPage %d (%s), PaperSize %.2fx%.2f\n", Cursel,
+              ps->WinPage, ps->FullName, ps->PaperDimension->x, ps->PaperDimension->y);
         di->dlgdm->dmPublic.u1.s1.dmPaperSize = ps->WinPage;
+        di->dlgdm->dmPublic.dmFields |= DM_PAPERSIZE;
+
+        di->dlgdm->dmPublic.u1.s1.dmPaperWidth  = paper_size_from_points(ps->PaperDimension->x);
+        di->dlgdm->dmPublic.u1.s1.dmPaperLength = paper_size_from_points(ps->PaperDimension->y);
+        di->dlgdm->dmPublic.dmFields |= DM_PAPERLENGTH | DM_PAPERWIDTH;
+
+        if (di->dlgdm->dmPublic.dmSize >= FIELD_OFFSET(DEVMODEW, dmFormName) + CCHFORMNAME * sizeof(WCHAR))
+        {
+            MultiByteToWideChar(CP_ACP, 0, ps->FullName, -1, di->dlgdm->dmPublic.dmFormName, CCHFORMNAME);
+            di->dlgdm->dmPublic.dmFields |= DM_FORMNAME;
+        }
         SendMessageW(GetParent(hwnd), PSM_CHANGED, 0, 0);
       }
       break;
@@ -291,6 +363,7 @@ static INT_PTR CALLBACK PSDRV_PaperDlgProc(HWND hwnd, UINT msg,
             "portrait" : "landscape");
       di->dlgdm->dmPublic.u1.s1.dmOrientation = wParam == IDD_ORIENT_PORTRAIT ?
         DMORIENT_PORTRAIT : DMORIENT_LANDSCAPE;
+      di->dlgdm->dmPublic.dmFields |= DM_ORIENTATION;
       SendMessageW(GetParent(hwnd), PSM_CHANGED, 0, 0);
       break;
     case IDD_DUPLEX:
@@ -304,6 +377,36 @@ static INT_PTR CALLBACK PSDRV_PaperDlgProc(HWND hwnd, UINT msg,
         }
         TRACE("Setting duplex to item %d Winduplex = %d\n", Cursel, duplex->WinDuplex);
         di->dlgdm->dmPublic.dmDuplex = duplex->WinDuplex;
+        di->dlgdm->dmPublic.dmFields |= DM_DUPLEX;
+        SendMessageW(GetParent(hwnd), PSM_CHANGED, 0, 0);
+      }
+      break;
+
+    case IDD_QUALITY:
+      if (HIWORD(wParam) == CBN_SELCHANGE)
+      {
+        LPARAM data;
+        int resx, resy;
+
+        Cursel = SendDlgItemMessageW(hwnd, LOWORD(wParam), CB_GETCURSEL, 0, 0);
+        data = SendDlgItemMessageW(hwnd, IDD_QUALITY, CB_GETITEMDATA, Cursel, 0);
+
+        resx = LOWORD(data);
+        resy = HIWORD(data);
+        TRACE("Setting resolution to %dx%d\n", resx, resy);
+
+        di->dlgdm->dmPublic.u1.s1.dmPrintQuality = resx;
+        di->dlgdm->dmPublic.dmFields |= DM_PRINTQUALITY;
+
+        di->dlgdm->dmPublic.dmYResolution = resy;
+        di->dlgdm->dmPublic.dmFields |= DM_YRESOLUTION;
+
+        if (di->pi->Devmode->dmPublic.dmFields & DM_LOGPIXELS)
+        {
+            di->dlgdm->dmPublic.dmLogPixels = resx;
+            di->dlgdm->dmPublic.dmFields |= DM_LOGPIXELS;
+        }
+
         SendMessageW(GetParent(hwnd), PSM_CHANGED, 0, 0);
       }
       break;
@@ -638,14 +741,22 @@ DWORD PSDRV_DeviceCapabilities(LPSTR lpszDriver, LPCSTR lpszDevice, LPCSTR lpszP
 
   case DC_ENUMRESOLUTIONS:
     {
-      LONG *lp = (LONG*)lpszOutput;
+        RESOLUTION *res;
+        LONG *lp = (LONG *)lpszOutput;
+        int i = 0;
 
-      if(lpszOutput != NULL) {
-	lp[0] = pi->ppd->DefaultResolution;
-	lp[1] = pi->ppd->DefaultResolution;
-      }
-      ret = 1;
-      break;
+        LIST_FOR_EACH_ENTRY(res, &pi->ppd->Resolutions, RESOLUTION, entry)
+        {
+            i++;
+            if (lpszOutput != NULL)
+            {
+                lp[0] = res->resx;
+                lp[1] = res->resy;
+                lp += 2;
+            }
+        }
+        ret = i;
+        break;
     }
 
   /* Windows returns 9999 too */

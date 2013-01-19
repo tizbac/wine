@@ -16,7 +16,7 @@
 21 stdcall AtlModuleTerm(ptr)
 22 stdcall AtlModuleUnregisterServer(ptr ptr)
 23 stdcall AtlModuleUpdateRegistryFromResourceD(ptr wstr long ptr ptr)
-24 stub AtlWaitWithMessageLoop
+24 stdcall AtlWaitWithMessageLoop(long) atl100.AtlWaitWithMessageLoop
 25 stub AtlSetErrorInfo
 26 stdcall AtlCreateTargetDC(long ptr) atl100.AtlCreateTargetDC
 27 stdcall AtlHiMetricToPixel(ptr ptr) atl100.AtlHiMetricToPixel
@@ -26,8 +26,8 @@
 31 stdcall AtlComQIPtrAssign(ptr ptr ptr) atl100.AtlComQIPtrAssign
 32 stdcall AtlInternalQueryInterface(ptr ptr ptr ptr) atl100.AtlInternalQueryInterface
 34 stdcall AtlGetVersion(ptr)
-35 stub AtlAxDialogBoxW
-36 stub AtlAxDialogBoxA
+35 stdcall AtlAxDialogBoxW(long wstr long ptr long) atl100.AtlAxDialogBoxW
+36 stdcall AtlAxDialogBoxA(long str long ptr long) atl100.AtlAxDialogBoxA
 37 stdcall AtlAxCreateDialogW(long wstr long ptr long) atl100.AtlAxCreateDialogW
 38 stdcall AtlAxCreateDialogA(long str long ptr long) atl100.AtlAxCreateDialogA
 39 stdcall AtlAxCreateControl(ptr ptr ptr ptr) atl100.AtlAxCreateControl
@@ -45,7 +45,7 @@
 51 stdcall AtlIPersistStreamInit_Save(ptr long ptr ptr ptr) atl100.AtlIPersistStreamInit_Save
 52 stub AtlIPersistPropertyBag_Load
 53 stub AtlIPersistPropertyBag_Save
-54 stub AtlGetObjectSourceInterface
+54 stdcall AtlGetObjectSourceInterface(ptr ptr ptr ptr ptr) atl100.AtlGetObjectSourceInterface
 55 stub AtlModuleUnRegisterTypeLib
 56 stdcall AtlModuleLoadTypeLib(ptr wstr ptr ptr)
 57 stdcall AtlModuleUnregisterServerEx(ptr long ptr)

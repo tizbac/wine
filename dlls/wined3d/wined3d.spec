@@ -2,7 +2,7 @@
 @ stdcall wined3d_mutex_unlock()
 
 @ cdecl wined3d_check_depth_stencil_match(ptr long long long long long)
-@ cdecl wined3d_check_device_format(ptr long long long long long long long)
+@ cdecl wined3d_check_device_format(ptr long long long long long long)
 @ cdecl wined3d_check_device_format_conversion(ptr long long long long)
 @ cdecl wined3d_check_device_multisample_type(ptr long long long long long ptr)
 @ cdecl wined3d_check_device_type(ptr long long long long long)
@@ -45,10 +45,8 @@
 @ cdecl wined3d_device_draw_indexed_primitive(ptr long long)
 @ cdecl wined3d_device_draw_indexed_primitive_instanced(ptr long long long long)
 @ cdecl wined3d_device_draw_indexed_primitive_strided(ptr long ptr long ptr long)
-@ cdecl wined3d_device_draw_indexed_primitive_up(ptr long ptr long ptr long)
 @ cdecl wined3d_device_draw_primitive(ptr long long)
 @ cdecl wined3d_device_draw_primitive_strided(ptr long ptr)
-@ cdecl wined3d_device_draw_primitive_up(ptr long ptr long)
 @ cdecl wined3d_device_draw_rect_patch(ptr long ptr ptr)
 @ cdecl wined3d_device_draw_tri_patch(ptr long ptr ptr)
 @ cdecl wined3d_device_end_scene(ptr)
@@ -212,7 +210,7 @@
 @ cdecl wined3d_stateblock_incref(ptr)
 
 @ cdecl wined3d_surface_blt(ptr ptr ptr ptr long ptr long)
-@ cdecl wined3d_surface_create(ptr long long long long long long long long long ptr ptr ptr)
+@ cdecl wined3d_surface_create(ptr long long long long long long long long ptr ptr ptr)
 @ cdecl wined3d_surface_decref(ptr)
 @ cdecl wined3d_surface_flip(ptr ptr long)
 @ cdecl wined3d_surface_from_resource(ptr)
@@ -242,7 +240,7 @@
 @ cdecl wined3d_surface_update_overlay(ptr ptr ptr ptr long ptr)
 @ cdecl wined3d_surface_update_overlay_z_order(ptr long ptr)
 
-@ cdecl wined3d_swapchain_create(ptr ptr long ptr ptr ptr)
+@ cdecl wined3d_swapchain_create(ptr ptr ptr ptr ptr)
 @ cdecl wined3d_swapchain_decref(ptr)
 @ cdecl wined3d_swapchain_get_back_buffer(ptr long long)
 @ cdecl wined3d_swapchain_get_device(ptr)

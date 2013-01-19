@@ -1,5 +1,5 @@
 /*
- * Copyright 2006 Stefan Dösinger for CodeWeavers
+ * Copyright 2006, 2012-2013 Stefan Dösinger for CodeWeavers
  * Copyright 2011 Henri Verbeet for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
@@ -2665,6 +2665,180 @@ static void test_coop_level_surf_create(void)
     IDirectDraw7_Release(ddraw);
 }
 
+static void test_vb_discard(void)
+{
+    static const struct vec4 quad[] =
+    {
+        {  0.0f, 480.0f, 0.0f, 1.0f},
+        {  0.0f,   0.0f, 0.0f, 1.0f},
+        {640.0f, 480.0f, 0.0f, 1.0f},
+        {640.0f,   0.0f, 0.0f, 1.0f},
+    };
+
+    IDirect3DDevice7 *device;
+    IDirect3D7 *d3d;
+    IDirect3DVertexBuffer7 *buffer;
+    HWND window;
+    HRESULT hr;
+    D3DVERTEXBUFFERDESC desc;
+    BYTE *data;
+    static const unsigned int vbsize = 16;
+    unsigned int i;
+
+    window = CreateWindowA("static", "ddraw_test", WS_OVERLAPPEDWINDOW,
+            0, 0, 640, 480, 0, 0, 0, 0);
+
+    if (!(device = create_device(window, DDSCL_NORMAL)))
+    {
+        skip("Failed to create D3D device, skipping test.\n");
+        DestroyWindow(window);
+        return;
+    }
+
+    hr = IDirect3DDevice7_GetDirect3D(device, &d3d);
+    ok(SUCCEEDED(hr), "Failed to get d3d interface, hr %#x.\n", hr);
+
+    memset(&desc, 0, sizeof(desc));
+    desc.dwSize = sizeof(desc);
+    desc.dwCaps = D3DVBCAPS_WRITEONLY;
+    desc.dwFVF = D3DFVF_XYZRHW;
+    desc.dwNumVertices = vbsize;
+    hr = IDirect3D7_CreateVertexBuffer(d3d, &desc, &buffer, 0);
+    ok(SUCCEEDED(hr), "Failed to create vertex buffer, hr %#x.\n", hr);
+
+    hr = IDirect3DVertexBuffer7_Lock(buffer, DDLOCK_DISCARDCONTENTS, (void **)&data, NULL);
+    ok(SUCCEEDED(hr), "Failed to lock vertex buffer, hr %#x.\n", hr);
+    memcpy(data, quad, sizeof(quad));
+    hr = IDirect3DVertexBuffer7_Unlock(buffer);
+    ok(SUCCEEDED(hr), "Failed to unlock vertex buffer, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice7_BeginScene(device);
+    ok(SUCCEEDED(hr), "Failed to begin scene, hr %#x.\n", hr);
+    hr = IDirect3DDevice7_DrawPrimitiveVB(device, D3DPT_TRIANGLESTRIP, buffer, 0, 4, 0);
+    ok(SUCCEEDED(hr), "Failed to draw, hr %#x.\n", hr);
+    hr = IDirect3DDevice7_EndScene(device);
+    ok(SUCCEEDED(hr), "Failed to end scene, hr %#x.\n", hr);
+
+    hr = IDirect3DVertexBuffer7_Lock(buffer, DDLOCK_DISCARDCONTENTS, (void **)&data, NULL);
+    ok(SUCCEEDED(hr), "Failed to lock vertex buffer, hr %#x.\n", hr);
+    memset(data, 0xaa, sizeof(struct vec4) * vbsize);
+    hr = IDirect3DVertexBuffer7_Unlock(buffer);
+    ok(SUCCEEDED(hr), "Failed to unlock vertex buffer, hr %#x.\n", hr);
+
+    hr = IDirect3DVertexBuffer7_Lock(buffer, DDLOCK_DISCARDCONTENTS, (void **)&data, NULL);
+    ok(SUCCEEDED(hr), "Failed to lock vertex buffer, hr %#x.\n", hr);
+    for (i = 0; i < sizeof(struct vec4) * vbsize; i++)
+    {
+        if (data[i] != 0xaa)
+        {
+            ok(FALSE, "Vertex buffer data byte %u is 0x%02x, expected 0xaa\n", i, data[i]);
+            break;
+        }
+    }
+    hr = IDirect3DVertexBuffer7_Unlock(buffer);
+    ok(SUCCEEDED(hr), "Failed to unlock vertex buffer, hr %#x.\n", hr);
+
+    IDirect3DVertexBuffer7_Release(buffer);
+    IDirect3D7_Release(d3d);
+    IDirect3DDevice7_Release(device);
+    DestroyWindow(window);
+}
+
+static void test_coop_level_multi_window(void)
+{
+    HWND window1, window2;
+    IDirectDraw7 *ddraw;
+    HRESULT hr;
+
+    window1 = CreateWindowA("static", "ddraw_test1", WS_OVERLAPPEDWINDOW,
+            0, 0, 640, 480, 0, 0, 0, 0);
+    window2 = CreateWindowA("static", "ddraw_test2", WS_OVERLAPPEDWINDOW,
+            0, 0, 640, 480, 0, 0, 0, 0);
+    if (!(ddraw = create_ddraw()))
+    {
+        skip("Failed to create a ddraw object, skipping test.\n");
+        DestroyWindow(window2);
+        DestroyWindow(window1);
+        return;
+    }
+
+    hr = IDirectDraw7_SetCooperativeLevel(ddraw, window1, DDSCL_NORMAL);
+    ok(SUCCEEDED(hr), "Failed to set cooperative level, hr %#x.\n", hr);
+    hr = IDirectDraw7_SetCooperativeLevel(ddraw, window2, DDSCL_NORMAL);
+    ok(SUCCEEDED(hr), "Failed to set cooperative level, hr %#x.\n", hr);
+    ok(IsWindow(window1), "Window 1 was destroyed.\n");
+    ok(IsWindow(window2), "Window 2 was destroyed.\n");
+
+    IDirectDraw7_Release(ddraw);
+    DestroyWindow(window2);
+    DestroyWindow(window1);
+}
+
+static void test_draw_strided(void)
+{
+    static struct vec3 position[] =
+    {
+        {-1.0,   -1.0,   0.0},
+        {-1.0,    1.0,   0.0},
+        { 1.0,    1.0,   0.0},
+        { 1.0,   -1.0,   0.0},
+    };
+    static DWORD diffuse[] =
+    {
+        0x0000ff00, 0x0000ff00, 0x0000ff00, 0x0000ff00,
+    };
+    static WORD indices[] =
+    {
+        0, 1, 2, 2, 3, 0
+    };
+
+    IDirectDrawSurface7 *rt;
+    IDirect3DDevice7 *device;
+    D3DCOLOR color;
+    HWND window;
+    HRESULT hr;
+    D3DDRAWPRIMITIVESTRIDEDDATA strided;
+
+    window = CreateWindowA("static", "ddraw_test", WS_OVERLAPPEDWINDOW,
+            0, 0, 640, 480, 0, 0, 0, 0);
+
+    if (!(device = create_device(window, DDSCL_NORMAL)))
+    {
+        skip("Failed to create D3D device, skipping test.\n");
+        DestroyWindow(window);
+        return;
+    }
+
+    hr = IDirect3DDevice7_GetRenderTarget(device, &rt);
+    ok(SUCCEEDED(hr), "Failed to get render target, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice7_SetRenderState(device, D3DRENDERSTATE_LIGHTING, FALSE);
+    ok(SUCCEEDED(hr), "Failed to disable lighting, hr %#x.\n", hr);
+    hr = IDirect3DDevice7_Clear(device, 0, NULL, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0);
+    ok(SUCCEEDED(hr), "Failed to clear render target, hr %#x.\n", hr);
+    hr = IDirect3DDevice7_BeginScene(device);
+    ok(SUCCEEDED(hr), "Failed to begin scene, hr %#x.\n", hr);
+
+    memset(&strided, 0x55, sizeof(strided));
+    strided.position.lpvData = position;
+    strided.position.dwStride = sizeof(*position);
+    strided.diffuse.lpvData = diffuse;
+    strided.diffuse.dwStride = sizeof(*diffuse);
+    hr = IDirect3DDevice7_DrawIndexedPrimitiveStrided(device, D3DPT_TRIANGLELIST, D3DFVF_XYZ | D3DFVF_DIFFUSE,
+            &strided, 4, indices, 6, 0);
+    ok(SUCCEEDED(hr), "Failed to draw, hr %#x.\n", hr);
+
+    hr = IDirect3DDevice7_EndScene(device);
+    ok(SUCCEEDED(hr), "Failed to end scene, hr %#x.\n", hr);
+
+    color = get_surface_color(rt, 320, 240);
+    ok(compare_color(color, 0x0000ff00, 1), "Got unexpected color 0x%08x.\n", color);
+
+    IDirectDrawSurface7_Release(rt);
+    IDirect3DDevice7_Release(device);
+    DestroyWindow(window);
+}
+
 START_TEST(ddraw7)
 {
     HMODULE module = GetModuleHandleA("ddraw.dll");
@@ -2695,4 +2869,7 @@ START_TEST(ddraw7)
     test_coop_level_mode_set_multi();
     test_initialize();
     test_coop_level_surf_create();
+    test_vb_discard();
+    test_coop_level_multi_window();
+    test_draw_strided();
 }

@@ -3237,8 +3237,9 @@ HRESULT WINAPI ScriptTextOut(const HDC hdc, SCRIPT_CACHE *psc, int x, int y, UIN
                              const int *piJustify, const GOFFSET *pGoffset)
 {
     HRESULT hr = S_OK;
-    INT i;
+    INT i, dir = 1;
     INT *lpDx;
+    WORD *reordered_glyphs = (WORD *)pwGlyphs;
 
     TRACE("(%p, %p, %d, %d, %04x, %p, %p, %p, %d, %p, %d, %p, %p, %p)\n",
          hdc, psc, x, y, fuOptions, lprc, psa, pwcReserved, iReserved, pwGlyphs, cGlyphs,
@@ -3253,67 +3254,50 @@ HRESULT WINAPI ScriptTextOut(const HDC hdc, SCRIPT_CACHE *psc, int x, int y, UIN
         fuOptions |= ETO_GLYPH_INDEX;                             /* Say don't do translation to glyph */
 
     lpDx = heap_alloc(cGlyphs * sizeof(INT) * 2);
-
-    if (pGoffset)
-    {
-        for (i = 0; i < cGlyphs; i++)
-            if (!(fuOptions&ETO_PDY) && pGoffset[i].dv)
-                fuOptions |= ETO_PDY;
-    }
-    for (i = 0; i < cGlyphs; i++)
-    {
-        int idx = i;
-        if (fuOptions&ETO_PDY)
-        {
-            idx *=2;
-            lpDx[idx+1] = 0;
-        }
-        lpDx[idx] = piAdvance[i];
-    }
-    if (pGoffset)
-    {
-        for (i = 1; i < cGlyphs; i++)
-        {
-            int idx = i;
-            int prev_idx = i-1;
-            if (fuOptions&ETO_PDY)
-            {
-                idx*=2;
-                prev_idx = idx-2;
-            }
-            lpDx[prev_idx] += pGoffset[i].du;
-            lpDx[idx] -= pGoffset[i].du;
-            if (fuOptions&ETO_PDY)
-            {
-                lpDx[prev_idx+1] += pGoffset[i].dv;
-                lpDx[idx+1] -= pGoffset[i].dv;
-            }
-        }
-    }
+    if (!lpDx) return E_OUTOFMEMORY;
+    fuOptions |= ETO_PDY;
 
     if (psa->fRTL && psa->fLogicalOrder)
     {
-        int i;
-        WORD *rtlGlyphs;
-
-        rtlGlyphs = heap_alloc(cGlyphs * sizeof(WORD));
-        if (!rtlGlyphs)
+        reordered_glyphs = heap_alloc( cGlyphs * sizeof(WORD) );
+        if (!reordered_glyphs)
         {
-            heap_free(lpDx);
+            heap_free( lpDx );
             return E_OUTOFMEMORY;
         }
 
         for (i = 0; i < cGlyphs; i++)
-            rtlGlyphs[i] = pwGlyphs[cGlyphs-1-i];
-
-        if (!ExtTextOutW(hdc, x, y, fuOptions, lprc, rtlGlyphs, cGlyphs, lpDx))
-            hr = S_FALSE;
-        heap_free(rtlGlyphs);
+            reordered_glyphs[i] = pwGlyphs[cGlyphs - 1 - i];
+        dir = -1;
     }
-    else
-        if (!ExtTextOutW(hdc, x, y, fuOptions, lprc, pwGlyphs, cGlyphs, lpDx))
-            hr = S_FALSE;
 
+    for (i = 0; i < cGlyphs; i++)
+    {
+        int orig_index = (dir > 0) ? i : cGlyphs - 1 - i;
+        lpDx[i * 2] = piAdvance[orig_index];
+        lpDx[i * 2 + 1] = 0;
+
+        if (pGoffset)
+        {
+            if (i == 0)
+            {
+                x += pGoffset[orig_index].du * dir;
+                y += pGoffset[orig_index].dv;
+            }
+            else
+            {
+                lpDx[(i - 1) * 2]     += pGoffset[orig_index].du * dir;
+                lpDx[(i - 1) * 2 + 1] += pGoffset[orig_index].dv;
+            }
+            lpDx[i * 2]     -= pGoffset[orig_index].du * dir;
+            lpDx[i * 2 + 1] -= pGoffset[orig_index].dv;
+        }
+    }
+
+    if (!ExtTextOutW(hdc, x, y, fuOptions, lprc, reordered_glyphs, cGlyphs, lpDx))
+        hr = S_FALSE;
+
+    if (reordered_glyphs != pwGlyphs) heap_free( reordered_glyphs );
     heap_free(lpDx);
 
     return hr;

@@ -791,7 +791,9 @@ HRESULT WINAPI D3DXCreateTextureFromResourceExA(struct IDirect3DDevice9 *device,
     if (!device || !texture)
         return D3DERR_INVALIDCALL;
 
-    resinfo = FindResourceA(srcmodule, resource, (LPCSTR) RT_RCDATA);
+    resinfo = FindResourceA(srcmodule, resource, (const char *)RT_RCDATA);
+    if (!resinfo) /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
+        resinfo = FindResourceA(srcmodule, resource, (const char *)RT_BITMAP);
 
     if (resinfo)
     {
@@ -808,15 +810,6 @@ HRESULT WINAPI D3DXCreateTextureFromResourceExA(struct IDirect3DDevice9 *device,
                                                    height, miplevels, usage, format,
                                                    pool, filter, mipfilter, colorkey,
                                                    srcinfo, palette, texture);
-    }
-
-    /* Try loading the resource as bitmap data */
-    resinfo = FindResourceA(srcmodule, resource, (LPCSTR) RT_BITMAP);
-
-    if (resinfo)
-    {
-        FIXME("Implement loading bitmaps from resource type RT_BITMAP\n");
-        return E_NOTIMPL;
     }
 
     return D3DXERR_INVALIDDATA;
@@ -834,7 +827,9 @@ HRESULT WINAPI D3DXCreateTextureFromResourceExW(struct IDirect3DDevice9 *device,
     if (!device || !texture)
         return D3DERR_INVALIDCALL;
 
-    resinfo = FindResourceW(srcmodule, resource, (LPCWSTR) RT_RCDATA);
+    resinfo = FindResourceW(srcmodule, resource, (const WCHAR *)RT_RCDATA);
+    if (!resinfo) /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
+        resinfo = FindResourceW(srcmodule, resource, (const WCHAR *)RT_BITMAP);
 
     if (resinfo)
     {
@@ -851,15 +846,6 @@ HRESULT WINAPI D3DXCreateTextureFromResourceExW(struct IDirect3DDevice9 *device,
                                                    height, miplevels, usage, format,
                                                    pool, filter, mipfilter, colorkey,
                                                    srcinfo, palette, texture);
-    }
-
-    /* Try loading the resource as bitmap data */
-    resinfo = FindResourceW(srcmodule, resource, (LPCWSTR) RT_BITMAP);
-
-    if (resinfo)
-    {
-        FIXME("Implement loading bitmaps from resource type RT_BITMAP\n");
-        return E_NOTIMPL;
     }
 
     return D3DXERR_INVALIDDATA;
@@ -1220,18 +1206,72 @@ HRESULT WINAPI D3DXCreateVolumeTextureFromFileInMemoryEx(IDirect3DDevice9 *devic
     return D3D_OK;
 }
 
+static inline void fill_texture(const struct pixel_format_desc *format, BYTE *pos, const D3DXVECTOR4 *value)
+{
+    DWORD c;
+
+    for (c = 0; c < format->bytes_per_pixel; c++)
+        pos[c] = 0;
+
+    for (c = 0; c < 4; c++)
+    {
+        float comp_value;
+        DWORD i, v = 0, mask32 = format->bits[c] == 32 ? ~0U : ((1 << format->bits[c]) - 1);
+
+        switch (c)
+        {
+            case 0: /* Alpha */
+                comp_value = value->w;
+                break;
+            case 1: /* Red */
+                comp_value = value->x;
+                break;
+            case 2: /* Green */
+                comp_value = value->y;
+                break;
+            case 3: /* Blue */
+                comp_value = value->z;
+                break;
+        }
+
+        if (format->type == FORMAT_ARGBF16)
+            v = float_32_to_16(comp_value);
+        else if (format->type == FORMAT_ARGBF)
+            v = *(DWORD *)&comp_value;
+        else if (format->type == FORMAT_ARGB)
+            v = comp_value * ((1 << format->bits[c]) - 1) + 0.5f;
+        else
+            FIXME("Unhandled format type %#x\n", format->type);
+
+        for (i = 0; i < format->bits[c] + format->shift[c]; i += 8)
+        {
+            BYTE byte, mask;
+
+            if (format->shift[c] > i)
+            {
+                mask = mask32 << (format->shift[c] - i);
+                byte = (v << (format->shift[c] - i)) & mask;
+            }
+            else
+            {
+                mask = mask32 >> (i - format->shift[c]);
+                byte = (v >> (i - format->shift[c])) & mask;
+            }
+            pos[i / 8] |= byte;
+        }
+    }
+}
+
 HRESULT WINAPI D3DXFillTexture(struct IDirect3DTexture9 *texture, LPD3DXFILL2D function, void *funcdata)
 {
     DWORD miplevels;
-    DWORD m, i, x, y, c, v;
+    DWORD m, x, y;
     D3DSURFACE_DESC desc;
     D3DLOCKED_RECT lock_rect;
     D3DXVECTOR4 value;
     D3DXVECTOR2 coord, size;
     const struct pixel_format_desc *format;
-    BYTE *data, *pos;
-    BYTE byte, mask;
-    float comp_value;
+    BYTE *data;
 
     if (texture == NULL || function == NULL)
         return D3DERR_INVALIDCALL;
@@ -1244,7 +1284,7 @@ HRESULT WINAPI D3DXFillTexture(struct IDirect3DTexture9 *texture, LPD3DXFILL2D f
             return D3DERR_INVALIDCALL;
 
         format = get_format_info(desc.Format);
-        if (format->type != FORMAT_ARGB)
+        if (format->type != FORMAT_ARGB && format->type != FORMAT_ARGBF16 && format->type != FORMAT_ARGBF)
         {
             FIXME("Unsupported texture format %#x\n", desc.Format);
             return D3DERR_INVALIDCALL;
@@ -1270,38 +1310,7 @@ HRESULT WINAPI D3DXFillTexture(struct IDirect3DTexture9 *texture, LPD3DXFILL2D f
 
                 function(&value, &coord, &size, funcdata);
 
-                pos = data + y * lock_rect.Pitch + x * format->bytes_per_pixel;
-
-                for (i = 0; i < format->bytes_per_pixel; i++)
-                    pos[i] = 0;
-
-                for (c = 0; c < 4; c++)
-                {
-                    switch (c)
-                    {
-                        case 0: /* Alpha */
-                            comp_value = value.w;
-                            break;
-                        case 1: /* Red */
-                            comp_value = value.x;
-                            break;
-                        case 2: /* Green */
-                            comp_value = value.y;
-                            break;
-                        case 3: /* Blue */
-                            comp_value = value.z;
-                            break;
-                    }
-
-                    v = comp_value * ((1 << format->bits[c]) - 1) + 0.5f;
-
-                    for (i = 0; i < format->bits[c] + format->shift[c]; i += 8)
-                    {
-                        mask = ((1 << format->bits[c]) - 1) << format->shift[c] >> i;
-                        byte = (v << format->shift[c] >> i) & mask;
-                        pos[i / 8] |= byte;
-                    }
-                }
+                fill_texture(format, data + y * lock_rect.Pitch + x * format->bytes_per_pixel, &value);
             }
         }
         IDirect3DTexture9_UnlockRect(texture, m);
@@ -1614,15 +1623,13 @@ static float get_cube_coord(enum cube_coord coord, unsigned int x, unsigned int 
 HRESULT WINAPI D3DXFillCubeTexture(struct IDirect3DCubeTexture9 *texture, LPD3DXFILL3D function, void *funcdata)
 {
     DWORD miplevels;
-    DWORD m, i, x, y, c, f, v;
+    DWORD m, x, y, f;
     D3DSURFACE_DESC desc;
     D3DLOCKED_RECT lock_rect;
     D3DXVECTOR4 value;
     D3DXVECTOR3 coord, size;
     const struct pixel_format_desc *format;
-    BYTE *data, *pos;
-    BYTE byte, mask;
-    float comp_value;
+    BYTE *data;
     static const enum cube_coord coordmap[6][3] =
         {
             {ONE, YCOORDINV, XCOORDINV},
@@ -1644,7 +1651,7 @@ HRESULT WINAPI D3DXFillCubeTexture(struct IDirect3DCubeTexture9 *texture, LPD3DX
             return D3DERR_INVALIDCALL;
 
         format = get_format_info(desc.Format);
-        if (format->type != FORMAT_ARGB)
+        if (format->type != FORMAT_ARGB && format->type != FORMAT_ARGBF16 && format->type != FORMAT_ARGBF)
         {
             FIXME("Unsupported texture format %#x\n", desc.Format);
             return D3DERR_INVALIDCALL;
@@ -1671,38 +1678,7 @@ HRESULT WINAPI D3DXFillCubeTexture(struct IDirect3DCubeTexture9 *texture, LPD3DX
 
                     function(&value, &coord, &size, funcdata);
 
-                    pos = data + y * lock_rect.Pitch + x * format->bytes_per_pixel;
-
-                    for (i = 0; i < format->bytes_per_pixel; i++)
-                        pos[i] = 0;
-
-                    for (c = 0; c < 4; c++)
-                    {
-                        switch (c)
-                        {
-                            case 0: /* Alpha */
-                                comp_value = value.w;
-                                break;
-                            case 1: /* Red */
-                                comp_value = value.x;
-                                break;
-                            case 2: /* Green */
-                                comp_value = value.y;
-                                break;
-                            case 3: /* Blue */
-                                comp_value = value.z;
-                                break;
-                        }
-
-                        v = comp_value * ((1 << format->bits[c]) - 1) + 0.5f;
-
-                        for (i = 0; i < format->bits[c] + format->shift[c]; i += 8)
-                        {
-                            mask = ((1 << format->bits[c]) - 1) << format->shift[c] >> i;
-                            byte = (v << format->shift[c] >> i) & mask;
-                            pos[i / 8] |= byte;
-                        }
-                    }
+                    fill_texture(format, data + y * lock_rect.Pitch + x * format->bytes_per_pixel, &value);
                 }
             }
             IDirect3DCubeTexture9_UnlockRect(texture, f, m);
@@ -1715,15 +1691,13 @@ HRESULT WINAPI D3DXFillCubeTexture(struct IDirect3DCubeTexture9 *texture, LPD3DX
 HRESULT WINAPI D3DXFillVolumeTexture(struct IDirect3DVolumeTexture9 *texture, LPD3DXFILL3D function, void *funcdata)
 {
     DWORD miplevels;
-    DWORD m, i, x, y, z, c, v;
+    DWORD m, x, y, z;
     D3DVOLUME_DESC desc;
     D3DLOCKED_BOX lock_box;
     D3DXVECTOR4 value;
     D3DXVECTOR3 coord, size;
     const struct pixel_format_desc *format;
-    BYTE *data, *pos;
-    BYTE byte, mask;
-    float comp_value;
+    BYTE *data;
 
     if (texture == NULL || function == NULL)
         return D3DERR_INVALIDCALL;
@@ -1736,7 +1710,7 @@ HRESULT WINAPI D3DXFillVolumeTexture(struct IDirect3DVolumeTexture9 *texture, LP
             return D3DERR_INVALIDCALL;
 
         format = get_format_info(desc.Format);
-        if (format->type != FORMAT_ARGB)
+        if (format->type != FORMAT_ARGB && format->type != FORMAT_ARGBF16 && format->type != FORMAT_ARGBF)
         {
             FIXME("Unsupported texture format %#x\n", desc.Format);
             return D3DERR_INVALIDCALL;
@@ -1767,38 +1741,8 @@ HRESULT WINAPI D3DXFillVolumeTexture(struct IDirect3DVolumeTexture9 *texture, LP
 
                     function(&value, &coord, &size, funcdata);
 
-                    pos = data + z * lock_box.SlicePitch + y * lock_box.RowPitch + x * format->bytes_per_pixel;
-
-                    for (i = 0; i < format->bytes_per_pixel; i++)
-                        pos[i] = 0;
-
-                    for (c = 0; c < 4; c++)
-                    {
-                        switch (c)
-                        {
-                            case 0: /* Alpha */
-                                comp_value = value.w;
-                                break;
-                            case 1: /* Red */
-                                comp_value = value.x;
-                                break;
-                            case 2: /* Green */
-                                comp_value = value.y;
-                                break;
-                            case 3: /* Blue */
-                                comp_value = value.z;
-                                break;
-                        }
-
-                        v = comp_value * ((1 << format->bits[c]) - 1) + 0.5f;
-
-                        for (i = 0; i < format->bits[c] + format->shift[c]; i += 8)
-                        {
-                            mask = ((1 << format->bits[c]) - 1) << format->shift[c] >> i;
-                            byte = (v << format->shift[c] >> i) & mask;
-                            pos[i / 8] |= byte;
-                        }
-                    }
+                    fill_texture(format, data + z * lock_box.SlicePitch + y * lock_box.RowPitch
+                            + x * format->bytes_per_pixel, &value);
                 }
             }
         }

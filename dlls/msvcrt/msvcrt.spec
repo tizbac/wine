@@ -300,8 +300,8 @@
 # stub _aligned_realloc_dbg(ptr long long str long)
 @ cdecl _amsg_exit(long)
 @ cdecl _assert(str str long) MSVCRT__assert
-@ stub _atodbl(ptr str)
-# stub _atodbl_l(ptr str ptr)
+@ cdecl _atodbl(ptr str) MSVCRT__atodbl
+@ cdecl _atodbl_l(ptr str ptr) MSVCRT__atodbl_l
 @ cdecl _atof_l(str ptr) MSVCRT__atof_l
 @ cdecl _atoflt_l(ptr str ptr) MSVCRT__atoflt_l
 @ cdecl -ret64 _atoi64(str) ntdll._atoi64
@@ -453,9 +453,9 @@
 @ cdecl _ftime32_s(ptr) MSVCRT__ftime32_s
 @ cdecl _ftime64(ptr) MSVCRT__ftime64
 @ cdecl _ftime64_s(ptr) MSVCRT__ftime64_s
-@ cdecl -ret64 _ftol() ntdll._ftol
-@ cdecl -ret64 _ftol2() ntdll._ftol
-@ cdecl -ret64 _ftol2_sse() ntdll._ftol #FIXME: SSE variant should be implemented
+@ cdecl -arch=i386 -ret64 _ftol() MSVCRT__ftol
+@ cdecl -arch=i386 -ret64 _ftol2() MSVCRT__ftol
+@ cdecl -arch=i386 -ret64 _ftol2_sse() MSVCRT__ftol #FIXME: SSE variant should be implemented
 # stub _ftol2_sse_excpt
 @ cdecl _fullpath(ptr str long)
 # stub _fullpath_dbg(ptr str long long str long)
@@ -474,7 +474,7 @@
 # stub _get_environ(ptr)
 @ cdecl _get_errno(ptr)
 # stub _get_fileinfo(ptr)
-# stub _get_fmode(ptr)
+@ cdecl _get_fmode(ptr)
 @ cdecl _get_heap_handle()
 @ cdecl _get_osfhandle(long) MSVCRT__get_osfhandle
 @ cdecl _get_osplatform(ptr) MSVCRT__get_osplatform
@@ -867,7 +867,7 @@
 @ cdecl _set_errno(long)
 @ cdecl _set_error_mode(long)
 # stub _set_fileinfo(long)
-# stub _set_fmode(long)
+@ cdecl _set_fmode(long)
 # stub _set_output_format(long)
 @ cdecl _set_sbh_threshold(long)
 @ cdecl _seterrormode(long)
@@ -918,7 +918,7 @@
 @ cdecl _stat64(str ptr) MSVCRT_stat64
 @ cdecl _stati64(str ptr) MSVCRT_stati64
 @ cdecl _statusfp()
-@ cdecl _strcmpi(str str) ntdll._strcmpi
+@ cdecl _strcmpi(str str) MSVCRT__stricmp
 @ cdecl _strcoll_l(str str ptr) MSVCRT_strcoll_l
 @ cdecl _strdate(ptr) MSVCRT__strdate
 @ cdecl _strdate_s(ptr long)
@@ -926,8 +926,8 @@
 # stub _strdup_dbg(str long str long)
 @ cdecl _strerror(long) MSVCRT__strerror
 # stub _strerror_s(ptr long long)
-@ cdecl _stricmp(str str) ntdll._stricmp
-# stub _stricmp_l(str str ptr)
+@ cdecl _stricmp(str str) MSVCRT__stricmp
+@ cdecl _stricmp_l(str str ptr) MSVCRT__stricmp_l
 @ cdecl _stricoll(str str) MSVCRT__stricoll
 @ cdecl _stricoll_l(str str ptr) MSVCRT__stricoll_l
 @ cdecl _strlwr(str) MSVCRT__strlwr
@@ -936,8 +936,8 @@
 @ cdecl _strlwr_s_l(ptr long ptr)
 @ cdecl _strncoll(str str long) MSVCRT_strncoll_l
 @ cdecl _strncoll_l(str str long ptr) MSVCRT_strncoll
-@ cdecl _strnicmp(str str long) ntdll._strnicmp
-# stub _strnicmp_l(str str long ptr)
+@ cdecl _strnicmp(str str long) MSVCRT__strnicmp
+@ cdecl _strnicmp_l(str str long ptr) MSVCRT__strnicmp_l
 @ cdecl _strnicoll(str str long) MSVCRT__strnicoll
 @ cdecl _strnicoll_l(str str long ptr) MSVCRT__strnicoll_l
 @ cdecl _strnset(str long long) MSVCRT__strnset
@@ -1338,7 +1338,7 @@
 @ cdecl mbtowc(ptr str long) MSVCRT_mbtowc
 @ cdecl memchr(ptr long long) ntdll.memchr
 @ cdecl memcmp(ptr ptr long) ntdll.memcmp
-@ cdecl memcpy(ptr ptr long) ntdll.memcpy
+@ cdecl memcpy(ptr ptr long) MSVCRT_memcpy
 @ cdecl memcpy_s(ptr long ptr long)
 @ cdecl memmove(ptr ptr long) ntdll.memmove
 @ cdecl memmove_s(ptr long ptr long)

@@ -119,134 +119,78 @@ static inline struct ddraw *impl_from_IDirect3D7(IDirect3D7 *iface)
     return CONTAINING_RECORD(iface, struct ddraw, IDirect3D7_iface);
 }
 
-/*****************************************************************************
- * IUnknown Methods
- *****************************************************************************/
-
-/*****************************************************************************
- * IDirectDraw7::QueryInterface
- *
- * Queries different interfaces of the DirectDraw object. It can return
- * IDirectDraw interfaces in version 1, 2, 4 and 7, and IDirect3D interfaces
- * in version 1, 2, 3 and 7. An IDirect3DDevice can be created with this
- * method.
- * The returned interface is AddRef()-ed before it's returned
- *
- * Used for version 1, 2, 4 and 7
- *
- * Params:
- *  refiid: Interface ID asked for
- *  obj: Used to return the interface pointer
- *
- * Returns:
- *  S_OK if an interface was found
- *  E_NOINTERFACE if the requested interface wasn't found
- *
- *****************************************************************************/
-static HRESULT WINAPI ddraw7_QueryInterface(IDirectDraw7 *iface, REFIID refiid, void **obj)
+static HRESULT WINAPI ddraw7_QueryInterface(IDirectDraw7 *iface, REFIID riid, void **out)
 {
-    struct ddraw *This = impl_from_IDirectDraw7(iface);
+    struct ddraw *ddraw = impl_from_IDirectDraw7(iface);
 
-    TRACE("iface %p, riid %s, object %p.\n", iface, debugstr_guid(refiid), obj);
+    TRACE("iface %p, riid %s, out %p.\n", iface, debugstr_guid(riid), out);
 
-    /* Can change surface impl type */
-    wined3d_mutex_lock();
-
-    /* According to COM docs, if the QueryInterface fails, obj should be set to NULL */
-    *obj = NULL;
-
-    if(!refiid)
+    if (!riid)
     {
-        wined3d_mutex_unlock();
+        *out = NULL;
         return DDERR_INVALIDPARAMS;
     }
 
-    /* Check DirectDraw Interfaces */
-    if ( IsEqualGUID( &IID_IUnknown, refiid ) ||
-         IsEqualGUID( &IID_IDirectDraw7, refiid ) )
+    /* The refcount unit test revealed that an IDirect3D7 interface can only
+     * be queried from a DirectDraw object that was created as an IDirectDraw7
+     * interface. The older interfaces can query any IDirect3D version except
+     * 7, because they are all initially created as IDirectDraw. This isn't
+     * really crucial behavior, and messy to implement with the common
+     * creation function, so it has been left out here. */
+    if (IsEqualGUID(&IID_IDirectDraw7, riid)
+            || IsEqualGUID(&IID_IUnknown, riid))
     {
-        *obj = &This->IDirectDraw7_iface;
-        TRACE("(%p) Returning IDirectDraw7 interface at %p\n", This, *obj);
+        *out = &ddraw->IDirectDraw7_iface;
+        TRACE("Returning IDirectDraw7 interface %p.\n", *out);
     }
-    else if ( IsEqualGUID( &IID_IDirectDraw4, refiid ) )
+    else if (IsEqualGUID(&IID_IDirectDraw4, riid))
     {
-        *obj = &This->IDirectDraw4_iface;
-        TRACE("(%p) Returning IDirectDraw4 interface at %p\n", This, *obj);
+        *out = &ddraw->IDirectDraw4_iface;
+        TRACE("Returning IDirectDraw4 interface %p.\n", *out);
     }
-    else if ( IsEqualGUID( &IID_IDirectDraw3, refiid ) )
+    else if (IsEqualGUID(&IID_IDirectDraw2, riid))
     {
-        /* This Interface exists in ddrawex.dll, it is implemented in a wrapper */
-        WARN("IDirectDraw3 is not valid in ddraw.dll\n");
-        *obj = NULL;
-        wined3d_mutex_unlock();
-        return E_NOINTERFACE;
+        *out = &ddraw->IDirectDraw2_iface;
+        TRACE("Returning IDirectDraw2 interface %p.\n", *out);
     }
-    else if ( IsEqualGUID( &IID_IDirectDraw2, refiid ) )
+    else if (IsEqualGUID(&IID_IDirectDraw, riid))
     {
-        *obj = &This->IDirectDraw2_iface;
-        TRACE("(%p) Returning IDirectDraw2 interface at %p\n", This, *obj);
+        *out = &ddraw->IDirectDraw_iface;
+        TRACE("Returning IDirectDraw interface %p.\n", *out);
     }
-    else if ( IsEqualGUID( &IID_IDirectDraw, refiid ) )
+    else if (IsEqualGUID(&IID_IDirect3D7, riid))
     {
-        *obj = &This->IDirectDraw_iface;
-        TRACE("(%p) Returning IDirectDraw interface at %p\n", This, *obj);
+        ddraw->d3dversion = 7;
+        *out = &ddraw->IDirect3D7_iface;
+        TRACE("Returning Direct3D7 interface %p.\n", *out);
     }
-
-    /* Direct3D
-     * The refcount unit test revealed that an IDirect3D7 interface can only be queried
-     * from a DirectDraw object that was created as an IDirectDraw7 interface. No idea
-     * who had this idea and why. The older interfaces can query and IDirect3D version
-     * because they are all created as IDirectDraw(1). This isn't really crucial behavior,
-     * and messy to implement with the common creation function, so it has been left out here.
-     */
-    else if ( IsEqualGUID( &IID_IDirect3D  , refiid ) ||
-              IsEqualGUID( &IID_IDirect3D2 , refiid ) ||
-              IsEqualGUID( &IID_IDirect3D3 , refiid ) ||
-              IsEqualGUID( &IID_IDirect3D7 , refiid ) )
+    else if (IsEqualGUID(&IID_IDirect3D3, riid))
     {
-        /* Check the surface implementation */
-        if (DefaultSurfaceType != WINED3D_SURFACE_TYPE_OPENGL)
-        {
-            WARN("The app requests a Direct3D interface, but non-opengl surfaces where set in winecfg\n");
-            /* Do not abort here, only reject 3D Device creation */
-        }
-
-        if ( IsEqualGUID( &IID_IDirect3D  , refiid ) )
-        {
-            This->d3dversion = 1;
-            *obj = &This->IDirect3D_iface;
-            TRACE(" returning Direct3D interface at %p.\n", *obj);
-        }
-        else if ( IsEqualGUID( &IID_IDirect3D2  , refiid ) )
-        {
-            This->d3dversion = 2;
-            *obj = &This->IDirect3D2_iface;
-            TRACE(" returning Direct3D2 interface at %p.\n", *obj);
-        }
-        else if ( IsEqualGUID( &IID_IDirect3D3  , refiid ) )
-        {
-            This->d3dversion = 3;
-            *obj = &This->IDirect3D3_iface;
-            TRACE(" returning Direct3D3 interface at %p.\n", *obj);
-        }
-        else if(IsEqualGUID( &IID_IDirect3D7  , refiid ))
-        {
-            This->d3dversion = 7;
-            *obj = &This->IDirect3D7_iface;
-            TRACE(" returning Direct3D7 interface at %p.\n", *obj);
-        }
+        ddraw->d3dversion = 3;
+        *out = &ddraw->IDirect3D3_iface;
+        TRACE("Returning Direct3D3 interface %p.\n", *out);
+    }
+    else if (IsEqualGUID(&IID_IDirect3D2, riid))
+    {
+        ddraw->d3dversion = 2;
+        *out = &ddraw->IDirect3D2_iface;
+        TRACE("Returning Direct3D2 interface %p.\n", *out);
+    }
+    else if (IsEqualGUID(&IID_IDirect3D, riid))
+    {
+        ddraw->d3dversion = 1;
+        *out = &ddraw->IDirect3D_iface;
+        TRACE("Returning Direct3D interface %p.\n", *out);
     }
     /* Unknown interface */
     else
     {
-        ERR("(%p)->(%s, %p): No interface found\n", This, debugstr_guid(refiid), obj);
-        wined3d_mutex_unlock();
+        WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(riid));
+        *out = NULL;
         return E_NOINTERFACE;
     }
 
-    IUnknown_AddRef( (IUnknown *) *obj );
-    wined3d_mutex_unlock();
-
+    IUnknown_AddRef((IUnknown *)*out);
     return S_OK;
 }
 
@@ -422,7 +366,7 @@ void ddraw_destroy_swapchain(struct ddraw *ddraw)
     wined3d_swapchain_decref(ddraw->wined3d_swapchain);
     ddraw->wined3d_swapchain = NULL;
 
-    if (DefaultSurfaceType == WINED3D_SURFACE_TYPE_OPENGL)
+    if (DefaultSurfaceType == DDRAW_SURFACE_TYPE_OPENGL)
     {
         UINT i;
 
@@ -607,9 +551,6 @@ static HRESULT ddraw_set_focus_window(struct ddraw *ddraw, HWND window)
 
     ddraw->focuswindow = window;
 
-    /* Use the focus window for drawing too. */
-    ddraw->dest_window = ddraw->focuswindow;
-
     return DD_OK;
 }
 
@@ -688,7 +629,7 @@ static HRESULT ddraw_create_swapchain(struct ddraw *ddraw, HWND window, BOOL win
     swapchain_desc.device_window = window;
     swapchain_desc.windowed = windowed;
 
-    if (DefaultSurfaceType == WINED3D_SURFACE_TYPE_OPENGL)
+    if (DefaultSurfaceType == DDRAW_SURFACE_TYPE_OPENGL)
         hr = ddraw_attach_d3d_device(ddraw, &swapchain_desc);
     else
         hr = wined3d_device_init_gdi(ddraw->wined3d_device, &swapchain_desc);
@@ -755,22 +696,18 @@ static HRESULT ddraw_create_swapchain(struct ddraw *ddraw, HWND window, BOOL win
  *   (Probably others too, have to investigate)
  *
  *****************************************************************************/
-static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd, DWORD cooplevel)
+static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND window, DWORD cooplevel)
 {
     struct ddraw *This = impl_from_IDirectDraw7(iface);
     struct wined3d_surface *rt = NULL, *ds = NULL;
     struct wined3d_stateblock *stateblock;
     BOOL restore_state = FALSE;
-    HWND window;
     HRESULT hr;
 
-    TRACE("iface %p, window %p, flags %#x.\n", iface, hwnd, cooplevel);
+    TRACE("iface %p, window %p, flags %#x.\n", iface, window, cooplevel);
     DDRAW_dump_cooperativelevel(cooplevel);
 
     wined3d_mutex_lock();
-
-    /* Get the old window */
-    window = This->dest_window;
 
     /* Tests suggest that we need one of them: */
     if(!(cooplevel & (DDSCL_SETFOCUSWINDOW |
@@ -808,14 +745,14 @@ static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd,
             return DDERR_INVALIDPARAMS;
         }
 
-        hr = ddraw_set_focus_window(This, hwnd);
+        hr = ddraw_set_focus_window(This, window);
         wined3d_mutex_unlock();
         return hr;
     }
 
     if (cooplevel & DDSCL_EXCLUSIVE)
     {
-        if (!(cooplevel & DDSCL_FULLSCREEN) || !(hwnd || (cooplevel & DDSCL_CREATEDEVICEWINDOW)))
+        if (!(cooplevel & DDSCL_FULLSCREEN) || !(window || (cooplevel & DDSCL_CREATEDEVICEWINDOW)))
         {
             WARN("DDSCL_EXCLUSIVE requires DDSCL_FULLSCREEN and a window.\n");
             wined3d_mutex_unlock();
@@ -853,20 +790,20 @@ static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd,
 
             if (cooplevel & DDSCL_SETFOCUSWINDOW)
             {
-                if (!hwnd)
+                if (!window)
                 {
                     wined3d_mutex_unlock();
                     return DDERR_NOHWND;
                 }
 
-                if (FAILED(hr = ddraw_set_focus_window(This, hwnd)))
+                if (FAILED(hr = ddraw_set_focus_window(This, window)))
                 {
                     wined3d_mutex_unlock();
                     return hr;
                 }
             }
 
-            hwnd = device_window;
+            window = device_window;
         }
     }
     else
@@ -878,28 +815,28 @@ static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd,
     }
 
     if ((This->cooperative_level & DDSCL_EXCLUSIVE)
-            && (hwnd != window || !(cooplevel & DDSCL_EXCLUSIVE)))
+            && (window != This->dest_window || !(cooplevel & DDSCL_EXCLUSIVE)))
         wined3d_device_release_focus_window(This->wined3d_device);
 
-    if ((cooplevel & DDSCL_FULLSCREEN) != (This->cooperative_level & DDSCL_FULLSCREEN) || hwnd != window)
+    if ((cooplevel & DDSCL_FULLSCREEN) != (This->cooperative_level & DDSCL_FULLSCREEN) || window != This->dest_window)
     {
         if (This->cooperative_level & DDSCL_FULLSCREEN)
-            wined3d_device_restore_fullscreen_window(This->wined3d_device, window);
+            wined3d_device_restore_fullscreen_window(This->wined3d_device, This->dest_window);
 
         if (cooplevel & DDSCL_FULLSCREEN)
         {
             struct wined3d_display_mode display_mode;
 
             wined3d_get_adapter_display_mode(This->wined3d, WINED3DADAPTER_DEFAULT, &display_mode, NULL);
-            wined3d_device_setup_fullscreen_window(This->wined3d_device, hwnd,
+            wined3d_device_setup_fullscreen_window(This->wined3d_device, window,
                     display_mode.width, display_mode.height);
         }
     }
 
     if ((cooplevel & DDSCL_EXCLUSIVE)
-            && (hwnd != window || !(This->cooperative_level & DDSCL_EXCLUSIVE)))
+            && (window != This->dest_window || !(This->cooperative_level & DDSCL_EXCLUSIVE)))
     {
-        hr = wined3d_device_acquire_focus_window(This->wined3d_device, hwnd);
+        hr = wined3d_device_acquire_focus_window(This->wined3d_device, window);
         if (FAILED(hr))
         {
             ERR("Failed to acquire focus window, hr %#x.\n", hr);
@@ -908,16 +845,12 @@ static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd,
         }
     }
 
-    /* Don't override focus windows or private device windows */
-    if (hwnd && !This->focuswindow && !This->devicewindow && (hwnd != window))
-        This->dest_window = hwnd;
-
     if (cooplevel & DDSCL_MULTITHREADED && !(This->cooperative_level & DDSCL_MULTITHREADED))
         wined3d_device_set_multithreaded(This->wined3d_device);
 
     if (This->wined3d_swapchain)
     {
-        if (DefaultSurfaceType != WINED3D_SURFACE_TYPE_GDI)
+        if (DefaultSurfaceType != DDRAW_SURFACE_TYPE_GDI)
         {
             restore_state = TRUE;
 
@@ -942,7 +875,7 @@ static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd,
         ddraw_destroy_swapchain(This);
     }
 
-    if (FAILED(hr = ddraw_create_swapchain(This, This->dest_window, !(cooplevel & DDSCL_FULLSCREEN))))
+    if (FAILED(hr = ddraw_create_swapchain(This, window, !(cooplevel & DDSCL_FULLSCREEN))))
         ERR("Failed to create swapchain, hr %#x.\n", hr);
 
     if (restore_state)
@@ -978,6 +911,7 @@ static HRESULT WINAPI ddraw7_SetCooperativeLevel(IDirectDraw7 *iface, HWND hwnd,
 
     /* Store the cooperative_level */
     This->cooperative_level = cooplevel;
+    This->dest_window = window;
     TRACE("SetCooperativeLevel retuning DD_OK\n");
     wined3d_mutex_unlock();
 
@@ -1272,10 +1206,9 @@ static HRESULT WINAPI ddraw7_GetCaps(IDirectDraw7 *iface, DDCAPS *DriverCaps, DD
     caps.dwSSBCKeyCaps = winecaps.ddraw_caps.ssb_color_key_caps;
     caps.dwSSBFXCaps = winecaps.ddraw_caps.ssb_fx_caps;
 
-    /* Even if WineD3D supports 3D rendering, remove the cap if ddraw is configured
-     * not to use it
-     */
-    if (DefaultSurfaceType == WINED3D_SURFACE_TYPE_GDI)
+    /* Even if wined3d supports 3D rendering, remove the cap if ddraw is
+     * configured not to use it. */
+    if (DefaultSurfaceType == DDRAW_SURFACE_TYPE_GDI)
     {
         caps.dwCaps &= ~DDCAPS_3D;
         caps.ddsCaps.dwCaps &= ~(DDSCAPS_3DDEVICE | DDSCAPS_MIPMAP | DDSCAPS_TEXTURE | DDSCAPS_ZBUFFER);
@@ -1512,9 +1445,8 @@ static HRESULT WINAPI ddraw7_GetFourCCCodes(IDirectDraw7 *iface, DWORD *NumCodes
 
     for (i = 0; i < (sizeof(formats) / sizeof(formats[0])); ++i)
     {
-        hr = wined3d_check_device_format(ddraw->wined3d, WINED3DADAPTER_DEFAULT, WINED3D_DEVICE_TYPE_HAL,
-                mode.format_id, 0, WINED3D_RTYPE_SURFACE, formats[i], DefaultSurfaceType);
-        if (SUCCEEDED(hr))
+        if (SUCCEEDED(wined3d_check_device_format(ddraw->wined3d, WINED3DADAPTER_DEFAULT, WINED3D_DEVICE_TYPE_HAL,
+                mode.format_id, 0, WINED3D_RTYPE_SURFACE, formats[i])))
         {
             if (count < outsize)
                 Codes[count] = formats[i];
@@ -2556,7 +2488,7 @@ static HRESULT ddraw_create_surface(struct ddraw *ddraw, DDSURFACEDESC2 *pDDSD,
         DDRAW_dump_surface_desc(pDDSD);
     }
 
-    if ((pDDSD->ddsCaps.dwCaps & DDSCAPS_3DDEVICE) && DefaultSurfaceType != WINED3D_SURFACE_TYPE_OPENGL)
+    if ((pDDSD->ddsCaps.dwCaps & DDSCAPS_3DDEVICE) && DefaultSurfaceType != DDRAW_SURFACE_TYPE_OPENGL)
     {
         WARN("The application requests a 3D capable surface, but a non-OpenGL surface type was set in the registry.\n");
         /* Do not fail surface creation, only fail 3D device creation. */
@@ -4489,9 +4421,8 @@ static HRESULT WINAPI d3d7_EnumZBufferFormats(IDirect3D7 *iface, REFCLSID device
 
     for (i = 0; i < (sizeof(formats) / sizeof(*formats)); ++i)
     {
-        hr = wined3d_check_device_format(ddraw->wined3d, WINED3DADAPTER_DEFAULT, type, mode.format_id,
-                WINED3DUSAGE_DEPTHSTENCIL, WINED3D_RTYPE_SURFACE, formats[i], WINED3D_SURFACE_TYPE_OPENGL);
-        if (SUCCEEDED(hr))
+        if (SUCCEEDED(wined3d_check_device_format(ddraw->wined3d, WINED3DADAPTER_DEFAULT, type, mode.format_id,
+                WINED3DUSAGE_DEPTHSTENCIL, WINED3D_RTYPE_SURFACE, formats[i])))
         {
             DDPIXELFORMAT pformat;
 
@@ -4514,9 +4445,8 @@ static HRESULT WINAPI d3d7_EnumZBufferFormats(IDirect3D7 *iface, REFCLSID device
      * while others used dwZBufferBitDepth=32. In either case the pitch matches a 32 bits per
      * pixel format, so we use dwZBufferBitDepth=32. Some games expect 24. Windows Vista and
      * newer enumerate both versions, so we do the same(bug 22434) */
-    hr = wined3d_check_device_format(ddraw->wined3d, WINED3DADAPTER_DEFAULT, type, mode.format_id,
-            WINED3DUSAGE_DEPTHSTENCIL, WINED3D_RTYPE_SURFACE, WINED3DFMT_X8D24_UNORM, WINED3D_SURFACE_TYPE_OPENGL);
-    if (SUCCEEDED(hr))
+    if (SUCCEEDED(wined3d_check_device_format(ddraw->wined3d, WINED3DADAPTER_DEFAULT, type, mode.format_id,
+            WINED3DUSAGE_DEPTHSTENCIL, WINED3D_RTYPE_SURFACE, WINED3DFMT_X8D24_UNORM)))
     {
         DDPIXELFORMAT x8d24 =
         {
@@ -4741,11 +4671,6 @@ HRESULT IDirect3DImpl_GetCaps(const struct wined3d *wined3d, D3DDEVICEDESC *desc
         D3DPTFILTERCAPS_MIPFPOINT        | D3DPTFILTERCAPS_MIPFLINEAR          | D3DPTFILTERCAPS_MAGFPOINT           |
         D3DPTFILTERCAPS_MAGFLINEAR       | D3DPTFILTERCAPS_MAGFANISOTROPIC     | D3DPTFILTERCAPS_MAGFAFLATCUBIC      |
         D3DPTFILTERCAPS_MAGFGAUSSIANCUBIC);
-
-    desc7->dpcLineCaps.dwTextureBlendCaps &= (
-        D3DPTBLENDCAPS_DECAL             | D3DPTBLENDCAPS_MODULATE             | D3DPTBLENDCAPS_DECALALPHA           |
-        D3DPTBLENDCAPS_MODULATEALPHA     | D3DPTBLENDCAPS_DECALMASK            | D3DPTBLENDCAPS_MODULATEMASK         |
-        D3DPTBLENDCAPS_COPY              | D3DPTBLENDCAPS_ADD);
 
     desc7->dpcLineCaps.dwTextureAddressCaps &= (
         D3DPTADDRESSCAPS_WRAP            | D3DPTADDRESSCAPS_MIRROR             | D3DPTADDRESSCAPS_CLAMP              |
@@ -5260,9 +5185,9 @@ static HRESULT CDECL device_parent_create_swapchain_surface(struct wined3d_devic
         return E_FAIL;
     }
 
-    if (SUCCEEDED(hr = wined3d_surface_create(ddraw->wined3d_device, width, height, format_id,
-            usage, WINED3D_POOL_DEFAULT, multisample_type, multisample_quality, DefaultSurfaceType,
-            WINED3D_SURFACE_MAPPABLE, ddraw, &ddraw_frontbuffer_parent_ops, surface)))
+    if (SUCCEEDED(hr = wined3d_surface_create(ddraw->wined3d_device, width, height, format_id, usage,
+            WINED3D_POOL_DEFAULT, multisample_type, multisample_quality, WINED3D_SURFACE_MAPPABLE,
+            ddraw, &ddraw_frontbuffer_parent_ops, surface)))
         ddraw->wined3d_frontbuffer = *surface;
 
     return hr;
@@ -5296,9 +5221,8 @@ static HRESULT CDECL device_parent_create_swapchain(struct wined3d_device_parent
         return E_FAIL;
     }
 
-    hr = wined3d_swapchain_create(ddraw->wined3d_device, desc,
-            DefaultSurfaceType, NULL, &ddraw_null_wined3d_parent_ops, swapchain);
-    if (FAILED(hr))
+    if (FAILED(hr = wined3d_swapchain_create(ddraw->wined3d_device, desc, NULL,
+            &ddraw_null_wined3d_parent_ops, swapchain)))
         WARN("Failed to create swapchain, hr %#x.\n", hr);
 
     return hr;
@@ -5316,6 +5240,7 @@ static const struct wined3d_device_parent_ops ddraw_wined3d_device_parent_ops =
 
 HRESULT ddraw_init(struct ddraw *ddraw, enum wined3d_device_type device_type)
 {
+    DWORD flags;
     HRESULT hr;
 
     ddraw->IDirectDraw7_iface.lpVtbl = &ddraw7_vtbl;
@@ -5330,11 +5255,20 @@ HRESULT ddraw_init(struct ddraw *ddraw, enum wined3d_device_type device_type)
     ddraw->numIfaces = 1;
     ddraw->ref7 = 1;
 
-    ddraw->wined3d = wined3d_create(7, WINED3D_LEGACY_DEPTH_BIAS);
-    if (!ddraw->wined3d)
+    flags = WINED3D_LEGACY_DEPTH_BIAS;
+    if (DefaultSurfaceType != DDRAW_SURFACE_TYPE_OPENGL)
+        flags |= WINED3D_NO3D;
+
+    if (!(ddraw->wined3d = wined3d_create(7, flags)))
     {
-        WARN("Failed to create a wined3d object.\n");
-        return E_OUTOFMEMORY;
+        if ((flags & WINED3D_NO3D) || !(ddraw->wined3d = wined3d_create(7, flags | WINED3D_NO3D)))
+        {
+            WARN("Failed to create a wined3d object.\n");
+            return E_FAIL;
+        }
+
+        WARN("Created a wined3d object without 3D support.\n");
+        DefaultSurfaceType = DDRAW_SURFACE_TYPE_GDI;
     }
 
     hr = wined3d_device_create(ddraw->wined3d, WINED3DADAPTER_DEFAULT, device_type,

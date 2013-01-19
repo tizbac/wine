@@ -484,7 +484,6 @@ AC_CHECK_HEADERS(\
 	scsi/sg.h \
 	stdbool.h \
 	stdint.h \
-	strings.h \
 	stropts.h \
 	sys/asoundlib.h \
 	sys/attr.h \
@@ -523,7 +522,6 @@ AC_CHECK_HEADERS(\
 	sys/timeout.h \
 	sys/times.h \
 	sys/uio.h \
-	sys/un.h \
 	sys/utsname.h \
 	sys/vm86.h \
 	sys/wait.h \
@@ -560,6 +558,7 @@ AC_CHECK_HEADERS(\
 	netinet/ip_var.h \
 	netinet/udp.h \
 	netipx/ipx.h \
+	sys/un.h \
 ,,,[#include <sys/types.h>
      #ifdef HAVE_SYS_SOCKET_H
      # include <sys/socket.h>
@@ -669,7 +668,7 @@ AC_CHECK_HEADERS([pthread_np.h],,,
 #include <pthread.h>
 #endif])
 
-AC_CHECK_HEADERS([linux/videodev.h linux/videodev2.h],,,
+AC_CHECK_HEADERS([linux/videodev.h linux/videodev2.h libv4l1.h],,,
 [#ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
@@ -692,7 +691,7 @@ AC_SUBST(IMPLIBEXT,"def")
 AC_SUBST(LDRPATH_INSTALL,"")
 AC_SUBST(LDRPATH_LOCAL,"")
 STATIC_IMPLIBEXT="def.a"
-WINE_PATH_LDD
+WINE_PATH_SONAME_TOOLS
 
 case $host_os in
   cygwin*|mingw32*)
@@ -725,7 +724,8 @@ case $host_os in
     LDDLLFLAGS="-bundle -multiply_defined suppress"
     LIBWINE_LDFLAGS="-multiply_defined suppress"
     LDSHARED="\$(CC) -dynamiclib"
-    LDRPATH_LOCAL="&& install_name_tool -change @executable_path/\`\$(RELPATH) \$(bindir) \$(libdir)\`/libwine.1.dylib @executable_path/\$(top_builddir)/libs/wine/libwine.1.dylib \$@ || \$(RM) \$@"
+    LDRPATH_INSTALL="-Wl,-rpath,@loader_path/\`\$(RELPATH) \$(bindir) \$(libdir)\`"
+    LDRPATH_LOCAL="-Wl,-rpath,@loader_path/\$(top_builddir)/libs/wine"
     dnl declare needed frameworks
     AC_SUBST(COREFOUNDATIONLIB,"-framework CoreFoundation")
     AC_SUBST(IOKITLIB,"-framework IOKit -framework CoreFoundation")
@@ -733,9 +733,9 @@ case $host_os in
     AC_SUBST(CORESERVICESLIB,"-framework CoreServices")
     case $host_os in
       darwin11*)
-        AC_SUBST(LDEXECFLAGS,["-image_base 0x7bf00000 -Wl,-macosx_version_min,10.6,-segaddr,WINE_DOS,0x00001000,-segaddr,WINE_SHAREDHEAP,0x7f000000"]) ;;
+        AC_SUBST(LDEXECFLAGS,["-image_base 0x7bf00000 -Wl,-macosx_version_min,10.6,-segaddr,WINE_DOS,0x00001000,-segaddr,WINE_SHAREDHEAP,0x7f000000,-sectcreate,__TEXT,__info_plist,wine_info.plist"]) ;;
       *)
-        AC_SUBST(LDEXECFLAGS,["-image_base 0x7bf00000 -Wl,-segaddr,WINE_DOS,0x00001000,-segaddr,WINE_SHAREDHEAP,0x7f000000"]) ;;
+        AC_SUBST(LDEXECFLAGS,["-image_base 0x7bf00000 -Wl,-segaddr,WINE_DOS,0x00001000,-segaddr,WINE_SHAREDHEAP,0x7f000000,-sectcreate,__TEXT,__info_plist,wine_info.plist"]) ;;
     esac
     if test "$ac_cv_header_DiskArbitration_DiskArbitration_h" = "yes"
     then
@@ -797,12 +797,20 @@ case $host_os in
     else
         WINE_NOTICE([QuickTime ${notice_platform}development files not found, video decoding won't be supported.])
     fi
-    dnl Enable quartz driver on Mac OS X
     if test "$ac_cv_header_Carbon_Carbon_h" = "yes"
     then
         AC_SUBST(CARBONLIB,"-framework Carbon")
-        enable_winequartz_drv=${enable_winequartz_drv:-yes}
     fi
+
+    dnl Enable Mac driver on Mac OS X 10.6 or later
+    if test "$ac_cv_header_ApplicationServices_ApplicationServices_h" = "yes"
+    then
+        ac_save_LIBS="$LIBS"
+        LIBS="$LIBS $APPLICATIONSERVICESLIB"
+        AC_CHECK_FUNC(CGDisplayModeGetWidth,enable_winemac_drv=${enable_winemac_drv:-yes})
+        LIBS="$ac_save_LIBS"
+    fi
+
     dnl Check for Xcode 3.x broken 16-bit support
     if test "x$enable_win16" = "xyes"
     then
@@ -900,7 +908,7 @@ case $host_os in
 esac
 
 enable_wineqtdecoder=${enable_wineqtdecoder:-no}
-enable_winequartz_drv=${enable_winequartz_drv:-no}
+enable_winemac_drv=${enable_winemac_drv:-no}
 
 if test "$LIBEXT" = "a"; then
   AC_MSG_ERROR(
@@ -947,9 +955,10 @@ dnl **** Check for pthread ****
 
 if test "$ac_cv_header_pthread_h" = "yes"
 then
-    AC_CHECK_LIB(pthread,pthread_create,[AC_SUBST(LIBPTHREAD,"-lpthread")])
+    AC_CHECK_FUNC(pthread_create,,[AC_CHECK_LIB(pthread,pthread_create,[AC_SUBST(LIBPTHREAD,"-lpthread")])])
 fi
-WINE_ERROR_WITH(pthread,[test "x$LIBPTHREAD" = "x"],[pthread ${notice_platform}development files not found.
+WINE_ERROR_WITH(pthread,[test "x$ac_cv_func_pthread_create" != xyes -a "x$LIBPTHREAD" = x],
+[pthread ${notice_platform}development files not found.
 Wine cannot support threads without libpthread.])
 
 dnl **** Check for X11 ****
@@ -2019,7 +2028,6 @@ AC_CHECK_FUNCS(\
 	getattrlist \
 	getdirentries \
 	getopt_long_only \
-	getpagesize \
 	getpwuid \
 	gettimeofday \
 	getuid \
@@ -2558,13 +2566,26 @@ WINE_CONFIG_DLL(advpack,,[implib])
 WINE_CONFIG_TEST(dlls/advpack/tests)
 WINE_CONFIG_DLL(amstream)
 WINE_CONFIG_TEST(dlls/amstream/tests)
+WINE_CONFIG_DLL(api-ms-win-core-winrt-error-l1-1-0)
+WINE_CONFIG_DLL(api-ms-win-core-winrt-string-l1-1-0)
+WINE_CONFIG_DLL(api-ms-win-downlevel-advapi32-l1-1-0)
+WINE_CONFIG_DLL(api-ms-win-downlevel-advapi32-l2-1-0)
+WINE_CONFIG_DLL(api-ms-win-downlevel-normaliz-l1-1-0)
+WINE_CONFIG_DLL(api-ms-win-downlevel-ole32-l1-1-0)
+WINE_CONFIG_DLL(api-ms-win-downlevel-shell32-l1-1-0)
+WINE_CONFIG_DLL(api-ms-win-downlevel-shlwapi-l1-1-0)
+WINE_CONFIG_DLL(api-ms-win-downlevel-shlwapi-l2-1-0)
+WINE_CONFIG_DLL(api-ms-win-downlevel-user32-l1-1-0)
+WINE_CONFIG_DLL(api-ms-win-downlevel-version-l1-1-0)
+WINE_CONFIG_DLL(api-ms-win-security-base-l1-1-0)
 WINE_CONFIG_DLL(apphelp)
 WINE_CONFIG_TEST(dlls/apphelp/tests)
 WINE_CONFIG_DLL(appwiz.cpl,,[po])
 WINE_CONFIG_DLL(atl,,[implib])
 WINE_CONFIG_TEST(dlls/atl/tests)
 WINE_CONFIG_DLL(atl100,,[implib])
-WINE_CONFIG_DLL(atl80)
+WINE_CONFIG_TEST(dlls/atl100/tests)
+WINE_CONFIG_DLL(atl80,,[implib])
 WINE_CONFIG_DLL(authz)
 WINE_CONFIG_DLL(avicap32,,[implib])
 WINE_CONFIG_DLL(avifil32,,[implib,po])
@@ -3074,6 +3095,7 @@ WINE_CONFIG_LIB(winecrt0)
 WINE_CONFIG_DLL(wined3d,,[implib])
 WINE_CONFIG_DLL(winegstreamer)
 WINE_CONFIG_DLL(winejoystick.drv)
+WINE_CONFIG_DLL(winemac.drv)
 WINE_CONFIG_DLL(winemapi)
 WINE_CONFIG_DLL(winemp3.acm)
 WINE_CONFIG_DLL(wineoss.drv)
@@ -3081,7 +3103,6 @@ WINE_CONFIG_DLL(wineps.drv,,[install-lib,po])
 WINE_CONFIG_DLL(wineps16.drv16,enable_win16)
 WINE_CONFIG_DLL(winepulse.drv)
 WINE_CONFIG_DLL(wineqtdecoder)
-WINE_CONFIG_DLL(winequartz.drv)
 WINE_CONFIG_DLL(winex11.drv)
 WINE_CONFIG_DLL(wing.dll16,enable_win16)
 WINE_CONFIG_DLL(wing32)
@@ -3108,6 +3129,7 @@ WINE_CONFIG_DLL(wldap32,,[implib,po])
 WINE_CONFIG_TEST(dlls/wldap32/tests)
 WINE_CONFIG_DLL(wmi)
 WINE_CONFIG_DLL(wmiutils)
+WINE_CONFIG_TEST(dlls/wmiutils/tests)
 WINE_CONFIG_DLL(wmvcore)
 WINE_CONFIG_DLL(wnaspi32,,[implib])
 WINE_CONFIG_DLL(wow32,enable_win16,[implib])
@@ -3147,6 +3169,7 @@ WINE_CONFIG_PROGRAM(cacls,,[install])
 WINE_CONFIG_PROGRAM(clock,,[install,po])
 WINE_CONFIG_PROGRAM(cmd,,[install,po])
 WINE_CONFIG_TEST(programs/cmd/tests)
+WINE_CONFIG_PROGRAM(conhost,,[install])
 WINE_CONFIG_PROGRAM(control,,[install])
 WINE_CONFIG_PROGRAM(cscript,,[install])
 WINE_CONFIG_PROGRAM(dxdiag,,[install,po])
@@ -3166,6 +3189,7 @@ WINE_CONFIG_PROGRAM(mshta,,[install])
 WINE_CONFIG_PROGRAM(msiexec,,[install,installbin,manpage])
 WINE_CONFIG_PROGRAM(net,,[install,po])
 WINE_CONFIG_PROGRAM(netsh,,[install])
+WINE_CONFIG_PROGRAM(netstat,,[install,po])
 WINE_CONFIG_PROGRAM(ngen,,[install])
 WINE_CONFIG_PROGRAM(notepad,,[install,installbin,manpage,po])
 WINE_CONFIG_PROGRAM(oleview,,[install,po])

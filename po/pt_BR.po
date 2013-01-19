@@ -474,7 +474,7 @@ msgstr "&De:"
 msgid "&To:"
 msgstr "&Até:"
 
-#: comdlg32.rc:209
+#: comdlg32.rc:209 wineps.rc:39
 msgid "Print &Quality:"
 msgstr "&Qualidade de Impressão:"
 
@@ -7116,7 +7116,7 @@ msgstr "relógio"
 msgid "split button"
 msgstr "botão de divisão"
 
-#: oleacc.rc:90 ipconfig.rc:33
+#: oleacc.rc:90
 msgid "IP address"
 msgstr "endereço IP"
 
@@ -7321,7 +7321,7 @@ msgctxt "unit: bits"
 msgid "b"
 msgstr "b"
 
-#: sane.rc:34 winecfg.rc:174
+#: sane.rc:34 wineps.rc:46 winecfg.rc:174
 msgctxt "unit: dots/inch"
 msgid "dpi"
 msgstr "ppp"
@@ -8294,23 +8294,23 @@ msgstr "Instalar/Desinstalar"
 
 #: urlmon.rc:40
 msgid ""
-"When installed, ActiveX has full access to your computer.Do not click "
-"install unless you have absolute trust in the above source."
+"When installed, an ActiveX component has full access to your computer. Do "
+"not click install unless you have absolute trust in the above source."
 msgstr ""
 
-#: urlmon.rc:47
+#: urlmon.rc:48
 #, fuzzy
 #| msgid "Installation transform failed to apply.\n"
 msgid "Installation of component failed: %08x"
 msgstr "Falha ao aplicar transformação de instalação.\n"
 
-#: urlmon.rc:48
+#: urlmon.rc:49
 #, fuzzy
 #| msgid "&Install"
 msgid "Install (%d)"
 msgstr "&Instalar"
 
-#: urlmon.rc:49
+#: urlmon.rc:50
 #, fuzzy
 #| msgid "&Install"
 msgid "Install"
@@ -10150,6 +10150,30 @@ msgid ""
 "Can't recognize '%1' as an internal or external command, or batch script.\n"
 msgstr ""
 
+#: cmd.rc:357
+msgid "Division by zero error.\n"
+msgstr ""
+
+#: cmd.rc:358
+msgid "Expected an operand.\n"
+msgstr ""
+
+#: cmd.rc:359
+#, fuzzy
+#| msgid "Unexpected network error.\n"
+msgid "Expected an operator.\n"
+msgstr "Erro de rede inesperado.\n"
+
+#: cmd.rc:360
+msgid "Mismatch in parentheses.\n"
+msgstr ""
+
+#: cmd.rc:361
+msgid ""
+"Badly formed number - must be one of decimal (12),\n"
+" hexadecimal (0x34) or octal (056).\n"
+msgstr ""
+
 #: dxdiag.rc:27
 msgid "DirectX Diagnostic Tool"
 msgstr "Ferramenta de Diagnóstico do DirectX"
@@ -10200,6 +10224,12 @@ msgstr "Ethernet"
 msgid "Connection-specific DNS suffix"
 msgstr "Sufixo DNS específico da conexão"
 
+#: ipconfig.rc:33
+#, fuzzy
+#| msgid "IP address"
+msgid "IPv4 address"
+msgstr "endereço IP"
+
 #: ipconfig.rc:34
 msgid "Hostname"
 msgstr "Nome do hospedeiro"
@@ -10239,6 +10269,12 @@ msgstr "DHCP habilitado"
 #: ipconfig.rc:46
 msgid "Default gateway"
 msgstr "Porta de ligação padrão"
+
+#: ipconfig.rc:47
+#, fuzzy
+#| msgid "IP address"
+msgid "IPv6 address"
+msgstr "endereço IP"
 
 #: net.rc:27
 msgid ""
@@ -10369,6 +10405,80 @@ msgstr "Reconectando"
 #: net.rc:40
 msgid "The following services are running:\n"
 msgstr "Os seguintes serviços estão rodando:\n"
+
+#: netstat.rc:27
+#, fuzzy
+#| msgid "LAN Connection"
+msgid "Active Connections"
+msgstr "Conexão LAN"
+
+#: netstat.rc:28
+msgid "Proto"
+msgstr ""
+
+#: netstat.rc:29
+#, fuzzy
+#| msgid "Email Address"
+msgid "Local Address"
+msgstr "Endereço de E-mail"
+
+#: netstat.rc:30
+#, fuzzy
+#| msgid "Street Address"
+msgid "Foreign Address"
+msgstr "Endereço da Rua"
+
+#: netstat.rc:31
+#, fuzzy
+#| msgid "Status"
+msgid "State"
+msgstr "Estado"
+
+#: netstat.rc:32
+#, fuzzy
+#| msgid "Interfaces"
+msgid "Interface Statistics"
+msgstr "Interfaces"
+
+#: netstat.rc:33
+msgid "Sent"
+msgstr ""
+
+#: netstat.rc:34
+msgid "Received"
+msgstr ""
+
+#: netstat.rc:35
+#, fuzzy
+#| msgid "bytes"
+msgid "Bytes"
+msgstr "bytes"
+
+#: netstat.rc:36
+msgid "Unicast packets"
+msgstr ""
+
+#: netstat.rc:37
+msgid "Non-unicast packets"
+msgstr ""
+
+#: netstat.rc:38
+#, fuzzy
+#| msgid "Disclaimer"
+msgid "Discards"
+msgstr "Declaração"
+
+#: netstat.rc:39
+#, fuzzy
+#| msgid "Error"
+msgid "Errors"
+msgstr "Erro"
+
+#: netstat.rc:40
+#, fuzzy
+#| msgid "Unknown port.\n"
+msgid "Unknown protocols"
+msgstr "Porta desconhecida.\n"
 
 #: notepad.rc:27
 msgid "&New\tCtrl+N"

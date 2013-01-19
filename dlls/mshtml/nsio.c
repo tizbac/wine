@@ -834,7 +834,7 @@ static nsresult NSAPI nsChannel_SetContentCharset(nsIHttpChannel *iface,
     return NS_OK;
 }
 
-static nsresult NSAPI nsChannel_GetContentLength(nsIHttpChannel *iface, PRInt32 *aContentLength)
+static nsresult NSAPI nsChannel_GetContentLength(nsIHttpChannel *iface, LONG *aContentLength)
 {
     nsChannel *This = impl_from_nsIHttpChannel(iface);
 
@@ -843,7 +843,7 @@ static nsresult NSAPI nsChannel_GetContentLength(nsIHttpChannel *iface, PRInt32 
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-static nsresult NSAPI nsChannel_SetContentLength(nsIHttpChannel *iface, PRInt32 aContentLength)
+static nsresult NSAPI nsChannel_SetContentLength(nsIHttpChannel *iface, LONG aContentLength)
 {
     nsChannel *This = impl_from_nsIHttpChannel(iface);
 
@@ -1134,7 +1134,21 @@ static nsresult NSAPI nsChannel_GetContentDisposition(nsIHttpChannel *iface, PRU
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
+static nsresult NSAPI nsChannel_SetContentDisposition(nsIHttpChannel *iface, PRUint32 aContentDisposition)
+{
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
+    FIXME("(%p)->(%u)\n", This, aContentDisposition);
+    return NS_ERROR_NOT_IMPLEMENTED;
+}
+
 static nsresult NSAPI nsChannel_GetContentDispositionFilename(nsIHttpChannel *iface, nsAString *aContentDispositionFilename)
+{
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
+    FIXME("(%p)->(%p)\n", This, aContentDispositionFilename);
+    return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+static nsresult NSAPI nsChannel_SetContentDispositionFilename(nsIHttpChannel *iface, const nsAString *aContentDispositionFilename)
 {
     nsChannel *This = impl_from_nsIHttpChannel(iface);
     FIXME("(%p)->(%p)\n", This, aContentDispositionFilename);
@@ -1399,7 +1413,9 @@ static const nsIHttpChannelVtbl nsChannelVtbl = {
     nsChannel_Open,
     nsChannel_AsyncOpen,
     nsChannel_GetContentDisposition,
+    nsChannel_SetContentDisposition,
     nsChannel_GetContentDispositionFilename,
+    nsChannel_SetContentDispositionFilename,
     nsChannel_GetContentDispositionHeader,
     nsChannel_GetRequestMethod,
     nsChannel_SetRequestMethod,
@@ -1447,7 +1463,7 @@ static nsrefcnt NSAPI nsUploadChannel_Release(nsIUploadChannel *iface)
 }
 
 static nsresult NSAPI nsUploadChannel_SetUploadStream(nsIUploadChannel *iface,
-        nsIInputStream *aStream, const nsACString *aContentType, PRInt32 aContentLength)
+        nsIInputStream *aStream, const nsACString *aContentType, PRInt64 aContentLength)
 {
     nsChannel *This = impl_from_nsIUploadChannel(iface);
     const char *content_type;
@@ -1455,7 +1471,7 @@ static nsresult NSAPI nsUploadChannel_SetUploadStream(nsIUploadChannel *iface,
     static const WCHAR content_typeW[] =
         {'C','o','n','t','e','n','t','-','T','y','p','e',0};
 
-    TRACE("(%p)->(%p %s %d)\n", This, aStream, debugstr_nsacstr(aContentType), aContentLength);
+    TRACE("(%p)->(%p %s %s)\n", This, aStream, debugstr_nsacstr(aContentType), wine_dbgstr_longlong(aContentLength));
 
     This->post_data_contains_headers = TRUE;
 
@@ -1479,7 +1495,7 @@ static nsresult NSAPI nsUploadChannel_SetUploadStream(nsIUploadChannel *iface,
         nsIInputStream_Release(This->post_data_stream);
 
     if(aContentLength != -1)
-        FIXME("Unsupported acontentLength = %d\n", aContentLength);
+        FIXME("Unsupported acontentLength = %s\n", wine_dbgstr_longlong(aContentLength));
 
     if(This->post_data_stream)
         nsIInputStream_Release(This->post_data_stream);
@@ -1645,7 +1661,7 @@ static nsresult NSAPI nsHttpChannelInternal_GetLocalAddress(nsIHttpChannelIntern
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-static nsresult NSAPI nsHttpChannelInternal_GetLocalPort(nsIHttpChannelInternal *iface, PRInt32 *aLocalPort)
+static nsresult NSAPI nsHttpChannelInternal_GetLocalPort(nsIHttpChannelInternal *iface, LONG *aLocalPort)
 {
     nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
@@ -1663,7 +1679,7 @@ static nsresult NSAPI nsHttpChannelInternal_GetRemoteAddress(nsIHttpChannelInter
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-static nsresult NSAPI nsHttpChannelInternal_GetRemotePort(nsIHttpChannelInternal *iface, PRInt32 *aRemotePort)
+static nsresult NSAPI nsHttpChannelInternal_GetRemotePort(nsIHttpChannelInternal *iface, LONG *aRemotePort)
 {
     nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
@@ -2181,7 +2197,7 @@ static nsresult NSAPI nsURI_SetHost(nsIFileURL *iface, const nsACString *aHost)
     return NS_OK;
 }
 
-static nsresult NSAPI nsURI_GetPort(nsIFileURL *iface, PRInt32 *aPort)
+static nsresult NSAPI nsURI_GetPort(nsIFileURL *iface, LONG *aPort)
 {
     nsWineURI *This = impl_from_nsIFileURL(iface);
     DWORD port;
@@ -2202,7 +2218,7 @@ static nsresult NSAPI nsURI_GetPort(nsIFileURL *iface, PRInt32 *aPort)
     return NS_OK;
 }
 
-static nsresult NSAPI nsURI_SetPort(nsIFileURL *iface, PRInt32 aPort)
+static nsresult NSAPI nsURI_SetPort(nsIFileURL *iface, LONG aPort)
 {
     nsWineURI *This = impl_from_nsIFileURL(iface);
     HRESULT hres;
@@ -2846,7 +2862,7 @@ static nsresult NSAPI nsStandardURL_SetMutable(nsIStandardURL *iface, cpp_bool a
     return NS_OK;
 }
 
-static nsresult NSAPI nsStandardURL_Init(nsIStandardURL *iface, PRUint32 aUrlType, PRInt32 aDefaultPort,
+static nsresult NSAPI nsStandardURL_Init(nsIStandardURL *iface, PRUint32 aUrlType, LONG aDefaultPort,
         const nsACString *aSpec, const char *aOriginCharset, nsIURI *aBaseURI)
 {
     nsWineURI *This = impl_from_nsIStandardURL(iface);
@@ -3081,7 +3097,7 @@ static nsresult NSAPI nsProtocolHandler_GetScheme(nsIProtocolHandler *iface, nsA
 }
 
 static nsresult NSAPI nsProtocolHandler_GetDefaultPort(nsIProtocolHandler *iface,
-        PRInt32 *aDefaultPort)
+        LONG *aDefaultPort)
 {
     nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
 
@@ -3130,7 +3146,7 @@ static nsresult NSAPI nsProtocolHandler_NewChannel(nsIProtocolHandler *iface,
 }
 
 static nsresult NSAPI nsProtocolHandler_AllowPort(nsIProtocolHandler *iface,
-        PRInt32 port, const char *scheme, cpp_bool *_retval)
+        LONG port, const char *scheme, cpp_bool *_retval)
 {
     nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
 
@@ -3343,7 +3359,7 @@ static nsresult NSAPI nsIOService_SetOffline(nsIIOService *iface, cpp_bool aOffl
     return nsIIOService_SetOffline(nsio, aOffline);
 }
 
-static nsresult NSAPI nsIOService_AllowPort(nsIIOService *iface, PRInt32 aPort,
+static nsresult NSAPI nsIOService_AllowPort(nsIIOService *iface, LONG aPort,
                                              const char *aScheme, cpp_bool *_retval)
 {
     TRACE("(%d %s %p)\n", aPort, debugstr_a(aScheme), _retval);
@@ -3457,7 +3473,7 @@ static nsresult NSAPI nsNetUtil_UnescapeString(nsINetUtil *iface, const nsACStri
 }
 
 static nsresult NSAPI nsNetUtil_ExtractCharsetFromContentType(nsINetUtil *iface, const nsACString *aTypeHeader,
-        nsACString *aCharset, PRInt32 *aCharsetStart, PRInt32 *aCharsetEnd, cpp_bool *_retval)
+        nsACString *aCharset, LONG *aCharsetStart, LONG *aCharsetEnd, cpp_bool *_retval)
 {
     TRACE("(%s %p %p %p %p)\n", debugstr_nsacstr(aTypeHeader), aCharset, aCharsetStart,
           aCharsetEnd, _retval);

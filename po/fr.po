@@ -5,7 +5,7 @@ msgstr ""
 "Project-Id-Version: Wine\n"
 "Report-Msgid-Bugs-To: http://bugs.winehq.org\n"
 "POT-Creation-Date: N/A\n"
-"PO-Revision-Date: 2012-10-29 21:13+0100\n"
+"PO-Revision-Date: 2013-01-03 21:13+0100\n"
 "Last-Translator: Frédéric Delanoy <frederic.delanoy@gmail.com>\n"
 "Language-Team: none\n"
 "Language: French\n"
@@ -476,7 +476,7 @@ msgstr "&De :"
 msgid "&To:"
 msgstr "&à :"
 
-#: comdlg32.rc:209
+#: comdlg32.rc:209 wineps.rc:39
 msgid "Print &Quality:"
 msgstr "&Qualité d'impression :"
 
@@ -3564,7 +3564,7 @@ msgstr "Constante chaîne de caractères non clôturée"
 
 #: jscript.rc:39
 msgid "'return' statement outside of function"
-msgstr ""
+msgstr "Instruction « return » en dehors d'une fonction"
 
 #: jscript.rc:40
 msgid "Can't have 'break' outside of loop"
@@ -7137,7 +7137,7 @@ msgstr "horloge"
 msgid "split button"
 msgstr "bouton avec menu"
 
-#: oleacc.rc:90 ipconfig.rc:33
+#: oleacc.rc:90
 msgid "IP address"
 msgstr "Adresse IP"
 
@@ -7342,7 +7342,7 @@ msgctxt "unit: bits"
 msgid "b"
 msgstr "b"
 
-#: sane.rc:34 winecfg.rc:174
+#: sane.rc:34 wineps.rc:46 winecfg.rc:174
 msgctxt "unit: dots/inch"
 msgid "dpi"
 msgstr "ppp"
@@ -8304,44 +8304,37 @@ msgid "Security Warning"
 msgstr "Alerte de sécurité"
 
 #: urlmon.rc:32
-#, fuzzy
-#| msgid "Do you want to continue anyway?"
 msgid "Do you want to install this software?"
-msgstr "Voulez-vous tout de même continuer ?"
+msgstr "Voulez-vous installer ce logiciel ?"
 
 #: urlmon.rc:34 explorer.rc:29
 msgid "Location:"
 msgstr "Emplacement :"
 
 #: urlmon.rc:36
-#, fuzzy
-#| msgid "Install/Uninstall"
 msgid "Don't install"
-msgstr "Installation/Désinstallation"
+msgstr "Ne pas installer"
 
 #: urlmon.rc:40
 msgid ""
-"When installed, ActiveX has full access to your computer.Do not click "
-"install unless you have absolute trust in the above source."
+"When installed, an ActiveX component has full access to your computer. Do "
+"not click install unless you have absolute trust in the above source."
 msgstr ""
-
-#: urlmon.rc:47
-#, fuzzy
-#| msgid "Installation transform failed to apply.\n"
-msgid "Installation of component failed: %08x"
-msgstr "Le fichier de transformation d'installation n'a pu être appliqué.\n"
+"Lorsqu'il est installé, un composant ActiveX a un accès complet à votre "
+"ordinateur. Ne cliquez pas sur le bouton d'installation à moins d'avoir une "
+"confiance absolue dans la source ci-dessus."
 
 #: urlmon.rc:48
-#, fuzzy
-#| msgid "&Install"
-msgid "Install (%d)"
-msgstr "&Installer"
+msgid "Installation of component failed: %08x"
+msgstr "Échec de l'installation du composant : %08x"
 
 #: urlmon.rc:49
-#, fuzzy
-#| msgid "&Install"
+msgid "Install (%d)"
+msgstr "Installer (%d)"
+
+#: urlmon.rc:50
 msgid "Install"
-msgstr "&Installer"
+msgstr "Installer"
 
 #: user32.rc:27 user32.rc:40 taskmgr.rc:138
 msgctxt "window"
@@ -10210,10 +10203,8 @@ msgid "Wine Command Prompt"
 msgstr "Invite de commande Wine"
 
 #: cmd.rc:349
-#, fuzzy
-#| msgid "CMD Version %1!S!\n"
 msgid "Wine CMD Version %1!S!\n"
-msgstr "CMD version %1!S!\n"
+msgstr "Wine CMD version %1!S!\n"
 
 #: cmd.rc:350
 msgid "More? "
@@ -10243,8 +10234,32 @@ msgstr " (Oui|Non|Tous)"
 msgid ""
 "Can't recognize '%1' as an internal or external command, or batch script.\n"
 msgstr ""
-"Ne reconnaît pas « %1 » comme commande interne ou externe, ou fichier de "
+"Ne reconnaît pas « %1 » comme commande interne ou externe, ou fichier de "
 "traitement par lots.\n"
+
+#: cmd.rc:357
+msgid "Division by zero error.\n"
+msgstr "Erreur de division par zéro.\n"
+
+#: cmd.rc:358
+msgid "Expected an operand.\n"
+msgstr "Opérande attendu.\n"
+
+#: cmd.rc:359
+msgid "Expected an operator.\n"
+msgstr "Opérateur attendu.\n"
+
+#: cmd.rc:360
+msgid "Mismatch in parentheses.\n"
+msgstr "Discordance des parenthèses.\n"
+
+#: cmd.rc:361
+msgid ""
+"Badly formed number - must be one of decimal (12),\n"
+" hexadecimal (0x34) or octal (056).\n"
+msgstr ""
+"Nombre mal formé : doit être décimal (12),\n"
+" hexadécimal (0x34) ou octal (056).\n"
 
 #: dxdiag.rc:27
 msgid "DirectX Diagnostic Tool"
@@ -10296,6 +10311,10 @@ msgstr "Ethernet"
 msgid "Connection-specific DNS suffix"
 msgstr "Suffixe DNS propre à la connexion"
 
+#: ipconfig.rc:33
+msgid "IPv4 address"
+msgstr "Adresse IPv4"
+
 #: ipconfig.rc:34
 msgid "Hostname"
 msgstr "Nom d'hôte"
@@ -10335,6 +10354,10 @@ msgstr "DHCP activé"
 #: ipconfig.rc:46
 msgid "Default gateway"
 msgstr "Passerelle par défaut"
+
+#: ipconfig.rc:47
+msgid "IPv6 address"
+msgstr "Adresse IPv6"
 
 #: net.rc:27
 msgid ""
@@ -10465,6 +10488,62 @@ msgstr "Reconnexion"
 #: net.rc:40
 msgid "The following services are running:\n"
 msgstr "Les services suivants sont en cours d'exécution :\n"
+
+#: netstat.rc:27
+msgid "Active Connections"
+msgstr "Connexions actives"
+
+#: netstat.rc:28
+msgid "Proto"
+msgstr "Proto"
+
+#: netstat.rc:29
+msgid "Local Address"
+msgstr "Adresse locale"
+
+#: netstat.rc:30
+msgid "Foreign Address"
+msgstr "Adresse distante"
+
+#: netstat.rc:31
+msgid "State"
+msgstr "État"
+
+#: netstat.rc:32
+msgid "Interface Statistics"
+msgstr "Statistiques de l'interface"
+
+#: netstat.rc:33
+msgid "Sent"
+msgstr "Envoyés"
+
+#: netstat.rc:34
+msgid "Received"
+msgstr "Reçus"
+
+#: netstat.rc:35
+msgid "Bytes"
+msgstr "Octets"
+
+#: netstat.rc:36
+msgid "Unicast packets"
+msgstr "Paquets monodiffusion"
+
+#: netstat.rc:37
+msgid "Non-unicast packets"
+msgstr "Paquets non monodiffusion"
+
+#: netstat.rc:38
+msgid "Discards"
+msgstr "Rejets"
+
+#: netstat.rc:39
+msgid "Errors"
+msgstr "Erreurs"
+
+#: netstat.rc:40
+msgid "Unknown protocols"
+msgstr "Protocoles inconnus"
 
 #: notepad.rc:27
 msgid "&New\tCtrl+N"
