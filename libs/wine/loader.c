@@ -63,6 +63,10 @@ extern char **environ;
 #include "winbase.h"
 #include "wine/library.h"
 
+#ifdef HAVE_VALGRIND_MEMCHECK_H
+#include <valgrind/memcheck.h>
+#endif
+
 /* argc/argv for the Windows application */
 int __wine_main_argc = 0;
 char **__wine_main_argv = NULL;
