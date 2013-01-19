@@ -59,6 +59,10 @@ extern char **environ;
 #include "winbase.h"
 #include "wine/library.h"
 
+#ifdef HAVE_VALGRIND_MEMCHECK_H
+#include <valgrind/memcheck.h>
+#endif
+
 /* argc/argv for the Windows application */
 int __wine_main_argc = 0;
 char **__wine_main_argv = NULL;
@@ -644,7 +648,6 @@ int wine_dll_get_owner( const char *name, char *buffer, int size, int *exists )
     return ret;
 }
 
-
 /***********************************************************************
  *           set_max_limit
  *
@@ -654,6 +657,11 @@ static void set_max_limit( int limit )
 {
 #ifdef HAVE_SETRLIMIT
     struct rlimit rlimit;
+
+#if defined(RLIMIT_NOFILE) && defined(RUNNING_ON_VALGRIND)
+    if (limit == RLIMIT_NOFILE && RUNNING_ON_VALGRIND)
+        return;
+#endif
 
     if (!getrlimit( limit, &rlimit ))
     {
