@@ -52,7 +52,8 @@ typedef enum
     XmlReadInState_DTD,
     XmlReadInState_DTD_Misc,
     XmlReadInState_Element,
-    XmlReadInState_Content
+    XmlReadInState_Content,
+    XmlReadInState_MiscEnd
 } XmlReaderInternalState;
 
 typedef enum
@@ -68,6 +69,10 @@ static const WCHAR utf8W[] = {'U','T','F','-','8',0};
 
 static const WCHAR dblquoteW[] = {'\"',0};
 static const WCHAR quoteW[] = {'\'',0};
+static const WCHAR ltW[] = {'<',0};
+static const WCHAR gtW[] = {'>',0};
+static const WCHAR commentW[] = {'<','!','-','-',0};
+static const WCHAR piW[] = {'<','?',0};
 
 struct xml_encoding_data
 {
@@ -124,6 +129,12 @@ struct attribute
     strval value;
 };
 
+struct element
+{
+    struct list entry;
+    strval qname;
+};
+
 typedef struct
 {
     IXmlReader IXmlReader_iface;
@@ -138,7 +149,9 @@ typedef struct
     struct list attrs; /* attributes list for current node */
     struct attribute *attr; /* current attribute */
     UINT attr_count;
+    struct list elements;
     strval strvalues[StringValue_Last];
+    UINT depth;
 } xmlreader;
 
 struct input_buffer
@@ -192,6 +205,21 @@ static inline void *reader_alloc(xmlreader *reader, size_t len)
 static inline void reader_free(xmlreader *reader, void *mem)
 {
     m_free(reader->imalloc, mem);
+}
+
+static HRESULT reader_strvaldup(xmlreader *reader, const strval *src, strval *dest)
+{
+    *dest = *src;
+
+    if (src->str != strval_empty.str)
+    {
+        dest->str = reader_alloc(reader, (dest->len+1)*sizeof(WCHAR));
+        if (!dest->str) return E_OUTOFMEMORY;
+        memcpy(dest->str, src->str, dest->len*sizeof(WCHAR));
+        dest->str[dest->len] = 0;
+    }
+
+    return S_OK;
 }
 
 /* reader input memory allocation functions */
@@ -253,10 +281,9 @@ static HRESULT reader_add_attr(xmlreader *reader, strval *localname, strval *val
     return S_OK;
 }
 
-static void reader_free_strvalue(xmlreader *reader, XmlReaderStringValue type)
+/* This one frees stored string value if needed */
+static void reader_free_strvalued(xmlreader *reader, strval *v)
 {
-    strval *v = &reader->strvalues[type];
-
     if (v->str != strval_empty.str)
     {
         reader_free(reader, v->str);
@@ -264,11 +291,75 @@ static void reader_free_strvalue(xmlreader *reader, XmlReaderStringValue type)
     }
 }
 
+static void reader_free_strvalue(xmlreader *reader, XmlReaderStringValue type)
+{
+    reader_free_strvalued(reader, &reader->strvalues[type]);
+}
+
 static void reader_free_strvalues(xmlreader *reader)
 {
     int type;
     for (type = 0; type < StringValue_Last; type++)
         reader_free_strvalue(reader, type);
+}
+
+/* This helper should only be used to test if strings are the same,
+   it doesn't try to sort. */
+static inline int strval_eq(const strval *str1, const strval *str2)
+{
+    if (str1->len != str2->len) return 0;
+    return !memcmp(str1->str, str2->str, str1->len*sizeof(WCHAR));
+}
+
+static void reader_clear_elements(xmlreader *reader)
+{
+    struct element *elem, *elem2;
+    LIST_FOR_EACH_ENTRY_SAFE(elem, elem2, &reader->elements, struct element, entry)
+    {
+        reader_free_strvalued(reader, &elem->qname);
+        reader_free(reader, elem);
+    }
+    list_init(&reader->elements);
+}
+
+static HRESULT reader_inc_depth(xmlreader *reader)
+{
+    /* FIXME: handle XmlReaderProperty_MaxElementDepth property */
+    reader->depth++;
+    return S_OK;
+}
+
+static HRESULT reader_push_element(xmlreader *reader, strval *qname)
+{
+    struct element *elem;
+    HRESULT hr;
+
+    elem = reader_alloc(reader, sizeof(*elem));
+    if (!elem) return E_OUTOFMEMORY;
+
+    hr = reader_strvaldup(reader, qname, &elem->qname);
+    if (FAILED(hr)) return hr;
+
+    if (!list_empty(&reader->elements))
+    {
+        hr = reader_inc_depth(reader);
+        if (FAILED(hr)) return hr;
+    }
+
+    list_add_head(&reader->elements, &elem->entry);
+    return hr;
+}
+
+static void reader_pop_element(xmlreader *reader)
+{
+    struct element *elem = LIST_ENTRY(list_head(&reader->elements), struct element, entry);
+
+    if (elem)
+    {
+        list_remove(&elem->entry);
+        reader_free_strvalued(reader, &elem->qname);
+        reader_free(reader, elem);
+    }
 }
 
 /* always make a copy, cause strings are supposed to be null terminated */
@@ -1176,8 +1267,6 @@ static HRESULT reader_parse_misc(xmlreader *reader)
 
     while (1)
     {
-        static const WCHAR commentW[] = {'<','!','-','-',0};
-        static const WCHAR piW[] = {'<','?',0};
         const WCHAR *cur = reader_get_cur(reader);
 
         if (is_wchar_space(*cur))
@@ -1395,7 +1484,7 @@ static HRESULT reader_parse_qname(xmlreader *reader, strval *prefix, strval *loc
 
 /* [12 NS] STag ::= '<' QName (S Attribute)* S? '>'
    [14 NS] EmptyElemTag ::= '<' QName (S Attribute)* S? '/>' */
-static HRESULT reader_parse_stag(xmlreader *reader, strval *prefix, strval *local, strval *qname)
+static HRESULT reader_parse_stag(xmlreader *reader, strval *prefix, strval *local, strval *qname, int *empty)
 {
     static const WCHAR endW[] = {'/','>',0};
     HRESULT hr;
@@ -1408,37 +1497,149 @@ static HRESULT reader_parse_stag(xmlreader *reader, strval *prefix, strval *loca
 
     reader_skipspaces(reader);
 
-    if (!reader_cmp(reader, endW)) return S_OK;
+    /* empty element */
+    if ((*empty = !reader_cmp(reader, endW)))
+    {
+        /* skip '/>' */
+        reader_skipn(reader, 2);
+        return S_OK;
+    }
 
-    FIXME("only empty elements without attributes supported\n");
+    /* got a start tag */
+    if (!reader_cmp(reader, gtW))
+    {
+        /* skip '>' */
+        reader_skipn(reader, 1);
+        return reader_push_element(reader, qname);
+    }
+
+    FIXME("only empty elements/start tags without attribute list supported\n");
     return E_NOTIMPL;
 }
 
 /* [39] element ::= EmptyElemTag | STag content ETag */
 static HRESULT reader_parse_element(xmlreader *reader)
 {
-    static const WCHAR ltW[] = {'<',0};
     strval qname, prefix, local;
     HRESULT hr;
+    int empty;
 
     /* check if we are really on element */
     if (reader_cmp(reader, ltW)) return S_FALSE;
     reader_shrink(reader);
 
     /* this handles empty elements too */
-    hr = reader_parse_stag(reader, &prefix, &local, &qname);
+    empty = 0;
+    hr = reader_parse_stag(reader, &prefix, &local, &qname, &empty);
     if (FAILED(hr)) return hr;
 
     /* FIXME: need to check for defined namespace to reject invalid prefix,
        currently reject all prefixes */
     if (prefix.len) return NC_E_UNDECLAREDPREFIX;
 
+    /* if we got empty element and stack is empty go straight to Misc */
+    if (empty && list_empty(&reader->elements))
+        reader->instate = XmlReadInState_MiscEnd;
+    else
+        reader->instate = XmlReadInState_Content;
+
     reader->nodetype = XmlNodeType_Element;
     reader_set_strvalue(reader, StringValue_LocalName, &local);
     reader_set_strvalue(reader, StringValue_QualifiedName, &qname);
 
-    FIXME("element content parsing not implemented\n");
     return hr;
+}
+
+/* [13 NS] ETag ::= '</' QName S? '>' */
+static HRESULT reader_parse_endtag(xmlreader *reader)
+{
+    strval prefix, local, qname;
+    struct element *elem;
+    HRESULT hr;
+
+    /* skip '</' */
+    reader_skipn(reader, 2);
+
+    hr = reader_parse_qname(reader, &prefix, &local, &qname);
+    if (FAILED(hr)) return hr;
+
+    reader_skipspaces(reader);
+
+    if (reader_cmp(reader, gtW)) return WC_E_GREATERTHAN;
+
+    /* skip '>' */
+    reader_skipn(reader, 1);
+
+    /* Element stack should never be empty at this point, cause we shouldn't get to
+       content parsing if it's empty. */
+    elem = LIST_ENTRY(list_head(&reader->elements), struct element, entry);
+    if (!strval_eq(&elem->qname, &qname)) return WC_E_ELEMENTMATCH;
+
+    reader_pop_element(reader);
+
+    reader->nodetype = XmlNodeType_EndElement;
+    reader_set_strvalue(reader, StringValue_LocalName, &local);
+    reader_set_strvalue(reader, StringValue_QualifiedName, &qname);
+
+    return S_OK;
+}
+
+/* [18] CDSect ::= CDStart CData CDEnd
+   [19] CDStart ::= '<![CDATA['
+   [20] CData ::= (Char* - (Char* ']]>' Char*))
+   [21] CDEnd ::= ']]>' */
+static HRESULT reader_parse_cdata(xmlreader *reader)
+{
+    FIXME("CDATA sections are not supported\n");
+    return E_NOTIMPL;
+}
+
+/* [66] CharRef ::= '&#' [0-9]+ ';' | '&#x' [0-9a-fA-F]+ ';'
+   [67]	Reference ::= EntityRef | CharRef
+   [68]	EntityRef ::= '&' Name ';' */
+static HRESULT reader_parse_reference(xmlreader *reader)
+{
+    FIXME("References not supported\n");
+    return E_NOTIMPL;
+}
+
+/* [14] CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*) */
+static HRESULT reader_parse_chardata(xmlreader *reader)
+{
+    FIXME("CharData not supported\n");
+    return E_NOTIMPL;
+}
+
+/* [43] content ::= CharData? ((element | Reference | CDSect | PI | Comment) CharData?)* */
+static HRESULT reader_parse_content(xmlreader *reader)
+{
+    static const WCHAR cdstartW[] = {'<','!','[','C','D','A','T','A','[',0};
+    static const WCHAR etagW[] = {'<','/',0};
+    static const WCHAR ampW[] = {'&',0};
+
+    reader_shrink(reader);
+
+    /* handle end tag here, it indicates end of content as well */
+    if (!reader_cmp(reader, etagW))
+        return reader_parse_endtag(reader);
+
+    if (!reader_cmp(reader, commentW))
+        return reader_parse_comment(reader);
+
+    if (!reader_cmp(reader, piW))
+        return reader_parse_pi(reader);
+
+    if (!reader_cmp(reader, cdstartW))
+        return reader_parse_cdata(reader);
+
+    if (!reader_cmp(reader, ampW))
+        return reader_parse_reference(reader);
+
+    if (!reader_cmp(reader, ltW))
+        return reader_parse_element(reader);
+
+    /* what's left must be CharData */
+    return reader_parse_chardata(reader);
 }
 
 static HRESULT reader_parse_nextnode(xmlreader *reader)
@@ -1505,11 +1706,9 @@ static HRESULT reader_parse_nextnode(xmlreader *reader)
                 return hr;
             break;
         case XmlReadInState_Element:
-            hr = reader_parse_element(reader);
-            if (FAILED(hr)) return hr;
-
-            reader->instate = XmlReadInState_Content;
-            return hr;
+            return reader_parse_element(reader);
+        case XmlReadInState_Content:
+            return reader_parse_content(reader);
         default:
             FIXME("internal state %d not handled\n", reader->instate);
             return E_NOTIMPL;
@@ -1561,6 +1760,7 @@ static ULONG WINAPI xmlreader_Release(IXmlReader *iface)
         IMalloc *imalloc = This->imalloc;
         if (This->input) IUnknown_Release(&This->input->IXmlReaderInput_iface);
         reader_clear_attrs(This);
+        reader_clear_elements(This);
         reader_free_strvalues(This);
         reader_free(This, This);
         if (imalloc) IMalloc_Release(imalloc);
@@ -1584,6 +1784,8 @@ static HRESULT WINAPI xmlreader_SetInput(IXmlReader* iface, IUnknown *input)
     }
 
     This->line = This->pos = 0;
+    reader_clear_elements(This);
+    This->depth = 0;
 
     /* just reset current input */
     if (!input)
@@ -1854,8 +2056,10 @@ static HRESULT WINAPI xmlreader_GetAttributeCount(IXmlReader* iface, UINT *count
 
 static HRESULT WINAPI xmlreader_GetDepth(IXmlReader* iface, UINT *depth)
 {
-    FIXME("(%p %p): stub\n", iface, depth);
-    return E_NOTIMPL;
+    xmlreader *This = impl_from_IXmlReader(iface);
+    TRACE("(%p)->(%p)\n", This, depth);
+    *depth = This->depth;
+    return S_OK;
 }
 
 static BOOL WINAPI xmlreader_IsEOF(IXmlReader* iface)
@@ -1985,6 +2189,8 @@ HRESULT WINAPI CreateXmlReader(REFIID riid, void **obj, IMalloc *imalloc)
     list_init(&reader->attrs);
     reader->attr_count = 0;
     reader->attr = NULL;
+    list_init(&reader->elements);
+    reader->depth = 0;
 
     for (i = 0; i < StringValue_Last; i++)
         reader->strvalues[i] = strval_empty;

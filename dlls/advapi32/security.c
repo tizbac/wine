@@ -1567,6 +1567,12 @@ BOOL WINAPI AddAce(
     return set_ntstatus(RtlAddAce(pAcl, dwAceRevision, dwStartingAceIndex, pAceList, nAceListLength));
 }
 
+BOOL WINAPI AddMandatoryAce(ACL *acl, DWORD ace_revision, DWORD ace_flags, DWORD mandatory_policy, PSID label_sid)
+{
+    FIXME("%p %x %x %x %p - stub\n", acl, ace_revision, ace_flags, mandatory_policy, label_sid);
+    return FALSE;
+}
+
 /******************************************************************************
  * DeleteAce [ADVAPI32.@]
  */
@@ -5267,6 +5273,20 @@ BOOL WINAPI CreateProcessWithLogonW( LPCWSTR lpUsername, LPCWSTR lpDomain, LPCWS
     lpStartupInfo, lpProcessInformation);
 
     return FALSE;
+}
+
+BOOL WINAPI CreateProcessWithTokenW(HANDLE token, DWORD logon_flags, LPCWSTR application_name, LPWSTR command_line,
+        DWORD creation_flags, void *environment, LPCWSTR current_directory, STARTUPINFOW *startup_info,
+        PROCESS_INFORMATION *process_information )
+{
+    FIXME("%p 0x%08x %s %s 0x%08x %p %s %p %p - semi-stub\n", token,
+          logon_flags, debugstr_w(application_name), debugstr_w(command_line),
+          creation_flags, environment, debugstr_w(current_directory),
+          startup_info, process_information);
+
+    /* FIXME: check if handles should be inherited */
+    return CreateProcessW( application_name, command_line, NULL, NULL, FALSE, creation_flags, environment,
+                           current_directory, startup_info, process_information );
 }
 
 /******************************************************************************

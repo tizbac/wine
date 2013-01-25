@@ -478,6 +478,7 @@ static void sync_window_opacity(struct macdrv_win_data *data, COLORREF key, BYTE
  */
 static void create_cocoa_window(struct macdrv_win_data *data)
 {
+    struct macdrv_thread_data *thread_data = macdrv_init_thread_data();
     WCHAR text[1024];
     struct macdrv_window_features wf;
     CGRect frame;
@@ -510,7 +511,7 @@ static void create_cocoa_window(struct macdrv_win_data *data)
     TRACE("creating %p window %s whole %s client %s\n", data->hwnd, wine_dbgstr_rect(&data->window_rect),
           wine_dbgstr_rect(&data->whole_rect), wine_dbgstr_rect(&data->client_rect));
 
-    data->cocoa_window = macdrv_create_cocoa_window(&wf, frame);
+    data->cocoa_window = macdrv_create_cocoa_window(&wf, frame, data->hwnd, thread_data->queue);
     if (!data->cocoa_window) goto done;
 
     set_cocoa_window_properties(data);
@@ -565,7 +566,10 @@ static struct macdrv_win_data *macdrv_create_win_data(HWND hwnd, const RECT *win
     if (GetWindowThreadProcessId(hwnd, NULL) != GetCurrentThreadId()) return NULL;
 
     if (!(parent = GetAncestor(hwnd, GA_PARENT)))  /* desktop */
+    {
+        macdrv_init_thread_data();
         return NULL;
+    }
 
     /* don't create win data for HWND_MESSAGE windows */
     if (parent != GetDesktopWindow() && !GetAncestor(parent, GA_PARENT)) return NULL;
@@ -1225,4 +1229,53 @@ void CDECL macdrv_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags,
 
 done:
     release_win_data(data);
+}
+
+
+/***********************************************************************
+ *              macdrv_window_close_requested
+ *
+ * Handler for WINDOW_CLOSE_REQUESTED events.
+ */
+void macdrv_window_close_requested(HWND hwnd)
+{
+    /* Ignore the delete window request if the window has been disabled. This
+     * is to disallow applications from being closed while in a modal state.
+     */
+    if (IsWindowEnabled(hwnd))
+    {
+        HMENU hSysMenu;
+
+        if (GetClassLongW(hwnd, GCL_STYLE) & CS_NOCLOSE) return;
+        hSysMenu = GetSystemMenu(hwnd, FALSE);
+        if (hSysMenu)
+        {
+            UINT state = GetMenuState(hSysMenu, SC_CLOSE, MF_BYCOMMAND);
+            if (state == 0xFFFFFFFF || (state & (MF_DISABLED | MF_GRAYED)))
+                return;
+        }
+        if (GetActiveWindow() != hwnd)
+        {
+            LRESULT ma = SendMessageW(hwnd, WM_MOUSEACTIVATE,
+                                      (WPARAM)GetAncestor(hwnd, GA_ROOT),
+                                      MAKELPARAM(HTCLOSE, WM_NCLBUTTONDOWN));
+            switch(ma)
+            {
+                case MA_NOACTIVATEANDEAT:
+                case MA_ACTIVATEANDEAT:
+                    return;
+                case MA_NOACTIVATE:
+                    break;
+                case MA_ACTIVATE:
+                case 0:
+                    SetActiveWindow(hwnd);
+                    break;
+                default:
+                    WARN("unknown WM_MOUSEACTIVATE code %d\n", (int) ma);
+                    break;
+            }
+        }
+
+        PostMessageW(hwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+    }
 }

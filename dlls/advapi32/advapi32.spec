@@ -25,7 +25,7 @@
 @ stdcall AddAuditAccessAceEx(ptr long long long ptr long long)
 # @ stub AddAuditAccessObjectAce
 # @ stub AddConditionalAce
-# @ stub AddMandatoryAce
+@ stdcall AddMandatoryAce(ptr long long long ptr)
 # @ stub AddUsersToEncryptedFileEx
 # @ stub ADVAPI32_1000
 # @ stub AddUsersToEncryptedFile
@@ -126,7 +126,7 @@
 # @ stub CreateProcessAsUserSecure
 @ stdcall CreateProcessAsUserW(long wstr wstr ptr ptr long long ptr wstr ptr ptr)
 @ stdcall CreateProcessWithLogonW(wstr wstr wstr long wstr wstr long ptr wstr ptr ptr)
-# @ stub CreateProcessWithTokenW
+@ stdcall CreateProcessWithTokenW(long long wstr wstr long ptr wstr ptr ptr)
 @ stdcall CreateRestrictedToken(long long long ptr long ptr long ptr ptr)
 @ stdcall CreateServiceA(long str str long long long long str str ptr str str str)
 @ stdcall CreateServiceW(long wstr wstr long long long long wstr wstr ptr wstr wstr wstr)

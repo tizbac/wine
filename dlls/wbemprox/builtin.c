@@ -215,6 +215,7 @@ static const struct column col_compsys[] =
 };
 static const struct column col_diskdrive[] =
 {
+    { prop_deviceidW,     CIM_STRING|COL_FLAG_KEY },
     { prop_manufacturerW, CIM_STRING },
     { prop_modelW,        CIM_STRING },
     { prop_serialnumberW, CIM_STRING }
@@ -345,6 +346,8 @@ static const WCHAR compsys_manufacturerW[] =
     {'T','h','e',' ','W','i','n','e',' ','P','r','o','j','e','c','t',0};
 static const WCHAR compsys_modelW[] =
     {'W','i','n','e',0};
+static const WCHAR diskdrive_deviceidW[] =
+    {'\\','\\','\\','\\','.','\\','\\','P','H','Y','S','I','C','A','L','D','R','I','V','E','0',0};
 static const WCHAR diskdrive_modelW[] =
     {'W','i','n','e',' ','D','i','s','k',' ','D','r','i','v','e',0};
 static const WCHAR diskdrive_manufacturerW[] =
@@ -399,6 +402,7 @@ struct record_computersystem
 };
 struct record_diskdrive
 {
+    const WCHAR *device_id;
     const WCHAR *manufacturer;
     const WCHAR *name;
     const WCHAR *serialnumber;
@@ -518,7 +522,7 @@ static const struct record_cdromdrive data_cdromdrive[] =
 };
 static const struct record_diskdrive data_diskdrive[] =
 {
-    { diskdrive_manufacturerW, diskdrive_modelW }
+    { diskdrive_deviceidW, diskdrive_manufacturerW, diskdrive_modelW }
 };
 static const struct record_params data_params[] =
 {
@@ -941,21 +945,15 @@ static WCHAR *get_lastbootuptime(void)
     static const WCHAR fmtW[] =
         {'%','0','4','u','%','0','2','u','%','0','2','u','%','0','2','u','%','0','2','u','%','0','2','u',
          '.','%','0','6','u','+','0','0','0',0};
-    SYSTEMTIME st;
-    FILETIME ft;
-    ULARGE_INTEGER ticks;
+    SYSTEM_TIMEOFDAY_INFORMATION ti;
+    TIME_FIELDS tf;
     WCHAR *ret;
 
     if (!(ret = heap_alloc( 26 * sizeof(WCHAR) ))) return NULL;
-    GetSystemTime( &st );
-    SystemTimeToFileTime( &st, &ft );
-    ticks.u.LowPart  = ft.dwLowDateTime;
-    ticks.u.HighPart = ft.dwHighDateTime;
-    ticks.QuadPart -= GetTickCount64() * 10000;
-    ft.dwLowDateTime  = ticks.u.LowPart;
-    ft.dwHighDateTime = ticks.u.HighPart;
-    FileTimeToSystemTime( &ft, &st );
-    sprintfW( ret, fmtW, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds * 1000 );
+
+    NtQuerySystemInformation( SystemTimeOfDayInformation, &ti, sizeof(ti), NULL );
+    RtlTimeToTimeFields( &ti.liKeBootTime, &tf );
+    sprintfW( ret, fmtW, tf.Year, tf.Month, tf.Day, tf.Hour, tf.Minute, tf.Second, tf.Milliseconds * 1000 );
     return ret;
 }
 static const WCHAR *get_osarchitecture(void)

@@ -80,6 +80,22 @@ enum macdrv_window_messages
     WM_MACDRV_SET_WIN_REGION = 0x80001000,
 };
 
+struct macdrv_thread_data
+{
+    macdrv_event_queue          queue;
+    const macdrv_event         *current_event;
+};
+
+extern DWORD thread_data_tls_index DECLSPEC_HIDDEN;
+
+extern struct macdrv_thread_data *macdrv_init_thread_data(void) DECLSPEC_HIDDEN;
+
+static inline struct macdrv_thread_data *macdrv_thread_data(void)
+{
+    return TlsGetValue(thread_data_tls_index);
+}
+
+
 /* macdrv private window data */
 struct macdrv_win_data
 {
@@ -100,5 +116,7 @@ extern RGNDATA *get_region_data(HRGN hrgn, HDC hdc_lptodp) DECLSPEC_HIDDEN;
 extern struct window_surface *create_surface(macdrv_window window, const RECT *rect, BOOL use_alpha) DECLSPEC_HIDDEN;
 extern void set_window_surface(macdrv_window window, struct window_surface *window_surface) DECLSPEC_HIDDEN;
 extern void set_surface_use_alpha(struct window_surface *window_surface, BOOL use_alpha) DECLSPEC_HIDDEN;
+
+extern void macdrv_window_close_requested(HWND hwnd) DECLSPEC_HIDDEN;
 
 #endif  /* __WINE_MACDRV_H */

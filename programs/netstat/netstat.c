@@ -46,6 +46,8 @@ static const WCHAR fmtethoutu[] = {'%', '-', '2', '0', 's', ' ', '%', '1', '4', 
 static const WCHAR fmtethheader[] = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
                                      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
                                      ' ', '%', '-', '1', '9', 's', ' ', '%', 's', '\n', '\n', 0};
+static const WCHAR fmttcpstat[] = {' ', ' ', '%', '-', '3', '5', 's', ' ', '=', ' ', '%', 'l', 'u', '\n', 0};
+static const WCHAR fmtudpstat[] = {' ', ' ', '%', '-', '2', '1', 's', ' ', '=', ' ', '%', 'l', 'u', '\n', 0};
 
 static const WCHAR tcpstatesW[][16] = {
     {'?', '?', '?', 0},
@@ -270,6 +272,29 @@ static void NETSTAT_tcp_table(void)
     HeapFree(GetProcessHeap(), 0, table);
 }
 
+static void NETSTAT_tcp_stats(void)
+{
+    PMIB_TCPSTATS stats;
+
+    stats = (PMIB_TCPSTATS)HeapAlloc(GetProcessHeap(), 0, sizeof(MIB_TCPSTATS));
+
+    if (GetTcpStatistics(stats) == NO_ERROR)
+    {
+        NETSTAT_wprintf(fmtnn, NETSTAT_load_message(IDS_TCP_STAT));
+        NETSTAT_wprintf(fmtn);
+        NETSTAT_wprintf(fmttcpstat, NETSTAT_load_message(IDS_TCP_ACTIVE_OPEN), stats->dwActiveOpens);
+        NETSTAT_wprintf(fmttcpstat, NETSTAT_load_message(IDS_TCP_PASSIV_OPEN), stats->dwPassiveOpens);
+        NETSTAT_wprintf(fmttcpstat, NETSTAT_load_message(IDS_TCP_FAILED_CONN), stats->dwAttemptFails);
+        NETSTAT_wprintf(fmttcpstat, NETSTAT_load_message(IDS_TCP_RESET_CONN),  stats->dwEstabResets);
+        NETSTAT_wprintf(fmttcpstat, NETSTAT_load_message(IDS_TCP_CURR_CONN),   stats->dwCurrEstab);
+        NETSTAT_wprintf(fmttcpstat, NETSTAT_load_message(IDS_TCP_SEGM_RECV),   stats->dwInSegs);
+        NETSTAT_wprintf(fmttcpstat, NETSTAT_load_message(IDS_TCP_SEGM_SENT),   stats->dwOutSegs);
+        NETSTAT_wprintf(fmttcpstat, NETSTAT_load_message(IDS_TCP_SEGM_RETRAN), stats->dwRetransSegs);
+    }
+
+    HeapFree(GetProcessHeap(), 0, stats);
+}
+
 static void NETSTAT_udp_table(void)
 {
     PMIB_UDPTABLE table;
@@ -298,6 +323,25 @@ static void NETSTAT_udp_table(void)
     HeapFree(GetProcessHeap(), 0, table);
 }
 
+static void NETSTAT_udp_stats(void)
+{
+    PMIB_UDPSTATS stats;
+
+    stats = (PMIB_UDPSTATS)HeapAlloc(GetProcessHeap(), 0, sizeof(MIB_UDPSTATS));
+
+    if (GetUdpStatistics(stats) == NO_ERROR)
+    {
+        NETSTAT_wprintf(fmtnn, NETSTAT_load_message(IDS_UDP_STAT));
+        NETSTAT_wprintf(fmtn);
+        NETSTAT_wprintf(fmtudpstat, NETSTAT_load_message(IDS_UDP_DGRAMS_RECV), stats->dwInDatagrams);
+        NETSTAT_wprintf(fmtudpstat, NETSTAT_load_message(IDS_UDP_NO_PORTS), stats->dwNoPorts);
+        NETSTAT_wprintf(fmtudpstat, NETSTAT_load_message(IDS_UDP_RECV_ERRORS), stats->dwInErrors);
+        NETSTAT_wprintf(fmtudpstat, NETSTAT_load_message(IDS_UDP_DGRAMS_SENT),  stats->dwOutDatagrams);
+    }
+
+    HeapFree(GetProcessHeap(), 0, stats);
+}
+
 static NETSTATPROTOCOLS NETSTAT_get_protocol(WCHAR name[])
 {
     if (!strcmpiW(name, ipW)) return PROT_IP;
@@ -314,6 +358,7 @@ static NETSTATPROTOCOLS NETSTAT_get_protocol(WCHAR name[])
 int wmain(int argc, WCHAR *argv[])
 {
     WSADATA wsa_data;
+    BOOL output_stats = FALSE;
 
     if (WSAStartup(MAKEWORD(2, 2), &wsa_data))
     {
@@ -341,16 +386,23 @@ int wmain(int argc, WCHAR *argv[])
         case 'e':
             NETSTAT_eth_stats();
             return 0;
+        case 's':
+            output_stats = TRUE;
+            break;
         case 'p':
             argv++; argc--;
             if (argc == 1) return 1;
             switch (NETSTAT_get_protocol(argv[1]))
             {
                 case PROT_TCP:
+                    if (output_stats)
+                        NETSTAT_tcp_stats();
                     NETSTAT_conn_header();
                     NETSTAT_tcp_table();
                     break;
                 case PROT_UDP:
+                    if (output_stats)
+                        NETSTAT_udp_stats();
                     NETSTAT_conn_header();
                     NETSTAT_udp_table();
                     break;
@@ -363,6 +415,12 @@ int wmain(int argc, WCHAR *argv[])
             return 1;
         }
         argv++; argc--;
+    }
+
+    if (output_stats)
+    {
+        NETSTAT_tcp_stats();
+        NETSTAT_udp_stats();
     }
 
     return 0;

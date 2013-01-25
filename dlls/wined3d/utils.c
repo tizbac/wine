@@ -1255,9 +1255,17 @@ static void init_format_fbo_compat_info(struct wined3d_gl_info *gl_info)
         gl_info->fbo_ops.glDeleteFramebuffers(1, &fbo);
 }
 
-static BOOL init_format_texture_info(struct wined3d_gl_info *gl_info)
+static BOOL init_format_texture_info(struct wined3d_adapter *adapter, struct wined3d_gl_info *gl_info)
 {
+    struct fragment_caps fragment_caps;
+    struct shader_caps shader_caps;
+    BOOL srgb_write;
     unsigned int i;
+
+    adapter->fragment_pipe->get_caps(gl_info, &fragment_caps);
+    adapter->shader_backend->shader_get_caps(gl_info, &shader_caps);
+    srgb_write = (fragment_caps.wined3d_caps & WINED3D_FRAGMENT_CAP_SRGB_WRITE)
+            && (shader_caps.wined3d_caps & WINED3D_SHADER_CAP_SRGB_WRITE);
 
     for (i = 0; i < sizeof(format_texture_info) / sizeof(*format_texture_info); ++i)
     {
@@ -1291,6 +1299,14 @@ static BOOL init_format_texture_info(struct wined3d_gl_info *gl_info)
         format->height_scale.numerator = 1;
         format->height_scale.denominator = 1;
 
+        if (!gl_info->limits.vertex_samplers)
+            format->flags &= ~WINED3DFMT_FLAG_VTF;
+
+        if (!(gl_info->quirks & WINED3D_QUIRK_LIMITED_TEX_FILTERING))
+            format->flags |= WINED3DFMT_FLAG_FILTERING;
+        else if (format->id != WINED3DFMT_R32G32B32A32_FLOAT && format->id != WINED3DFMT_R32_FLOAT)
+            format->flags &= ~WINED3DFMT_FLAG_VTF;
+
         if (format->glGammaInternal != format->glInternal)
         {
             /* Filter sRGB capabilities if EXT_texture_sRGB is not supported. */
@@ -1304,6 +1320,9 @@ static BOOL init_format_texture_info(struct wined3d_gl_info *gl_info)
                 format->glInternal = format->glGammaInternal;
             }
         }
+
+        if ((format->flags & WINED3DFMT_FLAG_SRGB_WRITE) && !srgb_write)
+            format->flags &= ~WINED3DFMT_FLAG_SRGB_WRITE;
 
         /* Texture conversion stuff */
         format->convert = format_texture_info[i].convert;
@@ -1657,17 +1676,19 @@ BOOL initPixelFormatsNoGL(struct wined3d_gl_info *gl_info)
 }
 
 /* Context activation is done by the caller. */
-BOOL initPixelFormats(struct wined3d_gl_info *gl_info, enum wined3d_pci_vendor vendor)
+BOOL wined3d_adapter_init_format_info(struct wined3d_adapter *adapter)
 {
+    struct wined3d_gl_info *gl_info = &adapter->gl_info;
+
     if (!init_format_base_info(gl_info)) return FALSE;
 
     if (!init_format_block_info(gl_info)) goto fail;
-    if (!init_format_texture_info(gl_info)) goto fail;
+    if (!init_format_texture_info(adapter, gl_info)) goto fail;
     if (!init_format_vertex_info(gl_info)) goto fail;
 
     apply_format_fixups(gl_info);
     init_format_fbo_compat_info(gl_info);
-    init_format_filter_info(gl_info, vendor);
+    init_format_filter_info(gl_info, adapter->driver_info.vendor);
 
     return TRUE;
 
@@ -3346,31 +3367,6 @@ UINT wined3d_log2i(UINT32 x)
     UINT32 i;
 
     return (i = x >> 16) ? (x = i >> 8) ? l[x] + 24 : l[i] + 16 : (i = x >> 8) ? l[i] + 8 : l[x];
-}
-
-/* Set the shader type for this device, depending on the given capabilities
- * and the user preferences in wined3d_settings. */
-void select_shader_mode(const struct wined3d_gl_info *gl_info, int *ps_selected, int *vs_selected)
-{
-    BOOL glsl = wined3d_settings.glslRequested && gl_info->glsl_version >= MAKEDWORD_VERSION(1, 20);
-
-    if (wined3d_settings.vs_mode == VS_NONE) *vs_selected = SHADER_NONE;
-    else if (gl_info->supported[ARB_VERTEX_SHADER] && glsl)
-    {
-        /* Geforce4 cards support GLSL but for vertex shaders only. Further its reported GLSL caps are
-         * wrong. This combined with the fact that glsl won't offer more features or performance, use ARB
-         * shaders only on this card. */
-        if (gl_info->supported[NV_VERTEX_PROGRAM] && !gl_info->supported[NV_VERTEX_PROGRAM2]) *vs_selected = SHADER_ARB;
-        else *vs_selected = SHADER_GLSL;
-    }
-    else if (gl_info->supported[ARB_VERTEX_PROGRAM]) *vs_selected = SHADER_ARB;
-    else *vs_selected = SHADER_NONE;
-
-    if (wined3d_settings.ps_mode == PS_NONE) *ps_selected = SHADER_NONE;
-    else if (gl_info->supported[ARB_FRAGMENT_SHADER] && glsl) *ps_selected = SHADER_GLSL;
-    else if (gl_info->supported[ARB_FRAGMENT_PROGRAM]) *ps_selected = SHADER_ARB;
-    else if (gl_info->supported[ATI_FRAGMENT_SHADER]) *ps_selected = SHADER_ATI;
-    else *ps_selected = SHADER_NONE;
 }
 
 const struct blit_shader *wined3d_select_blitter(const struct wined3d_gl_info *gl_info, enum wined3d_blit_op blit_op,

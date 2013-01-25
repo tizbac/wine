@@ -22,6 +22,7 @@
 
 #include "macdrv_cocoa.h"
 #import "cocoa_app.h"
+#import "cocoa_event.h"
 
 
 static NSUInteger style_mask_for_features(const struct macdrv_window_features* wf)
@@ -64,6 +65,9 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
 @property (nonatomic) BOOL noActivate;
 @property (nonatomic) BOOL floating;
 @property (retain, nonatomic) NSWindow* latentParentWindow;
+
+@property (nonatomic) void* hwnd;
+@property (retain, nonatomic) WineEventQueue* queue;
 
 @property (nonatomic) void* surface;
 @property (nonatomic) pthread_mutex_t* surface_mutex;
@@ -159,7 +163,7 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
 
 @implementation WineWindow
 
-    @synthesize disabled, noActivate, floating, latentParentWindow;
+    @synthesize disabled, noActivate, floating, latentParentWindow, hwnd, queue;
     @synthesize surface, surface_mutex;
     @synthesize shape, shapeChangedSinceLastDraw;
     @synthesize colorKeyed, colorKeyRed, colorKeyGreen, colorKeyBlue;
@@ -167,6 +171,8 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
 
     + (WineWindow*) createWindowWithFeatures:(const struct macdrv_window_features*)wf
                                  windowFrame:(NSRect)window_frame
+                                        hwnd:(void*)hwnd
+                                       queue:(WineEventQueue*)queue
     {
         WineWindow* window;
         WineContentView* contentView;
@@ -191,6 +197,8 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
         [window setHasShadow:wf->shadow];
         [window setColorSpace:[NSColorSpace genericRGBColorSpace]];
         [window setDelegate:window];
+        window.hwnd = hwnd;
+        window.queue = queue;
 
         contentView = [[[WineContentView alloc] initWithFrame:NSZeroRect] autorelease];
         if (!contentView)
@@ -204,6 +212,7 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
 
     - (void) dealloc
     {
+        [queue release];
         [latentParentWindow release];
         [shape release];
         [super dealloc];
@@ -428,6 +437,10 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
      */
     - (BOOL)windowShouldClose:(id)sender
     {
+        macdrv_event event;
+        event.type = WINDOW_CLOSE_REQUESTED;
+        event.window = (macdrv_window)[self retain];
+        [queue postEvent:&event];
         return NO;
     }
 
@@ -441,13 +454,15 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
  * title bar, close box, etc.).
  */
 macdrv_window macdrv_create_cocoa_window(const struct macdrv_window_features* wf,
-        CGRect frame)
+        CGRect frame, void* hwnd, macdrv_event_queue queue)
 {
     __block WineWindow* window;
 
     OnMainThread(^{
         window = [[WineWindow createWindowWithFeatures:wf
-                                           windowFrame:NSRectFromCGRect(frame)] retain];
+                                           windowFrame:NSRectFromCGRect(frame)
+                                                  hwnd:hwnd
+                                                 queue:(WineEventQueue*)queue] retain];
     });
 
     return (macdrv_window)window;
@@ -463,10 +478,22 @@ void macdrv_destroy_cocoa_window(macdrv_window w)
     NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
     WineWindow* window = (WineWindow*)w;
 
+    [window.queue discardEventsMatchingMask:-1 forWindow:window];
     [window close];
     [window release];
 
     [pool release];
+}
+
+/***********************************************************************
+ *              macdrv_get_window_hwnd
+ *
+ * Get the hwnd that was set for the window at creation.
+ */
+void* macdrv_get_window_hwnd(macdrv_window w)
+{
+    WineWindow* window = (WineWindow*)w;
+    return window.hwnd;
 }
 
 /***********************************************************************

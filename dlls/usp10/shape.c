@@ -63,7 +63,7 @@ static void ContextualShape_Mongolian(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS
 
 typedef VOID (*ShapeCharGlyphPropProc)( HDC , ScriptCache*, SCRIPT_ANALYSIS*, const WCHAR*, const INT, const WORD*, const INT, WORD*, SCRIPT_CHARPROP*, SCRIPT_GLYPHPROP*);
 
-static void ShapeCharGlyphProp_Default( HDC hdc, ScriptCache* psc, SCRIPT_ANALYSIS* psa, const WCHAR* pwcChars, const INT cChars, const WORD* pwGlyphs, const INT cGlyphs, WORD* pwLogClust, SCRIPT_CHARPROP* pCharProp, SCRIPT_GLYPHPROP* pGlyphProp);
+static void ShapeCharGlyphProp_Default( ScriptCache* psc, SCRIPT_ANALYSIS* psa, const WCHAR* pwcChars, const INT cChars, const WORD* pwGlyphs, const INT cGlyphs, WORD* pwLogClust, SCRIPT_CHARPROP* pCharProp, SCRIPT_GLYPHPROP* pGlyphProp);
 static void ShapeCharGlyphProp_Arabic( HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, const WCHAR* pwcChars, const INT cChars, const WORD* pwGlyphs, const INT cGlyphs, WORD *pwLogClust, SCRIPT_CHARPROP* pCharProp, SCRIPT_GLYPHPROP *pGlyphProp );
 static void ShapeCharGlyphProp_Hebrew( HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, const WCHAR* pwcChars, const INT cChars, const WORD* pwGlyphs, const INT cGlyphs, WORD *pwLogClust, SCRIPT_CHARPROP* pCharProp, SCRIPT_GLYPHPROP *pGlyphProp );
 static void ShapeCharGlyphProp_Thai( HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, const WCHAR* pwcChars, const INT cChars, const WORD* pwGlyphs, const INT cGlyphs, WORD *pwLogClust, SCRIPT_CHARPROP *pCharProp, SCRIPT_GLYPHPROP *pGlyphProp );
@@ -142,6 +142,8 @@ static OPENTYPE_FEATURE_RECORD standard_features[] =
 
 static OPENTYPE_FEATURE_RECORD latin_features[] =
 {
+    { MS_MAKE_TAG('l','o','c','l'), 1},
+    { MS_MAKE_TAG('c','c','m','p'), 1},
     { MS_MAKE_TAG('l','i','g','a'), 1},
     { MS_MAKE_TAG('c','l','i','g'), 1},
 };
@@ -451,11 +453,11 @@ typedef struct ScriptShapeDataTag {
 static const ScriptShapeData ShapingData[] =
 {
     {{ standard_features, 2}, {NULL, 0}, NULL, 0, NULL, NULL},
-    {{ latin_features, 2}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
-    {{ latin_features, 2}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
-    {{ latin_features, 2}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
+    {{ latin_features, 4}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
+    {{ latin_features, 4}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
+    {{ latin_features, 4}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
     {{ standard_features, 2}, {NULL, 0}, NULL, 0, NULL, NULL},
-    {{ latin_features, 2}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
+    {{ latin_features, 4}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
     {{ arabic_features, 6}, {arabic_gpos_features, 4}, required_arabic_features, 0, ContextualShape_Arabic, ShapeCharGlyphProp_Arabic},
     {{ arabic_features, 6}, {arabic_gpos_features, 4}, required_arabic_features, 0, ContextualShape_Arabic, ShapeCharGlyphProp_Arabic},
     {{ hebrew_features, 2}, {hebrew_gpos_features, 2}, NULL, 0, ContextualShape_Hebrew, ShapeCharGlyphProp_Hebrew},
@@ -495,7 +497,7 @@ static const ScriptShapeData ShapingData[] =
     {{ devanagari_features, 6}, {devanagari_gpos_features, 4}, required_telugu_features, MS_MAKE_TAG('m','l','m','2'), ContextualShape_Malayalam, ShapeCharGlyphProp_Malayalam},
     {{ devanagari_features, 6}, {devanagari_gpos_features, 4}, required_telugu_features, MS_MAKE_TAG('m','l','m','2'), ContextualShape_Malayalam, NULL},
     {{ standard_features, 2}, {NULL, 0}, NULL, 0, NULL, NULL},
-    {{ latin_features, 2}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
+    {{ latin_features, 4}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
     {{ standard_features, 2}, {NULL, 0}, NULL, 0, NULL, NULL},
     {{ myanmar_features, 2}, {NULL, 0}, NULL, 0, NULL, NULL},
     {{ myanmar_features, 2}, {NULL, 0}, NULL, 0, NULL, NULL},
@@ -530,7 +532,7 @@ static const ScriptShapeData ShapingData[] =
     {{ NULL, 0}, {NULL, 0}, NULL, 0, NULL, NULL},
     {{ NULL, 0}, {NULL, 0}, NULL, 0, NULL, NULL},
     {{ hebrew_features, 2}, {hebrew_gpos_features, 2}, NULL, 0, ContextualShape_Hebrew, NULL},
-    {{ latin_features, 2}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
+    {{ latin_features, 4}, {latin_gpos_features, 3}, NULL, 0, NULL, NULL},
     {{ thai_features, 1}, {thai_gpos_features, 3}, NULL, 0, ContextualShape_Thai, ShapeCharGlyphProp_Thai},
 };
 
@@ -612,7 +614,7 @@ static LoadedFeature* load_OT_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache
         int attempt = 2;
         OPENTYPE_TAG tags;
         OPENTYPE_TAG language;
-        OPENTYPE_TAG script;
+        OPENTYPE_TAG script = 0x00000000;
         int cTags;
 
         do
@@ -629,7 +631,7 @@ static LoadedFeature* load_OT_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache
         } while(attempt && !feature);
 
         /* try in the default (latin) table */
-        if (!feature)
+        if (!feature && !script)
             OpenType_GetFontFeatureTags(psc, MS_MAKE_TAG('l','a','t','n'), MS_MAKE_TAG('d','f','l','t'), FALSE, MS_MAKE_TAG(feat[0],feat[1],feat[2],feat[3]), tableType, 1, &tags, &cTags, &feature);
     }
 
@@ -675,12 +677,27 @@ static VOID *load_gpos_table(HDC hdc)
     return GPOS_Table;
 }
 
+static VOID *load_gdef_table(HDC hdc)
+{
+    VOID* GDEF_Table = NULL;
+    int length = GetFontData(hdc, MS_MAKE_TAG('G', 'D', 'E', 'F'), 0, NULL, 0);
+    if (length != GDI_ERROR)
+    {
+        GDEF_Table = HeapAlloc(GetProcessHeap(),0,length);
+        GetFontData(hdc, MS_MAKE_TAG('G', 'D', 'E', 'F'), 0, GDEF_Table, length);
+        TRACE("Loaded GDEF table of %i bytes\n",length);
+    }
+    return GDEF_Table;
+}
+
 static VOID load_ot_tables(HDC hdc, ScriptCache *psc)
 {
     if (!psc->GSUB_Table)
         psc->GSUB_Table = load_gsub_table(hdc);
     if (!psc->GPOS_Table)
         psc->GPOS_Table = load_gpos_table(hdc);
+    if (!psc->GDEF_Table)
+        psc->GDEF_Table = load_gdef_table(hdc);
 }
 
 INT SHAPE_does_GSUB_feature_apply_to_chars(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache* psc, const WCHAR *chars, INT write_dir, INT count, const char* feature)
@@ -860,8 +877,7 @@ static int apply_GSUB_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache* psc, W
     return GSUB_E_NOFEATURE;
 }
 
-static VOID GPOS_apply_feature(LPOUTLINETEXTMETRICW lpotm, LPLOGFONTW lplogfont, const SCRIPT_ANALYSIS *analysis, INT* piAdvance,
-                               LPCVOID header, LoadedFeature *feature, const WORD *glyphs, INT glyph_count, GOFFSET *pGoffset)
+static VOID GPOS_apply_feature(ScriptCache *psc, LPOUTLINETEXTMETRICW lpotm, LPLOGFONTW lplogfont, const SCRIPT_ANALYSIS *analysis, INT* piAdvance, LoadedFeature *feature, const WORD *glyphs, INT glyph_count, GOFFSET *pGoffset)
 {
     int i;
 
@@ -870,7 +886,7 @@ static VOID GPOS_apply_feature(LPOUTLINETEXTMETRICW lpotm, LPLOGFONTW lplogfont,
     {
         int j;
         for (j = 0; j < glyph_count; )
-            j = OpenType_apply_GPOS_lookup(lpotm, lplogfont, analysis, piAdvance, header, feature->lookups[i], glyphs, j, glyph_count, pGoffset);
+            j = OpenType_apply_GPOS_lookup(psc, lpotm, lplogfont, analysis, piAdvance, feature->lookups[i], glyphs, j, glyph_count, pGoffset);
     }
 }
 
@@ -2741,8 +2757,6 @@ static void ContextualShape_Mongolian(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS
     else
         dirL = 1;
 
-    load_ot_tables(hdc, psc);
-
     if (!psc->GSUB_Table)
         return;
 
@@ -2785,7 +2799,7 @@ static void ContextualShape_Mongolian(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS
     HeapFree(GetProcessHeap(),0,context_shape);
 }
 
-static void ShapeCharGlyphProp_Default( HDC hdc, ScriptCache* psc, SCRIPT_ANALYSIS* psa, const WCHAR* pwcChars, const INT cChars, const WORD* pwGlyphs, const INT cGlyphs, WORD* pwLogClust, SCRIPT_CHARPROP* pCharProp, SCRIPT_GLYPHPROP* pGlyphProp)
+static void ShapeCharGlyphProp_Default( ScriptCache* psc, SCRIPT_ANALYSIS* psa, const WCHAR* pwcChars, const INT cChars, const WORD* pwGlyphs, const INT cGlyphs, WORD* pwLogClust, SCRIPT_CHARPROP* pCharProp, SCRIPT_GLYPHPROP* pGlyphProp)
 {
     int i,k;
 
@@ -2813,7 +2827,7 @@ static void ShapeCharGlyphProp_Default( HDC hdc, ScriptCache* psc, SCRIPT_ANALYS
             pGlyphProp[i].sva.uJustification = SCRIPT_JUSTIFY_CHARACTER;
     }
 
-    OpenType_GDEF_UpdateGlyphProps(hdc, psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
+    OpenType_GDEF_UpdateGlyphProps(psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
     UpdateClustersFromGlyphProp(cGlyphs, cChars, pwLogClust, pGlyphProp);
 }
 
@@ -2922,7 +2936,7 @@ static void ShapeCharGlyphProp_Arabic( HDC hdc, ScriptCache *psc, SCRIPT_ANALYSI
             pGlyphProp[i].sva.uJustification = SCRIPT_JUSTIFY_NONE;
     }
 
-    OpenType_GDEF_UpdateGlyphProps(hdc, psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
+    OpenType_GDEF_UpdateGlyphProps(psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
     UpdateClustersFromGlyphProp(cGlyphs, cChars, pwLogClust, pGlyphProp);
     HeapFree(GetProcessHeap(),0,spaces);
 }
@@ -2953,7 +2967,7 @@ static void ShapeCharGlyphProp_Hebrew( HDC hdc, ScriptCache *psc, SCRIPT_ANALYSI
         }
     }
 
-    OpenType_GDEF_UpdateGlyphProps(hdc, psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
+    OpenType_GDEF_UpdateGlyphProps(psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
     UpdateClustersFromGlyphProp(cGlyphs, cChars, pwLogClust, pGlyphProp);
 }
 
@@ -2974,7 +2988,7 @@ static void ShapeCharGlyphProp_Thai( HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS 
         dirL = 1;
     }
 
-    OpenType_GDEF_UpdateGlyphProps(hdc, psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
+    OpenType_GDEF_UpdateGlyphProps(psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
 
     for (i = 0; i < cGlyphs; i++)
     {
@@ -3042,7 +3056,7 @@ static void ShapeCharGlyphProp_None( HDC hdc, ScriptCache* psc, SCRIPT_ANALYSIS*
         else
             pGlyphProp[i].sva.uJustification = SCRIPT_JUSTIFY_NONE;
     }
-    OpenType_GDEF_UpdateGlyphProps(hdc, psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
+    OpenType_GDEF_UpdateGlyphProps(psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
     UpdateClustersFromGlyphProp(cGlyphs, cChars, pwLogClust, pGlyphProp);
 }
 
@@ -3073,7 +3087,7 @@ static void ShapeCharGlyphProp_Tibet( HDC hdc, ScriptCache* psc, SCRIPT_ANALYSIS
         else
             pGlyphProp[i].sva.uJustification = SCRIPT_JUSTIFY_NONE;
     }
-    OpenType_GDEF_UpdateGlyphProps(hdc, psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
+    OpenType_GDEF_UpdateGlyphProps(psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
     UpdateClustersFromGlyphProp(cGlyphs, cChars, pwLogClust, pGlyphProp);
 
     /* Tibeten script does not set sva.fDiacritic or sva.fZeroWidth */
@@ -3091,7 +3105,7 @@ static void ShapeCharGlyphProp_BaseIndic( HDC hdc, ScriptCache *psc, SCRIPT_ANAL
 {
     int i,k;
 
-    OpenType_GDEF_UpdateGlyphProps(hdc, psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
+    OpenType_GDEF_UpdateGlyphProps(psc, pwGlyphs, cGlyphs, pwLogClust, cChars, pGlyphProp);
     for (i = 0; i < cGlyphs; i++)
     {
         int char_index[20];
@@ -3235,10 +3249,12 @@ static void ShapeCharGlyphProp_Khmer( HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS
 
 void SHAPE_CharGlyphProp(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, const WCHAR* pwcChars, const INT cChars, const WORD* pwGlyphs, const INT cGlyphs, WORD *pwLogClust, SCRIPT_CHARPROP *pCharProp, SCRIPT_GLYPHPROP *pGlyphProp)
 {
+    load_ot_tables(hdc, psc);
+
     if (ShapingData[psa->eScript].charGlyphPropProc)
         ShapingData[psa->eScript].charGlyphPropProc(hdc, psc, psa, pwcChars, cChars, pwGlyphs, cGlyphs, pwLogClust, pCharProp, pGlyphProp);
     else
-        ShapeCharGlyphProp_Default(hdc, psc, psa, pwcChars, cChars, pwGlyphs, cGlyphs, pwLogClust, pCharProp, pGlyphProp);
+        ShapeCharGlyphProp_Default(psc, psa, pwcChars, cChars, pwGlyphs, cGlyphs, pwLogClust, pCharProp, pGlyphProp);
 }
 
 void SHAPE_ContextualShaping(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WCHAR* pwcChars, INT cChars, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, WORD *pwLogClust)
@@ -3307,7 +3323,7 @@ void SHAPE_ApplyOpenTypePositions(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *ps
             if (!feature)
                 continue;
 
-            GPOS_apply_feature(psc->otm, &psc->lf, psa, piAdvance, psc->GPOS_Table, feature, pwGlyphs, cGlyphs, pGoffset);
+            GPOS_apply_feature(psc, psc->otm, &psc->lf, psa, piAdvance, feature, pwGlyphs, cGlyphs, pGoffset);
         }
     }
 }

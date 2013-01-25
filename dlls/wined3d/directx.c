@@ -2247,16 +2247,14 @@ static enum wined3d_pci_device wined3d_guess_card(const struct wined3d_gl_info *
     return select_card_fallback_nvidia(gl_info);
 }
 
-static const struct fragment_pipeline *select_fragment_implementation(const struct wined3d_gl_info *gl_info)
+static const struct fragment_pipeline *select_fragment_implementation(const struct wined3d_gl_info *gl_info,
+        const struct wined3d_shader_backend_ops *shader_backend_ops)
 {
-    int vs_selected_mode, ps_selected_mode;
-
-    select_shader_mode(gl_info, &ps_selected_mode, &vs_selected_mode);
-    if (ps_selected_mode == SHADER_GLSL)
+    if (shader_backend_ops == &glsl_shader_backend)
         return &glsl_fragment_pipe;
-    if (ps_selected_mode == SHADER_ARB)
+    if (shader_backend_ops == &arb_program_shader_backend)
         return &arbfp_fragment_pipeline;
-    if (ps_selected_mode == SHADER_ATI)
+    if (gl_info->supported[ATI_FRAGMENT_SHADER])
         return &atifs_fragment_pipeline;
     if (gl_info->supported[NV_REGISTER_COMBINERS] && gl_info->supported[NV_TEXTURE_SHADER2])
         return &nvts_fragment_pipeline;
@@ -2267,22 +2265,35 @@ static const struct fragment_pipeline *select_fragment_implementation(const stru
 
 static const struct wined3d_shader_backend_ops *select_shader_backend(const struct wined3d_gl_info *gl_info)
 {
-    int vs_selected_mode, ps_selected_mode;
+    BOOL glsl = wined3d_settings.glslRequested && gl_info->glsl_version >= MAKEDWORD_VERSION(1, 20);
 
-    select_shader_mode(gl_info, &ps_selected_mode, &vs_selected_mode);
-    if (vs_selected_mode == SHADER_GLSL || ps_selected_mode == SHADER_GLSL) return &glsl_shader_backend;
-    if (vs_selected_mode == SHADER_ARB || ps_selected_mode == SHADER_ARB) return &arb_program_shader_backend;
+    if (wined3d_settings.vs_mode == VS_NONE && wined3d_settings.ps_mode == PS_NONE)
+        return &none_shader_backend;
+    if (glsl && gl_info->supported[ARB_FRAGMENT_SHADER])
+        return &glsl_shader_backend;
+    if (glsl && gl_info->supported[ARB_VERTEX_SHADER])
+    {
+        /* Geforce4 cards support GLSL but for vertex shaders only. Further
+         * its reported GLSL caps are wrong. This combined with the fact that
+         * GLSL won't offer more features or performance, use ARB shaders only
+         * on this card. */
+        if (gl_info->supported[NV_VERTEX_PROGRAM] && !gl_info->supported[NV_VERTEX_PROGRAM2])
+            return &arb_program_shader_backend;
+        return &glsl_shader_backend;
+    }
+    if (gl_info->supported[ARB_VERTEX_PROGRAM] || gl_info->supported[ARB_FRAGMENT_PROGRAM])
+        return &arb_program_shader_backend;
     return &none_shader_backend;
 }
 
-static const struct blit_shader *select_blit_implementation(const struct wined3d_gl_info *gl_info)
+static const struct blit_shader *select_blit_implementation(const struct wined3d_gl_info *gl_info,
+        const struct wined3d_shader_backend_ops *shader_backend_ops)
 {
-    int vs_selected_mode, ps_selected_mode;
-
-    select_shader_mode(gl_info, &ps_selected_mode, &vs_selected_mode);
-    if ((ps_selected_mode == SHADER_ARB || ps_selected_mode == SHADER_GLSL)
-            && gl_info->supported[ARB_FRAGMENT_PROGRAM]) return &arbfp_blit;
-    else return &ffp_blit;
+    if ((shader_backend_ops == &glsl_shader_backend
+            || shader_backend_ops == &arb_program_shader_backend)
+            && gl_info->supported[ARB_FRAGMENT_PROGRAM])
+        return &arbfp_blit;
+    return &ffp_blit;
 }
 
 static void parse_extension_string(struct wined3d_gl_info *gl_info, const char *extensions,
@@ -2753,9 +2764,9 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
 
     checkGLcall("extension detection");
 
-    adapter->fragment_pipe = select_fragment_implementation(gl_info);
     adapter->shader_backend = select_shader_backend(gl_info);
-    adapter->blitter = select_blit_implementation(gl_info);
+    adapter->fragment_pipe = select_fragment_implementation(gl_info, adapter->shader_backend);
+    adapter->blitter = select_blit_implementation(gl_info, adapter->shader_backend);
 
     adapter->fragment_pipe->get_caps(gl_info, &fragment_caps);
     gl_info->limits.texture_stages = fragment_caps.MaxTextureBlendStages;
@@ -3471,16 +3482,6 @@ static BOOL CheckDepthStencilCapability(const struct wined3d_adapter *adapter,
     return FALSE;
 }
 
-static BOOL CheckFilterCapability(const struct wined3d_adapter *adapter, const struct wined3d_format *format)
-{
-    /* The flags entry of a format contains the filtering capability */
-    if ((format->flags & WINED3DFMT_FLAG_FILTERING)
-            || !(adapter->gl_info.quirks & WINED3D_QUIRK_LIMITED_TEX_FILTERING))
-        return TRUE;
-
-    return FALSE;
-}
-
 /* Check the render target capabilities of a format */
 static BOOL CheckRenderTargetCapability(const struct wined3d_adapter *adapter,
         const struct wined3d_format *adapter_format, const struct wined3d_format *check_format)
@@ -3525,57 +3526,6 @@ static BOOL CheckRenderTargetCapability(const struct wined3d_adapter *adapter,
         return TRUE;
     }
     return FALSE;
-}
-
-static BOOL CheckSrgbReadCapability(const struct wined3d_adapter *adapter, const struct wined3d_format *format)
-{
-    return format->flags & WINED3DFMT_FLAG_SRGB_READ;
-}
-
-static BOOL CheckSrgbWriteCapability(const struct wined3d_adapter *adapter, const struct wined3d_format *format)
-{
-    /* Only offer SRGB writing on X8R8G8B8/A8R8G8B8 when we use ARB or GLSL shaders as we are
-     * doing the color fixup in shaders.
-     * Note Windows drivers (at least on the Geforce 8800) also offer this on R5G6B5. */
-    if (format->flags & WINED3DFMT_FLAG_SRGB_WRITE)
-    {
-        int vs_selected_mode;
-        int ps_selected_mode;
-        select_shader_mode(&adapter->gl_info, &ps_selected_mode, &vs_selected_mode);
-
-        if ((ps_selected_mode == SHADER_ARB) || (ps_selected_mode == SHADER_GLSL))
-        {
-            TRACE("[OK]\n");
-            return TRUE;
-        }
-    }
-
-    TRACE("[FAILED] - sRGB writes not supported by format %s.\n", debug_d3dformat(format->id));
-    return FALSE;
-}
-
-/* Check if a format support blending in combination with pixel shaders */
-static BOOL CheckPostPixelShaderBlendingCapability(const struct wined3d_adapter *adapter,
-        const struct wined3d_format *format)
-{
-    /* The flags entry of a format contains the post pixel shader blending capability */
-    if (format->flags & WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING) return TRUE;
-
-    return FALSE;
-}
-
-static BOOL CheckWrapAndMipCapability(const struct wined3d_adapter *adapter, const struct wined3d_format *format)
-{
-    /* OpenGL supports mipmapping on all formats basically. Wrapping is unsupported,
-     * but we have to report mipmapping so we cannot reject this flag. Tests show that
-     * windows reports WRAPANDMIP on unfilterable surfaces as well, apparently to show
-     * that wrapping is supported. The lack of filtering will sort out the mipmapping
-     * capability anyway.
-     *
-     * For now lets report this on all formats, but in the future we may want to
-     * restrict it to some should games need that
-     */
-    return TRUE;
 }
 
 /* Check if a texture format is supported on the given adapter */
@@ -3905,24 +3855,6 @@ static BOOL CheckSurfaceCapability(const struct wined3d_adapter *adapter,
     return FALSE;
 }
 
-static BOOL CheckVertexTextureCapability(const struct wined3d_adapter *adapter,
-        const struct wined3d_format *format)
-{
-    const struct wined3d_gl_info *gl_info = &adapter->gl_info;
-
-    if (!gl_info->limits.vertex_samplers || !(format->flags & WINED3DFMT_FLAG_VTF))
-        return FALSE;
-
-    switch (format->id)
-    {
-        case WINED3DFMT_R32G32B32A32_FLOAT:
-        case WINED3DFMT_R32_FLOAT:
-            return TRUE;
-        default:
-            return !(gl_info->quirks & WINED3D_QUIRK_LIMITED_TEX_FILTERING);
-    }
-}
-
 HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT adapter_idx,
         enum wined3d_device_type device_type, enum wined3d_format_id adapter_format_id, DWORD usage,
         enum wined3d_resource_type resource_type, enum wined3d_format_id check_format_id)
@@ -4002,7 +3934,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_FILTER)
             {
-                if (!CheckFilterCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_FILTERING))
                 {
                     TRACE("[FAILED] - No filter support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4012,7 +3944,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING)
             {
-                if (!CheckPostPixelShaderBlendingCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING))
                 {
                     TRACE("[FAILED] - No post pixelshader blending support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4022,7 +3954,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_SRGBREAD)
             {
-                if (!CheckSrgbReadCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_SRGB_READ))
                 {
                     TRACE("[FAILED] - No sRGB read support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4032,7 +3964,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_SRGBWRITE)
             {
-                if (!CheckSrgbWriteCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_SRGB_WRITE))
                 {
                     TRACE("[FAILED] - No sRGB write support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4042,7 +3974,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_VERTEXTEXTURE)
             {
-                if (!CheckVertexTextureCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_VTF))
                 {
                     TRACE("[FAILED] - No vertex texture support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4050,15 +3982,18 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
                 usage_caps |= WINED3DUSAGE_QUERY_VERTEXTEXTURE;
             }
 
+            /* OpenGL supports mipmapping on all formats. Wrapping is
+             * unsupported, but we have to report mipmapping so we cannot
+             * reject this flag. Tests show that Windows reports WRAPANDMIP on
+             * unfilterable surfaces as well, apparently to show that wrapping
+             * is supported. The lack of filtering will sort out the
+             * mipmapping capability anyway.
+             *
+             * For now lets report this on all formats, but in the future we
+             * may want to restrict it to some should applications need that. */
             if (usage & WINED3DUSAGE_QUERY_WRAPANDMIP)
-            {
-                if (!CheckWrapAndMipCapability(adapter, format))
-                {
-                    TRACE("[FAILED] - No wrapping and mipmapping support.\n");
-                    return WINED3DERR_NOTAVAILABLE;
-                }
                 usage_caps |= WINED3DUSAGE_QUERY_WRAPANDMIP;
-            }
+
             break;
 
         case WINED3D_RTYPE_SURFACE:
@@ -4095,7 +4030,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING)
             {
-                if (!CheckPostPixelShaderBlendingCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING))
                 {
                     TRACE("[FAILED] - No post pixelshader blending support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4158,7 +4093,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_FILTER)
             {
-                if (!CheckFilterCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_FILTERING))
                 {
                     TRACE("[FAILED] - No filter support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4178,7 +4113,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING)
             {
-                if (!CheckPostPixelShaderBlendingCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING))
                 {
                     TRACE("[FAILED] - No post pixelshader blending support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4188,7 +4123,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_SRGBREAD)
             {
-                if (!CheckSrgbReadCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_SRGB_READ))
                 {
                     TRACE("[FAILED] - No sRGB read support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4198,7 +4133,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_SRGBWRITE)
             {
-                if (!CheckSrgbWriteCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_SRGB_WRITE))
                 {
                     TRACE("[FAILED] - No sRGB write support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4208,7 +4143,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_VERTEXTEXTURE)
             {
-                if (!CheckVertexTextureCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_VTF))
                 {
                     TRACE("[FAILED] - No vertex texture support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4217,14 +4152,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
             }
 
             if (usage & WINED3DUSAGE_QUERY_WRAPANDMIP)
-            {
-                if (!CheckWrapAndMipCapability(adapter, format))
-                {
-                    TRACE("[FAILED] - No wrapping and mipmapping support.\n");
-                    return WINED3DERR_NOTAVAILABLE;
-                }
                 usage_caps |= WINED3DUSAGE_QUERY_WRAPANDMIP;
-            }
 
             if (usage & WINED3DUSAGE_DEPTHSTENCIL)
             {
@@ -4336,7 +4264,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_FILTER)
             {
-                if (!CheckFilterCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_FILTERING))
                 {
                     TRACE("[FAILED] - No filter support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4346,7 +4274,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING)
             {
-                if (!CheckPostPixelShaderBlendingCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING))
                 {
                     TRACE("[FAILED] - No post pixelshader blending support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4356,7 +4284,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_SRGBREAD)
             {
-                if (!CheckSrgbReadCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_SRGB_READ))
                 {
                     TRACE("[FAILED] - No sRGB read support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4366,7 +4294,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_SRGBWRITE)
             {
-                if (!CheckSrgbWriteCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_SRGB_WRITE))
                 {
                     TRACE("[FAILED] - No sRGB write support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4376,7 +4304,7 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
 
             if (usage & WINED3DUSAGE_QUERY_VERTEXTEXTURE)
             {
-                if (!CheckVertexTextureCapability(adapter, format))
+                if (!(format->flags & WINED3DFMT_FLAG_VTF))
                 {
                     TRACE("[FAILED] - No vertex texture support.\n");
                     return WINED3DERR_NOTAVAILABLE;
@@ -4385,14 +4313,8 @@ HRESULT CDECL wined3d_check_device_format(const struct wined3d *wined3d, UINT ad
             }
 
             if (usage & WINED3DUSAGE_QUERY_WRAPANDMIP)
-            {
-                if (!CheckWrapAndMipCapability(adapter, format))
-                {
-                    TRACE("[FAILED] - No wrapping and mipmapping support.\n");
-                    return WINED3DERR_NOTAVAILABLE;
-                }
                 usage_caps |= WINED3DUSAGE_QUERY_WRAPANDMIP;
-            }
+
             break;
 
         default:
@@ -4530,8 +4452,6 @@ HRESULT CDECL wined3d_get_device_caps(const struct wined3d *wined3d, UINT adapte
 {
     const struct wined3d_adapter *adapter = &wined3d->adapters[adapter_idx];
     const struct wined3d_gl_info *gl_info = &adapter->gl_info;
-    int vs_selected_mode;
-    int ps_selected_mode;
     struct shader_caps shader_caps;
     struct fragment_caps fragment_caps;
     DWORD ckey_caps, blit_caps, fx_caps, pal_caps;
@@ -4542,12 +4462,6 @@ HRESULT CDECL wined3d_get_device_caps(const struct wined3d *wined3d, UINT adapte
     if (adapter_idx >= wined3d->adapter_count)
         return WINED3DERR_INVALIDCALL;
 
-    select_shader_mode(&adapter->gl_info, &ps_selected_mode, &vs_selected_mode);
-
-    /* ------------------------------------------------
-       The following fields apply to both d3d8 and d3d9
-       ------------------------------------------------ */
-    /* Not quite true, but use h/w supported by opengl I suppose */
     caps->DeviceType = (device_type == WINED3D_DEVICE_TYPE_HAL) ? WINED3D_DEVICE_TYPE_HAL : WINED3D_DEVICE_TYPE_REF;
     caps->AdapterOrdinal           = adapter_idx;
 
@@ -4931,30 +4845,11 @@ HRESULT CDECL wined3d_get_device_caps(const struct wined3d *wined3d, UINT adapte
     /* Add shader misc caps. Only some of them belong to the shader parts of the pipeline */
     caps->PrimitiveMiscCaps |= fragment_caps.PrimitiveMiscCaps;
 
-    /* This takes care for disabling vertex shader or pixel shader caps while leaving the other one enabled.
-     * Ignore shader model capabilities if disabled in config
-     */
-    if (vs_selected_mode == SHADER_NONE)
-    {
-        TRACE("Vertex shader disabled in config, reporting version 0.0.\n");
-        caps->VertexShaderVersion          = 0;
-        caps->MaxVertexShaderConst         = 0;
-    }
-    else
-    {
-        caps->VertexShaderVersion = shader_caps.vs_version;
-        caps->MaxVertexShaderConst = shader_caps.vs_uniform_count;
-    }
+    caps->VertexShaderVersion = shader_caps.vs_version;
+    caps->MaxVertexShaderConst = shader_caps.vs_uniform_count;
 
-    if (ps_selected_mode == SHADER_NONE)
-    {
-        TRACE("Pixel shader disabled in config, reporting version 0.0.\n");
-        caps->PixelShaderVersion           = 0;
-        caps->PixelShader1xMaxValue        = 0.0f;
-    } else {
-        caps->PixelShaderVersion = shader_caps.ps_version;
-        caps->PixelShader1xMaxValue = shader_caps.ps_1x_max_value;
-    }
+    caps->PixelShaderVersion = shader_caps.ps_version;
+    caps->PixelShader1xMaxValue = shader_caps.ps_1x_max_value;
 
     caps->TextureOpCaps                    = fragment_caps.TextureOpCaps;
     caps->MaxTextureBlendStages            = fragment_caps.MaxTextureBlendStages;
@@ -5572,7 +5467,7 @@ static BOOL wined3d_adapter_init(struct wined3d_adapter *adapter, UINT ordinal)
         return FALSE;
     }
 
-    if (!initPixelFormats(&adapter->gl_info, adapter->driver_info.vendor))
+    if (!wined3d_adapter_init_format_info(adapter))
     {
         ERR("Failed to initialize GL format info.\n");
         WineD3D_ReleaseFakeGLContext(&fake_gl_ctx);

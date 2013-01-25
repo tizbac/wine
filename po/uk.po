@@ -10492,6 +10492,80 @@ msgstr "Помилка"
 msgid "Unknown protocols"
 msgstr "Невідомий порт.\n"
 
+#: netstat.rc:41
+msgid "TCP Statistics for IPv4"
+msgstr ""
+
+#: netstat.rc:42
+#, fuzzy
+#| msgid "LAN Connection"
+msgid "Active Opens"
+msgstr "Підключення по локальній мережі"
+
+#: netstat.rc:43
+msgid "Passive Opens"
+msgstr ""
+
+#: netstat.rc:44
+#, fuzzy
+#| msgid "LAN Connection"
+msgid "Failed Connection Attempts"
+msgstr "Підключення по локальній мережі"
+
+#: netstat.rc:45
+#, fuzzy
+#| msgid "LAN Connection"
+msgid "Reset Connections"
+msgstr "Підключення по локальній мережі"
+
+#: netstat.rc:46
+#, fuzzy
+#| msgid "LAN Connection"
+msgid "Current Connections"
+msgstr "Підключення по локальній мережі"
+
+#: netstat.rc:47
+#, fuzzy
+#| msgid "Segment locked.\n"
+msgid "Segments Received"
+msgstr "Сегмент заблокований.\n"
+
+#: netstat.rc:48
+#, fuzzy
+#| msgid "Segment locked.\n"
+msgid "Segments Sent"
+msgstr "Сегмент заблокований.\n"
+
+#: netstat.rc:49
+msgid "Segments Retransmitted"
+msgstr ""
+
+#: netstat.rc:50
+msgid "UDP Statistics for IPv4"
+msgstr ""
+
+#: netstat.rc:51
+#, fuzzy
+#| msgid "Segment locked.\n"
+msgid "Datagrams Received"
+msgstr "Сегмент заблокований.\n"
+
+#: netstat.rc:52
+#, fuzzy
+#| msgid "Local Port"
+msgid "No Ports"
+msgstr "Локальний порт"
+
+#: netstat.rc:53
+#, fuzzy
+#| msgid "Decoding Error"
+msgid "Receive Errors"
+msgstr "Помилка декодування"
+
+#: netstat.rc:54
+msgid "Datagrams Sent"
+msgstr ""
+
 #: notepad.rc:27
 msgid "&New\tCtrl+N"
 msgstr "&Новий\tCtrl+N"

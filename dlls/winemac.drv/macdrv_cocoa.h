@@ -100,6 +100,7 @@
 
 
 typedef struct macdrv_opaque_window* macdrv_window;
+typedef struct macdrv_opaque_event_queue* macdrv_event_queue;
 
 struct macdrv_display {
     CGDirectDisplayID displayID;
@@ -109,12 +110,41 @@ struct macdrv_display {
 
 
 /* main */
+extern int macdrv_err_on;
+
 extern int macdrv_start_cocoa_app(void) DECLSPEC_HIDDEN;
 
 
 /* display */
 extern int macdrv_get_displays(struct macdrv_display** displays, int* count) DECLSPEC_HIDDEN;
 extern void macdrv_free_displays(struct macdrv_display* displays) DECLSPEC_HIDDEN;
+
+
+/* event */
+enum {
+    WINDOW_CLOSE_REQUESTED,
+    NUM_EVENT_TYPES
+};
+
+typedef uint32_t macdrv_event_mask;
+
+typedef struct macdrv_event {
+    int                 type;
+    macdrv_window       window;
+} macdrv_event;
+
+static inline macdrv_event_mask event_mask_for_type(int type)
+{
+    return ((macdrv_event_mask)1 << type);
+}
+
+extern macdrv_event_queue macdrv_create_event_queue(void) DECLSPEC_HIDDEN;
+extern void macdrv_destroy_event_queue(macdrv_event_queue queue) DECLSPEC_HIDDEN;
+extern int macdrv_get_event_queue_fd(macdrv_event_queue queue) DECLSPEC_HIDDEN;
+
+extern int macdrv_get_event_from_queue(macdrv_event_queue queue,
+        macdrv_event_mask mask, macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_cleanup_event(macdrv_event *event) DECLSPEC_HIDDEN;
 
 
 /* window */
@@ -136,8 +166,9 @@ struct macdrv_window_state {
 };
 
 extern macdrv_window macdrv_create_cocoa_window(const struct macdrv_window_features* wf,
-        CGRect frame) DECLSPEC_HIDDEN;
+        CGRect frame, void* hwnd, macdrv_event_queue queue) DECLSPEC_HIDDEN;
 extern void macdrv_destroy_cocoa_window(macdrv_window w) DECLSPEC_HIDDEN;
+extern void* macdrv_get_window_hwnd(macdrv_window w) DECLSPEC_HIDDEN;
 extern void macdrv_set_cocoa_window_features(macdrv_window w,
         const struct macdrv_window_features* wf) DECLSPEC_HIDDEN;
 extern void macdrv_set_cocoa_window_state(macdrv_window w,

@@ -1,5 +1,5 @@
 /*
- * MACDRV Cocoa window declarations
+ * MACDRV Cocoa event queue declarations
  *
  * Copyright 2011, 2012, 2013 Ken Thomases for CodeWeavers Inc.
  *
@@ -19,32 +19,18 @@
  */
 
 #import <AppKit/AppKit.h>
+#include "macdrv_cocoa.h"
 
 
-@class WineEventQueue;
-
-
-@interface WineWindow : NSPanel <NSWindowDelegate>
+@interface WineEventQueue : NSObject
 {
-    NSUInteger normalStyleMask;
-    BOOL disabled;
-    BOOL noActivate;
-    BOOL floating;
-    WineWindow* latentParentWindow;
+    NSMutableArray* events;
+    NSLock*         eventsLock;
 
-    void* hwnd;
-    WineEventQueue* queue;
-
-    void* surface;
-    pthread_mutex_t* surface_mutex;
-
-    NSBezierPath* shape;
-    BOOL shapeChangedSinceLastDraw;
-
-    BOOL colorKeyed;
-    CGFloat colorKeyRed, colorKeyGreen, colorKeyBlue;
-
-    BOOL usePerPixelAlpha;
+    int             fds[2]; /* Pipe signaling when there are events queued. */
 }
+
+    - (void) postEvent:(const macdrv_event*)inEvent;
+    - (void) discardEventsMatchingMask:(macdrv_event_mask)mask forWindow:(NSWindow*)window;
 
 @end

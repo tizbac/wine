@@ -137,7 +137,7 @@ static HRESULT WINAPI HTMLDOMChildrenCollection_Invoke(IHTMLDOMChildrenCollectio
 static HRESULT WINAPI HTMLDOMChildrenCollection_get_length(IHTMLDOMChildrenCollection *iface, LONG *p)
 {
     HTMLDOMChildrenCollection *This = impl_from_IHTMLDOMChildrenCollection(iface);
-    PRUint32 length=0;
+    UINT32 length=0;
 
     TRACE("(%p)->(%p)\n", This, p);
 
@@ -158,7 +158,7 @@ static HRESULT WINAPI HTMLDOMChildrenCollection_item(IHTMLDOMChildrenCollection 
     HTMLDOMChildrenCollection *This = impl_from_IHTMLDOMChildrenCollection(iface);
     nsIDOMNode *nsnode = NULL;
     HTMLDOMNode *node;
-    PRUint32 length=0;
+    UINT32 length=0;
     nsresult nsres;
     HRESULT hres;
 
@@ -212,7 +212,7 @@ static HRESULT HTMLDOMChildrenCollection_get_dispid(DispatchEx *dispex, BSTR nam
     HTMLDOMChildrenCollection *This = impl_from_DispatchEx(dispex);
     WCHAR *ptr;
     DWORD idx=0;
-    PRUint32 len = 0;
+    UINT32 len = 0;
 
     for(ptr = name; *ptr && isdigitW(*ptr); ptr++)
         idx = idx*10 + (*ptr-'0');
@@ -373,7 +373,7 @@ static HRESULT WINAPI HTMLDOMNode_Invoke(IHTMLDOMNode *iface, DISPID dispIdMembe
 static HRESULT WINAPI HTMLDOMNode_get_nodeType(IHTMLDOMNode *iface, LONG *p)
 {
     HTMLDOMNode *This = impl_from_IHTMLDOMNode(iface);
-    PRUint16 type = -1;
+    UINT16 type = -1;
 
     TRACE("(%p)->(%p)\n", This, p);
 
@@ -1085,7 +1085,7 @@ void HTMLDOMNode_Init(HTMLDocumentNode *doc, HTMLDOMNode *node, nsIDOMNode *nsno
 
 static HRESULT create_node(HTMLDocumentNode *doc, nsIDOMNode *nsnode, HTMLDOMNode **ret)
 {
-    PRUint16 node_type;
+    UINT16 node_type;
     HRESULT hres;
 
     nsIDOMNode_GetNodeType(nsnode, &node_type);

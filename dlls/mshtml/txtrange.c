@@ -54,9 +54,9 @@ typedef struct {
 } wstrbuf_t;
 
 typedef struct {
-    PRUint16 type;
+    UINT16 type;
     nsIDOMNode *node;
-    PRUint32 off;
+    UINT32 off;
     nsAString str;
     const PRUnichar *p;
 } dompos_t;
@@ -116,9 +116,9 @@ static int string_to_nscmptype(LPCWSTR str)
     return -1;
 }
 
-static PRUint16 get_node_type(nsIDOMNode *node)
+static UINT16 get_node_type(nsIDOMNode *node)
 {
-    PRUint16 type = 0;
+    UINT16 type = 0;
 
     if(node)
         nsIDOMNode_GetNodeType(node, &type);
@@ -377,7 +377,7 @@ static nsIDOMNode *prev_node(HTMLTxtRange *This, nsIDOMNode *iter)
     return NULL;
 }
 
-static nsIDOMNode *get_child_node(nsIDOMNode *node, PRUint32 off)
+static nsIDOMNode *get_child_node(nsIDOMNode *node, UINT32 off)
 {
     nsIDOMNodeList *node_list;
     nsIDOMNode *ret = NULL;

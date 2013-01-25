@@ -21,7 +21,34 @@
 #import "cocoa_app.h"
 
 
+int macdrv_err_on;
+
+
 @implementation WineApplication
+
+    - (id) init
+    {
+        self = [super init];
+        if (self != nil)
+        {
+            eventQueues = [[NSMutableArray alloc] init];
+            eventQueuesLock = [[NSLock alloc] init];
+
+            if (!eventQueues || !eventQueuesLock)
+            {
+                [self release];
+                return nil;
+            }
+        }
+        return self;
+    }
+
+    - (void) dealloc
+    {
+        [eventQueues release];
+        [eventQueuesLock release];
+        [super dealloc];
+    }
 
     - (void) transformProcessToForeground
     {
@@ -66,6 +93,21 @@
         }
     }
 
+    - (BOOL) registerEventQueue:(WineEventQueue*)queue
+    {
+        [eventQueuesLock lock];
+        [eventQueues addObject:queue];
+        [eventQueuesLock unlock];
+        return TRUE;
+    }
+
+    - (void) unregisterEventQueue:(WineEventQueue*)queue
+    {
+        [eventQueuesLock lock];
+        [eventQueues removeObjectIdenticalTo:queue];
+        [eventQueuesLock unlock];
+    }
+
 @end
 
 /***********************************************************************
@@ -86,4 +128,25 @@ void OnMainThread(dispatch_block_t block)
 void OnMainThreadAsync(dispatch_block_t block)
 {
     dispatch_async(dispatch_get_main_queue(), block);
+}
+
+/***********************************************************************
+ *              LogError
+ */
+void LogError(const char* func, NSString* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    LogErrorv(func, format, args);
+    va_end(args);
+}
+
+/***********************************************************************
+ *              LogErrorv
+ */
+void LogErrorv(const char* func, NSString* format, va_list args)
+{
+    NSString* message = [[NSString alloc] initWithFormat:format arguments:args];
+    fprintf(stderr, "err:%s:%s", func, [message UTF8String]);
+    [message release];
 }

@@ -252,11 +252,6 @@ static inline float float_24_to_32(DWORD in)
 #define ORM_BACKBUFFER  0
 #define ORM_FBO         1
 
-#define SHADER_ARB  1
-#define SHADER_GLSL 2
-#define SHADER_ATI  3
-#define SHADER_NONE 4
-
 #define RTL_READDRAW   1
 #define RTL_READTEX    2
 
@@ -714,6 +709,9 @@ extern const struct wined3d_shader_frontend sm4_shader_frontend DECLSPEC_HIDDEN;
 
 typedef void (*SHADER_HANDLER)(const struct wined3d_shader_instruction *);
 
+#define WINED3D_SHADER_CAP_VS_CLIPPING      0x00000001
+#define WINED3D_SHADER_CAP_SRGB_WRITE       0x00000002
+
 struct shader_caps
 {
     UINT vs_version;
@@ -724,7 +722,7 @@ struct shader_caps
     DWORD ps_uniform_count;
     float ps_1x_max_value;
 
-    BOOL vs_clipping;
+    DWORD wined3d_caps;
 };
 
 enum tex_types
@@ -1172,8 +1170,12 @@ struct StateEntryTemplate
     enum wined3d_gl_extension extension;
 };
 
+#define WINED3D_FRAGMENT_CAP_PROJ_CONTROL   0x00000001
+#define WINED3D_FRAGMENT_CAP_SRGB_WRITE     0x00000002
+
 struct fragment_caps
 {
+    DWORD wined3d_caps;
     DWORD PrimitiveMiscCaps;
     DWORD TextureOpCaps;
     DWORD MaxTextureBlendStages;
@@ -1188,7 +1190,6 @@ struct fragment_pipeline
     void (*free_private)(struct wined3d_device *device);
     BOOL (*color_fixup_supported)(struct color_fixup_desc fixup);
     const struct StateEntryTemplate *states;
-    BOOL ffp_proj_control;
 };
 
 extern const struct StateEntryTemplate misc_state_template[] DECLSPEC_HIDDEN;
@@ -1586,9 +1587,9 @@ struct wined3d_adapter
     const struct blit_shader *blitter;
 };
 
+BOOL wined3d_adapter_init_format_info(struct wined3d_adapter *adapter) DECLSPEC_HIDDEN;
 unsigned int adapter_adjust_memory(struct wined3d_adapter *adapter, int amount) DECLSPEC_HIDDEN;
 
-BOOL initPixelFormats(struct wined3d_gl_info *gl_info, enum wined3d_pci_vendor vendor) DECLSPEC_HIDDEN;
 BOOL initPixelFormatsNoGL(struct wined3d_gl_info *gl_info) DECLSPEC_HIDDEN;
 extern void add_gl_compat_wrappers(struct wined3d_gl_info *gl_info) DECLSPEC_HIDDEN;
 
@@ -2574,8 +2575,6 @@ void multiply_matrix(struct wined3d_matrix *dest, const struct wined3d_matrix *s
         const struct wined3d_matrix *src2) DECLSPEC_HIDDEN;
 UINT wined3d_log2i(UINT32 x) DECLSPEC_HIDDEN;
 unsigned int count_bits(unsigned int mask) DECLSPEC_HIDDEN;
-
-void select_shader_mode(const struct wined3d_gl_info *gl_info, int *ps_selected, int *vs_selected) DECLSPEC_HIDDEN;
 
 struct wined3d_shader_lconst
 {
