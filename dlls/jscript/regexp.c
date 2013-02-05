@@ -3366,6 +3366,7 @@ static HRESULT do_regexp_match_next(script_ctx_t *ctx, RegExpInstance *regexp, D
             if(!new_parens)
                 return E_OUTOFMEMORY;
 
+            *parens_size = regexp->jsregexp->parenCount;
             *parens = new_parens;
         }
     }
@@ -3464,10 +3465,15 @@ static HRESULT regexp_match(script_ctx_t *ctx, jsdisp_t *dispex, jsstr_t *str, B
             break;
 
         if(ret_size == i) {
-            if(ret)
-                ret = heap_realloc(ret, (ret_size <<= 1) * sizeof(match_result_t));
-            else
+            if(ret) {
+                match_result_t *old_ret = ret;
+
+                ret = heap_realloc(old_ret, (ret_size <<= 1) * sizeof(match_result_t));
+                if(!ret)
+                    heap_free(old_ret);
+            }else {
                 ret = heap_alloc((ret_size=4) * sizeof(match_result_t));
+            }
             if(!ret) {
                 hres = E_OUTOFMEMORY;
                 break;
@@ -3708,8 +3714,10 @@ static HRESULT RegExp_exec(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, unsig
     TRACE("\n");
 
     hres = run_exec(ctx, jsthis, argc ? argv[0] : jsval_string(jsstr_empty()), &string, &match, &parens, &parens_cnt, &b);
-    if(FAILED(hres))
+    if(FAILED(hres)) {
+        heap_free(parens);
         return hres;
+    }
 
     if(r) {
         if(b) {
@@ -3931,8 +3939,10 @@ HRESULT regexp_string_match(script_ctx_t *ctx, jsdisp_t *re, jsstr_t *str, jsval
         const WCHAR *cp = str->str;
 
         hres = regexp_match_next(ctx, &regexp->dispex, 0, str, &cp, &parens, &parens_size, &parens_cnt, &match);
-        if(FAILED(hres))
+        if(FAILED(hres)) {
+            heap_free(parens);
             return hres;
+        }
 
         if(r) {
             if(hres == S_OK) {

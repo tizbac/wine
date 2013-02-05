@@ -123,7 +123,7 @@ static HRESULT WINAPI enum_class_object_Next(
     if (lTimeout != WBEM_INFINITE) FIXME("timeout not supported\n");
 
     *puReturned = 0;
-    if (ec->index + uCount > view->count) return WBEM_S_FALSE;
+    if (ec->index >= view->count) return WBEM_S_FALSE;
 
     hr = create_class_object( view->table->name, iface, ec->index, NULL, apObjects );
     if (hr != S_OK) return hr;
@@ -546,8 +546,11 @@ static HRESULT WINAPI class_object_GetPropertyQualifierSet(
     LPCWSTR wszProperty,
     IWbemQualifierSet **ppQualSet )
 {
-    FIXME("%p, %s, %p\n", iface, debugstr_w(wszProperty), ppQualSet);
-    return WbemQualifierSet_create( NULL, (void **)ppQualSet );
+    struct class_object *co = impl_from_IWbemClassObject( iface );
+
+    TRACE("%p, %s, %p\n", iface, debugstr_w(wszProperty), ppQualSet);
+
+    return WbemQualifierSet_create( NULL, co->name, wszProperty, (void **)ppQualSet );
 }
 
 static HRESULT WINAPI class_object_Clone(
@@ -1012,8 +1015,8 @@ HRESULT create_class_object( const WCHAR *name, IEnumWbemClassObject *iter, UINT
 
     co->IWbemClassObject_iface.lpVtbl = &class_object_vtbl;
     co->refs  = 1;
-    co->name  = heap_strdupW( name );
-    if (!co->name)
+    if (!name) co->name = NULL;
+    else if (!(co->name = heap_strdupW( name )))
     {
         heap_free( co );
         return E_OUTOFMEMORY;

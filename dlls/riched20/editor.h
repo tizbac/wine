@@ -56,6 +56,16 @@ static inline void * __WINE_ALLOC_SIZE(2) heap_realloc( void *ptr, size_t len )
         (fe).lindex=-1;\
         };
 
+static inline WCHAR *get_text( const ME_Run *run, int offset )
+{
+    return run->strText->szData + offset;
+}
+
+static inline const char *debugstr_run( const ME_Run *run )
+{
+    return debugstr_w( get_text( run, 0 ) );
+}
+
 /* style.c */
 ME_Style *ME_MakeStyle(CHARFORMAT2W *style) DECLSPEC_HIDDEN;
 void ME_AddRefStyle(ME_Style *item) DECLSPEC_HIDDEN;
@@ -94,8 +104,6 @@ ME_String *ME_StrDup(const ME_String *s) DECLSPEC_HIDDEN;
 void ME_DestroyString(ME_String *s) DECLSPEC_HIDDEN;
 void ME_AppendString(ME_String *s1, const ME_String *s2) DECLSPEC_HIDDEN;
 ME_String *ME_VSplitString(ME_String *orig, int nVPos) DECLSPEC_HIDDEN;
-int ME_IsWhitespaces(const ME_String *s) DECLSPEC_HIDDEN;
-int ME_IsSplitable(const ME_String *s) DECLSPEC_HIDDEN;
 int ME_FindNonWhitespaceV(const ME_String *s, int nVChar) DECLSPEC_HIDDEN;
 int ME_CallWordBreakProc(ME_TextEditor *editor, ME_String *str, INT start, INT code) DECLSPEC_HIDDEN;
 void ME_StrDeleteV(ME_String *s, int nVChar, int nChars) DECLSPEC_HIDDEN;
@@ -317,7 +325,12 @@ ITextHost *ME_CreateTextHost(HWND hwnd, CREATESTRUCTW *cs, BOOL bEmulateVersion1
 #define ITextHost_TxGetSelectionBarWidth(This,a) TXTHOST_VTABLE(This)->TxGetSelectionBarWidth(This,a)
 
 /* undo.c */
-ME_UndoItem *ME_AddUndoItem(ME_TextEditor *editor, ME_DIType type, const ME_DisplayItem *pdi) DECLSPEC_HIDDEN;
+BOOL add_undo_insert_run( ME_TextEditor *, int pos, const WCHAR *str, int len, int flags, ME_Style *style ) DECLSPEC_HIDDEN;
+BOOL add_undo_delete_run( ME_TextEditor *, int pos, int len ) DECLSPEC_HIDDEN;
+BOOL add_undo_set_para_fmt( ME_TextEditor *, const ME_Paragraph *para ) DECLSPEC_HIDDEN;
+BOOL add_undo_set_char_fmt( ME_TextEditor *, int pos, int len, const CHARFORMAT2W *fmt ) DECLSPEC_HIDDEN;
+BOOL add_undo_join_paras( ME_TextEditor *, int pos ) DECLSPEC_HIDDEN;
+BOOL add_undo_split_para( ME_TextEditor *, const ME_Paragraph *para, const ME_Run *run, const ME_Cell *cell) DECLSPEC_HIDDEN;
 void ME_CommitUndo(ME_TextEditor *editor) DECLSPEC_HIDDEN;
 void ME_ContinueCoalescingTransaction(ME_TextEditor *editor) DECLSPEC_HIDDEN;
 void ME_CommitCoalescingUndo(ME_TextEditor *editor) DECLSPEC_HIDDEN;

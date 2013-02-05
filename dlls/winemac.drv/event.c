@@ -32,7 +32,12 @@ WINE_DEFAULT_DEBUG_CHANNEL(event);
 static const char *dbgstr_event(int type)
 {
     static const char * const event_names[] = {
+        "APP_DEACTIVATED",
+        "MOUSE_BUTTON",
         "WINDOW_CLOSE_REQUESTED",
+        "WINDOW_FRAME_CHANGED",
+        "WINDOW_GOT_FOCUS",
+        "WINDOW_LOST_FOCUS",
     };
 
     if (0 <= type && type < NUM_EVENT_TYPES) return event_names[type];
@@ -49,8 +54,17 @@ static macdrv_event_mask get_event_mask(DWORD mask)
 
     if ((mask & QS_ALLINPUT) == QS_ALLINPUT) return -1;
 
+    if (mask & QS_MOUSEBUTTON)
+        event_mask |= event_mask_for_type(MOUSE_BUTTON);
+
     if (mask & QS_POSTMESSAGE)
+    {
+        event_mask |= event_mask_for_type(APP_DEACTIVATED);
         event_mask |= event_mask_for_type(WINDOW_CLOSE_REQUESTED);
+        event_mask |= event_mask_for_type(WINDOW_FRAME_CHANGED);
+        event_mask |= event_mask_for_type(WINDOW_GOT_FOCUS);
+        event_mask |= event_mask_for_type(WINDOW_LOST_FOCUS);
+    }
 
     return event_mask;
 }
@@ -73,8 +87,23 @@ void macdrv_handle_event(macdrv_event *event)
 
     switch (event->type)
     {
+    case APP_DEACTIVATED:
+        macdrv_app_deactivated();
+        break;
+    case MOUSE_BUTTON:
+        macdrv_mouse_button(hwnd, event);
+        break;
     case WINDOW_CLOSE_REQUESTED:
         macdrv_window_close_requested(hwnd);
+        break;
+    case WINDOW_FRAME_CHANGED:
+        macdrv_window_frame_changed(hwnd, event->window_frame_changed.frame);
+        break;
+    case WINDOW_GOT_FOCUS:
+        macdrv_window_got_focus(hwnd, event);
+        break;
+    case WINDOW_LOST_FOCUS:
+        macdrv_window_lost_focus(hwnd, event);
         break;
     default:
         TRACE("    ignoring\n");

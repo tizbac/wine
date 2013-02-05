@@ -354,145 +354,16 @@ typedef struct
     netconn_stream_t netconn_stream;
 } http_request_t;
 
+typedef struct task_header_t task_header_t;
+typedef void (*async_task_proc_t)(task_header_t*);
 
-
-struct WORKREQ_FTPPUTFILEW
+struct task_header_t
 {
-    LPWSTR lpszLocalFile;
-    LPWSTR lpszNewRemoteFile;
-    DWORD  dwFlags;
-    DWORD_PTR dwContext;
-};
-
-struct WORKREQ_FTPSETCURRENTDIRECTORYW
-{
-    LPWSTR lpszDirectory;
-};
-
-struct WORKREQ_FTPCREATEDIRECTORYW
-{
-    LPWSTR lpszDirectory;
-};
-
-struct WORKREQ_FTPFINDFIRSTFILEW
-{
-    LPWSTR lpszSearchFile;
-    LPWIN32_FIND_DATAW lpFindFileData;
-    DWORD  dwFlags;
-    DWORD_PTR dwContext;
-};
-
-struct WORKREQ_FTPGETCURRENTDIRECTORYW
-{
-    LPWSTR lpszDirectory;
-    DWORD *lpdwDirectory;
-};
-
-struct WORKREQ_FTPOPENFILEW
-{
-    LPWSTR lpszFilename;
-    DWORD  dwAccess;
-    DWORD  dwFlags;
-    DWORD_PTR dwContext;
-};
-
-struct WORKREQ_FTPGETFILEW
-{
-    LPWSTR lpszRemoteFile;
-    LPWSTR lpszNewFile;
-    BOOL   fFailIfExists;
-    DWORD  dwLocalFlagsAttribute;
-    DWORD  dwFlags;
-    DWORD_PTR dwContext;
-};
-
-struct WORKREQ_FTPDELETEFILEW
-{
-    LPWSTR lpszFilename;
-};
-
-struct WORKREQ_FTPREMOVEDIRECTORYW
-{
-    LPWSTR lpszDirectory;
-};
-
-struct WORKREQ_FTPRENAMEFILEW
-{
-    LPWSTR lpszSrcFile;
-    LPWSTR lpszDestFile;
-};
-
-struct WORKREQ_FTPFINDNEXTW
-{
-    LPWIN32_FIND_DATAW lpFindFileData;
-};
-
-struct WORKREQ_HTTPSENDREQUESTW
-{
-    LPWSTR lpszHeader;
-    DWORD  dwHeaderLength;
-    LPVOID lpOptional;
-    DWORD  dwOptionalLength;
-    DWORD  dwContentLength;
-    BOOL   bEndRequest;
-};
-
-struct WORKREQ_HTTPENDREQUESTW
-{
-    DWORD     dwFlags;
-    DWORD_PTR dwContext;
-};
-
-struct WORKREQ_SENDCALLBACK
-{
-    DWORD_PTR dwContext;
-    DWORD     dwInternetStatus;
-    LPVOID    lpvStatusInfo;
-    DWORD     dwStatusInfoLength;
-};
-
-struct WORKREQ_INTERNETOPENURLW
-{
-    HINTERNET hInternet;
-    LPWSTR     lpszUrl;
-    LPWSTR     lpszHeaders;
-    DWORD     dwHeadersLength;
-    DWORD     dwFlags;
-    DWORD_PTR dwContext;
-};
-
-struct WORKREQ_HTTPREADFILEEX
-{
-    void *buf;
-    DWORD size;
-    DWORD *ret_read;
-};
-
-typedef struct WORKREQ
-{
-    void (*asyncproc)(struct WORKREQ*);
+    async_task_proc_t proc;
     object_header_t *hdr;
+};
 
-    union {
-        struct WORKREQ_FTPPUTFILEW              FtpPutFileW;
-        struct WORKREQ_FTPSETCURRENTDIRECTORYW  FtpSetCurrentDirectoryW;
-        struct WORKREQ_FTPCREATEDIRECTORYW      FtpCreateDirectoryW;
-        struct WORKREQ_FTPFINDFIRSTFILEW        FtpFindFirstFileW;
-        struct WORKREQ_FTPGETCURRENTDIRECTORYW  FtpGetCurrentDirectoryW;
-        struct WORKREQ_FTPOPENFILEW             FtpOpenFileW;
-        struct WORKREQ_FTPGETFILEW              FtpGetFileW;
-        struct WORKREQ_FTPDELETEFILEW           FtpDeleteFileW;
-        struct WORKREQ_FTPREMOVEDIRECTORYW      FtpRemoveDirectoryW;
-        struct WORKREQ_FTPRENAMEFILEW           FtpRenameFileW;
-        struct WORKREQ_FTPFINDNEXTW             FtpFindNextW;
-        struct WORKREQ_HTTPSENDREQUESTW         HttpSendRequestW;
-        struct WORKREQ_HTTPENDREQUESTW          HttpEndRequestW;
-        struct WORKREQ_SENDCALLBACK             SendCallback;
-        struct WORKREQ_INTERNETOPENURLW         InternetOpenUrlW;
-        struct WORKREQ_HTTPREADFILEEX           HttpReadFileEx;
-    } u;
-
-} WORKREQUEST, *LPWORKREQUEST;
+void *alloc_async_task(object_header_t*,async_task_proc_t,size_t) DECLSPEC_HIDDEN;
 
 void *alloc_object(object_header_t*,const object_vtbl_t*,size_t) DECLSPEC_HIDDEN;
 object_header_t *get_handle_object( HINTERNET hinternet ) DECLSPEC_HIDDEN;
@@ -522,7 +393,7 @@ BOOL set_cookie(const WCHAR*,const WCHAR*,const WCHAR*,const WCHAR*) DECLSPEC_HI
 
 void INTERNET_SetLastError(DWORD dwError) DECLSPEC_HIDDEN;
 DWORD INTERNET_GetLastError(void) DECLSPEC_HIDDEN;
-DWORD INTERNET_AsyncCall(LPWORKREQUEST lpWorkRequest) DECLSPEC_HIDDEN;
+DWORD INTERNET_AsyncCall(task_header_t*) DECLSPEC_HIDDEN;
 LPSTR INTERNET_GetResponseBuffer(void) DECLSPEC_HIDDEN;
 LPSTR INTERNET_GetNextLine(INT nSocket, LPDWORD dwLen) DECLSPEC_HIDDEN;
 

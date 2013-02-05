@@ -27,18 +27,30 @@
 
 
 @class WineEventQueue;
+@class WineWindow;
 
 
 @interface WineApplication : NSApplication <NSApplicationDelegate>
 {
     NSMutableArray* eventQueues;
     NSLock*         eventQueuesLock;
+
+    NSTimeInterval eventTimeAdjustment;
+
+    NSMutableArray* keyWindows;
+    NSMutableSet* triedWindows;
+    unsigned long windowFocusSerial;
 }
 
     - (void) transformProcessToForeground;
 
     - (BOOL) registerEventQueue:(WineEventQueue*)queue;
     - (void) unregisterEventQueue:(WineEventQueue*)queue;
+
+    - (void) computeEventTimeAdjustmentFromTicks:(unsigned long long)tickcount uptime:(uint64_t)uptime_ns;
+    - (double) ticksForEventTime:(NSTimeInterval)eventTime;
+
+    - (void) windowGotFocus:(WineWindow*)window;
 
 @end
 

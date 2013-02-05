@@ -64,7 +64,7 @@ void ME_PropagateCharOffset(ME_DisplayItem *p, int shift)
 	 */	 	    
   if (p->type == diRun) /* propagate in all runs in this para */
   {
-    TRACE("PropagateCharOffset(%s, %d)\n", debugstr_w(p->member.run.strText->szData), shift);
+    TRACE("PropagateCharOffset(%s, %d)\n", debugstr_run( &p->member.run ), shift);
     do {
       p->member.run.nCharOfs += shift;
       assert(p->member.run.nCharOfs >= 0);
@@ -121,14 +121,14 @@ void ME_CheckCharOffsets(ME_TextEditor *editor)
         ofs = 0;
         break;
       case diRun:
-        TRACE_(richedit_check)("run, real ofs = %d (+ofsp = %d), counted = %d, len = %d, txt = \"%s\", flags=%08x, fx&mask = %08x\n",
+        TRACE_(richedit_check)("run, real ofs = %d (+ofsp = %d), counted = %d, len = %d, txt = %s, flags=%08x, fx&mask = %08x\n",
           p->member.run.nCharOfs, p->member.run.nCharOfs+ofsp, ofsp+ofs,
-          p->member.run.strText->nLen, debugstr_w(p->member.run.strText->szData),
+          p->member.run.len, debugstr_run( &p->member.run ),
           p->member.run.nFlags,
           p->member.run.style->fmt.dwMask & p->member.run.style->fmt.dwEffects);
         assert(ofs == p->member.run.nCharOfs);
-        assert(p->member.run.strText->nLen);
-        ofs += p->member.run.strText->nLen;
+        assert(p->member.run.len);
+        ofs += p->member.run.len;
         break;
       case diCell:
         TRACE_(richedit_check)("cell\n");
@@ -226,11 +226,12 @@ void ME_JoinRuns(ME_TextEditor *editor, ME_DisplayItem *p)
   for (i=0; i<editor->nCursors; i++) {
     if (editor->pCursors[i].pRun == pNext) {
       editor->pCursors[i].pRun = p;
-      editor->pCursors[i].nOffset += p->member.run.strText->nLen;
+      editor->pCursors[i].nOffset += p->member.run.len;
     }
   }
 
   ME_AppendString(p->member.run.strText, pNext->member.run.strText);
+  p->member.run.len += pNext->member.run.len;
   ME_Remove(pNext);
   ME_DestroyDisplayItem(pNext);
   ME_UpdateRunFlags(editor, &p->member.run);
@@ -265,7 +266,7 @@ ME_DisplayItem *ME_SplitRun(ME_WrapContext *wc, ME_DisplayItem *item, int nVChar
 
   run = &item->member.run;
 
-  TRACE("Before split: %s(%d, %d)\n", debugstr_w(run->strText->szData),
+  TRACE("Before split: %s(%d, %d)\n", debugstr_run( run ),
         run->pt.x, run->pt.y);
 
   ME_SplitRunSimple(editor, &cursor);
@@ -283,8 +284,8 @@ ME_DisplayItem *ME_SplitRun(ME_WrapContext *wc, ME_DisplayItem *item, int nVChar
     ME_CheckCharOffsets(editor);
     TRACE("After check after split\n");
     TRACE("After split: %s(%d, %d), %s(%d, %d)\n",
-      debugstr_w(run->strText->szData), run->pt.x, run->pt.y,
-      debugstr_w(run2->strText->szData), run2->pt.x, run2->pt.y);
+      debugstr_run( run ), run->pt.x, run->pt.y,
+      debugstr_run( run2 ), run2->pt.x, run2->pt.y);
   }
 
   return cursor.pRun;
@@ -308,8 +309,9 @@ ME_DisplayItem *ME_SplitRunSimple(ME_TextEditor *editor, ME_Cursor *cursor)
   new_run = ME_MakeRun(run->member.run.style,
                        ME_VSplitString(run->member.run.strText, nOffset),
                        run->member.run.nFlags & MERF_SPLITMASK);
-
+  run->member.run.len = nOffset;
   new_run->member.run.nCharOfs = run->member.run.nCharOfs + nOffset;
+  new_run->member.run.para = run->member.run.para;
   cursor->pRun = new_run;
   cursor->nOffset = 0;
 
@@ -341,6 +343,8 @@ ME_DisplayItem *ME_MakeRun(ME_Style *s, ME_String *strData, int nFlags)
   item->member.run.strText = strData;
   item->member.run.nFlags = nFlags;
   item->member.run.nCharOfs = -1;
+  item->member.run.len = strData->nLen;
+  item->member.run.para = NULL;
   ME_AddRefStyle(s);
   return item;
 }
@@ -357,25 +361,50 @@ ME_InsertRunAtCursor(ME_TextEditor *editor, ME_Cursor *cursor, ME_Style *style,
                      const WCHAR *str, int len, int flags)
 {
   ME_DisplayItem *pDI;
-  ME_UndoItem *pUI;
 
   if (cursor->nOffset)
     ME_SplitRunSimple(editor, cursor);
 
-  pUI = ME_AddUndoItem(editor, diUndoDeleteRun, NULL);
-  if (pUI) {
-    pUI->nStart = cursor->pPara->member.para.nCharOfs
-                  + cursor->pRun->member.run.nCharOfs;
-    pUI->nLen = len;
-  }
+  add_undo_delete_run( editor, cursor->pPara->member.para.nCharOfs +
+                       cursor->pRun->member.run.nCharOfs, len );
 
   pDI = ME_MakeRun(style, ME_MakeStringN(str, len), flags);
   pDI->member.run.nCharOfs = cursor->pRun->member.run.nCharOfs;
+  pDI->member.run.para = cursor->pRun->member.run.para;
   ME_InsertBefore(cursor->pRun, pDI);
   TRACE("Shift length:%d\n", len);
   ME_PropagateCharOffset(cursor->pRun, len);
   cursor->pPara->member.para.nFlags |= MEPF_REWRAP;
   return pDI;
+}
+
+static BOOL run_is_splittable( const ME_Run *run )
+{
+    WCHAR *str = get_text( run, 0 ), *p;
+    int i;
+    BOOL found_ink = FALSE;
+
+    for (i = 0, p = str; i < run->len; i++, p++)
+    {
+        if (ME_IsWSpace( *p ))
+        {
+            if (found_ink) return TRUE;
+        }
+        else
+            found_ink = TRUE;
+    }
+    return FALSE;
+}
+
+static BOOL run_is_entirely_ws( const ME_Run *run )
+{
+    WCHAR *str = get_text( run, 0 ), *p;
+    int i;
+
+    for (i = 0, p = str; i < run->len; i++, p++)
+        if (!ME_IsWSpace( *p )) return FALSE;
+
+    return TRUE;
 }
 
 /******************************************************************************
@@ -387,7 +416,6 @@ ME_InsertRunAtCursor(ME_TextEditor *editor, ME_Cursor *cursor, ME_Style *style,
  */
 void ME_UpdateRunFlags(ME_TextEditor *editor, ME_Run *run)
 {
-  ME_String *strText = run->strText;
   assert(run->nCharOfs >= 0);
 
   if (RUN_IS_HIDDEN(run) || run->nFlags & MERF_TABLESTART)
@@ -395,24 +423,25 @@ void ME_UpdateRunFlags(ME_TextEditor *editor, ME_Run *run)
   else
     run->nFlags &= ~MERF_HIDDEN;
 
-  if (ME_IsSplitable(strText))
+  if (run_is_splittable( run ))
     run->nFlags |= MERF_SPLITTABLE;
   else
     run->nFlags &= ~MERF_SPLITTABLE;
 
-  if (!(run->nFlags & MERF_NOTEXT)) {
-    if (ME_IsWhitespaces(strText))
+  if (!(run->nFlags & MERF_NOTEXT))
+  {
+    if (run_is_entirely_ws( run ))
       run->nFlags |= MERF_WHITESPACE | MERF_STARTWHITE | MERF_ENDWHITE;
     else
     {
       run->nFlags &= ~MERF_WHITESPACE;
 
-      if (ME_IsWSpace(strText->szData[0]))
+      if (ME_IsWSpace( *get_text( run, 0 ) ))
         run->nFlags |= MERF_STARTWHITE;
       else
         run->nFlags &= ~MERF_STARTWHITE;
 
-      if (ME_IsWSpace(strText->szData[strText->nLen - 1]))
+      if (ME_IsWSpace( *get_text( run, run->len - 1 ) ))
         run->nFlags |= MERF_ENDWHITE;
       else
         run->nFlags &= ~MERF_ENDWHITE;
@@ -434,7 +463,7 @@ int ME_CharFromPoint(ME_Context *c, int cx, ME_Run *run)
   int fit = 0;
   HGDIOBJ hOldFont;
   SIZE sz;
-  if (!run->strText->nLen || cx <= 0)
+  if (!run->len || cx <= 0)
     return 0;
 
   if (run->nFlags & MERF_TAB ||
@@ -456,14 +485,14 @@ int ME_CharFromPoint(ME_Context *c, int cx, ME_Run *run)
   
   if (c->editor->cPasswordMask)
   {
-    ME_String *strMasked = ME_MakeStringR(c->editor->cPasswordMask, run->strText->nLen);
-    GetTextExtentExPointW(c->hDC, strMasked->szData, run->strText->nLen,
+    ME_String *strMasked = ME_MakeStringR(c->editor->cPasswordMask, run->len);
+    GetTextExtentExPointW(c->hDC, strMasked->szData, run->len,
       cx, &fit, NULL, &sz);
     ME_DestroyString(strMasked);
   }
   else
   {
-    GetTextExtentExPointW(c->hDC, run->strText->szData, run->strText->nLen,
+    GetTextExtentExPointW(c->hDC, get_text( run, 0 ), run->len,
       cx, &fit, NULL, &sz);
   }
   
@@ -485,14 +514,13 @@ int ME_CharFromPoint(ME_Context *c, int cx, ME_Run *run)
  */
 int ME_CharFromPointCursor(ME_TextEditor *editor, int cx, ME_Run *run)
 {
-  ME_String *strRunText;
-  /* This could point to either the run's real text, or it's masked form in a password control */
-
+  ME_String *mask_text = NULL;
+  WCHAR *str;
   int fit = 0;
   ME_Context c;
   HGDIOBJ hOldFont;
   SIZE sz, sz2, sz3;
-  if (!run->strText->nLen || cx <= 0)
+  if (!run->len || cx <= 0)
     return 0;
 
   if (run->nFlags & (MERF_TAB | MERF_ENDCELL))
@@ -513,23 +541,25 @@ int ME_CharFromPointCursor(ME_TextEditor *editor, int cx, ME_Run *run)
   }
 
   if (editor->cPasswordMask)
-    strRunText = ME_MakeStringR(editor->cPasswordMask, run->strText->nLen);
+  {
+    mask_text = ME_MakeStringR( editor->cPasswordMask, run->len );
+    str = mask_text->szData;
+  }
   else
-    strRunText = run->strText;
+    str = get_text( run, 0 );
 
   hOldFont = ME_SelectStyleFont(&c, run->style);
-  GetTextExtentExPointW(c.hDC, strRunText->szData, strRunText->nLen,
+  GetTextExtentExPointW(c.hDC, str, run->len,
                         cx, &fit, NULL, &sz);
-  if (fit != strRunText->nLen)
+  if (fit != run->len)
   {
-    GetTextExtentPoint32W(c.hDC, strRunText->szData, fit, &sz2);
-    GetTextExtentPoint32W(c.hDC, strRunText->szData, fit + 1, &sz3);
+    GetTextExtentPoint32W(c.hDC, str, fit, &sz2);
+    GetTextExtentPoint32W(c.hDC, str, fit + 1, &sz3);
     if (cx >= (sz2.cx+sz3.cx)/2)
       fit = fit + 1;
   }
 
-  if (editor->cPasswordMask)
-    ME_DestroyString(strRunText);
+  ME_DestroyString( mask_text );
 
   ME_UnselectStyleFont(&c, run->style, hOldFont);
   ME_DestroyContext(&c);
@@ -564,8 +594,8 @@ int ME_PointFromChar(ME_TextEditor *editor, ME_Run *pRun, int nOffset)
 {
   SIZE size;
   ME_Context c;
-  ME_String *strRunText;
-  /* This could point to either the run's real text, or it's masked form in a password control */
+  ME_String *mask_text = NULL;
+  WCHAR *str;
 
   ME_InitContext(&c, editor, ITextHost_TxGetDC(editor->texthost));
   if (pRun->nFlags & MERF_GRAPHICS)
@@ -579,14 +609,16 @@ int ME_PointFromChar(ME_TextEditor *editor, ME_Run *pRun, int nOffset)
   }
 
   if (editor->cPasswordMask)
-    strRunText = ME_MakeStringR(editor->cPasswordMask, pRun->strText->nLen);
+  {
+    mask_text = ME_MakeStringR(editor->cPasswordMask, pRun->len);
+    str = mask_text->szData;
+  }
   else
-    strRunText = pRun->strText;
+      str = get_text( pRun, 0 );
 
-  ME_GetTextExtent(&c,  strRunText->szData, nOffset, pRun->style, &size);
+  ME_GetTextExtent(&c, str, nOffset, pRun->style, &size);
   ME_DestroyContext(&c);
-  if (editor->cPasswordMask)
-    ME_DestroyString(strRunText);
+  ME_DestroyString( mask_text );
   return size.cx;
 }
 
@@ -600,7 +632,7 @@ static SIZE ME_GetRunSizeCommon(ME_Context *c, const ME_Paragraph *para, ME_Run 
                                 int startx, int *pAscent, int *pDescent)
 {
   SIZE size;
-  int nMaxLen = run->strText->nLen;
+  int nMaxLen = run->len;
 
   if (nLen>nMaxLen)
     nLen = nMaxLen;
@@ -618,7 +650,7 @@ static SIZE ME_GetRunSizeCommon(ME_Context *c, const ME_Paragraph *para, ME_Run 
   }
   else
   {
-    ME_GetTextExtent(c, run->strText->szData, nLen, run->style, &size);
+    ME_GetTextExtent(c, get_text( run, 0 ), nLen, run->style, &size);
   }
   *pAscent = run->style->tm.tmAscent;
   *pDescent = run->style->tm.tmDescent;
@@ -693,7 +725,7 @@ void ME_CalcRunExtent(ME_Context *c, const ME_Paragraph *para, int startx, ME_Ru
     run->nWidth = 0;
   else
   {
-    int nEnd = run->strText->nLen;
+    int nEnd = run->len;
     SIZE size = ME_GetRunSizeCommon(c, para, run, nEnd, startx,
                                     &run->nAscent, &run->nDescent);
     run->nWidth = size.cx;
@@ -769,19 +801,12 @@ void ME_SetCharFormat(ME_TextEditor *editor, ME_Cursor *start, ME_Cursor *end, C
 
   while(run != end_run)
   {
-    ME_UndoItem *undo = NULL;
     ME_Style *new_style = ME_ApplyStyle(run->member.run.style, pFmt);
     /* ME_DumpStyle(new_style); */
-    undo = ME_AddUndoItem(editor, diUndoSetCharFormat, NULL);
-    if (undo) {
-      undo->nStart = run->member.run.nCharOfs+para->member.para.nCharOfs;
-      undo->nLen = run->member.run.strText->nLen;
-      undo->di.member.ustyle = run->member.run.style;
-      /* we'd have to addref undo...ustyle and release tmp...style
-         but they'd cancel each other out so we can do nothing instead */
-    }
-    else
-      ME_ReleaseStyle(run->member.run.style);
+
+    add_undo_set_char_fmt( editor, para->member.para.nCharOfs + run->member.run.nCharOfs,
+                           run->member.run.len, &run->member.run.style->fmt );
+    ME_ReleaseStyle(run->member.run.style);
     run->member.run.style = new_style;
     run = ME_FindItemFwd(run, diRunOrParagraph);
     if (run && run->type == diParagraph)

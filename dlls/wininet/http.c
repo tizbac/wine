@@ -2878,16 +2878,22 @@ static DWORD HTTPREQ_ReadFile(object_header_t *hdr, void *buffer, DWORD size, DW
     return res;
 }
 
-static void HTTPREQ_AsyncReadFileExWProc(WORKREQUEST *workRequest)
+typedef struct {
+    task_header_t hdr;
+    void *buf;
+    DWORD size;
+    DWORD *ret_read;
+} read_file_ex_task_t;
+
+static void AsyncReadFileExProc(task_header_t *hdr)
 {
-    struct WORKREQ_HTTPREADFILEEX const *data = &workRequest->u.HttpReadFileEx;
-    http_request_t *req = (http_request_t*)workRequest->hdr;
+    read_file_ex_task_t *task = (read_file_ex_task_t*)hdr;
+    http_request_t *req = (http_request_t*)task->hdr.hdr;
     DWORD res;
 
-    TRACE("INTERNETREADFILEEXW %p\n", workRequest->hdr);
+    TRACE("INTERNETREADFILEEXW %p\n", task->hdr.hdr);
 
-    res = HTTPREQ_Read(req, data->buf, data->size, data->ret_read, TRUE);
-
+    res = HTTPREQ_Read(req, task->buf, task->size, task->ret_read, TRUE);
     send_request_complete(req, res == ERROR_SUCCESS, res);
 }
 
@@ -2905,7 +2911,7 @@ static DWORD HTTPREQ_ReadFileEx(object_header_t *hdr, void *buf, DWORD size, DWO
 
     if (hdr->dwFlags & INTERNET_FLAG_ASYNC)
     {
-        WORKREQUEST workRequest;
+        read_file_ex_task_t *task;
 
         if (TryEnterCriticalSection( &req->read_section ))
         {
@@ -2918,13 +2924,12 @@ static DWORD HTTPREQ_ReadFileEx(object_header_t *hdr, void *buf, DWORD size, DWO
             LeaveCriticalSection( &req->read_section );
         }
 
-        workRequest.asyncproc = HTTPREQ_AsyncReadFileExWProc;
-        workRequest.hdr = WININET_AddRef(&req->hdr);
-        workRequest.u.HttpReadFileEx.buf = buf;
-        workRequest.u.HttpReadFileEx.size = size;
-        workRequest.u.HttpReadFileEx.ret_read = ret_read;
+        task = alloc_async_task(&req->hdr, AsyncReadFileExProc, sizeof(*task));
+        task->buf = buf;
+        task->size = size;
+        task->ret_read = ret_read;
 
-        INTERNET_AsyncCall(&workRequest);
+        INTERNET_AsyncCall(&task->hdr);
 
         return ERROR_IO_PENDING;
     }
@@ -2989,9 +2994,9 @@ static DWORD HTTPREQ_WriteFile(object_header_t *hdr, const void *buffer, DWORD s
     return res;
 }
 
-static void HTTPREQ_AsyncQueryDataAvailableProc(WORKREQUEST *workRequest)
+static void AsyncQueryDataAvailableProc(task_header_t *task)
 {
-    http_request_t *req = (http_request_t*)workRequest->hdr;
+    http_request_t *req = (http_request_t*)task->hdr;
 
     HTTP_ReceiveRequestData(req, FALSE);
 }
@@ -3004,7 +3009,7 @@ static DWORD HTTPREQ_QueryDataAvailable(object_header_t *hdr, DWORD *available, 
 
     if (req->session->appInfo->hdr.dwFlags & INTERNET_FLAG_ASYNC)
     {
-        WORKREQUEST workRequest;
+        task_header_t *task;
 
         /* never wait, if we can't enter the section we queue an async request right away */
         if (TryEnterCriticalSection( &req->read_section ))
@@ -3015,11 +3020,8 @@ static DWORD HTTPREQ_QueryDataAvailable(object_header_t *hdr, DWORD *available, 
             LeaveCriticalSection( &req->read_section );
         }
 
-        workRequest.asyncproc = HTTPREQ_AsyncQueryDataAvailableProc;
-        workRequest.hdr = WININET_AddRef( &req->hdr );
-
-        INTERNET_AsyncCall(&workRequest);
-
+        task = alloc_async_task(&req->hdr, AsyncQueryDataAvailableProc, sizeof(*task));
+        INTERNET_AsyncCall(task);
         return ERROR_IO_PENDING;
     }
 
@@ -4986,23 +4988,32 @@ lend:
     return res;
 }
 
+typedef struct {
+    task_header_t hdr;
+    WCHAR *headers;
+    DWORD  headers_len;
+    void  *optional;
+    DWORD  optional_len;
+    DWORD  content_len;
+    BOOL   end_request;
+} send_request_task_t;
+
 /***********************************************************************
  *
  * Helper functions for the HttpSendRequest(Ex) functions
  *
  */
-static void AsyncHttpSendRequestProc(WORKREQUEST *workRequest)
+static void AsyncHttpSendRequestProc(task_header_t *hdr)
 {
-    struct WORKREQ_HTTPSENDREQUESTW const *req = &workRequest->u.HttpSendRequestW;
-    http_request_t *request = (http_request_t*) workRequest->hdr;
+    send_request_task_t *task = (send_request_task_t*)hdr;
+    http_request_t *request = (http_request_t*)task->hdr.hdr;
 
     TRACE("%p\n", request);
 
-    HTTP_HttpSendRequestW(request, req->lpszHeader,
-            req->dwHeaderLength, req->lpOptional, req->dwOptionalLength,
-            req->dwContentLength, req->bEndRequest);
+    HTTP_HttpSendRequestW(request, task->headers, task->headers_len, task->optional,
+            task->optional_len, task->content_len, task->end_request);
 
-    heap_free(req->lpszHeader);
+    heap_free(task->headers);
 }
 
 
@@ -5106,14 +5117,20 @@ BOOL WINAPI HttpEndRequestA(HINTERNET hRequest,
     return HttpEndRequestW(hRequest, NULL, dwFlags, dwContext);
 }
 
-static void AsyncHttpEndRequestProc(WORKREQUEST *work)
+typedef struct {
+    task_header_t hdr;
+    DWORD flags;
+    DWORD context;
+} end_request_task_t;
+
+static void AsyncHttpEndRequestProc(task_header_t *hdr)
 {
-    struct WORKREQ_HTTPENDREQUESTW const *req = &work->u.HttpEndRequestW;
-    http_request_t *request = (http_request_t*)work->hdr;
+    end_request_task_t *task = (end_request_task_t*)hdr;
+    http_request_t *req = (http_request_t*)task->hdr.hdr;
 
-    TRACE("%p\n", request);
+    TRACE("%p\n", req);
 
-    HTTP_HttpEndRequestW(request, req->dwFlags, req->dwContext);
+    HTTP_HttpEndRequestW(req, task->flags, task->context);
 }
 
 /***********************************************************************
@@ -5153,17 +5170,13 @@ BOOL WINAPI HttpEndRequestW(HINTERNET hRequest,
 
     if (request->session->appInfo->hdr.dwFlags & INTERNET_FLAG_ASYNC)
     {
-        WORKREQUEST work;
-        struct WORKREQ_HTTPENDREQUESTW *work_endrequest;
+        end_request_task_t *task;
 
-        work.asyncproc = AsyncHttpEndRequestProc;
-        work.hdr = WININET_AddRef( &request->hdr );
+        task = alloc_async_task(&request->hdr, AsyncHttpEndRequestProc, sizeof(*task));
+        task->flags = dwFlags;
+        task->context = dwContext;
 
-        work_endrequest = &work.u.HttpEndRequestW;
-        work_endrequest->dwFlags = dwFlags;
-        work_endrequest->dwContext = dwContext;
-
-        INTERNET_AsyncCall(&work);
+        INTERNET_AsyncCall(&task->hdr);
         res = ERROR_IO_PENDING;
     }
     else
@@ -5269,12 +5282,9 @@ BOOL WINAPI HttpSendRequestExW(HINTERNET hRequest,
 
     if (hIC->hdr.dwFlags & INTERNET_FLAG_ASYNC)
     {
-        WORKREQUEST workRequest;
-        struct WORKREQ_HTTPSENDREQUESTW *req;
+        send_request_task_t *task;
 
-        workRequest.asyncproc = AsyncHttpSendRequestProc;
-        workRequest.hdr = WININET_AddRef( &request->hdr );
-        req = &workRequest.u.HttpSendRequestW;
+        task = alloc_async_task(&request->hdr, AsyncHttpSendRequestProc, sizeof(*task));
         if (lpBuffersIn)
         {
             DWORD size = 0;
@@ -5286,31 +5296,28 @@ BOOL WINAPI HttpSendRequestExW(HINTERNET hRequest,
                 else
                     size = lpBuffersIn->dwHeadersLength * sizeof(WCHAR);
 
-                req->lpszHeader = heap_alloc(size);
-                memcpy( req->lpszHeader, lpBuffersIn->lpcszHeader, size );
+                task->headers = heap_alloc(size);
+                memcpy(task->headers, lpBuffersIn->lpcszHeader, size);
             }
-            else req->lpszHeader = NULL;
+            else task->headers = NULL;
 
-            req->dwHeaderLength = size / sizeof(WCHAR);
-            req->lpOptional = lpBuffersIn->lpvBuffer;
-            req->dwOptionalLength = lpBuffersIn->dwBufferLength;
-            req->dwContentLength = lpBuffersIn->dwBufferTotal;
+            task->headers_len = size / sizeof(WCHAR);
+            task->optional = lpBuffersIn->lpvBuffer;
+            task->optional_len = lpBuffersIn->dwBufferLength;
+            task->content_len = lpBuffersIn->dwBufferTotal;
         }
         else
         {
-            req->lpszHeader = NULL;
-            req->dwHeaderLength = 0;
-            req->lpOptional = NULL;
-            req->dwOptionalLength = 0;
-            req->dwContentLength = 0;
+            task->headers = NULL;
+            task->headers_len = 0;
+            task->optional = NULL;
+            task->optional_len = 0;
+            task->content_len = 0;
         }
 
-        req->bEndRequest = FALSE;
+        task->end_request = FALSE;
 
-        INTERNET_AsyncCall(&workRequest);
-        /*
-         * This is from windows.
-         */
+        INTERNET_AsyncCall(&task->hdr);
         res = ERROR_IO_PENDING;
     }
     else
@@ -5376,12 +5383,9 @@ BOOL WINAPI HttpSendRequestW(HINTERNET hHttpRequest, LPCWSTR lpszHeaders,
 
     if (hIC->hdr.dwFlags & INTERNET_FLAG_ASYNC)
     {
-        WORKREQUEST workRequest;
-        struct WORKREQ_HTTPSENDREQUESTW *req;
+        send_request_task_t *task;
 
-        workRequest.asyncproc = AsyncHttpSendRequestProc;
-        workRequest.hdr = WININET_AddRef( &request->hdr );
-        req = &workRequest.u.HttpSendRequestW;
+        task = alloc_async_task(&request->hdr, AsyncHttpSendRequestProc, sizeof(*task));
         if (lpszHeaders)
         {
             DWORD size;
@@ -5389,21 +5393,18 @@ BOOL WINAPI HttpSendRequestW(HINTERNET hHttpRequest, LPCWSTR lpszHeaders,
             if (dwHeaderLength == ~0u) size = (strlenW(lpszHeaders) + 1) * sizeof(WCHAR);
             else size = dwHeaderLength * sizeof(WCHAR);
 
-            req->lpszHeader = heap_alloc(size);
-            memcpy(req->lpszHeader, lpszHeaders, size);
+            task->headers = heap_alloc(size);
+            memcpy(task->headers, lpszHeaders, size);
         }
         else
-            req->lpszHeader = 0;
-        req->dwHeaderLength = dwHeaderLength;
-        req->lpOptional = lpOptional;
-        req->dwOptionalLength = dwOptionalLength;
-        req->dwContentLength = dwOptionalLength;
-        req->bEndRequest = TRUE;
+            task->headers = NULL;
+        task->headers_len = dwHeaderLength;
+        task->optional = lpOptional;
+        task->optional_len = dwOptionalLength;
+        task->content_len = dwOptionalLength;
+        task->end_request = TRUE;
 
-        INTERNET_AsyncCall(&workRequest);
-        /*
-         * This is from windows.
-         */
+        INTERNET_AsyncCall(&task->hdr);
         res = ERROR_IO_PENDING;
     }
     else

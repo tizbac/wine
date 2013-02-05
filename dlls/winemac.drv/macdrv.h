@@ -118,5 +118,11 @@ extern void set_window_surface(macdrv_window window, struct window_surface *wind
 extern void set_surface_use_alpha(struct window_surface *window_surface, BOOL use_alpha) DECLSPEC_HIDDEN;
 
 extern void macdrv_window_close_requested(HWND hwnd) DECLSPEC_HIDDEN;
+extern void macdrv_window_frame_changed(HWND hwnd, CGRect frame) DECLSPEC_HIDDEN;
+extern void macdrv_window_got_focus(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_window_lost_focus(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_app_deactivated(void) DECLSPEC_HIDDEN;
+
+extern void macdrv_mouse_button(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
 
 #endif  /* __WINE_MACDRV_H */

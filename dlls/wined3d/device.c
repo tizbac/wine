@@ -174,7 +174,7 @@ static BOOL fixed_get_input(BYTE usage, BYTE usage_idx, unsigned int *regnum)
 }
 
 /* Context activation is done by the caller. */
-void device_stream_info_from_declaration(struct wined3d_device *device, struct wined3d_stream_info *stream_info)
+static void device_stream_info_from_declaration(struct wined3d_device *device, struct wined3d_stream_info *stream_info)
 {
     const struct wined3d_state *state = &device->stateBlock->state;
     /* We need to deal with frequency data! */
@@ -314,74 +314,6 @@ void device_stream_info_from_declaration(struct wined3d_device *device, struct w
     }
 }
 
-static void stream_info_element_from_strided(const struct wined3d_gl_info *gl_info,
-        const struct wined3d_strided_element *strided, struct wined3d_stream_info_element *e)
-{
-    e->data.addr = strided->data;
-    e->data.buffer_object = 0;
-    e->format = wined3d_get_format(gl_info, strided->format);
-    e->stride = strided->stride;
-    e->stream_idx = 0;
-}
-
-static void device_stream_info_from_strided(const struct wined3d_gl_info *gl_info,
-        const struct wined3d_strided_data *strided, struct wined3d_stream_info *stream_info)
-{
-    unsigned int i;
-
-    memset(stream_info, 0, sizeof(*stream_info));
-
-    if (strided->position.data)
-        stream_info_element_from_strided(gl_info, &strided->position, &stream_info->elements[WINED3D_FFP_POSITION]);
-    if (strided->normal.data)
-        stream_info_element_from_strided(gl_info, &strided->normal, &stream_info->elements[WINED3D_FFP_NORMAL]);
-    if (strided->diffuse.data)
-        stream_info_element_from_strided(gl_info, &strided->diffuse, &stream_info->elements[WINED3D_FFP_DIFFUSE]);
-    if (strided->specular.data)
-        stream_info_element_from_strided(gl_info, &strided->specular, &stream_info->elements[WINED3D_FFP_SPECULAR]);
-
-    for (i = 0; i < WINED3DDP_MAXTEXCOORD; ++i)
-    {
-        if (strided->tex_coords[i].data)
-            stream_info_element_from_strided(gl_info, &strided->tex_coords[i],
-                    &stream_info->elements[WINED3D_FFP_TEXCOORD0 + i]);
-    }
-
-    stream_info->position_transformed = strided->position_transformed;
-
-    for (i = 0; i < sizeof(stream_info->elements) / sizeof(*stream_info->elements); ++i)
-    {
-        if (!stream_info->elements[i].format) continue;
-
-        if (!gl_info->supported[ARB_VERTEX_ARRAY_BGRA]
-                && stream_info->elements[i].format->id == WINED3DFMT_B8G8R8A8_UNORM)
-        {
-            stream_info->swizzle_map |= 1 << i;
-        }
-        stream_info->use_map |= 1 << i;
-    }
-}
-
-static void device_trace_strided_stream_info(const struct wined3d_stream_info *stream_info)
-{
-    TRACE("Strided Data:\n");
-    TRACE_STRIDED(stream_info, WINED3D_FFP_POSITION);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_BLENDWEIGHT);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_BLENDINDICES);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_NORMAL);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_PSIZE);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_DIFFUSE);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_SPECULAR);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_TEXCOORD0);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_TEXCOORD1);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_TEXCOORD2);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_TEXCOORD3);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_TEXCOORD4);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_TEXCOORD5);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_TEXCOORD6);
-    TRACE_STRIDED(stream_info, WINED3D_FFP_TEXCOORD7);
-}
-
 /* Context activation is done by the caller. */
 void device_update_stream_info(struct wined3d_device *device, const struct wined3d_gl_info *gl_info)
 {
@@ -389,18 +321,8 @@ void device_update_stream_info(struct wined3d_device *device, const struct wined
     const struct wined3d_state *state = &device->stateBlock->state;
     DWORD prev_all_vbo = stream_info->all_vbo;
 
-    if (device->up_strided)
-    {
-        /* Note: this is a ddraw fixed-function code path. */
-        TRACE("=============================== Strided Input ================================\n");
-        device_stream_info_from_strided(gl_info, device->up_strided, stream_info);
-        if (TRACE_ON(d3d)) device_trace_strided_stream_info(stream_info);
-    }
-    else
-    {
-        TRACE("============================= Vertex Declaration =============================\n");
-        device_stream_info_from_declaration(device, stream_info);
-    }
+    TRACE("============================= Vertex Declaration =============================\n");
+    device_stream_info_from_declaration(device, stream_info);
 
     if (state->vertex_shader && !stream_info->position_transformed)
     {
@@ -1388,19 +1310,6 @@ HRESULT CDECL wined3d_device_uninit_3d(struct wined3d_device *device)
         TRACE("Unloading resource %p.\n", resource);
 
         resource->resource_ops->resource_unload(resource);
-    }
-
-    TRACE("Deleting high order patches\n");
-    for (i = 0; i < PATCHMAP_SIZE; ++i)
-    {
-        struct wined3d_rect_patch *patch;
-        struct list *e1, *e2;
-
-        LIST_FOR_EACH_SAFE(e1, e2, &device->patches[i])
-        {
-            patch = LIST_ENTRY(e1, struct wined3d_rect_patch, entry);
-            wined3d_device_delete_patch(device, patch->Handle);
-        }
     }
 
     /* Delete the mouse cursor texture */
@@ -4127,59 +4036,6 @@ void CDECL wined3d_device_draw_indexed_primitive_instanced(struct wined3d_device
     draw_primitive(device, start_idx, index_count, start_instance, instance_count, TRUE, NULL);
 }
 
-HRESULT CDECL wined3d_device_draw_primitive_strided(struct wined3d_device *device,
-        UINT vertex_count, const struct wined3d_strided_data *strided_data)
-{
-    /* Mark the state dirty until we have nicer tracking. It's fine to change
-     * baseVertexIndex because that call is only called by ddraw which does
-     * not need that value. */
-    device_invalidate_state(device, STATE_VDECL);
-    device_invalidate_state(device, STATE_STREAMSRC);
-    device_invalidate_state(device, STATE_INDEXBUFFER);
-
-    device->stateBlock->state.base_vertex_index = 0;
-    device->up_strided = strided_data;
-    draw_primitive(device, 0, vertex_count, 0, 0, FALSE, NULL);
-    device->up_strided = NULL;
-
-    /* Invalidate the states again to make sure the values from the stateblock
-     * are properly applied in the next regular draw. Note that the application-
-     * provided strided data has ovwritten pretty much the entire vertex and
-     * and index stream related states */
-    device_invalidate_state(device, STATE_VDECL);
-    device_invalidate_state(device, STATE_STREAMSRC);
-    device_invalidate_state(device, STATE_INDEXBUFFER);
-    return WINED3D_OK;
-}
-
-HRESULT CDECL wined3d_device_draw_indexed_primitive_strided(struct wined3d_device *device,
-        UINT index_count, const struct wined3d_strided_data *strided_data,
-        UINT vertex_count, const void *index_data, enum wined3d_format_id index_data_format_id)
-{
-    enum wined3d_format_id prev_idx_format;
-
-    /* Mark the state dirty until we have nicer tracking
-     * its fine to change baseVertexIndex because that call is only called by ddraw which does not need
-     * that value.
-     */
-    device_invalidate_state(device, STATE_VDECL);
-    device_invalidate_state(device, STATE_STREAMSRC);
-    device_invalidate_state(device, STATE_INDEXBUFFER);
-
-    prev_idx_format = device->stateBlock->state.index_format;
-    device->stateBlock->state.index_format = index_data_format_id;
-    device->stateBlock->state.base_vertex_index = 0;
-    device->up_strided = strided_data;
-    draw_primitive(device, 0, index_count, 0, 0, TRUE, index_data);
-    device->up_strided = NULL;
-    device->stateBlock->state.index_format = prev_idx_format;
-
-    device_invalidate_state(device, STATE_VDECL);
-    device_invalidate_state(device, STATE_STREAMSRC);
-    device_invalidate_state(device, STATE_INDEXBUFFER);
-    return WINED3D_OK;
-}
-
 /* This is a helper function for UpdateTexture, there is no UpdateVolume method in D3D. */
 static HRESULT device_update_volume(struct wined3d_device *device,
         struct wined3d_volume *src_volume, struct wined3d_volume *dst_volume)
@@ -4487,140 +4343,6 @@ HRESULT CDECL wined3d_device_update_surface(struct wined3d_device *device,
     }
 
     return surface_upload_from_surface(dst_surface, dst_point, src_surface, src_rect);
-}
-
-HRESULT CDECL wined3d_device_draw_rect_patch(struct wined3d_device *device, UINT handle,
-        const float *num_segs, const struct wined3d_rect_patch_info *rect_patch_info)
-{
-    struct wined3d_rect_patch *patch;
-    GLenum old_primitive_type;
-    unsigned int i;
-    struct list *e;
-    BOOL found;
-
-    TRACE("device %p, handle %#x, num_segs %p, rect_patch_info %p.\n",
-            device, handle, num_segs, rect_patch_info);
-
-    if (!(handle || rect_patch_info))
-    {
-        /* TODO: Write a test for the return value, thus the FIXME */
-        FIXME("Both handle and rect_patch_info are NULL.\n");
-        return WINED3DERR_INVALIDCALL;
-    }
-
-    if (handle)
-    {
-        i = PATCHMAP_HASHFUNC(handle);
-        found = FALSE;
-        LIST_FOR_EACH(e, &device->patches[i])
-        {
-            patch = LIST_ENTRY(e, struct wined3d_rect_patch, entry);
-            if (patch->Handle == handle)
-            {
-                found = TRUE;
-                break;
-            }
-        }
-
-        if (!found)
-        {
-            TRACE("Patch does not exist. Creating a new one\n");
-            patch = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*patch));
-            patch->Handle = handle;
-            list_add_head(&device->patches[i], &patch->entry);
-        } else {
-            TRACE("Found existing patch %p\n", patch);
-        }
-    }
-    else
-    {
-        /* Since opengl does not load tesselated vertex attributes into numbered vertex
-         * attributes we have to tesselate, read back, and draw. This needs a patch
-         * management structure instance. Create one.
-         *
-         * A possible improvement is to check if a vertex shader is used, and if not directly
-         * draw the patch.
-         */
-        FIXME("Drawing an uncached patch. This is slow\n");
-        patch = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*patch));
-    }
-
-    if (num_segs[0] != patch->numSegs[0] || num_segs[1] != patch->numSegs[1]
-            || num_segs[2] != patch->numSegs[2] || num_segs[3] != patch->numSegs[3]
-            || (rect_patch_info && memcmp(rect_patch_info, &patch->rect_patch_info, sizeof(*rect_patch_info))))
-    {
-        HRESULT hr;
-        TRACE("Tesselation density or patch info changed, retesselating\n");
-
-        if (rect_patch_info)
-            patch->rect_patch_info = *rect_patch_info;
-
-        patch->numSegs[0] = num_segs[0];
-        patch->numSegs[1] = num_segs[1];
-        patch->numSegs[2] = num_segs[2];
-        patch->numSegs[3] = num_segs[3];
-
-        hr = tesselate_rectpatch(device, patch);
-        if (FAILED(hr))
-        {
-            WARN("Patch tesselation failed.\n");
-
-            /* Do not release the handle to store the params of the patch */
-            if (!handle)
-                HeapFree(GetProcessHeap(), 0, patch);
-
-            return hr;
-        }
-    }
-
-    old_primitive_type = device->stateBlock->state.gl_primitive_type;
-    device->stateBlock->state.gl_primitive_type = GL_TRIANGLES;
-    wined3d_device_draw_primitive_strided(device, patch->numSegs[0] * patch->numSegs[1] * 2 * 3, &patch->strided);
-    device->stateBlock->state.gl_primitive_type = old_primitive_type;
-
-    /* Destroy uncached patches */
-    if (!handle)
-    {
-        HeapFree(GetProcessHeap(), 0, patch->mem);
-        HeapFree(GetProcessHeap(), 0, patch);
-    }
-    return WINED3D_OK;
-}
-
-HRESULT CDECL wined3d_device_draw_tri_patch(struct wined3d_device *device, UINT handle,
-        const float *segment_count, const struct wined3d_tri_patch_info *patch_info)
-{
-    FIXME("device %p, handle %#x, segment_count %p, patch_info %p stub!\n",
-            device, handle, segment_count, patch_info);
-
-    return WINED3D_OK;
-}
-
-HRESULT CDECL wined3d_device_delete_patch(struct wined3d_device *device, UINT handle)
-{
-    struct wined3d_rect_patch *patch;
-    struct list *e;
-    int i;
-
-    TRACE("device %p, handle %#x.\n", device, handle);
-
-    i = PATCHMAP_HASHFUNC(handle);
-    LIST_FOR_EACH(e, &device->patches[i])
-    {
-        patch = LIST_ENTRY(e, struct wined3d_rect_patch, entry);
-        if (patch->Handle == handle)
-        {
-            TRACE("Deleting patch %p\n", patch);
-            list_remove(&patch->entry);
-            HeapFree(GetProcessHeap(), 0, patch->mem);
-            HeapFree(GetProcessHeap(), 0, patch);
-            return WINED3D_OK;
-        }
-    }
-
-    /* TODO: Write a test for the return value */
-    FIXME("Attempt to destroy nonexistent patch\n");
-    return WINED3DERR_INVALIDCALL;
 }
 
 /* Do not call while under the GL lock. */
@@ -5655,8 +5377,6 @@ HRESULT device_init(struct wined3d_device *device, struct wined3d *wined3d,
     device->create_parms.device_type = device_type;
     device->create_parms.focus_window = focus_window;
     device->create_parms.flags = flags;
-
-    for (i = 0; i < PATCHMAP_SIZE; ++i) list_init(&device->patches[i]);
 
     device->shader_backend = adapter->shader_backend;
     device->shader_backend->shader_get_caps(&adapter->gl_info, &shader_caps);

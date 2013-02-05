@@ -99,7 +99,6 @@
  *   -- LVN_GETINFOTIP
  *   -- LVN_HOTTRACK
  *   -- LVN_SETDISPINFO
- *   -- LVN_BEGINRDRAG
  *
  * Messages:
  *   -- LVM_ENABLEGROUPVIEW
@@ -325,7 +324,6 @@ typedef struct tagLISTVIEW_INFO
 
   /* mouse operation */
   BOOL bLButtonDown;
-  BOOL bRButtonDown;
   BOOL bDragging;
   POINT ptClickPos;         /* point where the user clicked */
   INT nLButtonDownItem;     /* tracks item to reset multiselection on WM_LBUTTONUP */
@@ -886,11 +884,13 @@ static inline LRESULT notify_listview(const LISTVIEW_INFO *infoPtr, INT code, LP
     return notify_hdr(infoPtr, code, (LPNMHDR)plvnm);
 }
 
+/* Handles NM_DBLCLK, NM_CLICK, NM_RDBLCLK, NM_RCLICK. Only NM_RCLICK return value is used. */
 static BOOL notify_click(const LISTVIEW_INFO *infoPtr, INT code, const LVHITTESTINFO *lvht)
 {
     NMITEMACTIVATE nmia;
     LVITEMW item;
     HWND hwnd = infoPtr->hwndSelf;
+    LRESULT ret;
 
     TRACE("code=%d, lvht=%s\n", code, debuglvhittestinfo(lvht)); 
     ZeroMemory(&nmia, sizeof(nmia));
@@ -901,8 +901,8 @@ static BOOL notify_click(const LISTVIEW_INFO *infoPtr, INT code, const LVHITTEST
     item.iItem = lvht->iItem;
     item.iSubItem = 0;
     if (LISTVIEW_GetItemT(infoPtr, &item, TRUE)) nmia.lParam = item.lParam;
-    notify_hdr(infoPtr, code, (LPNMHDR)&nmia);
-    return IsWindow(hwnd);
+    ret = notify_hdr(infoPtr, code, (NMHDR*)&nmia);
+    return IsWindow(hwnd) && (code == NM_RCLICK ? !ret : TRUE);
 }
 
 static BOOL notify_deleteitem(const LISTVIEW_INFO *infoPtr, INT nItem)
@@ -1838,9 +1838,9 @@ static inline INT LISTVIEW_GetCountPerColumn(const LISTVIEW_INFO *infoPtr)
 static INT LISTVIEW_ProcessLetterKeys(LISTVIEW_INFO *infoPtr, WPARAM charCode, LPARAM keyData)
 {
     WCHAR buffer[MAX_PATH];
-    INT endidx, startidx;
     DWORD prevTime;
     LVITEMW item;
+    int startidx;
     INT nItem;
     INT diff;
 
@@ -1880,15 +1880,16 @@ static INT LISTVIEW_ProcessLetterKeys(LISTVIEW_INFO *infoPtr, WPARAM charCode, L
         infoPtr->nSearchParamLength = 1;
     }
 
-    /* and search from the current position */
-    nItem = -1;
-    endidx = infoPtr->nItemCount;
-
     /* should start from next after focused item, so next item that matches
        will be selected, if there isn't any and focused matches it will be selected
        on second search stage from beginning of the list */
     if (infoPtr->nFocusedItem >= 0 && infoPtr->nItemCount > 1)
-        startidx = infoPtr->nFocusedItem + 1;
+    {
+        /* with some accumulated search data available start with current focus, otherwise
+           it's excluded from search */
+        startidx = infoPtr->nSearchParamLength > 1 ? infoPtr->nFocusedItem : infoPtr->nFocusedItem + 1;
+        if (startidx == infoPtr->nItemCount) startidx = 0;
+    }
     else
         startidx = 0;
 
@@ -1908,7 +1909,11 @@ static INT LISTVIEW_ProcessLetterKeys(LISTVIEW_INFO *infoPtr, WPARAM charCode, L
     }
     else
     {
-        INT i = startidx;
+        int i = startidx, endidx;
+
+        /* and search from the current position */
+        nItem = -1;
+        endidx = infoPtr->nItemCount;
 
         /* first search in [startidx, endidx), on failure continue in [0, startidx) */
         while (1)
@@ -1930,12 +1935,15 @@ static INT LISTVIEW_ProcessLetterKeys(LISTVIEW_INFO *infoPtr, WPARAM charCode, L
                 item.cchTextMax = MAX_PATH;
                 if (!LISTVIEW_GetItemW(infoPtr, &item)) return 0;
 
-                if (lstrncmpiW(item.pszText, infoPtr->szSearchParam, infoPtr->nSearchParamLength) == 0)
+                if (!lstrncmpiW(item.pszText, infoPtr->szSearchParam, infoPtr->nSearchParamLength))
                 {
                     nItem = i;
                     break;
                 }
-                else if (nItem == -1 && lstrncmpiW(item.pszText, infoPtr->szSearchParam, 1) == 0)
+                /* this is used to find first char match when search string is not available yet,
+                   otherwise every WM_CHAR will search to next item by first char, ignoring that we're
+                   already waiting for user to complete a string */
+                else if (nItem == -1 && infoPtr->nSearchParamLength == 1 && !lstrncmpiW(item.pszText, infoPtr->szSearchParam, 1))
                 {
                     /* this would work but we must keep looking for a longer match */
                     nItem = i;
@@ -3984,17 +3992,23 @@ static VOID CALLBACK LISTVIEW_ScrollTimer(HWND hWnd, UINT uMsg, UINT_PTR idEvent
  */
 static LRESULT LISTVIEW_MouseMove(LISTVIEW_INFO *infoPtr, WORD fwKeys, INT x, INT y)
 {
+    LVHITTESTINFO ht;
+    RECT rect;
+    POINT pt;
+
     if (!(fwKeys & MK_LBUTTON))
         infoPtr->bLButtonDown = FALSE;
 
     if (infoPtr->bLButtonDown)
     {
-        POINT tmp;
-        RECT rect;
-        LVHITTESTINFO lvHitTestInfo;
-        WORD wDragWidth = GetSystemMetrics(SM_CXDRAG);
-        WORD wDragHeight= GetSystemMetrics(SM_CYDRAG);
+        rect.left = rect.right = infoPtr->ptClickPos.x;
+        rect.top = rect.bottom = infoPtr->ptClickPos.y;
 
+        InflateRect(&rect, GetSystemMetrics(SM_CXDRAG), GetSystemMetrics(SM_CYDRAG));
+    }
+
+    if (infoPtr->bLButtonDown)
+    {
         if (infoPtr->bMarqueeSelect)
         {
             POINT coords_orig;
@@ -4037,22 +4051,17 @@ static LRESULT LISTVIEW_MouseMove(LISTVIEW_INFO *infoPtr, WORD fwKeys, INT x, IN
             return 0;
         }
 
-        rect.left = infoPtr->ptClickPos.x - wDragWidth;
-        rect.right = infoPtr->ptClickPos.x + wDragWidth;
-        rect.top = infoPtr->ptClickPos.y - wDragHeight;
-        rect.bottom = infoPtr->ptClickPos.y + wDragHeight;
+        pt.x = x;
+        pt.y = y;
 
-        tmp.x = x;
-        tmp.y = y;
-
-        lvHitTestInfo.pt = tmp;
-        LISTVIEW_HitTest(infoPtr, &lvHitTestInfo, TRUE, TRUE);
+        ht.pt = pt;
+        LISTVIEW_HitTest(infoPtr, &ht, TRUE, TRUE);
 
         /* reset item marker */
-        if (infoPtr->nLButtonDownItem != lvHitTestInfo.iItem)
+        if (infoPtr->nLButtonDownItem != ht.iItem)
             infoPtr->nLButtonDownItem = -1;
 
-        if (!PtInRect(&rect, tmp))
+        if (!PtInRect(&rect, pt))
         {
             /* this path covers the following:
                1. WM_LBUTTONDOWN over selected item (sets focus on it)
@@ -4072,12 +4081,12 @@ static LRESULT LISTVIEW_MouseMove(LISTVIEW_INFO *infoPtr, WORD fwKeys, INT x, IN
 
             if (!infoPtr->bDragging)
             {
-                lvHitTestInfo.pt = infoPtr->ptClickPos;
-                LISTVIEW_HitTest(infoPtr, &lvHitTestInfo, TRUE, TRUE);
+                ht.pt = infoPtr->ptClickPos;
+                LISTVIEW_HitTest(infoPtr, &ht, TRUE, TRUE);
 
                 /* If the click is outside the range of an item, begin a
                    highlight. If not, begin an item drag. */
-                if (lvHitTestInfo.iItem == -1)
+                if (ht.iItem == -1)
                 {
                     NMHDR hdr;
 
@@ -4102,7 +4111,7 @@ static LRESULT LISTVIEW_MouseMove(LISTVIEW_INFO *infoPtr, WORD fwKeys, INT x, IN
                     NMLISTVIEW nmlv;
 
                     ZeroMemory(&nmlv, sizeof(nmlv));
-                    nmlv.iItem = lvHitTestInfo.iItem;
+                    nmlv.iItem = ht.iItem;
                     nmlv.ptAction = infoPtr->ptClickPos;
 
                     notify_listview(infoPtr, LVN_BEGINDRAG, &nmlv);
@@ -4288,12 +4297,12 @@ static BOOL set_main_item(LISTVIEW_INFO *infoPtr, const LVITEMW *lpLVItem, BOOL 
 	}
 	/* If we are asked to change focus, and we manage it, do it.
            It's important to have all new item data stored at this point,
-           cause changing existing focus could result in redrawing operation,
+           because changing existing focus could result in a redrawing operation,
            which in turn could ask for disp data, application should see all data
            for inserted item when processing LVN_GETDISPINFO.
 
            The way this works application will see nested item change notifications -
-           changed item notifications interrupted by ones from item loosing focus. */
+           changed item notifications interrupted by ones from item losing focus. */
 	if (stateMask & ~infoPtr->uCallbackMask & LVIS_FOCUSED)
 	{
 	    if (lpLVItem->state & LVIS_FOCUSED)
@@ -8862,7 +8871,7 @@ static BOOL LISTVIEW_SetItemState(LISTVIEW_INFO *infoPtr, INT nItem, const LVITE
         UINT oldstate = 0;
         BOOL notify;
 
-        /* special case optimization for recurring attemp to deselect all */
+        /* special case optimization for recurring attempt to deselect all */
         if (lvItem.state == 0 && lvItem.stateMask == LVIS_SELECTED && !LISTVIEW_GetSelectedCount(infoPtr))
             return TRUE;
 
@@ -10015,6 +10024,52 @@ static LRESULT LISTVIEW_LButtonDblClk(LISTVIEW_INFO *infoPtr, WORD wKey, INT x, 
     return 0;
 }
 
+static LRESULT LISTVIEW_TrackMouse(const LISTVIEW_INFO *infoPtr, POINT pt)
+{
+    MSG msg;
+    RECT r;
+
+    r.top = r.bottom = pt.y;
+    r.left = r.right = pt.x;
+
+    InflateRect(&r, GetSystemMetrics(SM_CXDRAG), GetSystemMetrics(SM_CYDRAG));
+
+    SetCapture(infoPtr->hwndSelf);
+
+    while (1)
+    {
+	if (PeekMessageW(&msg, 0, 0, 0, PM_REMOVE | PM_NOYIELD))
+	{
+	    if (msg.message == WM_MOUSEMOVE)
+	    {
+		pt.x = (short)LOWORD(msg.lParam);
+		pt.y = (short)HIWORD(msg.lParam);
+		if (PtInRect(&r, pt))
+		    continue;
+		else
+		{
+		    ReleaseCapture();
+		    return 1;
+		}
+	    }
+	    else if (msg.message >= WM_LBUTTONDOWN &&
+		     msg.message <= WM_RBUTTONDBLCLK)
+	    {
+		break;
+	    }
+
+	    DispatchMessageW(&msg);
+	}
+
+	if (GetCapture() != infoPtr->hwndSelf)
+	    return 0;
+    }
+
+    ReleaseCapture();
+    return 0;
+}
+
+
 /***
  * DESCRIPTION:
  * Processes mouse down messages (left mouse button).
@@ -10619,93 +10674,75 @@ static LRESULT LISTVIEW_RButtonDblClk(const LISTVIEW_INFO *infoPtr, WORD wKey, I
 
 /***
  * DESCRIPTION:
- * Processes mouse down messages (right mouse button).
+ * Processes WM_RBUTTONDOWN message and corresponding drag operation.
  *
  * PARAMETER(S):
  * [I] infoPtr : valid pointer to the listview structure
  * [I] wKey : key flag
- * [I] x,y : mouse coordinate
+ * [I] x, y : mouse coordinate
  *
  * RETURN:
  * Zero
  */
 static LRESULT LISTVIEW_RButtonDown(LISTVIEW_INFO *infoPtr, WORD wKey, INT x, INT y)
 {
-    LVHITTESTINFO lvHitTestInfo;
-    INT nItem;
+    LVHITTESTINFO ht;
+    INT item;
 
-    TRACE("(key=%hu,X=%u,Y=%u)\n", wKey, x, y);
+    TRACE("(key=%hu, x=%d, y=%d)\n", wKey, x, y);
 
     /* send NM_RELEASEDCAPTURE notification */
     if (!notify(infoPtr, NM_RELEASEDCAPTURE)) return 0;
 
+    /* determine the index of the selected item */
+    ht.pt.x = x;
+    ht.pt.y = y;
+    item = LISTVIEW_HitTest(infoPtr, &ht, TRUE, TRUE);
+
     /* make sure the listview control window has the focus */
     if (!infoPtr->bFocus) SetFocus(infoPtr->hwndSelf);
 
-    /* set right button down flag */
-    infoPtr->bRButtonDown = TRUE;
-
-    /* determine the index of the selected item */
-    lvHitTestInfo.pt.x = x;
-    lvHitTestInfo.pt.y = y;
-    nItem = LISTVIEW_HitTest(infoPtr, &lvHitTestInfo, TRUE, TRUE);
-  
-    if ((nItem >= 0) && (nItem < infoPtr->nItemCount))
+    if ((item >= 0) && (item < infoPtr->nItemCount))
     {
-	LISTVIEW_SetItemFocus(infoPtr, nItem);
+	LISTVIEW_SetItemFocus(infoPtr, item);
 	if (!((wKey & MK_SHIFT) || (wKey & MK_CONTROL)) &&
-            !LISTVIEW_GetItemState(infoPtr, nItem, LVIS_SELECTED))
-	    LISTVIEW_SetSelection(infoPtr, nItem);
+            !LISTVIEW_GetItemState(infoPtr, item, LVIS_SELECTED))
+	    LISTVIEW_SetSelection(infoPtr, item);
+    }
+    else
+	LISTVIEW_DeselectAll(infoPtr);
+
+    if (LISTVIEW_TrackMouse(infoPtr, ht.pt))
+    {
+	if (ht.iItem != -1)
+	{
+            NMLISTVIEW nmlv;
+
+            memset(&nmlv, 0, sizeof(nmlv));
+            nmlv.iItem = ht.iItem;
+            nmlv.ptAction = ht.pt;
+
+            notify_listview(infoPtr, LVN_BEGINRDRAG, &nmlv);
+	}
     }
     else
     {
-	LISTVIEW_DeselectAll(infoPtr);
+	SetFocus(infoPtr->hwndSelf);
+
+        ht.pt.x = x;
+        ht.pt.y = y;
+        LISTVIEW_HitTest(infoPtr, &ht, TRUE, FALSE);
+
+	if (notify_click(infoPtr, NM_RCLICK, &ht))
+	{
+	    /* Send a WM_CONTEXTMENU message in response to the WM_RBUTTONUP */
+	    SendMessageW(infoPtr->hwndSelf, WM_CONTEXTMENU,
+		(WPARAM)infoPtr->hwndSelf, (LPARAM)GetMessagePos());
+	}
     }
 
     return 0;
 }
-
-/***
- * DESCRIPTION:
- * Processes mouse up messages (right mouse button).
- *
- * PARAMETER(S):
- * [I] infoPtr : valid pointer to the listview structure
- * [I] wKey : key flag
- * [I] x,y : mouse coordinate
- *
- * RETURN:
- * Zero
- */
-static LRESULT LISTVIEW_RButtonUp(LISTVIEW_INFO *infoPtr, WORD wKey, INT x, INT y)
-{
-    LVHITTESTINFO lvHitTestInfo;
-    POINT pt;
-
-    TRACE("(key=%hu,X=%u,Y=%u)\n", wKey, x, y);
-
-    if (!infoPtr->bRButtonDown) return 0;
- 
-    /* set button flag */
-    infoPtr->bRButtonDown = FALSE;
-
-    /* Send NM_RCLICK notification */
-    lvHitTestInfo.pt.x = x;
-    lvHitTestInfo.pt.y = y;
-    LISTVIEW_HitTest(infoPtr, &lvHitTestInfo, TRUE, FALSE);
-    if (!notify_click(infoPtr, NM_RCLICK, &lvHitTestInfo)) return 0;
-
-    /* Change to screen coordinate for WM_CONTEXTMENU */
-    pt = lvHitTestInfo.pt;
-    ClientToScreen(infoPtr->hwndSelf, &pt);
-
-    /* Send a WM_CONTEXTMENU message in response to the RBUTTONUP */
-    SendMessageW(infoPtr->hwndSelf, WM_CONTEXTMENU,
-		 (WPARAM)infoPtr->hwndSelf, MAKELPARAM(pt.x, pt.y));
-
-    return 0;
-}
-
 
 /***
  * DESCRIPTION:
@@ -11599,9 +11636,6 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
   case WM_RBUTTONDOWN:
     return LISTVIEW_RButtonDown(infoPtr, (WORD)wParam, (SHORT)LOWORD(lParam), (SHORT)HIWORD(lParam));
-
-  case WM_RBUTTONUP:
-    return LISTVIEW_RButtonUp(infoPtr, (WORD)wParam, (SHORT)LOWORD(lParam), (SHORT)HIWORD(lParam));
 
   case WM_SETCURSOR:
     return LISTVIEW_SetCursor(infoPtr, wParam, lParam);

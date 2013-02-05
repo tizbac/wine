@@ -41,8 +41,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(process);
 
 extern int CDECL __wine_set_signal_handler(unsigned, int (*)(unsigned));
 
-static ULONGLONG server_start_time;
-
 /***********************************************************************
  *           set_entry_point
  */
@@ -83,11 +81,7 @@ static void set_entry_point( HMODULE module, const char *name, DWORD rva )
  */
 static BOOL process_attach( HMODULE module )
 {
-    SYSTEM_TIMEOFDAY_INFORMATION ti;
     RTL_USER_PROCESS_PARAMETERS *params = NtCurrentTeb()->Peb->ProcessParameters;
-
-    NtQuerySystemInformation( SystemTimeOfDayInformation, &ti, sizeof(ti), NULL );
-    server_start_time = ti.liKeBootTime.QuadPart;
 
     /* Setup registry locale information */
     LOCALE_InitRegistry();
@@ -179,10 +173,10 @@ INT WINAPI MulDiv( INT nMultiplicand, INT nMultiplier, INT nDivisor)
  */
 ULONGLONG WINAPI GetTickCount64(void)
 {
-    LARGE_INTEGER now;
+    LARGE_INTEGER counter, frequency;
 
-    NtQuerySystemTime( &now );
-    return (now.QuadPart - server_start_time) / 10000;
+    NtQueryPerformanceCounter( &counter, &frequency );
+    return counter.QuadPart * 1000 / frequency.QuadPart;
 }
 
 
@@ -199,8 +193,6 @@ ULONGLONG WINAPI GetTickCount64(void)
  *
  * NOTES
  *  The value returned will wrap around every 2^32 milliseconds.
- *  Under Windows, tick 0 is the moment at which the system is rebooted.
- *  Under Wine, tick 0 begins at the moment the wineserver process is started.
  */
 DWORD WINAPI GetTickCount(void)
 {

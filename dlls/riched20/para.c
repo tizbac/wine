@@ -67,6 +67,7 @@ void ME_MakeFirstParagraph(ME_TextEditor *editor)
   eol_str = ME_MakeStringN(cr_lf, editor->bEmulateVersion10 ? 2 : 1);
   run = ME_MakeRun(style, eol_str, MERF_ENDPARA);
   run->member.run.nCharOfs = 0;
+  run->member.run.para = &para->member.para;
 
   ME_InsertBefore(text->pLast, para);
   ME_InsertBefore(text->pLast, run);
@@ -127,7 +128,7 @@ static BOOL ME_SetParaFormat(ME_TextEditor *editor, ME_DisplayItem *para, const 
   else
     dwMask &= PFM_ALL2;
 
-  ME_AddUndoItem(editor, diUndoSetParagraphFormat, para);
+  add_undo_set_para_fmt( editor, &para->member.para );
 
   copy = *para->member.para.pFmt;
 
@@ -198,7 +199,6 @@ ME_DisplayItem *ME_SplitParagraph(ME_TextEditor *editor, ME_DisplayItem *run,
   ME_DisplayItem *run_para = NULL;
   ME_DisplayItem *new_para = ME_MakeDI(diParagraph);
   ME_DisplayItem *end_run;
-  ME_UndoItem *undo = NULL;
   int ofs, i;
   ME_DisplayItem *pp;
   int run_flags = MERF_ENDPARA;
@@ -214,19 +214,18 @@ ME_DisplayItem *ME_SplitParagraph(ME_TextEditor *editor, ME_DisplayItem *run,
   } else { /* v1.0 - v3.0 */
     assert(!(paraFlags & (MEPF_CELL|MEPF_ROWSTART|MEPF_ROWEND)));
   }
-  end_run = ME_MakeRun(style, eol_str, run_flags);
-
   assert(run->type == diRun);
   run_para = ME_GetParagraph(run);
   assert(run_para->member.para.pFmt->cbSize == sizeof(PARAFORMAT2));
 
+  end_run = ME_MakeRun(style, eol_str, run_flags);
   ofs = end_run->member.run.nCharOfs = run->member.run.nCharOfs;
+  end_run->member.run.para = run->member.run.para;
+
   next_para = run_para->member.para.next_para;
   assert(next_para == ME_FindItemFwd(run_para, diParagraphOrEnd));
-  
-  undo = ME_AddUndoItem(editor, diUndoJoinParagraphs, NULL);
-  if (undo)
-    undo->nStart = run_para->member.para.nCharOfs + ofs;
+
+  add_undo_join_paras( editor, run_para->member.para.nCharOfs + ofs );
 
   /* Update selection cursors to point to the correct paragraph. */
   for (i = 0; i < editor->nCursors; i++) {
@@ -241,6 +240,7 @@ ME_DisplayItem *ME_SplitParagraph(ME_TextEditor *editor, ME_DisplayItem *run,
   pp = run;
   while(pp->type == diRun) {
     pp->member.run.nCharOfs -= ofs;
+    pp->member.run.para = &new_para->member.para;
     pp = ME_FindItemFwd(pp, diRunOrParagraphOrEnd);
   }
   new_para->member.para.nCharOfs = run_para->member.para.nCharOfs + ofs;
@@ -322,9 +322,8 @@ ME_DisplayItem *ME_SplitParagraph(ME_TextEditor *editor, ME_DisplayItem *run,
 ME_DisplayItem *ME_JoinParagraphs(ME_TextEditor *editor, ME_DisplayItem *tp,
                                   BOOL keepFirstParaFormat)
 {
-  ME_DisplayItem *pNext, *pFirstRunInNext, *pRun, *pTmp;
+  ME_DisplayItem *pNext, *pFirstRunInNext, *pRun, *pTmp, *pCell = NULL;
   int i, shift;
-  ME_UndoItem *undo = NULL;
   int end_len;
   CHARFORMAT2W fmt;
   ME_Cursor startCur, endCur;
@@ -342,7 +341,7 @@ ME_DisplayItem *ME_JoinParagraphs(ME_TextEditor *editor, ME_DisplayItem *tp,
   assert(pRun->type == diRun);
   assert(pRun->member.run.nFlags & MERF_ENDPARA);
 
-  end_len = pRun->member.run.strText->nLen;
+  end_len = pRun->member.run.len;
 
   /* null char format operation to store the original char format for the ENDPARA run */
   ME_InitCharFormat2W(&fmt);
@@ -353,20 +352,6 @@ ME_DisplayItem *ME_JoinParagraphs(ME_TextEditor *editor, ME_DisplayItem *tp,
   ME_PrevRun(&startCur.pPara, &startCur.pRun);
   ME_SetCharFormat(editor, &startCur, &endCur, &fmt);
 
-  undo = ME_AddUndoItem(editor, diUndoSplitParagraph, pNext);
-  if (undo)
-  {
-    undo->nStart = pNext->member.para.nCharOfs - end_len;
-    undo->eol_str = pRun->member.run.strText;
-    pRun->member.run.strText = NULL; /* Avoid freeing the string */
-  }
-  if (!keepFirstParaFormat)
-  {
-    ME_AddUndoItem(editor, diUndoSetParagraphFormat, tp);
-    *tp->member.para.pFmt = *pNext->member.para.pFmt;
-    tp->member.para.border = pNext->member.para.border;
-  }
-
   if (!editor->bEmulateVersion10) { /* v4.1 */
     /* Table cell/row properties are always moved over from the removed para. */
     tp->member.para.nFlags = pNext->member.para.nFlags;
@@ -374,33 +359,33 @@ ME_DisplayItem *ME_JoinParagraphs(ME_TextEditor *editor, ME_DisplayItem *tp,
 
     /* Remove cell boundary if it is between the end paragraph run and the next
      * paragraph display item. */
-    pTmp = pRun->next;
-    while (pTmp != pNext) {
+    for (pTmp = pRun->next; pTmp != pNext; pTmp = pTmp->next)
+    {
       if (pTmp->type == diCell)
       {
-        ME_Cell *pCell = &pTmp->member.cell;
-        if (undo)
-        {
-          assert(!(undo->di.member.para.nFlags & MEPF_ROWEND));
-          if (!(undo->di.member.para.nFlags & MEPF_ROWSTART))
-            undo->di.member.para.nFlags |= MEPF_CELL;
-          undo->di.member.para.pCell = ALLOC_OBJ(ME_DisplayItem);
-          *undo->di.member.para.pCell = *pTmp;
-          undo->di.member.para.pCell->next = NULL;
-          undo->di.member.para.pCell->prev = NULL;
-          undo->di.member.para.pCell->member.cell.next_cell = NULL;
-          undo->di.member.para.pCell->member.cell.prev_cell = NULL;
-        }
-        ME_Remove(pTmp);
-        if (pCell->prev_cell)
-          pCell->prev_cell->member.cell.next_cell = pCell->next_cell;
-        if (pCell->next_cell)
-          pCell->next_cell->member.cell.prev_cell = pCell->prev_cell;
-        ME_DestroyDisplayItem(pTmp);
+        pCell = pTmp;
         break;
       }
-      pTmp = pTmp->next;
     }
+  }
+
+  add_undo_split_para( editor, &pNext->member.para, &pRun->member.run, pCell ? &pCell->member.cell : NULL );
+
+  if (pCell)
+  {
+    ME_Remove( pCell );
+    if (pCell->member.cell.prev_cell)
+      pCell->member.cell.prev_cell->member.cell.next_cell = pCell->member.cell.next_cell;
+    if (pCell->member.cell.next_cell)
+      pCell->member.cell.next_cell->member.cell.prev_cell = pCell->member.cell.prev_cell;
+    ME_DestroyDisplayItem( pCell );
+  }
+
+  if (!keepFirstParaFormat)
+  {
+    add_undo_set_para_fmt( editor, &tp->member.para );
+    *tp->member.para.pFmt = *pNext->member.para.pFmt;
+    tp->member.para.border = pNext->member.para.border;
   }
 
   shift = pNext->member.para.nCharOfs - tp->member.para.nCharOfs - end_len;
@@ -425,8 +410,9 @@ ME_DisplayItem *ME_JoinParagraphs(ME_TextEditor *editor, ME_DisplayItem *tp,
     pTmp = ME_FindItemFwd(pTmp, diRunOrParagraphOrEnd);
     if (pTmp->type != diRun)
       break;
-    TRACE("shifting \"%s\" by %d (previous %d)\n", debugstr_w(pTmp->member.run.strText->szData), shift, pTmp->member.run.nCharOfs);
+    TRACE("shifting %s by %d (previous %d)\n", debugstr_run( &pTmp->member.run ), shift, pTmp->member.run.nCharOfs);
     pTmp->member.run.nCharOfs += shift;
+    pTmp->member.run.para = &tp->member.para;
   } while(1);
 
   ME_Remove(pRun);

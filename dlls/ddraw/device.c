@@ -233,6 +233,7 @@ static ULONG WINAPI d3d_device_inner_Release(IUnknown *iface)
     if (!ref)
     {
         DWORD i;
+        struct list *vp_entry, *vp_entry2;
 
         wined3d_mutex_lock();
 
@@ -303,6 +304,12 @@ static ULONG WINAPI d3d_device_inner_Release(IUnknown *iface)
         }
 
         ddraw_handle_table_destroy(&This->handle_table);
+
+        LIST_FOR_EACH_SAFE(vp_entry, vp_entry2, &This->viewport_list)
+        {
+            struct d3d_viewport *vp = LIST_ENTRY(vp_entry, struct d3d_viewport, entry);
+            IDirect3DDevice3_DeleteViewport(&This->IDirect3DDevice3_iface, &vp->IDirect3DViewport3_iface);
+        }
 
         TRACE("Releasing target %p.\n", This->target);
         /* Release the render target. */
@@ -758,6 +765,7 @@ static HRESULT WINAPI d3d_device3_AddViewport(IDirect3DDevice3 *iface, IDirect3D
         return DDERR_INVALIDPARAMS;
 
     wined3d_mutex_lock();
+    IDirect3DViewport3_AddRef(viewport);
     list_add_head(&device->viewport_list, &vp->entry);
     /* Viewport must be usable for Clear() after AddViewport, so set active_device here. */
     vp->active_device = device;
@@ -810,6 +818,12 @@ static HRESULT WINAPI d3d_device3_DeleteViewport(IDirect3DDevice3 *iface, IDirec
 
     TRACE("iface %p, viewport %p.\n", iface, viewport);
 
+    if (!vp)
+    {
+        WARN("NULL viewport, returning DDERR_INVALIDPARAMS\n");
+        return DDERR_INVALIDPARAMS;
+    }
+
     wined3d_mutex_lock();
 
     if (vp->active_device != device)
@@ -819,8 +833,17 @@ static HRESULT WINAPI d3d_device3_DeleteViewport(IDirect3DDevice3 *iface, IDirec
         return DDERR_INVALIDPARAMS;
     }
 
+    if (device->current_viewport == vp)
+    {
+        TRACE("Deleting current viewport, unsetting and releasing\n");
+        IDirect3DViewport3_Release(viewport);
+        device->current_viewport = NULL;
+    }
+
     vp->active_device = NULL;
     list_remove(&vp->entry);
+
+    IDirect3DViewport3_Release(viewport);
 
     wined3d_mutex_unlock();
 
@@ -834,7 +857,8 @@ static HRESULT WINAPI d3d_device2_DeleteViewport(IDirect3DDevice2 *iface, IDirec
 
     TRACE("iface %p, viewport %p.\n", iface, viewport);
 
-    return d3d_device3_DeleteViewport(&device->IDirect3DDevice3_iface, &vp->IDirect3DViewport3_iface);
+    return d3d_device3_DeleteViewport(&device->IDirect3DDevice3_iface,
+            vp ? &vp->IDirect3DViewport3_iface : NULL);
 }
 
 static HRESULT WINAPI d3d_device1_DeleteViewport(IDirect3DDevice *iface, IDirect3DViewport *viewport)
@@ -844,7 +868,8 @@ static HRESULT WINAPI d3d_device1_DeleteViewport(IDirect3DDevice *iface, IDirect
 
     TRACE("iface %p, viewport %p.\n", iface, viewport);
 
-    return d3d_device3_DeleteViewport(&device->IDirect3DDevice3_iface, &vp->IDirect3DViewport3_iface);
+    return d3d_device3_DeleteViewport(&device->IDirect3DDevice3_iface,
+            vp ? &vp->IDirect3DViewport3_iface : NULL);
 }
 
 /*****************************************************************************
@@ -1688,9 +1713,15 @@ static HRESULT WINAPI d3d_device3_SetCurrentViewport(IDirect3DDevice3 *iface, ID
 
     TRACE("iface %p, viewport %p.\n", iface, Direct3DViewport3);
 
+    if (!vp)
+    {
+        WARN("Direct3DViewport3 is NULL, returning DDERR_INVALIDPARAMS\n");
+        return DDERR_INVALIDPARAMS;
+    }
+
     wined3d_mutex_lock();
     /* Do nothing if the specified viewport is the same as the current one */
-    if (This->current_viewport == vp )
+    if (This->current_viewport == vp)
     {
         wined3d_mutex_unlock();
         return D3D_OK;
@@ -1730,7 +1761,8 @@ static HRESULT WINAPI d3d_device2_SetCurrentViewport(IDirect3DDevice2 *iface, ID
 
     TRACE("iface %p, viewport %p.\n", iface, viewport);
 
-    return d3d_device3_SetCurrentViewport(&device->IDirect3DDevice3_iface, &vp->IDirect3DViewport3_iface);
+    return d3d_device3_SetCurrentViewport(&device->IDirect3DDevice3_iface,
+            vp ? &vp->IDirect3DViewport3_iface : NULL);
 }
 
 /*****************************************************************************
@@ -1754,20 +1786,19 @@ static HRESULT WINAPI d3d_device3_GetCurrentViewport(IDirect3DDevice3 *iface, ID
 
     TRACE("iface %p, viewport %p.\n", iface, viewport);
 
-    if (!viewport)
-        return DDERR_INVALIDPARAMS;
-
     wined3d_mutex_lock();
-    *viewport = &device->current_viewport->IDirect3DViewport3_iface;
+    if (!device->current_viewport)
+    {
+        wined3d_mutex_unlock();
+        WARN("No current viewport, returning D3DERR_NOCURRENTVIEWPORT\n");
+        return D3DERR_NOCURRENTVIEWPORT;
+    }
 
-    /* AddRef the returned viewport */
-    if (*viewport)
-        IDirect3DViewport3_AddRef(*viewport);
+    *viewport = &device->current_viewport->IDirect3DViewport3_iface;
+    IDirect3DViewport3_AddRef(*viewport);
 
     TRACE("Returning interface %p.\n", *viewport);
-
     wined3d_mutex_unlock();
-
     return D3D_OK;
 }
 
@@ -3806,82 +3837,106 @@ static HRESULT WINAPI d3d_device2_GetClipStatus(IDirect3DDevice2 *iface, D3DCLIP
  *  (For details, see IWineD3DDevice::DrawPrimitiveStrided)
  *
  *****************************************************************************/
+static void pack_strided_data(BYTE *dst, DWORD count, const D3DDRAWPRIMITIVESTRIDEDDATA *src, DWORD fvf)
+{
+    DWORD i, tex, offset;
+
+    for (i = 0; i < count; i++)
+    {
+        /* The contents of the strided data are determined by the fvf,
+         * not by the members set in src. So it's valid
+         * to have diffuse.lpvData set to 0xdeadbeef if the diffuse flag is
+         * not set in the fvf. */
+        if (fvf & D3DFVF_POSITION_MASK)
+        {
+            offset = i * src->position.dwStride;
+            if (fvf & D3DFVF_XYZRHW)
+            {
+                memcpy(dst, ((BYTE *)src->position.lpvData) + offset, 4 * sizeof(float));
+                dst += 4 * sizeof(float);
+            }
+            else
+            {
+                memcpy(dst, ((BYTE *)src->position.lpvData) + offset, 3 * sizeof(float));
+                dst += 3 * sizeof(float);
+            }
+        }
+
+        if (fvf & D3DFVF_NORMAL)
+        {
+            offset = i * src->normal.dwStride;
+            memcpy(dst, ((BYTE *)src->normal.lpvData) + offset, 3 * sizeof(float));
+            dst += 3 * sizeof(float);
+        }
+
+        if (fvf & D3DFVF_DIFFUSE)
+        {
+            offset = i * src->diffuse.dwStride;
+            memcpy(dst, ((BYTE *)src->diffuse.lpvData) + offset, sizeof(DWORD));
+            dst += sizeof(DWORD);
+        }
+
+        if (fvf & D3DFVF_SPECULAR)
+        {
+            offset = i * src->specular.dwStride;
+            memcpy(dst, ((BYTE *)src->specular.lpvData) + offset, sizeof(DWORD));
+            dst += sizeof(DWORD);
+        }
+
+        for (tex = 0; tex < GET_TEXCOUNT_FROM_FVF(fvf); ++tex)
+        {
+            DWORD attrib_count = GET_TEXCOORD_SIZE_FROM_FVF(fvf, tex);
+            offset = i * src->textureCoords[tex].dwStride;
+            memcpy(dst, ((BYTE *)src->textureCoords[tex].lpvData) + offset, attrib_count * sizeof(float));
+            dst += attrib_count * sizeof(float);
+        }
+    }
+}
+
 static HRESULT d3d_device7_DrawPrimitiveStrided(IDirect3DDevice7 *iface, D3DPRIMITIVETYPE PrimitiveType,
         DWORD VertexType, D3DDRAWPRIMITIVESTRIDEDDATA *D3DDrawPrimStrideData, DWORD VertexCount, DWORD Flags)
 {
     struct d3d_device *device = impl_from_IDirect3DDevice7(iface);
-    struct wined3d_strided_data wined3d_strided;
-    DWORD i;
     HRESULT hr;
+    UINT dst_stride = get_flexible_vertex_size(VertexType);
+    UINT dst_size = dst_stride * VertexCount;
+    UINT vb_pos, align;
+    BYTE *dst_data;
 
     TRACE("iface %p, primitive_type %#x, FVF %#x, strided_data %p, vertex_count %u, flags %#x.\n",
             iface, PrimitiveType, VertexType, D3DDrawPrimStrideData, VertexCount, Flags);
 
-    memset(&wined3d_strided, 0, sizeof(wined3d_strided));
-    /* Get the strided data right. the wined3d structure is a bit bigger
-     * Watch out: The contents of the strided data are determined by the fvf,
-     * not by the members set in D3DDrawPrimStrideData. So it's valid
-     * to have diffuse.lpvData set to 0xdeadbeef if the diffuse flag is
-     * not set in the fvf.
-     */
-    if(VertexType & D3DFVF_POSITION_MASK)
-    {
-        wined3d_strided.position.format = WINED3DFMT_R32G32B32_FLOAT;
-        wined3d_strided.position.data = D3DDrawPrimStrideData->position.lpvData;
-        wined3d_strided.position.stride = D3DDrawPrimStrideData->position.dwStride;
-        if (VertexType & D3DFVF_XYZRHW)
-        {
-            wined3d_strided.position.format = WINED3DFMT_R32G32B32A32_FLOAT;
-            wined3d_strided.position_transformed = TRUE;
-        }
-        else
-        {
-            wined3d_strided.position_transformed = FALSE;
-        }
-    }
-
-    if (VertexType & D3DFVF_NORMAL)
-    {
-        wined3d_strided.normal.format = WINED3DFMT_R32G32B32_FLOAT;
-        wined3d_strided.normal.data = D3DDrawPrimStrideData->normal.lpvData;
-        wined3d_strided.normal.stride = D3DDrawPrimStrideData->normal.dwStride;
-    }
-
-    if (VertexType & D3DFVF_DIFFUSE)
-    {
-        wined3d_strided.diffuse.format = WINED3DFMT_B8G8R8A8_UNORM;
-        wined3d_strided.diffuse.data = D3DDrawPrimStrideData->diffuse.lpvData;
-        wined3d_strided.diffuse.stride = D3DDrawPrimStrideData->diffuse.dwStride;
-    }
-
-    if (VertexType & D3DFVF_SPECULAR)
-    {
-        wined3d_strided.specular.format = WINED3DFMT_B8G8R8A8_UNORM;
-        wined3d_strided.specular.data = D3DDrawPrimStrideData->specular.lpvData;
-        wined3d_strided.specular.stride = D3DDrawPrimStrideData->specular.dwStride;
-    }
-
-    for (i = 0; i < GET_TEXCOUNT_FROM_FVF(VertexType); ++i)
-    {
-        switch (GET_TEXCOORD_SIZE_FROM_FVF(VertexType, i))
-        {
-            case 1: wined3d_strided.tex_coords[i].format = WINED3DFMT_R32_FLOAT; break;
-            case 2: wined3d_strided.tex_coords[i].format = WINED3DFMT_R32G32_FLOAT; break;
-            case 3: wined3d_strided.tex_coords[i].format = WINED3DFMT_R32G32B32_FLOAT; break;
-            case 4: wined3d_strided.tex_coords[i].format = WINED3DFMT_R32G32B32A32_FLOAT; break;
-            default: ERR("Unexpected texture coordinate size %d\n",
-                         GET_TEXCOORD_SIZE_FROM_FVF(VertexType, i));
-        }
-        wined3d_strided.tex_coords[i].data = D3DDrawPrimStrideData->textureCoords[i].lpvData;
-        wined3d_strided.tex_coords[i].stride = D3DDrawPrimStrideData->textureCoords[i].dwStride;
-    }
-
-    /* WineD3D doesn't need the FVF here */
     wined3d_mutex_lock();
-    wined3d_device_set_primitive_type(device->wined3d_device, PrimitiveType);
-    hr = wined3d_device_draw_primitive_strided(device->wined3d_device, VertexCount, &wined3d_strided);
-    wined3d_mutex_unlock();
+    hr = d3d_device_prepare_vertex_buffer(device, dst_size);
+    if (FAILED(hr))
+        goto done;
 
+    vb_pos = device->vertex_buffer_pos;
+    align = vb_pos % dst_stride;
+    if (align) align = dst_stride - align;
+    if (vb_pos + dst_size + align > device->vertex_buffer_size)
+        vb_pos = 0;
+    else
+        vb_pos += align;
+
+    hr = wined3d_buffer_map(device->vertex_buffer, vb_pos, dst_size, &dst_data,
+            vb_pos ? WINED3D_MAP_NOOVERWRITE : WINED3D_MAP_DISCARD);
+    if (FAILED(hr))
+        goto done;
+    pack_strided_data(dst_data, VertexCount, D3DDrawPrimStrideData, VertexType);
+    wined3d_buffer_unmap(device->vertex_buffer);
+    device->vertex_buffer_pos = vb_pos + dst_size;
+
+    hr = wined3d_device_set_stream_source(device->wined3d_device, 0, device->vertex_buffer, 0, dst_stride);
+    if (FAILED(hr))
+        goto done;
+    wined3d_device_set_vertex_declaration(device->wined3d_device, ddraw_find_decl(device->ddraw, VertexType));
+
+    wined3d_device_set_primitive_type(device->wined3d_device, PrimitiveType);
+    hr = wined3d_device_draw_primitive(device->wined3d_device, vb_pos / dst_stride, VertexCount);
+
+done:
+    wined3d_mutex_unlock();
     return hr;
 }
 
@@ -3944,79 +3999,66 @@ static HRESULT d3d_device7_DrawIndexedPrimitiveStrided(IDirect3DDevice7 *iface,
         WORD *Indices, DWORD IndexCount, DWORD Flags)
 {
     struct d3d_device *device = impl_from_IDirect3DDevice7(iface);
-    struct wined3d_strided_data wined3d_strided;
-    DWORD i;
     HRESULT hr;
+    UINT vtx_dst_stride = get_flexible_vertex_size(VertexType);
+    UINT vtx_dst_size = VertexCount * vtx_dst_stride;
+    UINT vb_pos, align;
+    UINT idx_size = IndexCount * sizeof(WORD);
+    UINT ib_pos;
+    BYTE *dst_data;
 
     TRACE("iface %p, primitive_type %#x, FVF %#x, strided_data %p, vertex_count %u, indices %p, index_count %u, flags %#x.\n",
             iface, PrimitiveType, VertexType, D3DDrawPrimStrideData, VertexCount, Indices, IndexCount, Flags);
 
-    memset(&wined3d_strided, 0, sizeof(wined3d_strided));
-    /* Get the strided data right. the wined3d structure is a bit bigger
-     * Watch out: The contents of the strided data are determined by the fvf,
-     * not by the members set in D3DDrawPrimStrideData. So it's valid
-     * to have diffuse.lpvData set to 0xdeadbeef if the diffuse flag is
-     * not set in the fvf. */
-    if (VertexType & D3DFVF_POSITION_MASK)
-    {
-        wined3d_strided.position.format = WINED3DFMT_R32G32B32_FLOAT;
-        wined3d_strided.position.data = D3DDrawPrimStrideData->position.lpvData;
-        wined3d_strided.position.stride = D3DDrawPrimStrideData->position.dwStride;
-        if (VertexType & D3DFVF_XYZRHW)
-        {
-            wined3d_strided.position.format = WINED3DFMT_R32G32B32A32_FLOAT;
-            wined3d_strided.position_transformed = TRUE;
-        }
-        else
-        {
-            wined3d_strided.position_transformed = FALSE;
-        }
-    }
-
-    if (VertexType & D3DFVF_NORMAL)
-    {
-        wined3d_strided.normal.format = WINED3DFMT_R32G32B32_FLOAT;
-        wined3d_strided.normal.data = D3DDrawPrimStrideData->normal.lpvData;
-        wined3d_strided.normal.stride = D3DDrawPrimStrideData->normal.dwStride;
-    }
-
-    if (VertexType & D3DFVF_DIFFUSE)
-    {
-        wined3d_strided.diffuse.format = WINED3DFMT_B8G8R8A8_UNORM;
-        wined3d_strided.diffuse.data = D3DDrawPrimStrideData->diffuse.lpvData;
-        wined3d_strided.diffuse.stride = D3DDrawPrimStrideData->diffuse.dwStride;
-    }
-
-    if (VertexType & D3DFVF_SPECULAR)
-    {
-        wined3d_strided.specular.format = WINED3DFMT_B8G8R8A8_UNORM;
-        wined3d_strided.specular.data = D3DDrawPrimStrideData->specular.lpvData;
-        wined3d_strided.specular.stride = D3DDrawPrimStrideData->specular.dwStride;
-    }
-
-    for (i = 0; i < GET_TEXCOUNT_FROM_FVF(VertexType); ++i)
-    {
-        switch (GET_TEXCOORD_SIZE_FROM_FVF(VertexType, i))
-        {
-            case 1: wined3d_strided.tex_coords[i].format = WINED3DFMT_R32_FLOAT; break;
-            case 2: wined3d_strided.tex_coords[i].format = WINED3DFMT_R32G32_FLOAT; break;
-            case 3: wined3d_strided.tex_coords[i].format = WINED3DFMT_R32G32B32_FLOAT; break;
-            case 4: wined3d_strided.tex_coords[i].format = WINED3DFMT_R32G32B32A32_FLOAT; break;
-            default: ERR("Unexpected texture coordinate size %d\n",
-                         GET_TEXCOORD_SIZE_FROM_FVF(VertexType, i));
-        }
-        wined3d_strided.tex_coords[i].data = D3DDrawPrimStrideData->textureCoords[i].lpvData;
-        wined3d_strided.tex_coords[i].stride = D3DDrawPrimStrideData->textureCoords[i].dwStride;
-    }
-
-    /* WineD3D doesn't need the FVF here */
     wined3d_mutex_lock();
-    wined3d_device_set_primitive_type(device->wined3d_device, PrimitiveType);
-    wined3d_device_set_base_vertex_index(device->wined3d_device, 0);
-    hr = wined3d_device_draw_indexed_primitive_strided(device->wined3d_device,
-            IndexCount, &wined3d_strided, VertexCount, Indices, WINED3DFMT_R16_UINT);
-    wined3d_mutex_unlock();
 
+    hr = d3d_device_prepare_vertex_buffer(device, vtx_dst_size);
+    if (FAILED(hr))
+        goto done;
+
+    vb_pos = device->vertex_buffer_pos;
+    align = vb_pos % vtx_dst_stride;
+    if (align) align = vtx_dst_stride - align;
+    if (vb_pos + vtx_dst_size + align > device->vertex_buffer_size)
+        vb_pos = 0;
+    else
+        vb_pos += align;
+
+    hr = wined3d_buffer_map(device->vertex_buffer, vb_pos, vtx_dst_size, &dst_data,
+            vb_pos ? WINED3D_MAP_NOOVERWRITE : WINED3D_MAP_DISCARD);
+    if (FAILED(hr))
+        goto done;
+    pack_strided_data(dst_data, VertexCount, D3DDrawPrimStrideData, VertexType);
+    wined3d_buffer_unmap(device->vertex_buffer);
+    device->vertex_buffer_pos = vb_pos + vtx_dst_size;
+
+    hr = d3d_device_prepare_index_buffer(device, idx_size);
+    if (FAILED(hr))
+        goto done;
+    ib_pos = device->index_buffer_pos;
+    if (device->index_buffer_size - idx_size < ib_pos)
+        ib_pos = 0;
+
+    hr = wined3d_buffer_map(device->index_buffer, ib_pos, idx_size, &dst_data,
+            ib_pos ? WINED3D_MAP_NOOVERWRITE : WINED3D_MAP_DISCARD);
+    if (FAILED(hr))
+        goto done;
+    memcpy(dst_data, Indices, idx_size);
+    wined3d_buffer_unmap(device->index_buffer);
+    device->index_buffer_pos = ib_pos + idx_size;
+
+    hr = wined3d_device_set_stream_source(device->wined3d_device, 0, device->vertex_buffer, 0, vtx_dst_stride);
+    if (FAILED(hr))
+        goto done;
+    wined3d_device_set_index_buffer(device->wined3d_device, device->index_buffer, WINED3DFMT_R16_UINT);
+    wined3d_device_set_base_vertex_index(device->wined3d_device, vb_pos / vtx_dst_stride);
+
+    wined3d_device_set_vertex_declaration(device->wined3d_device, ddraw_find_decl(device->ddraw, VertexType));
+    wined3d_device_set_primitive_type(device->wined3d_device, PrimitiveType);
+    hr = wined3d_device_draw_indexed_primitive(device->wined3d_device, ib_pos / sizeof(WORD), IndexCount);
+
+done:
+    wined3d_mutex_unlock();
     return hr;
 }
 
