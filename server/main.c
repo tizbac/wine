@@ -39,7 +39,7 @@
 #include "request.h"
 #include "wine/library.h"
 
-extern int rtkit_make_realtime(pid_t process, pid_t thread, int priority);
+extern int rtkit_make_realtime(struct thread *thread, pid_t tid, int priority);
 
 /* command-line options */
 int debug_level = 0;
@@ -148,7 +148,7 @@ int main( int argc, char *argv[] )
     init_signals();
     init_directories();
     init_registry();
-    rtkit_make_realtime(getpid(), syscall( SYS_gettid ), 2);
+    rtkit_make_realtime(NULL, syscall( SYS_gettid ), 3);
     main_loop();
     return 0;
 }
