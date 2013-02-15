@@ -2536,7 +2536,7 @@ static BOOL write_freedesktop_association_entry(const char *desktopPath, const c
         fclose(desktop);
     }
     else
-        WINE_ERR("error writing association file %s\n", wine_dbgstr_a(desktopPath));
+        WINE_WARN("error writing association file %s\n", wine_dbgstr_a(desktopPath));
     return ret;
 }
 
