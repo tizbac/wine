@@ -1,5 +1,6 @@
 DEFS      = -D__WINESRC__
 EXTRALIBS = @LIBPOLL@ @LIBRT@
+MODCFLAGS = @DBUSINCL@
 
 C_SRCS = \
 	async.c \
@@ -31,6 +32,7 @@ C_SRCS = \
 	region.c \
 	registry.c \
 	request.c \
+	rtkit.c \
 	semaphore.c \
 	serial.c \
 	signal.c \
