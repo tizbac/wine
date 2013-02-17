@@ -230,7 +230,6 @@ void ME_JoinRuns(ME_TextEditor *editor, ME_DisplayItem *p)
     }
   }
 
-  ME_AppendString(p->member.run.strText, pNext->member.run.strText);
   p->member.run.len += pNext->member.run.len;
   ME_Remove(pNext);
   ME_DestroyDisplayItem(pNext);
@@ -241,54 +240,6 @@ void ME_JoinRuns(ME_TextEditor *editor, ME_DisplayItem *p)
     ME_CheckCharOffsets(editor);
     TRACE("After check after join\n");
   }
-}
-
-/******************************************************************************
- * ME_SplitRun
- *
- * Splits a run into two in a given place. It also updates the screen position
- * and size (extent) of the newly generated runs.
- */
-ME_DisplayItem *ME_SplitRun(ME_WrapContext *wc, ME_DisplayItem *item, int nVChar)
-{
-  ME_TextEditor *editor = wc->context->editor;
-  ME_Run *run, *run2;
-  ME_Paragraph *para = &wc->pPara->member.para;
-  ME_Cursor cursor = {wc->pPara, item, nVChar};
-
-  assert(item->member.run.nCharOfs != -1);
-  if(TRACE_ON(richedit))
-  {
-    TRACE("Before check before split\n");
-    ME_CheckCharOffsets(editor);
-    TRACE("After check before split\n");
-  }
-
-  run = &item->member.run;
-
-  TRACE("Before split: %s(%d, %d)\n", debugstr_run( run ),
-        run->pt.x, run->pt.y);
-
-  ME_SplitRunSimple(editor, &cursor);
-
-  run2 = &cursor.pRun->member.run;
-
-  ME_CalcRunExtent(wc->context, para, wc->nRow ? wc->nLeftMargin : wc->nFirstMargin, run);
-
-  run2->pt.x = run->pt.x+run->nWidth;
-  run2->pt.y = run->pt.y;
-
-  if(TRACE_ON(richedit))
-  {
-    TRACE("Before check after split\n");
-    ME_CheckCharOffsets(editor);
-    TRACE("After check after split\n");
-    TRACE("After split: %s(%d, %d), %s(%d, %d)\n",
-      debugstr_run( run ), run->pt.x, run->pt.y,
-      debugstr_run( run2 ), run2->pt.x, run2->pt.y);
-  }
-
-  return cursor.pRun;
 }
 
 /******************************************************************************
@@ -307,11 +258,11 @@ ME_DisplayItem *ME_SplitRunSimple(ME_TextEditor *editor, ME_Cursor *cursor)
   assert(!(run->member.run.nFlags & MERF_NONTEXT));
 
   new_run = ME_MakeRun(run->member.run.style,
-                       ME_VSplitString(run->member.run.strText, nOffset),
                        run->member.run.nFlags & MERF_SPLITMASK);
-  run->member.run.len = nOffset;
   new_run->member.run.nCharOfs = run->member.run.nCharOfs + nOffset;
+  new_run->member.run.len = run->member.run.len - nOffset;
   new_run->member.run.para = run->member.run.para;
+  run->member.run.len = nOffset;
   cursor->pRun = new_run;
   cursor->nOffset = 0;
 
@@ -335,15 +286,14 @@ ME_DisplayItem *ME_SplitRunSimple(ME_TextEditor *editor, ME_Cursor *cursor)
  * 
  * A helper function to create run structures quickly.
  */   
-ME_DisplayItem *ME_MakeRun(ME_Style *s, ME_String *strData, int nFlags)
+ME_DisplayItem *ME_MakeRun(ME_Style *s, int nFlags)
 {
   ME_DisplayItem *item = ME_MakeDI(diRun);
   item->member.run.style = s;
   item->member.run.ole_obj = NULL;
-  item->member.run.strText = strData;
   item->member.run.nFlags = nFlags;
   item->member.run.nCharOfs = -1;
-  item->member.run.len = strData->nLen;
+  item->member.run.len = 0;
   item->member.run.para = NULL;
   ME_AddRefStyle(s);
   return item;
@@ -368,9 +318,11 @@ ME_InsertRunAtCursor(ME_TextEditor *editor, ME_Cursor *cursor, ME_Style *style,
   add_undo_delete_run( editor, cursor->pPara->member.para.nCharOfs +
                        cursor->pRun->member.run.nCharOfs, len );
 
-  pDI = ME_MakeRun(style, ME_MakeStringN(str, len), flags);
+  pDI = ME_MakeRun(style, flags);
   pDI->member.run.nCharOfs = cursor->pRun->member.run.nCharOfs;
+  pDI->member.run.len = len;
   pDI->member.run.para = cursor->pRun->member.run.para;
+  ME_InsertString( pDI->member.run.para->text, pDI->member.run.nCharOfs, str, len );
   ME_InsertBefore(cursor->pRun, pDI);
   TRACE("Shift length:%d\n", len);
   ME_PropagateCharOffset(cursor->pRun, len);
@@ -449,56 +401,6 @@ void ME_UpdateRunFlags(ME_TextEditor *editor, ME_Run *run)
   }
   else
     run->nFlags &= ~(MERF_WHITESPACE | MERF_STARTWHITE | MERF_ENDWHITE);
-}
-
-/******************************************************************************
- * ME_CharFromPoint
- * 
- * Returns a character position inside the run given a run-relative
- * pixel horizontal position. This version rounds left (ie. if the second
- * character is at pixel position 8, then for cx=0..7 it returns 0).  
- */     
-int ME_CharFromPoint(ME_Context *c, int cx, ME_Run *run)
-{
-  int fit = 0;
-  HGDIOBJ hOldFont;
-  SIZE sz;
-  if (!run->len || cx <= 0)
-    return 0;
-
-  if (run->nFlags & MERF_TAB ||
-      (run->nFlags & (MERF_ENDCELL|MERF_ENDPARA)) == MERF_ENDCELL)
-  {
-    if (cx < run->nWidth/2) 
-      return 0;
-    return 1;
-  }
-  if (run->nFlags & MERF_GRAPHICS)
-  {
-    SIZE sz;
-    ME_GetOLEObjectSize(c, run, &sz);
-    if (cx < sz.cx)
-      return 0;
-    return 1;
-  }
-  hOldFont = ME_SelectStyleFont(c, run->style);
-  
-  if (c->editor->cPasswordMask)
-  {
-    ME_String *strMasked = ME_MakeStringR(c->editor->cPasswordMask, run->len);
-    GetTextExtentExPointW(c->hDC, strMasked->szData, run->len,
-      cx, &fit, NULL, &sz);
-    ME_DestroyString(strMasked);
-  }
-  else
-  {
-    GetTextExtentExPointW(c->hDC, get_text( run, 0 ), run->len,
-      cx, &fit, NULL, &sz);
-  }
-  
-  ME_UnselectStyleFont(c, run->style, hOldFont);
-
-  return fit;
 }
 
 /******************************************************************************
@@ -585,41 +487,54 @@ static void ME_GetTextExtent(ME_Context *c, LPCWSTR szText, int nChars, ME_Style
 }
 
 /******************************************************************************
- * ME_PointFromChar
+ * ME_PointFromCharContext
  *
  * Returns a run-relative pixel position given a run-relative character
  * position (character offset)
  */
-int ME_PointFromChar(ME_TextEditor *editor, ME_Run *pRun, int nOffset)
+int ME_PointFromCharContext(ME_Context *c, ME_Run *pRun, int nOffset)
 {
   SIZE size;
-  ME_Context c;
   ME_String *mask_text = NULL;
   WCHAR *str;
 
-  ME_InitContext(&c, editor, ITextHost_TxGetDC(editor->texthost));
   if (pRun->nFlags & MERF_GRAPHICS)
   {
     if (nOffset)
-      ME_GetOLEObjectSize(&c, pRun, &size);
-    ME_DestroyContext(&c);
+      ME_GetOLEObjectSize(c, pRun, &size);
     return nOffset != 0;
   } else if (pRun->nFlags & MERF_ENDPARA) {
     nOffset = 0;
   }
 
-  if (editor->cPasswordMask)
+  if (c->editor->cPasswordMask)
   {
-    mask_text = ME_MakeStringR(editor->cPasswordMask, pRun->len);
+    mask_text = ME_MakeStringR(c->editor->cPasswordMask, pRun->len);
     str = mask_text->szData;
   }
   else
       str = get_text( pRun, 0 );
 
-  ME_GetTextExtent(&c, str, nOffset, pRun->style, &size);
-  ME_DestroyContext(&c);
+  ME_GetTextExtent(c, str, nOffset, pRun->style, &size);
   ME_DestroyString( mask_text );
   return size.cx;
+}
+
+/******************************************************************************
+ * ME_PointFromChar
+ *
+ * Calls ME_PointFromCharContext after first creating a context.
+ */
+int ME_PointFromChar(ME_TextEditor *editor, ME_Run *pRun, int nOffset)
+{
+    ME_Context c;
+    int ret;
+
+    ME_InitContext(&c, editor, ITextHost_TxGetDC(editor->texthost));
+    ret = ME_PointFromCharContext( &c, pRun, nOffset );
+    ME_DestroyContext(&c);
+
+    return ret;
 }
 
 /******************************************************************************
@@ -628,8 +543,8 @@ int ME_PointFromChar(ME_TextEditor *editor, ME_Run *pRun, int nOffset)
  * Finds width, height, ascent and descent of a run, up to given character
  * (nLen).
  */
-static SIZE ME_GetRunSizeCommon(ME_Context *c, const ME_Paragraph *para, ME_Run *run, int nLen,
-                                int startx, int *pAscent, int *pDescent)
+SIZE ME_GetRunSizeCommon(ME_Context *c, const ME_Paragraph *para, ME_Run *run, int nLen,
+                         int startx, int *pAscent, int *pDescent)
 {
   SIZE size;
   int nMaxLen = run->len;
@@ -710,28 +625,6 @@ SIZE ME_GetRunSize(ME_Context *c, const ME_Paragraph *para,
 {
   int asc, desc;
   return ME_GetRunSizeCommon(c, para, run, nLen, startx, &asc, &desc);
-}
-
-/******************************************************************************
- * ME_CalcRunExtent
- * 
- * Updates the size of the run (fills width, ascent and descent). The height
- * is calculated based on whole row's ascent and descent anyway, so no need
- * to use it here.        
- */     
-void ME_CalcRunExtent(ME_Context *c, const ME_Paragraph *para, int startx, ME_Run *run)
-{
-  if (run->nFlags & MERF_HIDDEN)
-    run->nWidth = 0;
-  else
-  {
-    int nEnd = run->len;
-    SIZE size = ME_GetRunSizeCommon(c, para, run, nEnd, startx,
-                                    &run->nAscent, &run->nDescent);
-    run->nWidth = size.cx;
-    if (!size.cx)
-      WARN("size.cx == 0\n");
-  }
 }
 
 /******************************************************************************

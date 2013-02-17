@@ -2764,7 +2764,7 @@ static void send_request_complete(http_request_t *req, DWORD_PTR result, DWORD e
             sizeof(INTERNET_ASYNC_RESULT));
 }
 
-static void HTTP_ReceiveRequestData(http_request_t *req, BOOL first_notif)
+static void HTTP_ReceiveRequestData(http_request_t *req, BOOL first_notif, DWORD *ret_size)
 {
     DWORD res, read = 0, avail = 0;
     read_mode_t mode;
@@ -2777,6 +2777,8 @@ static void HTTP_ReceiveRequestData(http_request_t *req, BOOL first_notif)
     res = refill_read_buffer(req, mode, &read);
     if(res == ERROR_SUCCESS && !first_notif)
         avail = get_avail_data(req);
+    if(ret_size)
+        *ret_size = get_avail_data(req);
 
     LeaveCriticalSection( &req->read_section );
 
@@ -2994,11 +2996,16 @@ static DWORD HTTPREQ_WriteFile(object_header_t *hdr, const void *buffer, DWORD s
     return res;
 }
 
-static void AsyncQueryDataAvailableProc(task_header_t *task)
-{
-    http_request_t *req = (http_request_t*)task->hdr;
+typedef struct {
+    task_header_t hdr;
+    DWORD *ret_size;
+} http_data_available_task_t;
 
-    HTTP_ReceiveRequestData(req, FALSE);
+static void AsyncQueryDataAvailableProc(task_header_t *hdr)
+{
+    http_data_available_task_t *task = (http_data_available_task_t*)hdr;
+
+    HTTP_ReceiveRequestData((http_request_t*)task->hdr.hdr, FALSE, task->ret_size);
 }
 
 static DWORD HTTPREQ_QueryDataAvailable(object_header_t *hdr, DWORD *available, DWORD flags, DWORD_PTR ctx)
@@ -3009,7 +3016,7 @@ static DWORD HTTPREQ_QueryDataAvailable(object_header_t *hdr, DWORD *available, 
 
     if (req->session->appInfo->hdr.dwFlags & INTERNET_FLAG_ASYNC)
     {
-        task_header_t *task;
+        http_data_available_task_t *task;
 
         /* never wait, if we can't enter the section we queue an async request right away */
         if (TryEnterCriticalSection( &req->read_section ))
@@ -3021,7 +3028,8 @@ static DWORD HTTPREQ_QueryDataAvailable(object_header_t *hdr, DWORD *available, 
         }
 
         task = alloc_async_task(&req->hdr, AsyncQueryDataAvailableProc, sizeof(*task));
-        INTERNET_AsyncCall(task);
+        task->ret_size = available;
+        INTERNET_AsyncCall(&task->hdr);
         return ERROR_IO_PENDING;
     }
 
@@ -4975,7 +4983,7 @@ lend:
     {
         if (res == ERROR_SUCCESS) {
             if(bEndRequest && request->contentLength && request->bytesWritten == request->bytesToWrite)
-                HTTP_ReceiveRequestData(request, TRUE);
+                HTTP_ReceiveRequestData(request, TRUE, NULL);
             else
                 send_request_complete(request,
                         request->session->hdr.dwInternalFlags & INET_OPENURL ? (DWORD_PTR)request->hdr.hInternet : 1, 0);
@@ -5086,7 +5094,7 @@ static DWORD HTTP_HttpEndRequestW(http_request_t *request, DWORD dwFlags, DWORD_
         create_cache_entry(request);
 
     if (res == ERROR_SUCCESS && request->contentLength)
-        HTTP_ReceiveRequestData(request, TRUE);
+        HTTP_ReceiveRequestData(request, TRUE, NULL);
     else
         send_request_complete(request, res == ERROR_SUCCESS, res);
 

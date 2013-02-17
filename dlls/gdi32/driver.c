@@ -100,11 +100,7 @@ static const struct gdi_dc_funcs *get_display_driver( HMODULE *module_ret )
     HMODULE module = 0;
     HKEY hkey;
 
-    if (display_driver)
-    {
-        *module_ret = display_driver->module;
-        return display_driver->funcs;  /* already loaded */
-    }
+    if (display_driver) goto done;
 
     strcpy( buffer, "x11" );  /* default value */
     /* @@ Wine registry key: HKCU\Software\Wine\Drivers */
@@ -140,6 +136,8 @@ static const struct gdi_dc_funcs *get_display_driver( HMODULE *module_ret )
         FreeLibrary( driver->module );
         HeapFree( GetProcessHeap(), 0, driver );
     }
+done:
+    *module_ret = display_driver->module;
     return display_driver->funcs;
 }
 
@@ -1101,9 +1099,11 @@ INT WINAPI Escape( HDC hdc, INT escape, INT in_count, LPCSTR in_data, LPVOID out
 
     case QUERYESCSUPPORT:
         {
-            const INT *ptr = (const INT *)in_data;
-            if (in_count < sizeof(INT)) return 0;
-            switch(*ptr)
+            DWORD code;
+
+            if (in_count < sizeof(SHORT)) return 0;
+            code = (in_count < sizeof(DWORD)) ? *(const USHORT *)in_data : *(const DWORD *)in_data;
+            switch (code)
             {
             case ABORTDOC:
             case ENDDOC:

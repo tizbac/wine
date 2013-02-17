@@ -474,7 +474,8 @@ static HRESULT WINAPI class_object_GetNames(
     struct class_object *co = impl_from_IWbemClassObject( iface );
     struct enum_class_object *ec = impl_from_IEnumWbemClassObject( co->iter );
 
-    TRACE("%p, %s, %08x, %p, %p\n", iface, debugstr_w(wszQualifierName), lFlags, pQualifierVal, pNames);
+    TRACE("%p, %s, %08x, %s, %p\n", iface, debugstr_w(wszQualifierName), lFlags,
+          debugstr_variant(pQualifierVal), pNames);
 
     if (wszQualifierName || pQualifierVal)
     {
@@ -834,12 +835,11 @@ HRESULT create_signature( const WCHAR *class, const WCHAR *method, enum param_di
     }
     hr = create_signature_table( iter, name );
     IEnumWbemClassObject_Release( iter );
-    if (hr != S_OK)
-    {
-        heap_free( name );
-        return hr;
-    }
-    return get_object( name, sig );
+    if (hr == S_OK)
+        hr = get_object( name, sig );
+
+    heap_free( name );
+    return hr;
 }
 
 static HRESULT WINAPI class_object_GetMethod(

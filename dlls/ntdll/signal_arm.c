@@ -832,6 +832,21 @@ void signal_free_thread( TEB *teb )
     NtFreeVirtualMemory( NtCurrentProcess(), (void **)&teb, &size, MEM_RELEASE );
 }
 
+/**********************************************************************
+ *      set_tpidrurw
+ *
+ * Win32/ARM applications expect the TEB pointer to be in the TPIDRURW register.
+ */
+#ifdef __ARM_ARCH_7A__
+extern void set_tpidrurw( TEB *teb );
+__ASM_GLOBAL_FUNC( set_tpidrurw,
+                   "mcr p15, 0, r0, c13, c0, 2\n\t" /* TEB -> TPIDRURW */
+                   "blx lr" )
+#else
+void set_tpidrurw( TEB *teb )
+{
+}
+#endif
 
 /**********************************************************************
  *		signal_init_thread
@@ -845,6 +860,7 @@ void signal_init_thread( TEB *teb )
         pthread_key_create( &teb_key, NULL );
         init_done = 1;
     }
+    set_tpidrurw( teb );
     pthread_setspecific( teb_key, teb );
 }
 
@@ -900,9 +916,60 @@ void __wine_enter_vm86( CONTEXT *context )
 /***********************************************************************
  *            RtlUnwind  (NTDLL.@)
  */
-void WINAPI RtlUnwind( PVOID pEndFrame, PVOID targetIp, PEXCEPTION_RECORD pRecord, PVOID retval )
+void WINAPI RtlUnwind( void *endframe, void *target_ip, EXCEPTION_RECORD *rec, void *retval )
 {
-    FIXME( "Not implemented on ARM\n" );
+    CONTEXT context;
+    EXCEPTION_RECORD record;
+    EXCEPTION_REGISTRATION_RECORD *frame, *dispatch;
+    DWORD res;
+
+    RtlCaptureContext( &context );
+    context.R0 = (DWORD)retval;
+
+    /* build an exception record, if we do not have one */
+    if (!rec)
+    {
+        record.ExceptionCode    = STATUS_UNWIND;
+        record.ExceptionFlags   = 0;
+        record.ExceptionRecord  = NULL;
+        record.ExceptionAddress = (void *)context.Pc;
+        record.NumberParameters = 0;
+        rec = &record;
+    }
+
+    rec->ExceptionFlags |= EH_UNWINDING | (endframe ? 0 : EH_EXIT_UNWIND);
+
+    TRACE( "code=%x flags=%x\n", rec->ExceptionCode, rec->ExceptionFlags );
+
+    /* get chain of exception frames */
+    frame = NtCurrentTeb()->Tib.ExceptionList;
+    while ((frame != (EXCEPTION_REGISTRATION_RECORD*)~0UL) && (frame != endframe))
+    {
+        /* Check frame address */
+        if (endframe && ((void*)frame > endframe))
+            raise_status( STATUS_INVALID_UNWIND_TARGET, rec );
+
+        if (!is_valid_frame( frame )) raise_status( STATUS_BAD_STACK, rec );
+
+        /* Call handler */
+        TRACE( "calling handler at %p code=%x flags=%x\n",
+               frame->Handler, rec->ExceptionCode, rec->ExceptionFlags );
+        res = frame->Handler(rec, frame, &context, &dispatch);
+        TRACE( "handler at %p returned %x\n", frame->Handler, res );
+
+        switch(res)
+        {
+        case ExceptionContinueSearch:
+            break;
+        case ExceptionCollidedUnwind:
+            frame = dispatch;
+            break;
+        default:
+            raise_status( STATUS_INVALID_DISPOSITION, rec );
+            break;
+        }
+        frame = __wine_pop_frame( frame );
+    }
 }
 
 /*******************************************************************

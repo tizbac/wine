@@ -40,7 +40,16 @@
     NSMutableArray* keyWindows;
     NSMutableSet* triedWindows;
     unsigned long windowFocusSerial;
+
+    CGEventSourceKeyboardType keyboardType;
+    NSEvent* lastFlagsChanged;
+
+    CGFloat primaryScreenHeight;
+    BOOL primaryScreenHeightValid;
 }
+
+@property (nonatomic) CGEventSourceKeyboardType keyboardType;
+@property (readonly, copy, nonatomic) NSEvent* lastFlagsChanged;
 
     - (void) transformProcessToForeground;
 
@@ -51,6 +60,8 @@
     - (double) ticksForEventTime:(NSTimeInterval)eventTime;
 
     - (void) windowGotFocus:(WineWindow*)window;
+
+    - (void) keyboardSelectionDidChange;
 
 @end
 

@@ -24,6 +24,7 @@
 #include "rpcproxy.h"
 #include "vbscript_classes.h"
 #include "vbsglobal.h"
+#include "vbsregexp55.h"
 
 #include "wine/debug.h"
 
@@ -132,13 +133,13 @@ static inline DWORD block_size(DWORD block)
     return MIN_BLOCK_SIZE << block;
 }
 
-void vbsheap_init(vbsheap_t *heap)
+void heap_pool_init(heap_pool_t *heap)
 {
     memset(heap, 0, sizeof(*heap));
     list_init(&heap->custom_blocks);
 }
 
-void *vbsheap_alloc(vbsheap_t *heap, size_t size)
+void *heap_pool_alloc(heap_pool_t *heap, size_t size)
 {
     struct list *list;
     void *tmp;
@@ -193,7 +194,7 @@ void *vbsheap_alloc(vbsheap_t *heap, size_t size)
     return list+1;
 }
 
-void vbsheap_free(vbsheap_t *heap)
+void heap_pool_free(heap_pool_t *heap)
 {
     struct list *iter;
     DWORD i;
@@ -257,6 +258,16 @@ static const IClassFactoryVtbl VBScriptFactoryVtbl = {
 
 static IClassFactory VBScriptFactory = { &VBScriptFactoryVtbl };
 
+static const IClassFactoryVtbl VBScriptRegExpFactoryVtbl = {
+    ClassFactory_QueryInterface,
+    ClassFactory_AddRef,
+    ClassFactory_Release,
+    VBScriptRegExpFactory_CreateInstance,
+    ClassFactory_LockServer
+};
+
+static IClassFactory VBScriptRegExpFactory = { &VBScriptRegExpFactoryVtbl };
+
 /******************************************************************
  *              DllMain (vbscript.@)
  */
@@ -274,6 +285,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
         break;
     case DLL_PROCESS_DETACH:
         release_typelib();
+        release_regexp_typelib();
     }
 
     return TRUE;
@@ -287,6 +299,9 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
     if(IsEqualGUID(&CLSID_VBScript, rclsid)) {
         TRACE("(CLSID_VBScript %s %p)\n", debugstr_guid(riid), ppv);
         return IClassFactory_QueryInterface(&VBScriptFactory, riid, ppv);
+    }else if(IsEqualGUID(&CLSID_VBScriptRegExp, rclsid)) {
+        TRACE("(CLSID_VBScriptRegExp %s %p)\n", debugstr_guid(riid), ppv);
+        return IClassFactory_QueryInterface(&VBScriptRegExpFactory, riid, ppv);
     }
 
     FIXME("%s %s %p\n", debugstr_guid(rclsid), debugstr_guid(riid), ppv);

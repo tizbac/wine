@@ -18,11 +18,19 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#import <Carbon/Carbon.h>
+
 #import "cocoa_window.h"
 
 #include "macdrv_cocoa.h"
 #import "cocoa_app.h"
 #import "cocoa_event.h"
+
+
+/* Additional Mac virtual keycode, to complement those in Carbon's <HIToolbox/Events.h>. */
+enum {
+    kVK_RightCommand              = 0x36, /* Invented for Wine; was unused */
+};
 
 
 static NSUInteger style_mask_for_features(const struct macdrv_window_features* wf)
@@ -52,6 +60,49 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
             return TRUE;
     }
     return FALSE;
+}
+
+
+/* We rely on the supposedly device-dependent modifier flags to distinguish the
+   keys on the left side of the keyboard from those on the right.  Some event
+   sources don't set those device-depdendent flags.  If we see a device-independent
+   flag for a modifier without either corresponding device-dependent flag, assume
+   the left one. */
+static inline void fix_device_modifiers_by_generic(NSUInteger* modifiers)
+{
+    if ((*modifiers & (NX_COMMANDMASK | NX_DEVICELCMDKEYMASK | NX_DEVICERCMDKEYMASK)) == NX_COMMANDMASK)
+        *modifiers |= NX_DEVICELCMDKEYMASK;
+    if ((*modifiers & (NX_SHIFTMASK | NX_DEVICELSHIFTKEYMASK | NX_DEVICERSHIFTKEYMASK)) == NX_SHIFTMASK)
+        *modifiers |= NX_DEVICELSHIFTKEYMASK;
+    if ((*modifiers & (NX_CONTROLMASK | NX_DEVICELCTLKEYMASK | NX_DEVICERCTLKEYMASK)) == NX_CONTROLMASK)
+        *modifiers |= NX_DEVICELCTLKEYMASK;
+    if ((*modifiers & (NX_ALTERNATEMASK | NX_DEVICELALTKEYMASK | NX_DEVICERALTKEYMASK)) == NX_ALTERNATEMASK)
+        *modifiers |= NX_DEVICELALTKEYMASK;
+}
+
+/* As we manipulate individual bits of a modifier mask, we can end up with
+   inconsistent sets of flags.  In particular, we might set or clear one of the
+   left/right-specific bits, but not the corresponding non-side-specific bit.
+   Fix that.  If either side-specific bit is set, set the non-side-specific bit,
+   otherwise clear it. */
+static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
+{
+    if (*modifiers & (NX_DEVICELCMDKEYMASK | NX_DEVICERCMDKEYMASK))
+        *modifiers |= NX_COMMANDMASK;
+    else
+        *modifiers &= ~NX_COMMANDMASK;
+    if (*modifiers & (NX_DEVICELSHIFTKEYMASK | NX_DEVICERSHIFTKEYMASK))
+        *modifiers |= NX_SHIFTMASK;
+    else
+        *modifiers &= ~NX_SHIFTMASK;
+    if (*modifiers & (NX_DEVICELCTLKEYMASK | NX_DEVICERCTLKEYMASK))
+        *modifiers |= NX_CONTROLMASK;
+    else
+        *modifiers &= ~NX_CONTROLMASK;
+    if (*modifiers & (NX_DEVICELALTKEYMASK | NX_DEVICERALTKEYMASK))
+        *modifiers |= NX_ALTERNATEMASK;
+    else
+        *modifiers &= ~NX_ALTERNATEMASK;
 }
 
 
@@ -165,6 +216,11 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
         [[self window] rightMouseDown:theEvent];
     }
 
+    - (BOOL) acceptsFirstMouse:(NSEvent*)theEvent
+    {
+        return YES;
+    }
+
 @end
 
 
@@ -183,6 +239,7 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
     {
         WineWindow* window;
         WineContentView* contentView;
+        NSTrackingArea* trackingArea;
 
         [self flipRect:&window_frame];
 
@@ -193,6 +250,7 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
 
         if (!window) return nil;
         window->normalStyleMask = [window styleMask];
+        window->forceNextMouseMoveAbsolute = TRUE;
 
         /* Standardize windows to eliminate differences between titled and
            borderless windows and between NSWindow and NSPanel. */
@@ -212,11 +270,18 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
             return nil;
         [contentView setAutoresizesSubviews:NO];
 
-        [window setContentView:contentView];
+        trackingArea = [[[NSTrackingArea alloc] initWithRect:[contentView bounds]
+                                                     options:(NSTrackingMouseEnteredAndExited |
+                                                              NSTrackingMouseMoved |
+                                                              NSTrackingActiveAlways |
+                                                              NSTrackingInVisibleRect)
+                                                       owner:window
+                                                    userInfo:nil] autorelease];
+        if (!trackingArea)
+            return nil;
+        [contentView addTrackingArea:trackingArea];
 
-        /* In case Cocoa adjusted the frame we tried to set, generate a frame-changed
-           event.  The back end will ignore it if nothing actually changed. */
-        [window windowDidResize:nil];
+        [window setContentView:contentView];
 
         return window;
     }
@@ -287,6 +352,22 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
                 [NSApp addWindowsItem:self title:[self title] filename:NO];
         }
         [self setCollectionBehavior:behavior];
+
+        if (state->minimized && ![self isMiniaturized])
+        {
+            ignore_windowMiniaturize = TRUE;
+            [self miniaturize:nil];
+        }
+        else if (!state->minimized && [self isMiniaturized])
+        {
+            ignore_windowDeminiaturize = TRUE;
+            [self deminiaturize:nil];
+        }
+
+        /* Whatever events regarding minimization might have been in the queue are now stale. */
+        [queue discardEventsMatchingMask:event_mask_for_type(WINDOW_DID_MINIMIZE) |
+                                         event_mask_for_type(WINDOW_DID_UNMINIMIZE)
+                               forWindow:self];
     }
 
     /* Returns whether or not the window was ordered in, which depends on if
@@ -324,6 +405,7 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
     {
         self.latentParentWindow = [self parentWindow];
         [latentParentWindow removeChildWindow:self];
+        forceNextMouseMoveAbsolute = TRUE;
         [self orderOut:nil];
         [NSApp removeWindowsItem:self];
     }
@@ -357,9 +439,12 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
                 [self setFrame:frame display:YES];
         }
 
-        /* In case Cocoa adjusted the frame we tried to set, generate a frame-changed
-           event.  The back end will ignore it if nothing actually changed. */
-        [self windowDidResize:nil];
+        if (on_screen)
+        {
+            /* In case Cocoa adjusted the frame we tried to set, generate a frame-changed
+               event.  The back end will ignore it if nothing actually changed. */
+            [self windowDidResize:nil];
+        }
 
         return on_screen;
     }
@@ -477,6 +562,86 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
         [self windowDidResize:nil];
     }
 
+    - (void) postKey:(uint16_t)keyCode
+             pressed:(BOOL)pressed
+           modifiers:(NSUInteger)modifiers
+               event:(NSEvent*)theEvent
+    {
+        macdrv_event event;
+        CGEventRef cgevent;
+        WineApplication* app = (WineApplication*)NSApp;
+
+        event.type          = pressed ? KEY_PRESS : KEY_RELEASE;
+        event.window        = (macdrv_window)[self retain];
+        event.key.keycode   = keyCode;
+        event.key.modifiers = modifiers;
+        event.key.time_ms   = [app ticksForEventTime:[theEvent timestamp]];
+
+        if ((cgevent = [theEvent CGEvent]))
+        {
+            CGEventSourceKeyboardType keyboardType = CGEventGetIntegerValueField(cgevent,
+                                                        kCGKeyboardEventKeyboardType);
+            if (keyboardType != app.keyboardType)
+            {
+                app.keyboardType = keyboardType;
+                [app keyboardSelectionDidChange];
+            }
+        }
+
+        [queue postEvent:&event];
+    }
+
+    - (void) postKeyEvent:(NSEvent *)theEvent
+    {
+        [self flagsChanged:theEvent];
+        [self postKey:[theEvent keyCode]
+              pressed:[theEvent type] == NSKeyDown
+            modifiers:[theEvent modifierFlags]
+                event:theEvent];
+    }
+
+    - (void) postMouseMovedEvent:(NSEvent *)theEvent
+    {
+        macdrv_event event;
+
+        if (forceNextMouseMoveAbsolute)
+        {
+            CGPoint point = CGEventGetLocation([theEvent CGEvent]);
+
+            event.type = MOUSE_MOVED_ABSOLUTE;
+            event.mouse_moved.x = point.x;
+            event.mouse_moved.y = point.y;
+
+            mouseMoveDeltaX = 0;
+            mouseMoveDeltaY = 0;
+
+            forceNextMouseMoveAbsolute = FALSE;
+        }
+        else
+        {
+            /* Add event delta to accumulated delta error */
+            /* deltaY is already flipped */
+            mouseMoveDeltaX += [theEvent deltaX];
+            mouseMoveDeltaY += [theEvent deltaY];
+
+            event.type = MOUSE_MOVED;
+            event.mouse_moved.x = mouseMoveDeltaX;
+            event.mouse_moved.y = mouseMoveDeltaY;
+
+            /* Keep the remainder after integer truncation. */
+            mouseMoveDeltaX -= event.mouse_moved.x;
+            mouseMoveDeltaY -= event.mouse_moved.y;
+        }
+
+        if (event.type == MOUSE_MOVED_ABSOLUTE || event.mouse_moved.x || event.mouse_moved.y)
+        {
+            event.window = (macdrv_window)[self retain];
+            event.mouse_moved.time_ms = [NSApp ticksForEventTime:[theEvent timestamp]];
+
+            [queue postEvent:&event];
+        }
+    }
+
 
     /*
      * ---------- NSWindow method overrides ----------
@@ -514,18 +679,27 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
 
     - (void) sendEvent:(NSEvent*)event
     {
-        if ([event type] == NSLeftMouseDown)
+        /* NSWindow consumes certain key-down events as part of Cocoa's keyboard
+           interface control.  For example, Control-Tab switches focus among
+           views.  We want to bypass that feature, so directly route key-down
+           events to -keyDown:. */
+        if ([event type] == NSKeyDown)
+            [[self firstResponder] keyDown:event];
+        else
         {
-            /* Since our windows generally claim they can't be made key, clicks
-               in their title bars are swallowed by the theme frame stuff.  So,
-               we hook directly into the event stream and assume that any click
-               in the window will activate it, if Wine and the Win32 program
-               accept. */
-            if (![self isKeyWindow] && !self.disabled && !self.noActivate)
-                [NSApp windowGotFocus:self];
-        }
+            if ([event type] == NSLeftMouseDown)
+            {
+                /* Since our windows generally claim they can't be made key, clicks
+                   in their title bars are swallowed by the theme frame stuff.  So,
+                   we hook directly into the event stream and assume that any click
+                   in the window will activate it, if Wine and the Win32 program
+                   accept. */
+                if (![self isKeyWindow] && !self.disabled && !self.noActivate)
+                    [NSApp windowGotFocus:self];
+            }
 
-        [super sendEvent:event];
+            [super sendEvent:event];
+        }
     }
 
 
@@ -540,15 +714,189 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
     - (void) rightMouseUp:(NSEvent *)theEvent { [self mouseUp:theEvent]; }
     - (void) otherMouseUp:(NSEvent *)theEvent { [self mouseUp:theEvent]; }
 
+    - (void) keyDown:(NSEvent *)theEvent { [self postKeyEvent:theEvent]; }
+    - (void) keyUp:(NSEvent *)theEvent   { [self postKeyEvent:theEvent]; }
+
+    - (void) flagsChanged:(NSEvent *)theEvent
+    {
+        static const struct {
+            NSUInteger  mask;
+            uint16_t    keycode;
+        } modifiers[] = {
+            { NX_ALPHASHIFTMASK,        kVK_CapsLock },
+            { NX_DEVICELSHIFTKEYMASK,   kVK_Shift },
+            { NX_DEVICERSHIFTKEYMASK,   kVK_RightShift },
+            { NX_DEVICELCTLKEYMASK,     kVK_Control },
+            { NX_DEVICERCTLKEYMASK,     kVK_RightControl },
+            { NX_DEVICELALTKEYMASK,     kVK_Option },
+            { NX_DEVICERALTKEYMASK,     kVK_RightOption },
+            { NX_DEVICELCMDKEYMASK,     kVK_Command },
+            { NX_DEVICERCMDKEYMASK,     kVK_RightCommand },
+        };
+
+        NSUInteger modifierFlags = [theEvent modifierFlags];
+        NSUInteger changed;
+        int i, last_changed;
+
+        fix_device_modifiers_by_generic(&modifierFlags);
+        changed = modifierFlags ^ lastModifierFlags;
+
+        last_changed = -1;
+        for (i = 0; i < sizeof(modifiers)/sizeof(modifiers[0]); i++)
+            if (changed & modifiers[i].mask)
+                last_changed = i;
+
+        for (i = 0; i <= last_changed; i++)
+        {
+            if (changed & modifiers[i].mask)
+            {
+                BOOL pressed = (modifierFlags & modifiers[i].mask) != 0;
+
+                if (i == last_changed)
+                    lastModifierFlags = modifierFlags;
+                else
+                {
+                    lastModifierFlags ^= modifiers[i].mask;
+                    fix_generic_modifiers_by_device(&lastModifierFlags);
+                }
+
+                // Caps lock generates one event for each press-release action.
+                // We need to simulate a pair of events for each actual event.
+                if (modifiers[i].mask == NX_ALPHASHIFTMASK)
+                {
+                    [self postKey:modifiers[i].keycode
+                          pressed:TRUE
+                        modifiers:lastModifierFlags
+                            event:(NSEvent*)theEvent];
+                    pressed = FALSE;
+                }
+
+                [self postKey:modifiers[i].keycode
+                      pressed:pressed
+                    modifiers:lastModifierFlags
+                        event:(NSEvent*)theEvent];
+            }
+        }
+    }
+
+    - (void) mouseEntered:(NSEvent *)theEvent { forceNextMouseMoveAbsolute = TRUE; }
+    - (void) mouseExited:(NSEvent *)theEvent  { forceNextMouseMoveAbsolute = TRUE; }
+
+    - (void) mouseMoved:(NSEvent *)theEvent         { [self postMouseMovedEvent:theEvent]; }
+    - (void) mouseDragged:(NSEvent *)theEvent       { [self postMouseMovedEvent:theEvent]; }
+    - (void) rightMouseDragged:(NSEvent *)theEvent  { [self postMouseMovedEvent:theEvent]; }
+    - (void) otherMouseDragged:(NSEvent *)theEvent  { [self postMouseMovedEvent:theEvent]; }
+
+    - (void) scrollWheel:(NSEvent *)theEvent
+    {
+        CGPoint pt;
+        macdrv_event event;
+        CGEventRef cgevent;
+        CGFloat x, y;
+        BOOL continuous = FALSE;
+
+        cgevent = [theEvent CGEvent];
+        pt = CGEventGetLocation(cgevent);
+
+        event.type = MOUSE_SCROLL;
+        event.window = (macdrv_window)[self retain];
+        event.mouse_scroll.x = pt.x;
+        event.mouse_scroll.y = pt.y;
+        event.mouse_scroll.time_ms = [NSApp ticksForEventTime:[theEvent timestamp]];
+
+        if (CGEventGetIntegerValueField(cgevent, kCGScrollWheelEventIsContinuous))
+        {
+            continuous = TRUE;
+
+            /* Continuous scroll wheel events come from high-precision scrolling
+               hardware like Apple's Magic Mouse, Mighty Mouse, and trackpads.
+               For these, we can get more precise data from the CGEvent API. */
+            /* Axis 1 is vertical, axis 2 is horizontal. */
+            x = CGEventGetDoubleValueField(cgevent, kCGScrollWheelEventPointDeltaAxis2);
+            y = CGEventGetDoubleValueField(cgevent, kCGScrollWheelEventPointDeltaAxis1);
+        }
+        else
+        {
+            double pixelsPerLine = 10;
+            CGEventSourceRef source;
+
+            /* The non-continuous values are in units of "lines", not pixels. */
+            if ((source = CGEventCreateSourceFromEvent(cgevent)))
+            {
+                pixelsPerLine = CGEventSourceGetPixelsPerLine(source);
+                CFRelease(source);
+            }
+
+            x = pixelsPerLine * [theEvent deltaX];
+            y = pixelsPerLine * [theEvent deltaY];
+        }
+
+        /* Mac: negative is right or down, positive is left or up.
+           Win32: negative is left or down, positive is right or up.
+           So, negate the X scroll value to translate. */
+        x = -x;
+
+        /* The x,y values so far are in pixels.  Win32 expects to receive some
+           fraction of WHEEL_DELTA == 120.  By my estimation, that's roughly
+           6 times the pixel value. */
+        event.mouse_scroll.x_scroll = 6 * x;
+        event.mouse_scroll.y_scroll = 6 * y;
+
+        if (!continuous)
+        {
+            /* For non-continuous "clicky" wheels, if there was any motion, make
+               sure there was at least WHEEL_DELTA motion.  This is so, at slow
+               speeds where the system's acceleration curve is actually reducing the
+               scroll distance, the user is sure to get some action out of each click.
+               For example, this is important for rotating though weapons in a
+               first-person shooter. */
+            if (0 < event.mouse_scroll.x_scroll && event.mouse_scroll.x_scroll < 120)
+                event.mouse_scroll.x_scroll = 120;
+            else if (-120 < event.mouse_scroll.x_scroll && event.mouse_scroll.x_scroll < 0)
+                event.mouse_scroll.x_scroll = -120;
+
+            if (0 < event.mouse_scroll.y_scroll && event.mouse_scroll.y_scroll < 120)
+                event.mouse_scroll.y_scroll = 120;
+            else if (-120 < event.mouse_scroll.y_scroll && event.mouse_scroll.y_scroll < 0)
+                event.mouse_scroll.y_scroll = -120;
+        }
+
+        if (event.mouse_scroll.x_scroll || event.mouse_scroll.y_scroll)
+            [queue postEvent:&event];
+    }
+
 
     /*
      * ---------- NSWindowDelegate methods ----------
      */
     - (void)windowDidBecomeKey:(NSNotification *)notification
     {
+        NSEvent* event = [NSApp lastFlagsChanged];
+        if (event)
+            [self flagsChanged:event];
+
         if (causing_becomeKeyWindow) return;
 
         [NSApp windowGotFocus:self];
+    }
+
+    - (void)windowDidDeminiaturize:(NSNotification *)notification
+    {
+        if (!ignore_windowDeminiaturize)
+        {
+            macdrv_event event;
+
+            /* Coalesce events by discarding any previous ones still in the queue. */
+            [queue discardEventsMatchingMask:event_mask_for_type(WINDOW_DID_MINIMIZE) |
+                                             event_mask_for_type(WINDOW_DID_UNMINIMIZE)
+                                   forWindow:self];
+
+            event.type = WINDOW_DID_UNMINIMIZE;
+            event.window = (macdrv_window)[self retain];
+            [queue postEvent:&event];
+        }
+
+        ignore_windowDeminiaturize = FALSE;
     }
 
     - (void)windowDidMove:(NSNotification *)notification
@@ -591,6 +939,25 @@ static BOOL frame_intersects_screens(NSRect frame, NSArray* screens)
         event.window = (macdrv_window)[self retain];
         [queue postEvent:&event];
         return NO;
+    }
+
+    - (void)windowWillMiniaturize:(NSNotification *)notification
+    {
+        if (!ignore_windowMiniaturize)
+        {
+            macdrv_event event;
+
+            /* Coalesce events by discarding any previous ones still in the queue. */
+            [queue discardEventsMatchingMask:event_mask_for_type(WINDOW_DID_MINIMIZE) |
+                                             event_mask_for_type(WINDOW_DID_UNMINIMIZE)
+                                   forWindow:self];
+
+            event.type = WINDOW_DID_MINIMIZE;
+            event.window = (macdrv_window)[self retain];
+            [queue postEvent:&event];
+        }
+
+        ignore_windowMiniaturize = FALSE;
     }
 
 @end

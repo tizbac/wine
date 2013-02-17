@@ -1,0 +1,8 @@
+MODULE    = windowscodecsext.dll
+IMPORTLIB = windowscodecsext
+IMPORTS   = ole32
+
+C_SRCS = \
+	main.c
+
+@MAKE_DLL_RULES@

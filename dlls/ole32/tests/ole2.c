@@ -1701,6 +1701,9 @@ static void test_default_handler(void)
     hr = IOleObject_GetClientSite(pObject, &pClientSite);
     ok_ole_success(hr, "IOleObject_GetClientSite");
 
+    hr = IOleObject_SetClientSite(pObject, pClientSite);
+    ok_ole_success(hr, "IOleObject_SetClientSite");
+
     hr = IOleObject_GetClipboardData(pObject, 0, &pDataObject);
     ok(hr == OLE_E_NOTRUNNING,
        "IOleObject_GetClipboardData should have returned OLE_E_NOTRUNNING instead of 0x%08x\n",
@@ -1923,6 +1926,14 @@ static const IUnknownVtbl UnknownVtbl =
 
 static IUnknown unknown = { &UnknownVtbl };
 
+static void test_OleRun(void)
+{
+    HRESULT hr;
+
+    hr = OleRun(&unknown);
+    ok(hr == S_OK, "OleRun failed 0x%08x\n", hr);
+}
+
 static void test_OleLockRunning(void)
 {
     HRESULT hr;
@@ -1981,6 +1992,7 @@ START_TEST(ole2)
     test_data_cache();
     test_default_handler();
     test_runnable();
+    test_OleRun();
     test_OleLockRunning();
     test_OleDraw();
 

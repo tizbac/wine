@@ -205,7 +205,7 @@ ME_GetCursorCoordinates(ME_TextEditor *editor, ME_Cursor *pCursor,
   ME_DisplayItem *para = pCursor->pPara;
   ME_DisplayItem *pSizeRun = run;
   ME_Context c;
-  SIZE sz = {0, 0};
+  int run_x;
 
   assert(height && x && y);
   assert(~para->member.para.nFlags & MEPF_REWRAP);
@@ -235,18 +235,12 @@ ME_GetCursorCoordinates(ME_TextEditor *editor, ME_Cursor *pCursor,
       pSizeRun = run = tmp;
       assert(run);
       assert(run->type == diRun);
-      sz = ME_GetRunSize(&c, &para->member.para,
-                         &run->member.run, run->member.run.len,
-                         row->member.row.nLMargin);
     }
   }
-  if (pCursor->nOffset) {
-    sz = ME_GetRunSize(&c, &para->member.para, &run->member.run,
-                       pCursor->nOffset, row->member.row.nLMargin);
-  }
+  run_x = ME_PointFromCharContext( &c, &run->member.run, pCursor->nOffset );
 
   *height = pSizeRun->member.run.nAscent + pSizeRun->member.run.nDescent;
-  *x = c.rcView.left + run->member.run.pt.x + sz.cx - editor->horz_si.nPos;
+  *x = c.rcView.left + run->member.run.pt.x + run_x - editor->horz_si.nPos;
   *y = c.rcView.top + para->member.para.pt.y + row->member.row.nBaseline
        + run->member.run.pt.y - pSizeRun->member.run.nAscent
        - editor->vert_si.nPos;
@@ -382,7 +376,7 @@ BOOL ME_InternalDeleteText(ME_TextEditor *editor, ME_Cursor *start,
          to the current (deleted) run */
       add_undo_insert_run( editor, nOfs + nChars, get_text( run, c.nOffset ), nCharsToDelete, run->nFlags, run->style );
 
-      ME_StrDeleteV(run->strText, c.nOffset, nCharsToDelete);
+      ME_StrDeleteV(run->para->text, run->nCharOfs + c.nOffset, nCharsToDelete);
       run->len -= nCharsToDelete;
       TRACE("Post deletion string: %s (%d)\n", debugstr_run( run ), run->len);
       TRACE("Shift value: %d\n", shift);
@@ -558,13 +552,12 @@ void ME_InsertTextFromCursor(ME_TextEditor *editor, int nCursor,
         WCHAR space = ' ';
         ME_InternalInsertTextFromCursor(editor, nCursor, &space, 1, style, 0);
       } else {
-        ME_String *eol_str;
+        const WCHAR cr = '\r', *eol_str = str;
 
-        if (!editor->bEmulateVersion10) {
-          WCHAR cr = '\r';
-          eol_str = ME_MakeStringN(&cr, 1);
-        } else {
-          eol_str = ME_MakeStringN(str, eol_len);
+        if (!editor->bEmulateVersion10)
+        {
+          eol_str = &cr;
+          eol_len = 1;
         }
 
         p = &editor->pCursors[nCursor];
@@ -572,7 +565,7 @@ void ME_InsertTextFromCursor(ME_TextEditor *editor, int nCursor,
           ME_SplitRunSimple(editor, p);
         tmp_style = ME_GetInsertStyle(editor, nCursor);
         /* ME_SplitParagraph increases style refcount */
-        tp = ME_SplitParagraph(editor, p->pRun, p->pRun->member.run.style, eol_str, 0);
+        tp = ME_SplitParagraph(editor, p->pRun, p->pRun->member.run.style, eol_str, eol_len, 0);
         p->pRun = ME_FindItemFwd(tp, diRun);
         p->pPara = tp;
         end_run = ME_FindItemBack(tp, diRun);
@@ -680,19 +673,21 @@ ME_MoveCursorWords(ME_TextEditor *editor, ME_Cursor *cursor, int nRelOfs)
     /* Backward movement */
     while (TRUE)
     {
-      nOffset = ME_CallWordBreakProc(editor, pRun->member.run.strText,
-                                     nOffset, WB_MOVEWORDLEFT);
+      nOffset = ME_CallWordBreakProc(editor, get_text( &pRun->member.run, 0 ),
+                                     pRun->member.run.len, nOffset, WB_MOVEWORDLEFT);
       if (nOffset)
         break;
       pOtherRun = ME_FindItemBack(pRun, diRunOrParagraph);
       if (pOtherRun->type == diRun)
       {
-        if (ME_CallWordBreakProc(editor, pOtherRun->member.run.strText,
+        if (ME_CallWordBreakProc(editor, get_text( &pOtherRun->member.run, 0 ),
+                                 pOtherRun->member.run.len,
                                  pOtherRun->member.run.len - 1,
                                  WB_ISDELIMITER)
             && !(pRun->member.run.nFlags & MERF_ENDPARA)
             && !(cursor->pRun == pRun && cursor->nOffset == 0)
-            && !ME_CallWordBreakProc(editor, pRun->member.run.strText, 0,
+            && !ME_CallWordBreakProc(editor, get_text( &pRun->member.run, 0 ),
+                                     pRun->member.run.len, 0,
                                      WB_ISDELIMITER))
           break;
         pRun = pOtherRun;
@@ -724,18 +719,18 @@ ME_MoveCursorWords(ME_TextEditor *editor, ME_Cursor *cursor, int nRelOfs)
     
     while (TRUE)
     {
-      if (last_delim && !ME_CallWordBreakProc(editor, pRun->member.run.strText,
-                                              nOffset, WB_ISDELIMITER))
+      if (last_delim && !ME_CallWordBreakProc(editor, get_text( &pRun->member.run, 0 ),
+                                              pRun->member.run.len, nOffset, WB_ISDELIMITER))
         break;
-      nOffset = ME_CallWordBreakProc(editor, pRun->member.run.strText,
-                                     nOffset, WB_MOVEWORDRIGHT);
+      nOffset = ME_CallWordBreakProc(editor, get_text( &pRun->member.run, 0 ),
+                                     pRun->member.run.len, nOffset, WB_MOVEWORDRIGHT);
       if (nOffset < pRun->member.run.len)
         break;
       pOtherRun = ME_FindItemFwd(pRun, diRunOrParagraphOrEnd);
       if (pOtherRun->type == diRun)
       {
-        last_delim = ME_CallWordBreakProc(editor, pRun->member.run.strText,
-                                          nOffset - 1, WB_ISDELIMITER);
+        last_delim = ME_CallWordBreakProc(editor, get_text( &pRun->member.run, 0 ),
+                                          pRun->member.run.len, nOffset - 1, WB_ISDELIMITER);
         pRun = pOtherRun;
         nOffset = 0;
       }

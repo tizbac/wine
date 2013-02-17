@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#import <Carbon/Carbon.h>
+
 #import "cocoa_app.h"
 #import "cocoa_event.h"
 #import "cocoa_window.h"
@@ -26,7 +28,16 @@
 int macdrv_err_on;
 
 
+@interface WineApplication ()
+
+@property (readwrite, copy, nonatomic) NSEvent* lastFlagsChanged;
+
+@end
+
+
 @implementation WineApplication
+
+    @synthesize keyboardType, lastFlagsChanged;
 
     - (id) init
     {
@@ -173,10 +184,94 @@ int macdrv_err_on;
         }
     }
 
+    - (void) keyboardSelectionDidChange
+    {
+        TISInputSourceRef inputSource;
+
+        inputSource = TISCopyCurrentKeyboardLayoutInputSource();
+        if (inputSource)
+        {
+            CFDataRef uchr;
+            uchr = TISGetInputSourceProperty(inputSource,
+                    kTISPropertyUnicodeKeyLayoutData);
+            if (uchr)
+            {
+                macdrv_event event;
+                WineEventQueue* queue;
+
+                event.type = KEYBOARD_CHANGED;
+                event.window = NULL;
+                event.keyboard_changed.keyboard_type = self.keyboardType;
+                event.keyboard_changed.iso_keyboard = (KBGetLayoutType(self.keyboardType) == kKeyboardISO);
+                event.keyboard_changed.uchr = CFDataCreateCopy(NULL, uchr);
+
+                if (event.keyboard_changed.uchr)
+                {
+                    [eventQueuesLock lock];
+
+                    for (queue in eventQueues)
+                    {
+                        CFRetain(event.keyboard_changed.uchr);
+                        [queue postEvent:&event];
+                    }
+
+                    [eventQueuesLock unlock];
+
+                    CFRelease(event.keyboard_changed.uchr);
+                }
+            }
+
+            CFRelease(inputSource);
+        }
+    }
+
+    - (CGFloat) primaryScreenHeight
+    {
+        if (!primaryScreenHeightValid)
+        {
+            NSArray* screens = [NSScreen screens];
+            if ([screens count])
+            {
+                primaryScreenHeight = NSHeight([[screens objectAtIndex:0] frame]);
+                primaryScreenHeightValid = TRUE;
+            }
+            else
+                return 1280; /* arbitrary value */
+        }
+
+        return primaryScreenHeight;
+    }
+
+    - (NSPoint) flippedMouseLocation:(NSPoint)point
+    {
+        /* This relies on the fact that Cocoa's mouse location points are
+           actually off by one (precisely because they were flipped from
+           Quartz screen coordinates using this same technique). */
+        point.y = [self primaryScreenHeight] - point.y;
+        return point;
+    }
+
+
+    /*
+     * ---------- NSApplication method overrides ----------
+     */
+    - (void) sendEvent:(NSEvent*)anEvent
+    {
+        if ([anEvent type] == NSFlagsChanged)
+            self.lastFlagsChanged = anEvent;
+
+        [super sendEvent:anEvent];
+    }
+
 
     /*
      * ---------- NSApplicationDelegate methods ----------
      */
+    - (void)applicationDidChangeScreenParameters:(NSNotification *)notification
+    {
+        primaryScreenHeightValid = FALSE;
+    }
+
     - (void)applicationDidResignActive:(NSNotification *)notification
     {
         macdrv_event event;
@@ -213,6 +308,17 @@ int macdrv_err_on;
             NSWindow* window = [note object];
             [keyWindows removeObjectIdenticalTo:window];
         }];
+
+        [nc addObserver:self
+               selector:@selector(keyboardSelectionDidChange)
+                   name:NSTextInputContextKeyboardSelectionDidChangeNotification
+                 object:nil];
+
+        /* The above notification isn't sent unless the NSTextInputContext
+           class has initialized itself.  Poke it. */
+        [NSTextInputContext self];
+
+        self.keyboardType = LMGetKbdType();
     }
 
 @end
@@ -268,5 +374,45 @@ void macdrv_window_rejected_focus(const macdrv_event *event)
 {
     OnMainThread(^{
         [NSApp windowRejectedFocusEvent:event];
+    });
+}
+
+/***********************************************************************
+ *              macdrv_get_keyboard_layout
+ *
+ * Returns the keyboard layout uchr data.
+ */
+CFDataRef macdrv_copy_keyboard_layout(CGEventSourceKeyboardType* keyboard_type, int* is_iso)
+{
+    __block CFDataRef result = NULL;
+
+    OnMainThread(^{
+        TISInputSourceRef inputSource;
+
+        inputSource = TISCopyCurrentKeyboardLayoutInputSource();
+        if (inputSource)
+        {
+            CFDataRef uchr = TISGetInputSourceProperty(inputSource,
+                                kTISPropertyUnicodeKeyLayoutData);
+            result = CFDataCreateCopy(NULL, uchr);
+            CFRelease(inputSource);
+
+            *keyboard_type = ((WineApplication*)NSApp).keyboardType;
+            *is_iso = (KBGetLayoutType(*keyboard_type) == kKeyboardISO);
+        }
+    });
+
+    return result;
+}
+
+/***********************************************************************
+ *              macdrv_beep
+ *
+ * Play the beep sound configured by the user in System Preferences.
+ */
+void macdrv_beep(void)
+{
+    OnMainThreadAsync(^{
+        NSBeep();
     });
 }

@@ -62,7 +62,7 @@ static HRESULT WINAPI IDirect3DRMTexture2Impl_QueryInterface(IDirect3DRMTexture2
     {
         *object = &This->IDirect3DRMTexture2_iface;
     }
-    else if IsEqualGUID(riid, &IID_IDirect3DRMTexture3)
+    else if (IsEqualGUID(riid, &IID_IDirect3DRMTexture3))
     {
         *object = &This->IDirect3DRMTexture3_iface;
     }
@@ -431,7 +431,7 @@ static HRESULT WINAPI IDirect3DRMTexture3Impl_QueryInterface(IDirect3DRMTexture3
     {
         *object = &This->IDirect3DRMTexture2_iface;
     }
-    else if IsEqualGUID(riid, &IID_IDirect3DRMTexture3)
+    else if (IsEqualGUID(riid, &IID_IDirect3DRMTexture3))
     {
         *object = &This->IDirect3DRMTexture3_iface;
     }
@@ -849,10 +849,7 @@ HRESULT Direct3DRMTexture_create(REFIID riid, IUnknown** ret_iface)
 
     object = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(IDirect3DRMTextureImpl));
     if (!object)
-    {
-        ERR("Out of memory\n");
         return E_OUTOFMEMORY;
-    }
 
     object->IDirect3DRMTexture2_iface.lpVtbl = &Direct3DRMTexture2_Vtbl;
     object->IDirect3DRMTexture3_iface.lpVtbl = &Direct3DRMTexture3_Vtbl;

@@ -115,6 +115,7 @@ extern int macdrv_err_on;
 
 extern int macdrv_start_cocoa_app(unsigned long long tickcount) DECLSPEC_HIDDEN;
 extern void macdrv_window_rejected_focus(const struct macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_beep(void) DECLSPEC_HIDDEN;
 
 
 /* display */
@@ -125,8 +126,16 @@ extern void macdrv_free_displays(struct macdrv_display* displays) DECLSPEC_HIDDE
 /* event */
 enum {
     APP_DEACTIVATED,
+    KEY_PRESS,
+    KEY_RELEASE,
+    KEYBOARD_CHANGED,
     MOUSE_BUTTON,
+    MOUSE_MOVED,
+    MOUSE_MOVED_ABSOLUTE,
+    MOUSE_SCROLL,
     WINDOW_CLOSE_REQUESTED,
+    WINDOW_DID_MINIMIZE,
+    WINDOW_DID_UNMINIMIZE,
     WINDOW_FRAME_CHANGED,
     WINDOW_GOT_FOCUS,
     WINDOW_LOST_FOCUS,
@@ -140,12 +149,34 @@ typedef struct macdrv_event {
     macdrv_window       window;
     union {
         struct {
+            CGKeyCode                   keycode;
+            CGEventFlags                modifiers;
+            unsigned long               time_ms;
+        }                                           key;
+        struct {
+            CFDataRef                   uchr;
+            CGEventSourceKeyboardType   keyboard_type;
+            int                         iso_keyboard;
+        }                                           keyboard_changed;
+        struct {
             int             button;
             int             pressed;
             int             x;
             int             y;
             unsigned long   time_ms;
         }                                           mouse_button;
+        struct {
+            int             x;
+            int             y;
+            unsigned long   time_ms;
+        }                                           mouse_moved;
+        struct {
+            int             x_scroll;
+            int             y_scroll;
+            int             x;
+            int             y;
+            unsigned long   time_ms;
+        }                                           mouse_scroll;
         struct {
             CGRect frame;
         }                                           window_frame_changed;
@@ -186,6 +217,7 @@ struct macdrv_window_state {
     unsigned int    floating:1;
     unsigned int    excluded_by_expose:1;
     unsigned int    excluded_by_cycle:1;
+    unsigned int    minimized:1;
 };
 
 extern macdrv_window macdrv_create_cocoa_window(const struct macdrv_window_features* wf,
@@ -215,5 +247,9 @@ extern void macdrv_set_window_color_key(macdrv_window w, CGFloat keyRed, CGFloat
 extern void macdrv_clear_window_color_key(macdrv_window w) DECLSPEC_HIDDEN;
 extern void macdrv_window_use_per_pixel_alpha(macdrv_window w, int use_per_pixel_alpha) DECLSPEC_HIDDEN;
 extern void macdrv_give_cocoa_window_focus(macdrv_window w) DECLSPEC_HIDDEN;
+
+
+/* keyboard */
+extern CFDataRef macdrv_copy_keyboard_layout(CGEventSourceKeyboardType* keyboard_type, int* is_iso) DECLSPEC_HIDDEN;
 
 #endif  /* __WINE_MACDRV_COCOA_H */

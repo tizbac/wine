@@ -182,13 +182,13 @@ BOOL add_undo_join_paras( ME_TextEditor *editor, int pos )
     return TRUE;
 }
 
-BOOL add_undo_split_para( ME_TextEditor *editor, const ME_Paragraph *para, const ME_Run *run, const ME_Cell *cell )
+BOOL add_undo_split_para( ME_TextEditor *editor, const ME_Paragraph *para, ME_String *eol_str, const ME_Cell *cell )
 {
     struct undo_item *undo = add_undo( editor, undo_split_para );
     if (!undo) return FALSE;
 
-    undo->u.split_para.pos = para->nCharOfs - run->len;
-    undo->u.split_para.eol_str = ME_StrDup( run->strText );
+    undo->u.split_para.pos = para->nCharOfs - eol_str->nLen;
+    undo->u.split_para.eol_str = eol_str;
     undo->u.split_para.fmt = *para->pFmt;
     undo->u.split_para.border = para->border;
     undo->u.split_para.flags = para->prev_para->member.para.nFlags & ~MEPF_CELL;
@@ -394,9 +394,7 @@ static void ME_PlayUndoItem(ME_TextEditor *editor, struct undo_item *undo)
       this_para->member.para.nFlags &= ~MEPF_ROWSTART;
     }
     new_para = ME_SplitParagraph(editor, tmp.pRun, tmp.pRun->member.run.style,
-                                 undo->u.split_para.eol_str, paraFlags);
-    /* ME_SplitParagraph owns eol_str */
-    undo->u.split_para.eol_str = NULL;
+                                 undo->u.split_para.eol_str->szData, undo->u.split_para.eol_str->nLen, paraFlags);
     if (bFixRowStart)
       new_para->member.para.nFlags |= MEPF_ROWSTART;
     *new_para->member.para.pFmt = undo->u.split_para.fmt;

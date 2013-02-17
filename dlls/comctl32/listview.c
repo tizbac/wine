@@ -8,6 +8,7 @@
  * Copyright 2002 Dimitrie O. Paun
  * Copyright 2009-2013 Nikolay Sivov
  * Copyright 2009 Owen Rudge for CodeWeavers
+ * Copyright 2012-2013 Daniel Jelinski
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -54,7 +55,6 @@
  *   -- LVA_SNAPTOGRID not implemented
  *   -- LISTVIEW_ApproximateViewRect partially implemented
  *   -- LISTVIEW_SetColumnWidth ignores header images & bitmap
- *   -- LISTVIEW_SetIconSpacing is incomplete
  *   -- LISTVIEW_StyleChanged doesn't handle some changes too well
  *
  * Speedups
@@ -289,6 +289,7 @@ typedef struct tagLISTVIEW_INFO
   HIMAGELIST himlSmall;
   HIMAGELIST himlState;
   SIZE iconSize;
+  BOOL autoSpacing;
   SIZE iconSpacing;
   SIZE iconStateSize;
   POINT currIconPos;        /* this is the position next icon will be placed */
@@ -329,6 +330,7 @@ typedef struct tagLISTVIEW_INFO
   INT nLButtonDownItem;     /* tracks item to reset multiselection on WM_LBUTTONUP */
   DWORD dwHoverTime;
   HCURSOR hHotCursor;
+  INT cWheelRemainder;
 
   /* keyboard operation */
   DWORD lastKeyPressTimestamp;
@@ -4632,21 +4634,25 @@ static BOOL LISTVIEW_DrawItem(LISTVIEW_INFO *infoPtr, HDC hdc, INT nItem, INT nS
     else if ((infoPtr->dwLvExStyle & LVS_EX_FULLROWSELECT) == FALSE)
         prepaint_setup(infoPtr, hdc, &nmlvcd, TRUE);
 
-    /* in full row select, subitems, will just use main item's colors */
-    if (nSubItem && infoPtr->uView == LV_VIEW_DETAILS && (infoPtr->dwLvExStyle & LVS_EX_FULLROWSELECT))
-	nmlvcd.clrTextBk = CLR_NONE;
-
     /* FIXME: temporary hack */
     rcSelect.left = rcLabel.left;
 
-    /* draw the selection background, if we're drawing the main item */
-    if (nSubItem == 0)
-    {
-        /* in icon mode, the label rect is really what we want to draw the
-         * background for */
-        if (infoPtr->uView == LV_VIEW_ICON)
-	    rcSelect = rcLabel;
+    /* in icon mode, the label rect is really what we want to draw the
+     * background for */
+    /* in detail mode, we want to paint background for label rect when
+     * item is not selected or listview has full row select; otherwise paint
+     * background for text only */
+    if (infoPtr->uView == LV_VIEW_ICON ||
+        (infoPtr->uView == LV_VIEW_DETAILS &&
+        (!(lvItem.state & LVIS_SELECTED) ||
+        (infoPtr->dwLvExStyle & LVS_EX_FULLROWSELECT) != 0)))
+        rcSelect = rcLabel;
 
+    if (nmlvcd.clrTextBk != CLR_NONE)
+        ExtTextOutW(hdc, rcSelect.left, rcSelect.top, ETO_OPAQUE, &rcSelect, NULL, 0, NULL);
+
+    if(nSubItem == 0 && infoPtr->nFocusedItem == nItem)
+    {
 	if (infoPtr->uView == LV_VIEW_DETAILS && (infoPtr->dwLvExStyle & LVS_EX_FULLROWSELECT))
 	{
 	    /* we have to update left focus bound too if item isn't in leftmost column
@@ -4669,10 +4675,8 @@ static BOOL LISTVIEW_DrawItem(LISTVIEW_INFO *infoPtr, HDC hdc, INT nItem, INT nS
 	    rcSelect.right = rcBox.right;
 	}
 
-	if (nmlvcd.clrTextBk != CLR_NONE)
-	    ExtTextOutW(hdc, rcSelect.left, rcSelect.top, ETO_OPAQUE, &rcSelect, NULL, 0, NULL);
 	/* store new focus rectangle */
-	if (infoPtr->nFocusedItem == nItem) infoPtr->rcFocus = rcSelect;
+        infoPtr->rcFocus = rcSelect;
     }
 
     /* state icons */
@@ -8585,36 +8589,33 @@ static DWORD LISTVIEW_SetHoverTime(LISTVIEW_INFO *infoPtr, DWORD dwHoverTime)
  */
 static DWORD LISTVIEW_SetIconSpacing(LISTVIEW_INFO *infoPtr, INT cx, INT cy)
 {
+    INT iconWidth = 0, iconHeight = 0;
     DWORD oldspacing = MAKELONG(infoPtr->iconSpacing.cx, infoPtr->iconSpacing.cy);
 
     TRACE("requested=(%d,%d)\n", cx, cy);
-    
-    /* this is supported only for LVS_ICON style */
-    if (infoPtr->uView != LV_VIEW_ICON) return oldspacing;
-  
+
     /* set to defaults, if instructed to */
-    if (cx == -1) cx = GetSystemMetrics(SM_CXICONSPACING);
-    if (cy == -1) cy = GetSystemMetrics(SM_CYICONSPACING);
-
-    /* if 0 then compute width
-     * FIXME: computed cx and cy is not matching native behaviour */
-    if (cx == 0) {
-        cx = GetSystemMetrics(SM_CXICONSPACING);
-        if (infoPtr->iconSize.cx + ICON_LR_PADDING > cx)
-            cx = infoPtr->iconSize.cx + ICON_LR_PADDING;
+    if (cx == -1 && cy == -1)
+    {
+        infoPtr->autoSpacing = TRUE;
+        if (infoPtr->himlNormal)
+            ImageList_GetIconSize(infoPtr->himlNormal, &iconWidth, &iconHeight);
+        cx = GetSystemMetrics(SM_CXICONSPACING) - GetSystemMetrics(SM_CXICON) + iconWidth;
+        cy = GetSystemMetrics(SM_CYICONSPACING) - GetSystemMetrics(SM_CYICON) + iconHeight;
     }
+    else
+        infoPtr->autoSpacing = FALSE;
 
-    /* if 0 then compute height */
-    if (cy == 0) 
-	cy = infoPtr->iconSize.cy + 2 * infoPtr->ntmHeight +
-	     ICON_BOTTOM_PADDING + ICON_TOP_PADDING + LABEL_VERT_PADDING;
-    
+    /* if 0 then keep width */
+    if (cx != 0)
+        infoPtr->iconSpacing.cx = cx;
 
-    infoPtr->iconSpacing.cx = cx;
-    infoPtr->iconSpacing.cy = cy;
+    /* if 0 then keep height */
+    if (cy != 0)
+        infoPtr->iconSpacing.cy = cy;
 
     TRACE("old=(%d,%d), new=(%d,%d), iconSize=(%d,%d), ntmH=%d\n",
-	  LOWORD(oldspacing), HIWORD(oldspacing), cx, cy, 
+          LOWORD(oldspacing), HIWORD(oldspacing), infoPtr->iconSpacing.cx, infoPtr->iconSpacing.cy,
 	  infoPtr->iconSize.cx, infoPtr->iconSize.cy,
 	  infoPtr->ntmHeight);
 
@@ -8666,7 +8667,8 @@ static HIMAGELIST LISTVIEW_SetImageList(LISTVIEW_INFO *infoPtr, INT nType, HIMAG
         himlOld = infoPtr->himlNormal;
         infoPtr->himlNormal = himl;
         if (infoPtr->uView == LV_VIEW_ICON) set_icon_size(&infoPtr->iconSize, himl, FALSE);
-        LISTVIEW_SetIconSpacing(infoPtr, 0, 0);
+        if (infoPtr->autoSpacing)
+            LISTVIEW_SetIconSpacing(infoPtr, -1, -1);
     break;
 
     case LVSIL_SMALL:
@@ -9060,7 +9062,6 @@ static BOOL LISTVIEW_SetUnicodeFormat( LISTVIEW_INFO *infoPtr, BOOL unicode)
  */
 static INT LISTVIEW_SetView(LISTVIEW_INFO *infoPtr, DWORD nView)
 {
-  SIZE oldIconSize = infoPtr->iconSize;
   HIMAGELIST himl;
 
   if (infoPtr->uView == nView) return 1;
@@ -9086,14 +9087,6 @@ static INT LISTVIEW_SetView(LISTVIEW_INFO *infoPtr, DWORD nView)
   switch (nView)
   {
   case LV_VIEW_ICON:
-      if ((infoPtr->iconSize.cx != oldIconSize.cx) || (infoPtr->iconSize.cy != oldIconSize.cy))
-      {
-            TRACE("icon old size=(%d,%d), new size=(%d,%d)\n",
-                   oldIconSize.cx, oldIconSize.cy, infoPtr->iconSize.cx, infoPtr->iconSize.cy);
-	    LISTVIEW_SetIconSpacing(infoPtr, 0, 0);
-      }
-      LISTVIEW_Arrange(infoPtr, LVA_DEFAULT);
-      break;
   case LV_VIEW_SMALLICON:
       LISTVIEW_Arrange(infoPtr, LVA_DEFAULT);
       break;
@@ -9389,11 +9382,13 @@ static LRESULT LISTVIEW_NCCreate(HWND hwnd, const CREATESTRUCTW *lpcs)
   infoPtr->bRedraw = TRUE;
   infoPtr->bNoItemMetrics = TRUE;
   infoPtr->bDoChangeNotify = TRUE;
-  infoPtr->iconSpacing.cx = GetSystemMetrics(SM_CXICONSPACING);
-  infoPtr->iconSpacing.cy = GetSystemMetrics(SM_CYICONSPACING);
+  infoPtr->autoSpacing = TRUE;
+  infoPtr->iconSpacing.cx = GetSystemMetrics(SM_CXICONSPACING) - GetSystemMetrics(SM_CXICON);
+  infoPtr->iconSpacing.cy = GetSystemMetrics(SM_CYICONSPACING) - GetSystemMetrics(SM_CYICON);
   infoPtr->nEditLabelItem = -1;
   infoPtr->nLButtonDownItem = -1;
   infoPtr->dwHoverTime = HOVER_DEFAULT; /* default system hover time */
+  infoPtr->cWheelRemainder = 0;
   infoPtr->nMeasureItemHeight = 0;
   infoPtr->xTrackLine = -1;  /* no track line */
   infoPtr->itemEdit.fEnabled = FALSE;
@@ -9794,13 +9789,9 @@ static LRESULT LISTVIEW_HScroll(LISTVIEW_INFO *infoPtr, INT nScrollCode,
 
 static LRESULT LISTVIEW_MouseWheel(LISTVIEW_INFO *infoPtr, INT wheelDelta)
 {
-    INT gcWheelDelta = 0;
-    INT pulScrollLines = 3;
+    UINT pulScrollLines = 3;
 
     TRACE("(wheelDelta=%d)\n", wheelDelta);
-
-    SystemParametersInfoW(SPI_GETWHEELSCROLLLINES,0, &pulScrollLines, 0);
-    gcWheelDelta -= wheelDelta;
 
     switch(infoPtr->uView)
     {
@@ -9810,21 +9801,31 @@ static LRESULT LISTVIEW_MouseWheel(LISTVIEW_INFO *infoPtr, INT wheelDelta)
         *  listview should be scrolled by a multiple of 37 dependently on its dimension or its visible item number
         *  should be fixed in the future.
         */
-        LISTVIEW_VScroll(infoPtr, SB_INTERNAL, (gcWheelDelta < 0) ?
+        LISTVIEW_VScroll(infoPtr, SB_INTERNAL, (wheelDelta > 0) ?
                 -LISTVIEW_SCROLL_ICON_LINE_SIZE : LISTVIEW_SCROLL_ICON_LINE_SIZE);
         break;
 
     case LV_VIEW_DETAILS:
-        if (abs(gcWheelDelta) >= WHEEL_DELTA && pulScrollLines)
+        SystemParametersInfoW(SPI_GETWHEELSCROLLLINES,0, &pulScrollLines, 0);
+
+        /* if scrolling changes direction, ignore left overs */
+        if ((wheelDelta < 0 && infoPtr->cWheelRemainder < 0) ||
+            (wheelDelta > 0 && infoPtr->cWheelRemainder > 0))
+            infoPtr->cWheelRemainder += wheelDelta;
+        else
+            infoPtr->cWheelRemainder = wheelDelta;
+        if (infoPtr->cWheelRemainder && pulScrollLines)
         {
-            int cLineScroll = min(LISTVIEW_GetCountPerColumn(infoPtr), pulScrollLines);
-            cLineScroll *= (gcWheelDelta / WHEEL_DELTA);
-            LISTVIEW_VScroll(infoPtr, SB_INTERNAL, cLineScroll);
+            int cLineScroll;
+            pulScrollLines = min((UINT)LISTVIEW_GetCountPerColumn(infoPtr), pulScrollLines);
+            cLineScroll = pulScrollLines * (float)infoPtr->cWheelRemainder / WHEEL_DELTA;
+            infoPtr->cWheelRemainder -= WHEEL_DELTA * cLineScroll / (int)pulScrollLines;
+            LISTVIEW_VScroll(infoPtr, SB_INTERNAL, -cLineScroll);
         }
         break;
 
     case LV_VIEW_LIST:
-        LISTVIEW_HScroll(infoPtr, (gcWheelDelta < 0) ? SB_LINELEFT : SB_LINERIGHT, 0);
+        LISTVIEW_HScroll(infoPtr, (wheelDelta > 0) ? SB_LINELEFT : SB_LINERIGHT, 0);
         break;
     }
     return 0;
@@ -9951,7 +9952,10 @@ static LRESULT LISTVIEW_KillFocus(LISTVIEW_INFO *infoPtr)
 {
     TRACE("()\n");
 
-    /* if we did not have the focus, there's nothing to do */
+    /* drop any left over scroll amount */
+    infoPtr->cWheelRemainder = 0;
+
+    /* if we did not have the focus, there's nothing more to do */
     if (!infoPtr->bFocus) return 0;
    
     /* send NM_KILLFOCUS notification */
@@ -11022,7 +11026,6 @@ static INT LISTVIEW_StyleChanged(LISTVIEW_INFO *infoPtr, WPARAM wStyleType,
 
     if (uNewView != uOldView)
     {
-    	SIZE oldIconSize = infoPtr->iconSize;
     	HIMAGELIST himl;
     
         SendMessageW(infoPtr->hwndEdit, WM_KILLFOCUS, 0, 0);
@@ -11033,17 +11036,8 @@ static INT LISTVIEW_StyleChanged(LISTVIEW_INFO *infoPtr, WPARAM wStyleType,
 
         himl = (uNewView == LVS_ICON ? infoPtr->himlNormal : infoPtr->himlSmall);
         set_icon_size(&infoPtr->iconSize, himl, uNewView != LVS_ICON);
-    
-        if (uNewView == LVS_ICON)
-        {
-            if ((infoPtr->iconSize.cx != oldIconSize.cx) || (infoPtr->iconSize.cy != oldIconSize.cy))
-            {
-                TRACE("icon old size=(%d,%d), new size=(%d,%d)\n",
-		      oldIconSize.cx, oldIconSize.cy, infoPtr->iconSize.cx, infoPtr->iconSize.cy);
-	        LISTVIEW_SetIconSpacing(infoPtr, 0, 0);
-            }
-        }
-        else if (uNewView == LVS_REPORT)
+
+        if (uNewView == LVS_REPORT)
         {
             HDLAYOUT hl;
             WINDOWPOS wp;
@@ -11474,7 +11468,9 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     return LISTVIEW_SetHoverTime(infoPtr, (DWORD)lParam);
 
   case LVM_SETICONSPACING:
-    return LISTVIEW_SetIconSpacing(infoPtr, (short)LOWORD(lParam), (short)HIWORD(lParam));
+    if(lParam == -1)
+        return LISTVIEW_SetIconSpacing(infoPtr, -1, -1);
+    return LISTVIEW_SetIconSpacing(infoPtr, LOWORD(lParam), HIWORD(lParam));
 
   case LVM_SETIMAGELIST:
     return (LRESULT)LISTVIEW_SetImageList(infoPtr, (INT)wParam, (HIMAGELIST)lParam);

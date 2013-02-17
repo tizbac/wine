@@ -84,6 +84,14 @@ struct macdrv_thread_data
 {
     macdrv_event_queue          queue;
     const macdrv_event         *current_event;
+    CFDataRef                   keyboard_layout_uchr;
+    CGEventSourceKeyboardType   keyboard_type;
+    int                         iso_keyboard;
+    CGEventFlags                last_modifiers;
+    UInt32                      dead_key_state;
+    HKL                         active_keyboard_layout;
+    WORD                        keyc2vkey[128];
+    WORD                        keyc2scan[128];
 };
 
 extern DWORD thread_data_tls_index DECLSPEC_HIDDEN;
@@ -105,10 +113,11 @@ struct macdrv_win_data
     RECT                whole_rect;             /* Mac window rectangle for the whole window relative to parent */
     RECT                client_rect;            /* client area relative to parent */
     COLORREF            color_key;              /* color key for layered window; CLR_INVALID is not color keyed */
-    BOOL                on_screen : 1;          /* is window ordered in? */
+    BOOL                on_screen : 1;          /* is window ordered in? (minimized or not) */
     BOOL                shaped : 1;             /* is window using a custom region shape? */
     BOOL                layered : 1;            /* is window layered and with valid attributes? */
     BOOL                per_pixel_alpha : 1;    /* is window using per-pixel alpha? */
+    BOOL                minimized : 1;          /* is window minimized? */
     struct window_surface *surface;
 };
 
@@ -122,7 +131,15 @@ extern void macdrv_window_frame_changed(HWND hwnd, CGRect frame) DECLSPEC_HIDDEN
 extern void macdrv_window_got_focus(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
 extern void macdrv_window_lost_focus(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
 extern void macdrv_app_deactivated(void) DECLSPEC_HIDDEN;
+extern void macdrv_window_did_minimize(HWND hwnd) DECLSPEC_HIDDEN;
+extern void macdrv_window_did_unminimize(HWND hwnd) DECLSPEC_HIDDEN;
 
 extern void macdrv_mouse_button(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_mouse_moved(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_mouse_scroll(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
+
+extern void macdrv_compute_keyboard_layout(struct macdrv_thread_data *thread_data) DECLSPEC_HIDDEN;
+extern void macdrv_keyboard_changed(const macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_key_event(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
 
 #endif  /* __WINE_MACDRV_H */

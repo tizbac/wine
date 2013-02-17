@@ -21,13 +21,14 @@
 #include "config.h"
 #include "wine/port.h"
 #include <stdio.h>
-#include "wine/unicode.h"
 
 #define OEMRESOURCE
-
 #include <windows.h>
 #include <rpc.h>
-#include <wine/debug.h>
+
+#include "wine/gdi_driver.h"
+#include "wine/unicode.h"
+#include "wine/debug.h"
 #include "explorer_private.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(explorer);
@@ -35,6 +36,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(explorer);
 #define DESKTOP_CLASS_ATOM ((LPCWSTR)MAKEINTATOM(32769))
 #define DESKTOP_ALL_ACCESS 0x01ff
 
+static HMODULE graphics_driver;
 static BOOL using_root;
 
 /* screen saver handler */
@@ -104,14 +106,13 @@ static LRESULT WINAPI desktop_wnd_proc( HWND hwnd, UINT message, WPARAM wp, LPAR
     }
 }
 
-/* create the desktop and the associated X11 window, and make it the current desktop */
-static unsigned long create_desktop( const WCHAR *name, unsigned int width, unsigned int height )
+/* create the desktop and the associated driver window, and make it the current desktop */
+static BOOL create_desktop( const WCHAR *name, unsigned int width, unsigned int height )
 {
     static const WCHAR rootW[] = {'r','o','o','t',0};
-    HMODULE x11drv = GetModuleHandleA( "winex11.drv" );
     HDESK desktop;
-    unsigned long xwin = 0;
-    unsigned long (CDECL *create_desktop_func)(unsigned int, unsigned int);
+    BOOL ret = FALSE;
+    BOOL (CDECL *create_desktop_func)(unsigned int, unsigned int);
 
     desktop = CreateDesktopW( name, NULL, NULL, 0, DESKTOP_ALL_ACCESS, NULL );
     if (!desktop)
@@ -119,14 +120,14 @@ static unsigned long create_desktop( const WCHAR *name, unsigned int width, unsi
         WINE_ERR( "failed to create desktop %s error %d\n", wine_dbgstr_w(name), GetLastError() );
         ExitProcess( 1 );
     }
-    /* magic: desktop "root" means use the X11 root window */
-    if (x11drv && strcmpiW( name, rootW ))
+    /* magic: desktop "root" means use the root window */
+    if (graphics_driver && strcmpiW( name, rootW ))
     {
-        create_desktop_func = (void *)GetProcAddress( x11drv, "wine_create_desktop" );
-        if (create_desktop_func) xwin = create_desktop_func( width, height );
+        create_desktop_func = (void *)GetProcAddress( graphics_driver, "wine_create_desktop" );
+        if (create_desktop_func) ret = create_desktop_func( width, height );
     }
     SetThreadDesktop( desktop );
-    return xwin;
+    return ret;
 }
 
 /* parse the desktop size specification */
@@ -260,10 +261,11 @@ static void set_desktop_window_title( HWND hwnd, const WCHAR *name )
 /* main desktop management function */
 void manage_desktop( WCHAR *arg )
 {
+    static const WCHAR displayW[] = {'D','I','S','P','L','A','Y',0};
     static const WCHAR messageW[] = {'M','e','s','s','a','g','e',0};
     MSG msg;
+    HDC hdc;
     HWND hwnd, msg_hwnd;
-    unsigned long xwin = 0;
     unsigned int width, height;
     WCHAR *cmdline = NULL;
     WCHAR *p = arg;
@@ -293,9 +295,10 @@ void manage_desktop( WCHAR *arg )
         if (!get_default_desktop_size( name, &width, &height )) width = height = 0;
     }
 
-    if (name && width && height) xwin = create_desktop( name, width, height );
+    hdc = CreateDCW( displayW, NULL, NULL, NULL );
+    graphics_driver = __wine_get_driver_module( hdc );
 
-    if (!xwin) using_root = TRUE; /* using the root window */
+    if (name && width && height) using_root = !create_desktop( name, width, height );
 
     /* create the desktop window */
     hwnd = CreateWindowExW( 0, DESKTOP_CLASS_ATOM, NULL,
@@ -307,6 +310,8 @@ void manage_desktop( WCHAR *arg )
     /* create the HWND_MESSAGE parent */
     msg_hwnd = CreateWindowExW( 0, messageW, NULL, WS_POPUP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
                                 0, 0, 100, 100, 0, 0, 0, NULL );
+
+    DeleteDC( hdc );
 
     if (hwnd == GetDesktopWindow())
     {
@@ -320,7 +325,7 @@ void manage_desktop( WCHAR *arg )
         ClipCursor( NULL );
         initialize_display_settings( hwnd );
         initialize_appbar();
-        initialize_systray( using_root );
+        initialize_systray( graphics_driver, using_root );
 
         if ((shell32 = LoadLibraryA( "shell32.dll" )) &&
             (pShellDDEInit = (void *)GetProcAddress( shell32, (LPCSTR)188)))

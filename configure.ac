@@ -1077,8 +1077,8 @@ then
                 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <X11/Xlib.h>
 #include <X11/extensions/Xrandr.h>]], [[static typeof(XRRSetScreenConfigAndRate) * func; if (func) return 0;]])],
                   [WINE_CHECK_SONAME(Xrandr,XRRQueryExtension,
-                    [AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <X11/extensions/Xrandr.h>]],
-                        [[static typeof(XRRGetScreenResources) *f; if (f) return 0;]])],
+                    [AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <X11/Xlib.h>
+#include <X11/extensions/Xrandr.h>]], [[static typeof(XRRGetScreenResources) *f; if (f) return 0;]])],
                       [AC_DEFINE(HAVE_XRRGETSCREENRESOURCES, 1,
                         [Define if Xrandr has the XRRGetScreenResources function])])],,
                     [$X_LIBS $XLIB $X_EXTRA_LIBS])])
@@ -3097,6 +3097,8 @@ WINE_CONFIG_DLL(winaspi.dll16,enable_win16)
 WINE_CONFIG_DLL(windebug.dll16,enable_win16)
 WINE_CONFIG_DLL(windowscodecs,,[implib])
 WINE_CONFIG_TEST(dlls/windowscodecs/tests)
+WINE_CONFIG_DLL(windowscodecsext,,[implib])
+WINE_CONFIG_TEST(dlls/windowscodecsext/tests)
 WINE_CONFIG_DLL(winealsa.drv)
 WINE_CONFIG_DLL(winecoreaudio.drv)
 WINE_CONFIG_LIB(winecrt0)

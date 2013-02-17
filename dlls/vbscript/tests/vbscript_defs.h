@@ -1,7 +1,5 @@
 /*
- * ODBC Cursor Library
- *
- * Copyright 2012 Alistair Leslie-Hughes
+ * Copyright 2011 Jacek Caban for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,27 +14,20 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
- *
  */
 
-#include "config.h"
-#include "wine/port.h"
+#define DISPID_SUBMATCHES_COUNT     1
 
-#include <stdarg.h>
+#define DISPID_MATCHCOLLECTION_COUNT    1
 
-#include "windef.h"
-#include "winbase.h"
+#define DISPID_MATCH_FIRSTINDEX     10001
+#define DISPID_MATCH_LENGTH         10002
+#define DISPID_MATCH_SUBMATCHES     10003
 
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
-{
-    switch (fdwReason)
-    {
-        case DLL_PROCESS_ATTACH:
-            DisableThreadLibraryCalls(hinstDLL);
-            break;
-        case DLL_PROCESS_DETACH:
-            break;
-    }
-
-    return TRUE;
-}
+#define DISPID_REGEXP_PATTERN       10001
+#define DISPID_REGEXP_IGNORECASE    10002
+#define DISPID_REGEXP_GLOBAL        10003
+#define DISPID_REGEXP_EXECUTE       10004
+#define DISPID_REGEXP_TEST          10005
+#define DISPID_REGEXP_REPLACE       10006
+#define DISPID_REGEXP_MULTILINE     10007

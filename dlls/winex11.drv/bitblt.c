@@ -2029,6 +2029,7 @@ struct window_surface *create_surface( Window window, const XVisualInfo *vis, co
     }
 
     surface->gc = XCreateGC( gdi_display, window, 0, NULL );
+    XSetSubwindowMode( gdi_display, surface->gc, IncludeInferiors );
     surface->byteswap = image_needs_byteswap( surface->image, is_r8g8b8(vis), format->bits_per_pixel );
 
     if (surface->byteswap || format->bits_per_pixel == 4 || format->bits_per_pixel == 8)
@@ -2059,6 +2060,8 @@ void set_surface_color_key( struct window_surface *window_surface, COLORREF colo
     struct x11drv_window_surface *surface = get_x11_surface( window_surface );
     COLORREF prev;
 
+    if (window_surface->funcs != &x11drv_surface_funcs) return;  /* we may get the null surface */
+
     window_surface->funcs->lock( window_surface );
     prev = surface->color_key;
     set_color_key( surface, color_key );
@@ -2073,6 +2076,8 @@ HRGN expose_surface( struct window_surface *window_surface, const RECT *rect )
 {
     struct x11drv_window_surface *surface = get_x11_surface( window_surface );
     HRGN region = 0;
+
+    if (window_surface->funcs != &x11drv_surface_funcs) return 0;  /* we may get the null surface */
 
     window_surface->funcs->lock( window_surface );
     add_bounds_rect( &surface->bounds, rect );

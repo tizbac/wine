@@ -33,8 +33,16 @@ static const char *dbgstr_event(int type)
 {
     static const char * const event_names[] = {
         "APP_DEACTIVATED",
+        "KEY_PRESS",
+        "KEY_RELEASE",
+        "KEYBOARD_CHANGED",
         "MOUSE_BUTTON",
+        "MOUSE_MOVED",
+        "MOUSE_MOVED_ABSOLUTE",
+        "MOUSE_SCROLL",
         "WINDOW_CLOSE_REQUESTED",
+        "WINDOW_DID_MINIMIZE",
+        "WINDOW_DID_UNMINIMIZE",
         "WINDOW_FRAME_CHANGED",
         "WINDOW_GOT_FOCUS",
         "WINDOW_LOST_FOCUS",
@@ -54,13 +62,31 @@ static macdrv_event_mask get_event_mask(DWORD mask)
 
     if ((mask & QS_ALLINPUT) == QS_ALLINPUT) return -1;
 
+    if (mask & QS_KEY)
+    {
+        event_mask |= event_mask_for_type(KEY_PRESS);
+        event_mask |= event_mask_for_type(KEY_RELEASE);
+        event_mask |= event_mask_for_type(KEYBOARD_CHANGED);
+    }
+
     if (mask & QS_MOUSEBUTTON)
+    {
         event_mask |= event_mask_for_type(MOUSE_BUTTON);
+        event_mask |= event_mask_for_type(MOUSE_SCROLL);
+    }
+
+    if (mask & QS_MOUSEMOVE)
+    {
+        event_mask |= event_mask_for_type(MOUSE_MOVED);
+        event_mask |= event_mask_for_type(MOUSE_MOVED_ABSOLUTE);
+    }
 
     if (mask & QS_POSTMESSAGE)
     {
         event_mask |= event_mask_for_type(APP_DEACTIVATED);
         event_mask |= event_mask_for_type(WINDOW_CLOSE_REQUESTED);
+        event_mask |= event_mask_for_type(WINDOW_DID_MINIMIZE);
+        event_mask |= event_mask_for_type(WINDOW_DID_UNMINIMIZE);
         event_mask |= event_mask_for_type(WINDOW_FRAME_CHANGED);
         event_mask |= event_mask_for_type(WINDOW_GOT_FOCUS);
         event_mask |= event_mask_for_type(WINDOW_LOST_FOCUS);
@@ -90,11 +116,31 @@ void macdrv_handle_event(macdrv_event *event)
     case APP_DEACTIVATED:
         macdrv_app_deactivated();
         break;
+    case KEY_PRESS:
+    case KEY_RELEASE:
+        macdrv_key_event(hwnd, event);
+        break;
+    case KEYBOARD_CHANGED:
+        macdrv_keyboard_changed(event);
+        break;
     case MOUSE_BUTTON:
         macdrv_mouse_button(hwnd, event);
         break;
+    case MOUSE_MOVED:
+    case MOUSE_MOVED_ABSOLUTE:
+        macdrv_mouse_moved(hwnd, event);
+        break;
+    case MOUSE_SCROLL:
+        macdrv_mouse_scroll(hwnd, event);
+        break;
     case WINDOW_CLOSE_REQUESTED:
         macdrv_window_close_requested(hwnd);
+        break;
+    case WINDOW_DID_MINIMIZE:
+        macdrv_window_did_minimize(hwnd);
+        break;
+    case WINDOW_DID_UNMINIMIZE:
+        macdrv_window_did_unminimize(hwnd);
         break;
     case WINDOW_FRAME_CHANGED:
         macdrv_window_frame_changed(hwnd, event->window_frame_changed.frame);

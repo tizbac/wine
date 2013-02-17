@@ -513,7 +513,7 @@ const scriptData scriptInformation[] = {
      {0x53, 0, 1, 1, 1, DEFAULT_CHARSET, 0, 0, 0, 0, 1, 0, 0, 0, 0},
      MS_MAKE_TAG('k','h','m','r'),
      {'D','a','u','n','P','e','n','h'}},
-    {{Script_Khmer, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+    {{Script_Khmer_Numeric, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
      {0x53, 1, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
      MS_MAKE_TAG('k','h','m','r'),
      {'D','a','u','n','P','e','n','h'}},
@@ -999,23 +999,6 @@ int USP10_FindGlyphInLogClust(const WORD* pwLogClust, int cChars, WORD target)
 }
 
 /***********************************************************************
- *      DllMain
- *
- */
-BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
-{
-    switch(fdwReason)
-    {
-    case DLL_PROCESS_ATTACH:
-        DisableThreadLibraryCalls(hInstDLL);
-        break;
-    case DLL_PROCESS_DETACH:
-        break;
-    }
-    return TRUE;
-}
-
-/***********************************************************************
  *      ScriptFreeCache (USP10.@)
  *
  * Free a script cache.
@@ -1060,6 +1043,9 @@ HRESULT WINAPI ScriptFreeCache(SCRIPT_CACHE *psc)
                     heap_free(((ScriptCache *)*psc)->scripts[i].languages[j].features[k].lookups);
                 heap_free(((ScriptCache *)*psc)->scripts[i].languages[j].features);
             }
+            for (j = 0; j < ((ScriptCache *)*psc)->scripts[i].default_language.feature_count; j++)
+                heap_free(((ScriptCache *)*psc)->scripts[i].default_language.features[j].lookups);
+            heap_free(((ScriptCache *)*psc)->scripts[i].default_language.features);
             heap_free(((ScriptCache *)*psc)->scripts[i].languages);
         }
         heap_free(((ScriptCache *)*psc)->scripts);
@@ -1270,28 +1256,11 @@ static inline WORD base_indic(WORD script)
     };
 }
 
-/***********************************************************************
- *      ScriptItemizeOpenType (USP10.@)
- *
- * Split a Unicode string into shapeable parts.
- *
- * PARAMS
- *  pwcInChars  [I] String to split.
- *  cInChars    [I] Number of characters in pwcInChars.
- *  cMaxItems   [I] Maximum number of items to return.
- *  psControl   [I] Pointer to a SCRIPT_CONTROL structure.
- *  psState     [I] Pointer to a SCRIPT_STATE structure.
- *  pItems      [O] Buffer to receive SCRIPT_ITEM structures.
- *  pScriptTags [O] Buffer to receive OPENTYPE_TAGs.
- *  pcItems     [O] Number of script items returned.
- *
- * RETURNS
- *  Success: S_OK
- *  Failure: Non-zero HRESULT value.
- */
-HRESULT WINAPI ScriptItemizeOpenType(const WCHAR *pwcInChars, int cInChars, int cMaxItems,
-                             const SCRIPT_CONTROL *psControl, const SCRIPT_STATE *psState,
-                             SCRIPT_ITEM *pItems, OPENTYPE_TAG *pScriptTags, int *pcItems)
+
+static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
+                int cMaxItems, const SCRIPT_CONTROL *psControl,
+                const SCRIPT_STATE *psState, SCRIPT_ITEM *pItems,
+                OPENTYPE_TAG *pScriptTags, int *pcItems)
 {
 
 #define Numeric_space 0x0020
@@ -1346,8 +1315,36 @@ HRESULT WINAPI ScriptItemizeOpenType(const WCHAR *pwcInChars, int cInChars, int 
             forceLevels = TRUE;
 
         /* Diacritical marks merge with other scripts */
-        if (scripts[i] == Script_Diacritical && i > 0)
-                scripts[i] = scripts[i-1];
+        if (scripts[i] == Script_Diacritical)
+        {
+            if (i > 0)
+            {
+                if (pScriptTags)
+                    scripts[i] = scripts[i-1];
+                else
+                {
+                    int j;
+                    BOOL asian = FALSE;
+                    WORD first_script = scripts[i-1];
+                    for (j = i-1; j >= 0 &&  scripts[j] == first_script && pwcInChars[j] != Numeric_space; j--)
+                    {
+                        WORD original = scripts[j];
+                        if (original == Script_Ideograph || original == Script_Kana || original == Script_Yi || original == Script_CJK_Han || original == Script_Bopomofo)
+                        {
+                            asian = TRUE;
+                            break;
+                        }
+                        if (original != Script_MathAlpha && scriptInformation[scripts[j]].props.fComplex)
+                            break;
+                        scripts[j] = scripts[i];
+                        if (original == Script_Punctuation2)
+                            break;
+                    }
+                    if (scriptInformation[scripts[j]].props.fComplex || asian)
+                        scripts[i] = scripts[j];
+                }
+            }
+        }
     }
 
     for (i = 0; i < cInChars; i++)
@@ -1496,7 +1493,8 @@ HRESULT WINAPI ScriptItemizeOpenType(const WCHAR *pwcInChars, int cInChars, int 
 
     pItems[index].iCharPos = 0;
     pItems[index].a = scriptInformation[scripts[cnt]].a;
-    pScriptTags[index] = scriptInformation[scripts[cnt]].scriptTag;
+    if (pScriptTags)
+        pScriptTags[index] = scriptInformation[scripts[cnt]].scriptTag;
 
     if (strength && strength[cnt] == BIDI_STRONG)
         str = strength[cnt];
@@ -1590,7 +1588,8 @@ HRESULT WINAPI ScriptItemizeOpenType(const WCHAR *pwcInChars, int cInChars, int 
             memset(&pItems[index].a, 0, sizeof(SCRIPT_ANALYSIS));
 
             pItems[index].a = scriptInformation[New_Script].a;
-            pScriptTags[index] = scriptInformation[New_Script].scriptTag;
+            if (pScriptTags)
+                pScriptTags[index] = scriptInformation[New_Script].scriptTag;
             if (levels)
             {
                 if (levels[cnt] == 0)
@@ -1633,6 +1632,32 @@ HRESULT WINAPI ScriptItemizeOpenType(const WCHAR *pwcInChars, int cInChars, int 
 }
 
 /***********************************************************************
+ *      ScriptItemizeOpenType (USP10.@)
+ *
+ * Split a Unicode string into shapeable parts.
+ *
+ * PARAMS
+ *  pwcInChars  [I] String to split.
+ *  cInChars    [I] Number of characters in pwcInChars.
+ *  cMaxItems   [I] Maximum number of items to return.
+ *  psControl   [I] Pointer to a SCRIPT_CONTROL structure.
+ *  psState     [I] Pointer to a SCRIPT_STATE structure.
+ *  pItems      [O] Buffer to receive SCRIPT_ITEM structures.
+ *  pScriptTags [O] Buffer to receive OPENTYPE_TAGs.
+ *  pcItems     [O] Number of script items returned.
+ *
+ * RETURNS
+ *  Success: S_OK
+ *  Failure: Non-zero HRESULT value.
+ */
+HRESULT WINAPI ScriptItemizeOpenType(const WCHAR *pwcInChars, int cInChars, int cMaxItems,
+                             const SCRIPT_CONTROL *psControl, const SCRIPT_STATE *psState,
+                             SCRIPT_ITEM *pItems, OPENTYPE_TAG *pScriptTags, int *pcItems)
+{
+    return _ItemizeInternal(pwcInChars, cInChars, cMaxItems, psControl, psState, pItems, pScriptTags, pcItems);
+}
+
+/***********************************************************************
  *      ScriptItemize (USP10.@)
  *
  * Split a Unicode string into shapeable parts.
@@ -1654,15 +1679,7 @@ HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItem
                              const SCRIPT_CONTROL *psControl, const SCRIPT_STATE *psState,
                              SCRIPT_ITEM *pItems, int *pcItems)
 {
-    OPENTYPE_TAG *discarded_tags;
-    HRESULT res;
-
-    discarded_tags = heap_alloc(cMaxItems * sizeof(OPENTYPE_TAG));
-    if (!discarded_tags)
-        return E_OUTOFMEMORY;
-    res = ScriptItemizeOpenType(pwcInChars, cInChars, cMaxItems, psControl, psState, pItems, discarded_tags, pcItems);
-    heap_free(discarded_tags);
-    return res;
+    return _ItemizeInternal(pwcInChars, cInChars, cMaxItems, psControl, psState, pItems, NULL, pcItems);
 }
 
 static inline int getGivenTabWidth(ScriptCache *psc, SCRIPT_TABDEF *pTabdef, int charPos, int current_x)
@@ -1847,7 +1864,7 @@ HRESULT WINAPI ScriptStringAnalyse(HDC hdc, const void *pString, int cString,
     hr = ScriptItemize(pString, cString, num_items, &sControl, &sState, analysis->pItem,
                        &analysis->numItems);
 
-    if FAILED(hr)
+    if (FAILED(hr))
     {
         if (hr == E_OUTOFMEMORY)
             hr = E_INVALIDARG;
