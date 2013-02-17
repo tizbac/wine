@@ -59,13 +59,16 @@ DWORD GetTitleID()
 void HexDump(unsigned char * data, unsigned int len)
 {
     int i = 0;
+    
     char buf[1024];
     
     sprintf(buf,"HexDump(%u bytes): ",len);
-    for ( i = 0; i < len; i++ )
+    for ( i = 0; i < len && i < (1024-(128))/2; i++ )
     {
         sprintf(&buf[strlen(buf)],"%02X",(unsigned int)data[i]);
     }
+    if ( i >= (1024-(128))/2 )
+      sprintf(&buf[strlen(buf)],"...");
     sprintf(&buf[strlen(buf)],"\n");
     FIXME("%s",buf);
 }
