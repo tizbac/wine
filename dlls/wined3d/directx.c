@@ -3516,8 +3516,7 @@ static BOOL CheckRenderTargetCapability(const struct wined3d_adapter *adapter,
     return FALSE;
 }
 
-        case WINED3DFMT_DF16:
-        case WINED3DFMT_DF24:
+
 static BOOL CheckSurfaceCapability(const struct wined3d_adapter *adapter,
         const struct wined3d_format *adapter_format,
         const struct wined3d_format *check_format, BOOL no3d)
