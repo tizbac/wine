@@ -1,6 +1,6 @@
 1 stdcall -noname XWSAStartup(long long)
 2 stdcall -noname XWSACleanup()
-3 stdcall -noname XCreateSocket(long long long long)
+3 stdcall -noname XSocketCreate(long long long long)
 4 stdcall -noname XSocketClose (long)
 5 stdcall -noname XSocketShutdown (long long)
 6 stdcall -noname XSocketIOCTLSocket(long long long)
@@ -67,7 +67,7 @@
 82 stdcall -noname XNetGetXnAddrPlatform (long long)
 83 stdcall -noname XNetGetSystemLinkPort (long)
 84 stdcall -noname XNetSetSystemLinkPort (long)
-472 stub -noname @
+472 stdcall -noname XCustomSetAction (long long long)
 473 stdcall -noname XCustomGetLastActionPress (long long long)
 474 stub -noname @
 476 stub -noname @

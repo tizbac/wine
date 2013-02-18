@@ -7,7 +7,7 @@
 #include "winsock2.h"
 #include "wine/debug.h"
 #include <wine/server_protocol.h>
-#include "stdlib.h"
+#include <stdlib.h>
 #include "xlivestructs.h"
 WINE_DEFAULT_DEBUG_CHANNEL(xlive_notify);
 typedef struct {

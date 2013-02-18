@@ -535,6 +535,12 @@ INT WINAPI XNetSetSystemLinkPort(WORD newPort) {
 	return 0;
 }
 
+// #472: XCustomSetAction
+INT WINAPI XCustomSetAction (DWORD w1, DWORD w2, DWORD w3) {
+        FIXME ("(%d, %d, %d)\n", w1, w2, w3);
+        return 0;
+}
+
 // #473: XCustomGetLastActionPress
 INT WINAPI XCustomGetLastActionPress (DWORD w1, DWORD w2, DWORD w3) {
         FIXME ("(%d, %d, %d)\n", w1, w2, w3);
