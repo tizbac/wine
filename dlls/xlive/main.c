@@ -529,6 +529,35 @@ INT WINAPI XCustomGetLastActionPress (DWORD w1, DWORD w2, DWORD w3) {
     FIXME ("(%d, %d, %d)\n", w1, w2, w3);
     return 0;
 }
+// #474 XCustomSetDynamicActions
+INT WINAPI XCustomSetDynamicActions (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+    FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+    return 0;
+}
+
+// #476 XCustomGetLastActionPressEx
+INT WINAPI XCustomGetLastActionPressEx(DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+    FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+    return 0;
+}
+
+// #477 XCustomUnregisterDynamicActions
+INT WINAPI XCustomUnregisterDynamicActions (void) {
+    FIXME ("stub\n");
+    return 0;
+}
+
+// #478 XCustomRegisterDynamicActions
+INT WINAPI XCustomRegisterDynamicActions (void) {
+    FIXME ("stub\n");
+    return 0;
+}
+
+// #479 XCustomGetCurrentGamercard
+INT WINAPI XCustomGetCurrentGamercard (DWORD w1, DWORD w2) {
+    FIXME ("(%d, %d, %d)\n", w1, w2);
+    return 0;
+}
 
 // #1082: XGetOverlappedExtendedError
 INT WINAPI XGetOverlappedExtendedError (void * p0) {

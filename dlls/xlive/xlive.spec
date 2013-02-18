@@ -103,7 +103,7 @@
 5026 stdcall -noname XLiveSetSponsorToken (long long)
 5027 stdcall -noname XLiveUninstallTitle (long)
 5028 stdcall -noname XLiveLoadLibraryEx (long long long)
-5029 stdcall -noname XLiveLoadLibrary (long)
+5029 stdcall -noname XLiveFreeLibrary (long)
 5030 stdcall -noname XLivePreTranslateMessage(long)
 5031 stdcall -noname XLiveSetDebugLevel(long long)
 5032 stdcall -noname XLiveVerifyArcadeLicense (long long)
