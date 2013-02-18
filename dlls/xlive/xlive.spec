@@ -46,7 +46,7 @@
 57 stdcall -noname XNetXnAddrToInAddr (long long long)
 58 stdcall -noname XNetServerToInAddr (long long long)
 60 stdcall -noname XNetInAddrToXnAddr (long long long)
-62 stdcall -noname XLIVE_62(long long long)
+62 stdcall -noname XNetInAddrToString (long long long)
 63 stdcall -noname XNetUnregisterInAddr (long)
 64 stdcall -noname XNetXnAddrToMachineId (long long)
 65 stdcall -noname XNetConnect (long)
