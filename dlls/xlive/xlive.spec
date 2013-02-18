@@ -84,7 +84,7 @@
 5002 stdcall -noname XLiveRender()
 5003 stdcall -noname XLiveUninitialize()
 5005 stdcall -noname XLiveOnCreateDevice(long long)
-5006 stdcall -noname XLIVE_5006()
+5006 stdcall -noname XLiveOnDestroyDevice()
 5007 stdcall -noname XLiveOnResetDevice(long)
 5008 stdcall -noname XHVCreateEngine(long long long)
 5010 stub -noname @

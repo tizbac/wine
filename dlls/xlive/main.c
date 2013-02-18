@@ -618,9 +618,9 @@ INT WINAPI XLiveOnCreateDevice(DWORD p0,DWORD p1) {
 	return 0;
 }
 
-// #5006: 
-INT WINAPI XLIVE_5006(void) {
-	FIXME("unk\n");
+// #5006: XLiveOnDestroyDevice
+INT WINAPI XLiveOnDestroyDevice(void) {
+	FIXME("stub\n");
 	return 0;
 }
 
