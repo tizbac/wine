@@ -13,27 +13,27 @@
 13 stdcall -noname XSocketListen (long long)
 14 stdcall -noname XSocketAccept (long long long)
 15 stdcall -noname XSocketSelect (long long long long long)
-16 stub -noname @
-17 stub -noname @
+16 stdcall -noname XWSAGetOverlappedResult (long long long long long)
+17 stdcall -noname XWSACancelOverlappedIO (long)
 18 stdcall -noname XSocketRecv (long long long long)
-19 stub -noname @
+19 stdcall -noname XWSARecv (long long long long long long long)
 20 stdcall -noname XSocketRecvFrom (long long long long long long)
-21 stub -noname @
+21 stdcall -noname XWSARecvFrom (long long long long long long long long long)
 22 stdcall -noname XSocketSend (long long long long)
-23 stub -noname @
+23 stdcall -noname XWSASend (long long long long long long long)
 24 stdcall -noname XSocketSendTo (long long long long long long)
-25 stub -noname @
+25 stdcall -noname XWSASendTo (long long long long long long long long long)
 26 stdcall -noname XSocketInet_Addr (long)
 27 stdcall -noname XWSAGetLastError()
-28 stub -noname @
+28 stdcall -noname XWSASetLastError(long)
 29 stdcall -noname XWSACreateEvent()
-30 stub -noname @
-31 stub -noname @
-32 stub -noname @
-33 stub -noname @
-34 stub -noname @
-35 stub -noname @
-37 stub -noname @
+30 stdcall -noname XWSACloseEvent(long)
+31 stdcall -noname XWSASetEvent (long)
+32 stdcall -noname XWSAResetEvent (long)
+33 stdcall -noname XWSAWaitForMultipleEvents(long long long long long)
+34 stdcall -noname __XWSAFDIsSet (long long)
+35 stdcall -noname XWSAEventSelect (long long long)
+37 stdcall -noname XSocketNTOHS(long)
 38 stdcall -noname NetDll_ntohs(long)
 39 stdcall -noname XSocketNTOHL(long)
 40 stdcall -noname NetDll_htons(long)

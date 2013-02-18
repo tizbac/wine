@@ -208,44 +208,131 @@ INT WINAPI XSocketSelect (int n, DWORD * readfds, DWORD * writefds, DWORD * exce
 	return 0;
 }
 
+// #16: XWSAGetOverlappedResult 
+DWORD WINAPI XWSAGetOverlappedResult (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+	FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0; // should return arg 4
+}
+
+// #17: XWSACancelOverlappedIO
+DWORD WINAPI XWSACancelOverlappedIO (DWORD w1) {
+	FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0; // should return$ 4
+}
+
 // #18: XSocketRecv
 INT WINAPI XSocketRecv (SOCKET s, char * buf, int len, int flags) {
-        return 0;
+        return 0; // should return arg 3
+}
+
+// #19: XWSARecv
+DWORD WINAPI XWSARecv (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7) {
+	FIXME("stub: (%d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7);
+        return 0; // should return arg 6
 }
 
 // #20: XSocketRecvFrom
 INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, DWORD * from, int fromlen) {
-        return 0;
+	FIXME("stub: (%p, %p, %d, %d, %p, %d)\n", s, buf, len, flags, from, fromlen);
+        return 0; // should return arg 6 ?
+}
+
+// #21: XWSARecvFrom
+DWORD WINAPI XWSARecv (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8, DWORD w9) {
+	FIXME("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8, w9);
+        return 0; // should return arg 8
 }
 
 // #22: XSocketSend
 INT WINAPI XSocketSend (SOCKET s, char * buf, int len, int flags) {
+	FIXME("stub: (%p, %p, %d, %d)\n", s, buf, len, flags);
         return 0;
+}
+
+// #23: XWSASend
+DWORD WINAPI XWSASend (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7) {
+	FIXME("stub: (%d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7);
+        return 0; // should return arg 6
 }
 
 // #24: XSocketSendTo
 INT WINAPI XSocketSendTo (SOCKET s, char * buf, int len, int flags, DWORD * to, int tolen) {
-        return 0;
+	FIXME("stub: (%p, %p, %d, %d, %p, %d)\n", s, buf, len, flags, to, tolen);
+        return 0; // should return arg 6
+}
+
+// #25: XWSASendTo
+DWORD WINAPI XWSASendTo (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8, DWORD w9) {
+	FIXME("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8, w9);
+        return 0; // should return arg 6
 }
 
 // #26: XSocketInet_Addr
 INT WINAPI XSocketInet_Addr (char * param) {
         FIXME ("stub: (%p)\n", param);
-        return 0;
+        return 0; // actually, jumps to NetDll_XSocketInet_Addr
 }
 
 // #27 XWSAGetLastError
 INT WINAPI XWSAGetLastError(void) {
-	return WSAENETDOWN; // 0 ?
+        FIXME ("stub:\n");
+	return WSAENETDOWN; // 0 ? jumps to NetDll_XWSAGetLastError
+}
+
+// #28 XWSASetLastError
+INT WINAPI XWSASetLastError(DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+	return WSAENETDOWN; // 0 ? jumps to NetDll_XWSASetLastError
 }
 
 // #29: XWSACreateEvent
 WSAEVENT WINAPI XWSACreateEvent(void) {
-         return WSA_INVALID_EVENT;
+         return WSA_INVALID_EVENT; // jumps to NetDll_XWSACreateEvent
+}
+
+// #30 XWSACloseEvent
+INT WINAPI XWSACloseEvent(DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+	return WSAENETDOWN; // 0 ? jumps to NetDll_XWSACloseEvent
+}
+
+// #31 XWSASetEvent
+INT WINAPI XWSASetEvent(DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+	return WSAENETDOWN; // 0 ? jumps to NetDll_XWSASetEvent
+}
+
+// #32 XWSAResetEvent
+INT WINAPI XWSAResetEvent(DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+	return WSAENETDOWN; // 0 ? jumps to NetDll_XWSAResetEvent
+}
+
+// #33: XWSAWaitForMultipleEvents
+DWORD WINAPI XWSAWaitForMultipleEvents (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+	FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0; // jumps to NetDll_XWSAWaitForMultipleEvents
+}
+
+// #34 __XWSAFDIsSet
+INT WINAPI __XWSAFDIsSet(DWORD w1, DWORD w2) {
+        FIXME ("stub: (%d, %d)\n", w1, w2);
+	return WSAENETDOWN; // 0 ? jumps to NetDll___XWSAFDIsSet
+}
+
+// 35: XWSAEventSelect
+WSAEVENT WINAPI XWSAEventSelect(DWORD w1, DWORD w2, DWORD w3) {
+	FIXME("stub: (%d, %d, %d)\n", w1, w2, w3);
+        return 0; // should return arg 2
+}
+
+// #37:  XSocketNTOHS
+short WINAPI XSocketNTOHS(short in)
+{
+    return ntohs(in);
 }
 
 // #38: NetDll_ntohs
-// another definition says this should be WORD XSocketNTOHS (WORD n) { return ((n&0xFF00) >> 8)|((n&0xFF) << 8);
 short WINAPI NetDll_ntohs(short in)
 {
     return ntohs(in);
