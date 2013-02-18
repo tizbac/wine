@@ -42,6 +42,7 @@ DWORD curr_titleId;
 BOOL initialized = FALSE;
 WINEXLIVEUSER Xliveusers[3];
 DWORD handlecounter = 0;
+unsigned short x_syslinkport = 3074;
 INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dwNumSettingIds,
                     DWORD * pdwSettingIds, DWORD * pcbResults, PXUSER_READ_PROFILE_SETTING_RESULT pResults, DWORD pOverlapped);
 BOOL WINAPI XLivepIsUserIndexValid(DWORD userid,DWORD unk1, DWORD unk2)
@@ -523,15 +524,16 @@ DWORD WINAPI XNetGetXnAddrPlatform (DWORD a1,DWORD a2) {
 }
 
 // #83: XNetGetSystemLinkPort
-INT WINAPI XNetGetSystemLinkPort(DWORD * LinkPort) {
-        FIXME("stub: (%p)\n",LinkPort);
-	*LinkPort = 0;
-        return WSAEACCES;
+INT WINAPI XNetGetSystemLinkPort(WORD * LinkPort) {
+    FIXME("stub: (%p)\n",LinkPort);
+	*LinkPort = x_syslinkport;
+    return ERROR_SUCCESS;
 }
 
 // #84: XNetSetSystemLinkPort
 INT WINAPI XNetSetSystemLinkPort(WORD newPort) {
-        FIXME("stub: (%d)\n",(int)newPort);
+    FIXME("stub: (%d)\n",(int)newPort);
+    x_syslinkport = newPort;
 	return 0;
 }
 
