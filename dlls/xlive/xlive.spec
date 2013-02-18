@@ -87,9 +87,9 @@
 5006 stdcall -noname XLiveOnDestroyDevice()
 5007 stdcall -noname XLiveOnResetDevice(long)
 5008 stdcall -noname XHVCreateEngine(long long long)
-5010 stub -noname @
-5011 stub -noname @
-5012 stub -noname @
+5010 stdcall -noname XLiveRegisterDataSection (long long long)
+5011 stdcall -noname XLiveUnregisterDataSection (long)
+5012 stdcall -noname XLiveUpdateHashes (long long)
 5016 stdcall -noname XLivePBufferAllocate (long long)
 5017 stdcall -noname XLivePBufferFree (long)
 5018 stdcall -noname XLivePBufferGetByte (long long long)
@@ -97,16 +97,16 @@
 5020 stdcall -noname XLivePBufferGetDWORD (long long long)
 5021 stdcall -noname XLivePBufferSetDWORD (long long long)
 5022 stdcall -noname XLiveGetUpdateInformation (long)
-5023 stub -noname @
+5023 stdcall -noname XNetGetCurrentAdapter(long long)
 5024 stdcall -noname XLiveUpdateSystem (long)
-5025 stub -noname @
+5025 stdcall -noname XLiveGetLiveIdError(long long long long)
 5026 stdcall -noname XLiveSetSponsorToken (long long)
-5027 stub -noname @
-5028 stub -noname @
-5029 stub -noname @
+5027 stdcall -noname XLiveUninstallTitle (long)
+5028 stdcall -noname XLiveLoadLibraryEx (long long long)
+5029 stdcall -noname XLiveLoadLibrary (long)
 5030 stdcall -noname XLivePreTranslateMessage(long)
 5031 stdcall -noname XLiveSetDebugLevel(long long)
-5032 stub -noname @
+5032 stdcall -noname XLiveVerifyArcadeLicense (long long)
 5034 stdcall -noname XLiveProtectData(long long long long long)
 5035 stdcall -noname XLiveUnprotectData(long long long long long)
 5036 stdcall -noname XLiveCreateProtectedDataContext (long long)

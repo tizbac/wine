@@ -589,6 +589,24 @@ INT WINAPI XHVCreateEngine(DWORD p0, DWORD p1, void ** ppEngine)
     return -1;
 }
 
+// #5010: XLiveRegisterDataSection
+INT WINAPI XLiveRegisterDataSection (DWORD w1, DWORD w2, DWORD w3) {
+    FIXME ("(%d, %d, %d)\n", w1, w2, w3);
+    return 0;
+}
+
+// #5011: XLiveRegisterDataSection
+INT WINAPI XLiveUnregisterDataSection (DWORD w1) {
+    FIXME ("(%d)\n", w1);
+    return 0;
+}
+
+// #5012: XLiveUpdateHashes
+INT WINAPI XLiveUpdateHashes (DWORD w1, DWORD w2) {
+    FIXME ("(%d, %d)\n", w1, w2);
+    return 0;
+}
+
 // should be defined somewhere else, needed by 5016
 typedef struct {
     DWORD   dwMagick;
@@ -660,16 +678,46 @@ INT WINAPI XLiveGetUpdateInformation (DWORD w1) {
     return -1; // no update
 }
 
+// #5023: XNetGetCurrentAdapter
+INT WINAPI XNetGetCurrentAdapter (DWORD w1, DWORD w2) {
+    FIXME ("stub: (%d, %d)\n", w1, w2);
+    return 0;
+}
+
 // #5024: XLiveUpdateSystem
 INT WINAPI XLiveUpdateSystem (DWORD w1) {
     FIXME ("stub: (%d)\n", w1);
     return -1; // no update
 }
 
+// #5025: XLiveGetLiveIdError
+INT WINAPI XLiveGetLiveIdError (DWORD w1, DWORD w2, DWORD w3, DWORD w4) {
+    FIXME ("stub: (%d, %d, %d, %d)\n", w1, w2, w3, w4);
+    return 0;
+}
+
 // #5026: XLiveSetSponsorToken
 DWORD WINAPI XLiveSetSponsorToken (LPCWSTR pwszToken, DWORD dwTitleId) {
     FIXME ("stub: (, 0x%08x)\n", dwTitleId);
     return S_OK;
+}
+
+// #5027: XLiveUninstallTitle
+INT WINAPI XLiveUninstallTitle (DWORD w1) {
+    FIXME ("stub: (%d)\n", w1);
+    return 0; 
+}
+
+// #5028 XLiveLoadLibraryEx
+INT WINAPI XLiveLoadLibraryEx(LPCWSTR lpLibFileName, int a2, DWORD dwFlags) {
+    FIXME ("stub: (%p, %d, %d)\n", lpLibFileName, a2, dwFlags);
+    return 0; 
+}
+
+// #5029 XLiveFreeLibrary
+INT WINAPI XLiveFreeLibrary(HMODULE hLibModule) {
+    FIXME ("stub: (%p)\n", hLibModule);
+    return 0; 
 }
 
 // #5030: XLivePreTranslateMessage
@@ -682,6 +730,12 @@ INT WINAPI XLivePreTranslateMessage(DWORD w1)
 // #5031: XLiveSetDebugLevel
 DWORD WINAPI XLiveSetDebugLevel (DWORD xdlLevel, DWORD * pxdlOldLevel) {
     FIXME ("stub: (%d, %p)\n", xdlLevel, pxdlOldLevel);
+    return 0;
+}
+
+// #5032 XLiveVerifyArcadeLicense
+INT WINAPI XLiveVerifyArcadeLicense(struct __SecureBufferHandleStruct *a1, int a2) {
+    FIXME ("stub: (%p, %d)\n", a1, a2);
     return 0;
 }
 
