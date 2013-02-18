@@ -405,9 +405,9 @@ DWORD WINAPI XNetInAddrToXnAddr (DWORD w1, DWORD w2, DWORD w3) {
         return 0;
 }
 
-// #62:
-INT WINAPI XLIVE_62(DWORD w1 ,DWORD* w2,DWORD w3) {
-	FIXME("unk (%d, %p, %d)\n", w1, w2, w3);
+// #62: XNetInAddrToString
+INT NWINAPI XNetInAddrToString(char a1, void *Dst, signed int Size) {
+	FIXME("stub: (%d, %p, %d)\n", a1, Dst, Size);
 	return 0;
 }
 
@@ -487,9 +487,9 @@ INT WINAPI XNetGetEthernetLinkStatus(void) {
 }
 
 // #76: XNetGetBroadcastVersionStatus
-DWORD WINAPI XNetGetBroadcastVersionStatus (DWORD a1) {
+DWORD WINAPI XNetGetBroadcastVersionStatus (int a1) {
     FIXME("stub: (%d), returning 0\n",a1);
-    return 4; // this should return 4
+    return 0; 
 }
 
 // #77: XNetQosGetListenStats
