@@ -12,8 +12,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(xlive_notify);
 typedef struct {
     int type;
-    void * param;
-    int paramsize;
+    char param[128];
 } XLiveEvent;
 typedef struct {
     unsigned long long areas;
@@ -24,6 +23,36 @@ typedef struct {
 
 XLiveListener * xlive_g_listeners = 0x0;
 int xlive_g_listener_count = 0;
+void _XListenerAddEvent_PDW(XLiveListener *l, int type, DWORD param )
+{
+    if ( l->eventcount >= 128 )
+    {
+        ERR("Too many unprocessed events!\n");
+        return;
+    }
+    memcpy(l->events[l->eventcount].param,&param,sizeof(param));
+    l->events[l->eventcount].type = type;
+    
+    FIXME("trace: new event: %d %d(%p)\n",type,param,l->events[l->eventcount].param);
+    l->eventcount++;
+}
+
+
+void _XNotifySigninChanged_Event()
+{
+    int i;
+    for ( i = 0; i < xlive_g_listener_count; i++ )
+    {
+        if ( xlive_g_listeners[i].areas & XNOTIFY_SYSTEM )
+        {
+            _XListenerAddEvent_PDW(&xlive_g_listeners[i],XN_SYS_SIGNINCHANGED,1);
+            
+        }
+        
+    }
+}
+
+//TODO: WaitForSingleObject support, atm only polling is supported
 INT WINAPI XNotifyCreateListener(unsigned long long qwAreas)
 {
     FIXME("trace");
@@ -56,6 +85,7 @@ BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void ** pPa
         //WARNING: High chance of crap code, coded at 2:25 AM
     }
     l->eventcount--;
+    FIXME("trace: event delivered: %d %p\n",*pdwId,*pParam);
     return 1;
 }
 
@@ -73,6 +103,17 @@ BOOL WINAPI XNotifyGetNext(HANDLE hNotificationListener, DWORD dwMsgFilter, DWOR
     {
         return _XNotifyRemoveEvent(&xlive_g_listeners[index],0,pdwId,pParam);
     }
-    //TODO: Filter
+    if ( xlive_g_listeners[index].eventcount && dwMsgFilter )
+    {
+        int i;
+        for ( i = 0; i < xlive_g_listeners[index].eventcount; i++ )
+        {
+            if ( xlive_g_listeners[index].events[i].type == dwMsgFilter )
+            {
+                return _XNotifyRemoveEvent(&xlive_g_listeners[index],i,pdwId,pParam);
+            }
+            
+        }
+    }
     return 0;
 }

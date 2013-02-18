@@ -29,7 +29,7 @@
 #include <wine/server_protocol.h>
 #include "crc32.c"
 #include "xlivestructs.h"
-
+#include <stdlib.h>
 WINE_DEFAULT_DEBUG_CHANNEL(xlive);
 
 const char xlivebasedir[] = "C:\\xlive\\"; //TODO: Make it tied to system 
@@ -38,6 +38,7 @@ DWORD curr_titleId;
 BOOL initialized = FALSE;
 WINEXLIVEUSER Xliveusers[3];
 DWORD handlecounter = 0;
+void _XNotifySigninChanged_Event();
 INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dwNumSettingIds,
                     DWORD * pdwSettingIds, DWORD * pcbResults, PXUSER_READ_PROFILE_SETTING_RESULT pResults, DWORD pOverlapped);
 BOOL DirectoryExists(const char * szPath)
@@ -101,7 +102,12 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
     
     return TRUE;
 }
-
+BOOL WINAPI XLivepIsUserIndexValid(DWORD userid,DWORD unk1, DWORD unk2)
+{
+    if ( userid < 3 )
+        return TRUE;
+    return FALSE;
+}
 /* This DLL is completely undocumented. DLL ordinal functions were found using winedump
    and number of parameters determined using Python ctypes. See http://docs.python.org/library/ctypes.html */
 
@@ -112,6 +118,7 @@ INT WINAPI XShowSigninUI(DWORD cPanes,DWORD dwFlags)
         Xliveusers[0].signedin = eXUserSigninState_SignedInLocally;
     else
         Xliveusers[0].signedin = eXUserSigninState_SignedInToLive;
+    _XNotifySigninChanged_Event();
     return 0;
 }
 
@@ -373,7 +380,15 @@ INT WINAPI XNetXnAddrToMachineId( void * addr1, void * pMachId)
 DWORD WINAPI XLiveUserCheckPrivilege(DWORD uIndex,DWORD PrivType, PBOOL pfResult )
 {
   FIXME("stub: %d %d %p\n",uIndex,PrivType,pfResult);
+  
   *pfResult = FALSE;
+  if ( uIndex > 2 )
+      return ERROR_NO_SUCH_USER;
+  if ( PrivType == 254 /* Online play privilege?? */ )
+  {
+      if ( Xliveusers[uIndex].signedin == eXUserSigninState_SignedInToLive )
+          *pfResult = TRUE;
+  }
   return ERROR_SUCCESS;
 }
 INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, void ** ppxnqos)
@@ -708,11 +723,45 @@ DWORD WINAPI XLivePBufferSetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset
         return 0;
 }
 
-DWORD WINAPI XLiveContentCreateEnumerator (DWORD a1, void * a2, DWORD *pchBuffer, HANDLE * phContent) {
-  FIXME("stub: %d %p %p %p\n",a1,a2,pchBuffer,phContent);
-	if (phContent)
-		*phContent = INVALID_HANDLE_VALUE;
-	return 1;
+DWORD WINAPI XLiveContentCreateEnumerator (DWORD cItems, DWORD * pdwFlags/*seems to contain three dwords */, DWORD *pchBuffer, HANDLE * phContent) {
+    FIXME("stub: %d %p %p %p\n",cItems,pdwFlags,pchBuffer,phContent);
+	if ( !cItems || cItems > 0x64 )
+    {
+        ERR("cItems bigger than %d\n",0x64);
+        return ERROR_INVALID_PARAMETER;
+    }
+    
+    if ( pdwFlags)
+    {
+        DWORD pdwFlags_LO = pdwFlags[0];
+        DWORD pdwFlags_HI = pdwFlags[1];
+        DWORD userId = pdwFlags[2];
+        if ( pdwFlags_LO == 1 /*unk*/ )
+        {
+            if ( pdwFlags_HI & XLIVE_CONTENT_FLAG_RETRIEVE_FOR_ALL_USERS && pdwFlags_HI & XLIVE_CONTENT_FLAG_RETRIEVE_BY_XUID )
+            {
+                ERR("Cannot retrieve at the same time for user and for all users\n");
+            }else{
+                if ( pdwFlags_HI & XLIVE_CONTENT_FLAG_RETRIEVE_FOR_ALL_USERS || pdwFlags_HI & XLIVE_CONTENT_FLAG_RETRIEVE_BY_XUID || XLivepIsUserIndexValid(userId,0,0) )
+                {
+                    if ( pdwFlags_HI & 2 || pdwFlags[7] == 2 )
+                    {
+                        if ( pchBuffer )
+                        {
+                            //TODO: XVerifySameFamily
+                            //TODO: Do enumeration
+                            
+                        }
+                        
+                    }
+                }
+            }
+        }
+        
+        
+    }
+    *phContent = INVALID_HANDLE_VALUE;
+    return 0;
 }
 DWORD WINAPI XLIVE_5313(DWORD dw1)
 {
