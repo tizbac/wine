@@ -1,5 +1,5 @@
 MODULE    = xlive.dll
-
+IMPORTS   = wsock32
 C_SRCS = \
 	main.c \
 	notify.c

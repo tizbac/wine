@@ -25,7 +25,8 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-
+#include <unistd.h>
+#include "winsock2.h"
 #include "windef.h"
 #include "winbase.h"
 #include "winsock2.h"
@@ -118,9 +119,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 // #1: XWSAStartup
 INT WINAPI XWSAStartup(WORD wVersionRequested, LPWSADATA lpWsaData)
 {
-    FIXME("stub: %d %p\n",wVersionRequested,lpWsaData);
-    lpWsaData->wVersion = wVersionRequested;
-    return 0;
+    
+    return WSAStartup(wVersionRequested,lpWsaData);
 }
 
 // #2: XWSACleanup
@@ -131,16 +131,12 @@ void WINAPI XWSACleanup(void)
 
 // #3: XSocketCreate
 INT WINAPI XSocketCreate (int af, int type, int protocol) { 
-	FIXME ("stub: (%d, %d, %d)\n", af, type, protocol);
-	return -1;
-//         return INVALID_SOCKET; // probably better
-				//  should return arg 2
+	return socket(af,type,protocol);
 }
 
 // #4: XSocketClose
 INT WINAPI XSocketClose (long sock) {
-	FIXME ("stub: (%ld)\n", sock);
-	return 0; // should return 4.
+	return closesocket(sock);
 }
 
 // #5: XSocketShutdown
@@ -156,15 +152,13 @@ INT WINAPI XSocketIOCTLSocket (long sock, long cmd, long * argp) {
 }
 
 // #7: XSocketSetSockOpt
-INT WINAPI XSocketSetSockOpt (long sock, DWORD dw1, DWORD dw2, DWORD dw3, DWORD dw4) {
-	FIXME("stub: (%ld, %d, %d, %d, %d)\n", sock, dw1, dw2, dw3, dw4);
-	return 0; // should return arg 4
+INT WINAPI XSocketSetSockOpt (long sock, int level, int optname, const char * optval, int optlen) {
+	return setsockopt(sock,level,optname,optval,optlen);
 }
 
 // #8: XSocketGetSockOpt
-INT WINAPI XSocketGetSockOpt (long sock, DWORD a2, DWORD a3, void *p4, DWORD a5) {
-	FIXME("stub: (%ld, %d, %d, %p, %d)\n", sock, a2, a3, p4, a5);
-	return 0; // should return arg 4
+INT WINAPI XSocketGetSockOpt (long sock, int level, int optname, char * optval, int * optlen) {
+	return getsockopt(sock,level,optname,optval,optlen);
 }
 
 // #9: XSocketGetSockName
@@ -181,26 +175,22 @@ INT WINAPI XSocketGetPeerName (SOCKET s, DWORD * addr, int * addrlen) {
 
 // #11: XSocketBind
 INT WINAPI XSocketBind (SOCKET s, WORD * addr, int * addrlen) {
-	FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
-	return INVALID_SOCKET; // should return arg 2
+	return bind(s,addr,addrlen);
 }
 
 // #12: XSocketConnect
 INT WINAPI XSocketConnect (SOCKET s, DWORD * addr, int * addrlen) {
-	FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
-        return 0; // should return arg 2
+	return connect(s,addr,addrlen);
 }
 
 // #13: XSocketListen
 INT WINAPI XSocketListen (SOCKET s, int backlog) {
-	FIXME ("stub: (%d, %d)\n", s, backlog);
-        return 0; // should return arg 1 ?
+	return listen(s,backlog);
 }
 
 // #14: XSocketAccept
 INT WINAPI XSocketAccept (SOCKET s, DWORD * addr, int * addrlen) {
-	FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
-	return INVALID_SOCKET;
+	return accept(s,addr,addrlen);
 }
 
 // #15: XSocketSelect
@@ -233,9 +223,8 @@ DWORD WINAPI XWSARecv (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w
 }
 
 // #20: XSocketRecvFrom
-INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, DWORD * from, int fromlen) {
-	FIXME("stub: (%p, %p, %d, %d, %p, %d)\n", s, buf, len, flags, from, fromlen);
-        return 0; // should return arg 6 ?
+INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, struct sockaddr * from, int fromlen) {
+	return recvfrom(s,buf,len,flags,from,fromlen);
 }
 
 // #21: XWSARecvFrom
@@ -519,13 +508,13 @@ DWORD WINAPI XNetReplaceKey (DWORD a1,DWORD a2) {
 
 // #82: 
 DWORD WINAPI XNetGetXnAddrPlatform (DWORD a1,DWORD a2) {
-	FIXME("stub: (%d %d), returning 0\n",a1,a2);
+	FIXME("trace: (%d %d), returning 0\n",a1,a2);
         return 8; // this should return 8
 }
 
 // #83: XNetGetSystemLinkPort
 INT WINAPI XNetGetSystemLinkPort(WORD * LinkPort) {
-    FIXME("stub: (%p)\n",LinkPort);
+    FIXME("trace: (%p)\n",LinkPort);
 	*LinkPort = x_syslinkport;
     return ERROR_SUCCESS;
 }
