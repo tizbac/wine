@@ -542,8 +542,38 @@ INT WINAPI XCustomSetAction (DWORD w1, DWORD w2, DWORD w3) {
 }
 
 // #473: XCustomGetLastActionPress
-INT WINAPI XCustomGetLastActionPress (DWORD w1, DWORD w2, DWORD w3) {
-        FIXME ("(%d, %d, %d)\n", w1, w2, w3);
+INT WINAPI XCustomGetLastActionPress (int a1, int a2, int a3) {
+        FIXME ("(%d, %d, %d)\n", a1, a2, a3);
+        return 0; 
+}
+
+// #474: XCustomSetDynamicActions
+INT WINAPI XCustomSetDynamicActions (char a1, int a2, DWORD a3, const void *Src, int a5) {
+        FIXME ("(%d, %d, %d, %p, %d)\n", a1, a2, a3, Src, a5);
+        return 0; 
+}
+
+// #476: XCustomGetLastActionPressEx
+INT WINAPI XCustomGetLastActionPressEx (char a1, int a2, int a3, int a4, void *Dst, int a6) {
+        FIXME ("(%d, %d, %d, %d, %p, %d)\n", a1, a2, a3, a4, Dst, a6);
+        return 0; 
+}
+
+// #477: XCustomRegisterDynamicActions
+INT WINAPI XCustomRegisterDynamicActions (void) {
+        FIXME ("stub\n");
+        return 0;
+}
+
+// #478: XCustomUnregisterDynamicActions
+INT WINAPI XCustomUnregisterDynamicActions (void) {
+        FIXME ("stub\n");
+        return 0;
+}
+
+// #479: XCustomGetCurrentGamercard
+INT WINAPI XCustomGetCurrentGamercard (DWORD w1, DWORD w2) {
+        FIXME ("(%d, %d)\n", w1, w2);
         return 0;
 }
 

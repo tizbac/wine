@@ -69,11 +69,11 @@
 84 stdcall -noname XNetSetSystemLinkPort (long)
 472 stdcall -noname XCustomSetAction (long long long)
 473 stdcall -noname XCustomGetLastActionPress (long long long)
-474 stub -noname @
-476 stub -noname @
-477 stub -noname @
-478 stub -noname @
-479 stub -noname @
+474 stdcall -noname XCustomSetDynamicActions (long long long long long)
+476 stdcall -noname XCustomGetLastActionPressEx (long long long long long long)
+477 stdcall -noname XCustomUnregisterDynamicActions ()
+478 stdcall -noname XCustomRegisterDynamicActions ()
+479 stdcall -noname XCustomGetCurrentGamercard (long long)
 651 stdcall -noname XNotifyGetNext(long long long long)
 652 stdcall -noname XNotifyPositionUI(long)
 653 stdcall -noname XNotifyDelayUI(long)
