@@ -44,6 +44,11 @@ BOOL initialized = FALSE;
 WINEXLIVEUSER Xliveusers[3];
 DWORD handlecounter = 0;
 unsigned short x_syslinkport = 3074;
+
+int xnet_recv_bytes = 0;
+int xnet_sent_bytes = 0;
+XNetStartupParams xnetparams;
+
 INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dwNumSettingIds,
                                     DWORD * pdwSettingIds, DWORD * pcbResults, PXUSER_READ_PROFILE_SETTING_RESULT pResults, DWORD pOverlapped);
 BOOL WINAPI XLivepIsUserIndexValid(DWORD userid,DWORD unk1, DWORD unk2)
@@ -105,7 +110,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         sprintf(Xliveusers[i].username,"Wineplayer%d",i);
         Xliveusers[i].xuid = 0x0000100010001000L * (i+1);
         if ( i == 0 )
-            Xliveusers[i].signedin = eXUserSigninState_SignedInLocally;
+            Xliveusers[i].signedin = eXUserSigninState_SignedInToLive;
         else
             Xliveusers[i].signedin = eXUserSigninState_NotSignedIn;
     }
@@ -126,7 +131,7 @@ INT WINAPI XWSAStartup(WORD wVersionRequested, LPWSADATA lpWsaData)
 // #2: XWSACleanup
 void WINAPI XWSACleanup(void)
 {
-    FIXME("stub:\n");
+    WSACleanup();
 }
 
 // #3: XSocketCreate
@@ -141,14 +146,12 @@ INT WINAPI XSocketClose (long sock) {
 
 // #5: XSocketShutdown
 INT WINAPI XSocketShutdown (long sock, int how) {
-    FIXME ("stub: (%ld, %d)\n", sock, how);
-    return 0; // should return 8
+    return shutdown(sock,how);
 }
 
 // #6: XSocketIOCTLSocket
 INT WINAPI XSocketIOCTLSocket (long sock, long cmd, long * argp) {
-    FIXME ("stub: (%ld, %ld, %p)\n", sock, cmd, argp);
-    return 0; // should return arg 2 ?
+    return ioctlsocket(sock,cmd,argp);
 }
 
 // #7: XSocketSetSockOpt
@@ -163,14 +166,12 @@ INT WINAPI XSocketGetSockOpt (long sock, int level, int optname, char * optval, 
 
 // #9: XSocketGetSockName
 INT WINAPI XSocketGetSockName (long sock, DWORD * name, int * namelen) {
-    FIXME ("stub: (%ld, %p, %p)\n", sock, name, namelen);
-    return 0; // should return arg 2
+    return getsockname(sock,name,namelen);
 }
 
 // #10: XSocketGetPeerName
 INT WINAPI XSocketGetPeerName (SOCKET s, DWORD * addr, int * addrlen) {
-    FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
-    return INVALID_SOCKET; // should return arg 2
+    return getpeername(s,addr,addrlen);
 }
 
 // #11: XSocketBind
@@ -195,36 +196,37 @@ INT WINAPI XSocketAccept (SOCKET s, DWORD * addr, int * addrlen) {
 
 // #15: XSocketSelect
 INT WINAPI XSocketSelect (int n, DWORD * readfds, DWORD * writefds, DWORD * exceptfds, DWORD * timeout) {
-    FIXME ("stub: (%d, %p, %p, %p, %p)\n", n, readfds, writefds, exceptfds, timeout);
-    return 0;
+    return select(n,readfds,writefds,exceptfds,timeout);
 }
 
 // #16: XWSAGetOverlappedResult
-DWORD WINAPI XWSAGetOverlappedResult (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
-    FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
-    return 0; // should return arg 4
+DWORD WINAPI XWSAGetOverlappedResult (SOCKET s, LPWSAOVERLAPPED lpOverlapped, LPDWORD lpcbTransfer, BOOL fWait, LPDWORD lpdwFlags) {
+    return WSAGetOverlappedResult(s,lpOverlapped,lpcbTransfer,fWait,lpdwFlags);
 }
 
 // #17: XWSACancelOverlappedIO
 DWORD WINAPI XWSACancelOverlappedIO (DWORD w1) {
-    FIXME("stub: (%d)\n", w1);
-    return 0; // should return$ 4
+    return 0;
+    //return WSACancelOverlappedIO(w1); // TODO: Not implemented on wine at all??
 }
 
 // #18: XSocketRecv
 INT WINAPI XSocketRecv (SOCKET s, char * buf, int len, int flags) {
-    return 0; // should return arg 3
+    DWORD rb = recv(s,buf,len,flags);
+    xnet_sent_bytes += rb;
+    return rb;
 }
 
 // #19: XWSARecv
-DWORD WINAPI XWSARecv (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7) {
-    FIXME("stub: (%d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7);
-    return 0; // should return arg 6
+DWORD WINAPI XWSARecv (SOCKET s, LPWSABUF lpBuffers,DWORD dwBufferCount,LPDWORD lpNumberOfBytesRecvd,LPDWORD lpFlags, LPWSAOVERLAPPED lpOverlapped,LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine) {
+    return WSARecv(s,lpBuffers,dwBufferCount,lpNumberOfBytesRecvd,lpFlags,lpOverlapped,lpCompletionRoutine);
 }
 
 // #20: XSocketRecvFrom
 INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, struct sockaddr * from, int fromlen) {
-    return recvfrom(s,buf,len,flags,from,fromlen);
+    DWORD rb = recvfrom(s,buf,len,flags,from,fromlen);
+    xnet_sent_bytes += rb;
+    return rb;
 }
 
 // #21: XWSARecvFrom
@@ -235,8 +237,8 @@ DWORD WINAPI XWSARecvFrom (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWO
 
 // #22: XSocketSend
 INT WINAPI XSocketSend (SOCKET s, char * buf, int len, int flags) {
-    FIXME("stub: (%p, %p, %d, %d)\n", s, buf, len, flags);
-    return 0;
+    xnet_sent_bytes += len;
+    return send(s,buf,len,flags);
 }
 
 // #23: XWSASend
@@ -265,8 +267,7 @@ INT WINAPI XSocketInet_Addr (char * param) {
 
 // #27 XWSAGetLastError
 INT WINAPI XWSAGetLastError(void) {
-    FIXME ("stub:\n");
-    return WSAENETDOWN; // 0 ? jumps to NetDll_XWSAGetLastError
+    return WSAGetLastError();
 }
 
 // #28 XWSASetLastError
@@ -341,7 +342,7 @@ short WINAPI NetDll_htons(short in)
 
 // #51: XNetStartup
 INT WINAPI XNetStartup(XNetStartupParams * p) {
-    FIXME("stub: (%p)\n",p);
+    memcpy(&xnetparams,p,sizeof(XNetStartupParams));
     return 0;
 }
 
@@ -489,9 +490,90 @@ DWORD WINAPI XNetQosGetListenStats (DWORD a1,DWORD a2) {
 }
 
 // #78: XNetGetOpt
-DWORD WINAPI XNetGetOpt (DWORD a1,DWORD a2,DWORD a3) {
-    FIXME("stub: (%d %d %d), returning 0\n",a1,a2,a3);
-    return a2; // this should return arg 2
+DWORD WINAPI XNetGetOpt (DWORD dwOptId, BYTE *pbValue,DWORD * pdwValueSize) {
+    switch ( dwOptId )
+    {
+        case XNET_OPTID_NIC_XMIT_BYTES:
+            FIXME("NIC stats not implemented yet, returning since startup\n");
+            if ( sizeof(ULONGLONG) < *pdwValueSize )
+            {
+                *pdwValueSize = sizeof(ULONGLONG);
+                return WSAEMSGSIZE;
+            }
+            *(ULONGLONG*)pbValue = xnet_sent_bytes;
+            return 0;
+        case XNET_OPTID_NIC_XMIT_FRAMES:
+            FIXME("NIC stats not implemented yet, returning since startup\n");
+            if ( sizeof(DWORD) < *pdwValueSize )
+            {
+                *pdwValueSize = sizeof(DWORD);
+                return WSAEMSGSIZE;
+            }
+            *(DWORD*)pbValue = xnet_sent_bytes/1500; //TODO
+            return 0;
+        case XNET_OPTID_NIC_RECV_BYTES:
+            FIXME("NIC stats not implemented yet, returning since startup\n");
+            if ( sizeof(ULONGLONG) < *pdwValueSize )
+            {
+                *pdwValueSize = sizeof(ULONGLONG);
+                return WSAEMSGSIZE;
+            }
+            *(ULONGLONG*)pbValue = xnet_recv_bytes;
+            return 0;
+        case XNET_OPTID_NIC_RECV_FRAMES:
+            FIXME("NIC stats not implemented yet, returning since startup\n");
+            if ( sizeof(DWORD) < *pdwValueSize )
+            {
+                *pdwValueSize = sizeof(DWORD);
+                return WSAEMSGSIZE;
+            }
+            *(DWORD*)pbValue = xnet_recv_bytes/1500; //TODO
+            return 0;
+        case XNET_OPTID_CALLER_XMIT_BYTES:
+            if ( sizeof(ULONGLONG) < *pdwValueSize )
+            {
+                *pdwValueSize = sizeof(ULONGLONG);
+                return WSAEMSGSIZE;
+            }
+            *(ULONGLONG*)pbValue = xnet_sent_bytes;
+            return 0;
+        case XNET_OPTID_CALLER_RECV_BYTES:
+            if ( sizeof(ULONGLONG) < *pdwValueSize )
+            {
+                *pdwValueSize = sizeof(ULONGLONG);
+                return WSAEMSGSIZE;
+            }
+            *(ULONGLONG*)pbValue = xnet_recv_bytes;
+            return 0;
+        case XNET_OPTID_CALLER_XMIT_FRAMES:
+            if ( sizeof(DWORD) < *pdwValueSize )
+            {
+                *pdwValueSize = sizeof(DWORD);
+                return WSAEMSGSIZE;
+            }
+            *(DWORD*)pbValue = xnet_sent_bytes/1500; //TODO
+            return 0;
+        case XNET_OPTID_CALLER_RECV_FRAMES:
+            if ( sizeof(DWORD) < *pdwValueSize )
+            {
+                *pdwValueSize = sizeof(DWORD);
+                return WSAEMSGSIZE;
+            }
+            *(DWORD*)pbValue = xnet_recv_bytes/1500; //TODO
+            return 0;
+        case XNET_OPTID_STARTUP_PARAMS:
+            if ( sizeof(XNetStartupParams) < *pdwValueSize )
+            {
+                *pdwValueSize = sizeof(XNetStartupParams);
+                return WSAEMSGSIZE;
+            }
+            memcpy(pbValue,&xnetparams,sizeof(XNetStartupParams));
+            return 0;
+        default:
+            return WSAEINVAL;
+    }
+    return 0;
+    
 }
 
 // #79: XNetSetOpt
