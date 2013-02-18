@@ -1,6 +1,7 @@
 MODULE    = xlive.dll
 
 C_SRCS = \
-	main.c
+	main.c \
+	notify.c
 
 @MAKE_DLL_RULES@

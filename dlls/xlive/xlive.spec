@@ -138,7 +138,7 @@
 5257 stub -noname @
 5258 stub -noname @
 5259 stub -noname @
-5260 stub -noname @
+5260 stdcall -noname XShowSigninUI(long long)
 5261 stdcall -noname XUserGetXUID(long long)
 5262 stdcall -noname XUserGetSigninState(long)
 5263 stdcall -noname XUserGetName(long long long)
@@ -182,7 +182,7 @@
 5307 stub -noname @
 5308 stub -noname @
 5309 stub -noname @
-5310 stdcall -noname XLIVE_5310()
+5310 stdcall -noname XOnlineStartup()
 5311 stdcall -noname XOnlineCleanup()
 5312 stdcall -noname XFriendsCreateEnumerator(long long long long long)
 5313 stdcall -noname XLIVE_5313(long)

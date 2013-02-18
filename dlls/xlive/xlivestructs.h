@@ -23,6 +23,61 @@
 #define XUSER_DATA_TYPE_BINARY      ((BYTE)6)
 #define XUSER_DATA_TYPE_DATETIME    ((BYTE)7)
 #define XUSER_DATA_TYPE_NULL        ((BYTE)0xFF)
+
+#define XNOTIFY_SYSTEM                  (0x00000001)
+#define XNOTIFY_LIVE                    (0x00000002)
+#define XNOTIFY_FRIENDS                 (0x00000004)
+#define XNOTIFY_CUSTOM                  (0x00000008)
+#define XNOTIFY_XMP                     (0x00000020)
+#define XNOTIFY_MSGR                    (0x00000040)
+#define XNOTIFY_PARTY                   (0x00000080)
+#define XNOTIFY_ALL                     (XNOTIFY_SYSTEM | XNOTIFY_LIVE | XNOTIFY_FRIENDS | XNOTIFY_CUSTOM | XNOTIFY_XMP | XNOTIFY_MSGR | XNOTIFY_PARTY)
+#define XSSUI_FLAGS_LOCALSIGNINONLY                 0x00000001
+#define XSSUI_FLAGS_SHOWONLYONLINEENABLED           0x00000002
+#define XSSUI_FLAGS_ALLOW_SIGNOUT                   0x00000004
+#define XSSUI_FLAGS_DISALLOW_PLAYAS                 0x00000010
+#define XSSUI_FLAGS_ADDUSER                         0x00010000
+#define XSSUI_FLAGS_ENABLE_GUEST                    0x00080000
+#define XSSUI_FLAGS_CONVERTOFFLINETOGUEST           0x00400000
+#define XSSUI_FLAGS_DISALLOW_GUEST                  0x01000000
+
+
+
+#define XNID(Version, Area, Index)      (DWORD)( (WORD)(Area) << 25 | (WORD)(Version) << 16 | (WORD)(Index))
+#define XNID_VERSION(msgid)             (((msgid) >> 16) & 0x1FF)
+#define XNID_AREA(msgid)                (((msgid) >> 25) & 0x3F)
+#define XNID_INDEX(msgid)               ((msgid) & 0xFFFF)
+
+#define _XNAREA_SYSTEM                  (0)
+#define _XNAREA_LIVE                    (1)
+#define _XNAREA_FRIENDS                 (2)
+#define _XNAREA_CUSTOM                  (3)
+#define _XNAREA_XMP                     (5)
+#define _XNAREA_MSGR                    (6)
+#define _XNAREA_PARTY                   (7)
+
+
+#define XN_SYS_FIRST                    XNID(0, _XNAREA_SYSTEM, 0x0001)
+#define XN_SYS_UI                       XNID(0, _XNAREA_SYSTEM, 0x0009)
+#define XN_SYS_SIGNINCHANGED            XNID(0, _XNAREA_SYSTEM, 0x000a)
+#define XN_SYS_STORAGEDEVICESCHANGED    XNID(0, _XNAREA_SYSTEM, 0x000b)
+#define XN_SYS_PROFILESETTINGCHANGED    XNID(0, _XNAREA_SYSTEM, 0x000e)
+#define XN_SYS_MUTELISTCHANGED          XNID(0, _XNAREA_SYSTEM, 0x0011)
+#define XN_SYS_INPUTDEVICESCHANGED      XNID(0, _XNAREA_SYSTEM, 0x0012)
+#define XN_SYS_INPUTDEVICECONFIGCHANGED XNID(1, _XNAREA_SYSTEM, 0x0013)
+#define XN_SYS_PLAYTIMERNOTICE          XNID(3, _XNAREA_SYSTEM, 0x0015)
+#define XN_SYS_AVATARCHANGED            XNID(4, _XNAREA_SYSTEM, 0x0017)
+#define XN_SYS_NUIHARDWARESTATUSCHANGED XNID(6, _XNAREA_SYSTEM, 0x0019)
+#define XN_SYS_NUIPAUSE                 XNID(6, _XNAREA_SYSTEM, 0x001a)
+#define XN_SYS_NUIUIAPPROACH            XNID(6, _XNAREA_SYSTEM, 0x001b)
+#define XN_SYS_DEVICEREMAP              XNID(6, _XNAREA_SYSTEM, 0x001c)
+#define XN_SYS_NUIBINDINGCHANGED        XNID(6, _XNAREA_SYSTEM, 0x001d)
+#define XN_SYS_AUDIOLATENCYCHANGED      XNID(8, _XNAREA_SYSTEM, 0x001e)
+#define XN_SYS_NUICHATBINDINGCHANGED    XNID(8, _XNAREA_SYSTEM, 0x001f)
+#define XN_SYS_INPUTACTIVITYCHANGED     XNID(9, _XNAREA_SYSTEM, 0x0020)
+#define XN_SYS_LAST                     XNID(0, _XNAREA_SYSTEM, 0x0023)
+
+
 struct XUSER_READ_PROFILE_SETTINGS {
 	DWORD	dwLength;
 	BYTE *	pSettings;

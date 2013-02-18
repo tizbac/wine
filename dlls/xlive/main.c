@@ -105,11 +105,17 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 /* This DLL is completely undocumented. DLL ordinal functions were found using winedump
    and number of parameters determined using Python ctypes. See http://docs.python.org/library/ctypes.html */
 
-INT WINAPI XNotifyGetNext(HANDLE hNotification, DWORD dwMsgFilter, DWORD * pdwId, void * pParam)
+INT WINAPI XShowSigninUI(DWORD cPanes,DWORD dwFlags)
 {
-   // FIXME("stub: %d %d %p %p\n", hNotification, dwMsgFilter,  pdwId, pParam);
+    FIXME("Signing in user 0\n");
+    if ( dwFlags & XSSUI_FLAGS_LOCALSIGNINONLY )
+        Xliveusers[0].signedin = eXUserSigninState_SignedInLocally;
+    else
+        Xliveusers[0].signedin = eXUserSigninState_SignedInToLive;
     return 0;
 }
+
+
 
 INT WINAPI XLIVE_652(DWORD unknown)
 {
@@ -186,18 +192,13 @@ INT WINAPI XUserGetSigninInfo(DWORD dwUser, DWORD dwFlags, XUSER_SIGNIN_INFO * p
     else
         pInfo->xuid = Xliveusers[dwUser].xuid;
     pInfo->dwInfoFlags = 0;
-    pInfo->UserSigninState = eXUserSigninState_SignedInLocally;
+    pInfo->UserSigninState = Xliveusers[dwUser].signedin;
     pInfo->dwGuestNumber = 0;
     pInfo->dwSponsorUserIndex = 0;
     lstrcpynA(pInfo->szUserName,Xliveusers[dwUser].username,15);
     return ERROR_SUCCESS;
 }
 
-INT WINAPI XNotifyCreateListener(DWORD unknown, DWORD unknown2)
-{
-    FIXME("stub: %d %d\n", unknown, unknown2);
-    return 1;
-}
 
 INT WINAPI XLiveInitializeEx(XLIVE_INITIALIZE_INFO * pXii, DWORD dwVersion)
 {
@@ -281,6 +282,7 @@ INT WINAPI XNetGetTitleXnAddr(DWORD * pAddr)
 }
 XUSER_SIGNIN_STATE WINAPI XUserGetSigninState(DWORD dwUserIndex)
 {
+    FIXME("trace\n");
     if ( dwUserIndex > 2 )
         return eXUserSigninState_NotSignedIn;
     return Xliveusers[dwUserIndex].signedin;
@@ -416,7 +418,7 @@ INT WINAPI XLiveCancelOverlapped(void * pOver)
   FIXME("stub\n");
   return ERROR_SUCCESS;
 }
-INT WINAPI XLIVE_5310(void)
+INT WINAPI XOnlineStartup(void)
 {
     FIXME("stub\n");
     return 0;
