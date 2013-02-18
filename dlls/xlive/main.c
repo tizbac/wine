@@ -216,7 +216,7 @@ DWORD WINAPI XWSAGetOverlappedResult (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DW
 
 // #17: XWSACancelOverlappedIO
 DWORD WINAPI XWSACancelOverlappedIO (DWORD w1) {
-	FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+	FIXME("stub: (%d)\n", w1);
         return 0; // should return$ 4
 }
 
@@ -238,7 +238,7 @@ INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, DWORD * fr
 }
 
 // #21: XWSARecvFrom
-DWORD WINAPI XWSARecv (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8, DWORD w9) {
+DWORD WINAPI XWSARecvFrom (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8, DWORD w9) {
 	FIXME("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8, w9);
         return 0; // should return arg 8
 }
@@ -406,7 +406,7 @@ DWORD WINAPI XNetInAddrToXnAddr (DWORD w1, DWORD w2, DWORD w3) {
 }
 
 // #62: XNetInAddrToString
-INT NWINAPI XNetInAddrToString(char a1, void *Dst, signed int Size) {
+INT WINAPI XNetInAddrToString(char a1, void *Dst, signed int Size) {
 	FIXME("stub: (%d, %p, %d)\n", a1, Dst, Size);
 	return 0;
 }
