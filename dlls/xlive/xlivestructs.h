@@ -81,6 +81,17 @@
 #define XLIVE_CONTENT_FLAG_RETRIEVE_BY_XUID 0x8 
 
 
+
+#define XNET_OPTID_STARTUP_PARAMS                   1
+#define XNET_OPTID_NIC_XMIT_BYTES                   2
+#define XNET_OPTID_NIC_XMIT_FRAMES                  3
+#define XNET_OPTID_NIC_RECV_BYTES                   4
+#define XNET_OPTID_NIC_RECV_FRAMES                  5
+#define XNET_OPTID_CALLER_XMIT_BYTES                6
+#define XNET_OPTID_CALLER_XMIT_FRAMES               7
+#define XNET_OPTID_CALLER_RECV_BYTES                8
+#define XNET_OPTID_CALLER_RECV_FRAMES               9
+
 struct XUSER_READ_PROFILE_SETTINGS {
 	DWORD	dwLength;
 	BYTE *	pSettings;
