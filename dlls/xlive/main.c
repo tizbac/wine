@@ -44,6 +44,12 @@ WINEXLIVEUSER Xliveusers[3];
 DWORD handlecounter = 0;
 INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dwNumSettingIds,
                     DWORD * pdwSettingIds, DWORD * pcbResults, PXUSER_READ_PROFILE_SETTING_RESULT pResults, DWORD pOverlapped);
+BOOL WINAPI XLivepIsUserIndexValid(DWORD userid,DWORD unk1, DWORD unk2)
+{
+    if ( userid < 3 )
+        return TRUE;
+    return FALSE;
+}
 BOOL DirectoryExists(const char * szPath)
 {
   DWORD dwAttrib = GetFileAttributesA(szPath);
@@ -405,24 +411,6 @@ INT WINAPI XCustomGetLastActionPress (DWORD w1, DWORD w2, DWORD w3) {
         return 0;
 }
 
-// #651: XNotifyGetNext
-INT WINAPI XNotifyGetNext(HANDLE hNotification, DWORD dwMsgFilter, DWORD * pdwId, void * pParam)
-{
-   // FIXME("stub: %d %d %p %p\n", hNotification, dwMsgFilter,  pdwId, pParam);
-    return 0;
-}
-
-// #652: XNotifyPositionUI
-INT WINAPI XNotifyPositionUI(DWORD dwPosition) {
-	FIXME("stub: (%d)\n", dwPosition);
-        return 0;
-}
-
-// #653: XNotifyDelayUI
-INT WINAPI XNotifyDelayUI(long delay) {
-	FIXME("stub: (%ld)\n", delay);
-	return 0;
-}
 
 // #1082: XGetOverlappedExtendedError
 INT WINAPI XGetOverlappedExtendedError (void * p0) {
@@ -783,14 +771,6 @@ INT WINAPI XUserGetSigninInfo(DWORD dwUser, DWORD dwFlags, XUSER_SIGNIN_INFO * p
     pInfo->dwSponsorUserIndex = 0;
     lstrcpynA(pInfo->szUserName,Xliveusers[dwUser].username,15);
     return ERROR_SUCCESS;
-}
-
-
-// #5270: XNotifyCreateListener
-INT WINAPI XNotifyCreateListener(DWORD w1, DWORD w2)
-{
-    FIXME("stub: (%d, %d)\n", w1, w2);
-    return 1;
 }
 
 // #5273: XUserReadGamerpictureByKey
@@ -1427,11 +1407,45 @@ DWORD v6[0x14+2];
 }
 
 // #5360: XLiveContentCreateEnumerator
-DWORD WINAPI XLiveContentCreateEnumerator (DWORD a1, void * a2, DWORD *pchBuffer, HANDLE * phContent) {
-  FIXME("stub: (%d, %p, %p, %p)\n",a1,a2,pchBuffer,phContent);
-	if (phContent)
-		*phContent = INVALID_HANDLE_VALUE;
-	return 1;
+DWORD WINAPI XLiveContentCreateEnumerator (DWORD cItems, DWORD * pdwFlags/*seems to contain three dwords */, DWORD *pchBuffer, HANDLE * phContent) {
+    FIXME("stub: %d %p %p %p\n",cItems,pdwFlags,pchBuffer,phContent);
+    if ( !cItems || cItems > 0x64 )
+    {
+        ERR("cItems bigger than %d\n",0x64);
+        return ERROR_INVALID_PARAMETER;
+    }
+    
+    if ( pdwFlags)
+    {
+        DWORD pdwFlags_LO = pdwFlags[0];
+        DWORD pdwFlags_HI = pdwFlags[1];
+        DWORD userId = pdwFlags[2];
+        if ( pdwFlags_LO == 1 /*unk*/ )
+        {
+            if ( pdwFlags_HI & XLIVE_CONTENT_FLAG_RETRIEVE_FOR_ALL_USERS && pdwFlags_HI & XLIVE_CONTENT_FLAG_RETRIEVE_BY_XUID )
+            {
+                ERR("Cannot retrieve at the same time for user and for all users\n");
+            }else{
+                if ( pdwFlags_HI & XLIVE_CONTENT_FLAG_RETRIEVE_FOR_ALL_USERS || pdwFlags_HI & XLIVE_CONTENT_FLAG_RETRIEVE_BY_XUID || XLivepIsUserIndexValid(userId,0,0) )
+                {
+                    if ( pdwFlags_HI & 2 || pdwFlags[7] == 2 )
+                    {
+                        if ( pchBuffer )
+                        {
+                            //TODO: XVerifySameFamily
+                            //TODO: Do enumeration
+                            
+                        }
+                        
+                    }
+                }
+            }
+        }
+        
+        
+    }
+    *phContent = INVALID_HANDLE_VALUE;
+    return 0;
 }
 
 // #5361: XLiveContentRetrieveOffersByDate

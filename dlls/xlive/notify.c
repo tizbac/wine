@@ -51,7 +51,7 @@ void _XNotifySigninChanged_Event()
         
     }
 }
-
+// #5270: XNotifyCreateListener
 //TODO: WaitForSingleObject support, atm only polling is supported
 INT WINAPI XNotifyCreateListener(unsigned long long qwAreas)
 {
@@ -88,7 +88,7 @@ BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void ** pPa
     FIXME("trace: event delivered: %d %p\n",*pdwId,*pParam);
     return 1;
 }
-
+// #651: XNotifyGetNext
 BOOL WINAPI XNotifyGetNext(HANDLE hNotificationListener, DWORD dwMsgFilter, DWORD * pdwId, void ** pParam)
 {
     int index = (int)(hNotificationListener-1);
@@ -115,5 +115,17 @@ BOOL WINAPI XNotifyGetNext(HANDLE hNotificationListener, DWORD dwMsgFilter, DWOR
             
         }
     }
+    return 0;
+}
+
+// #652: XNotifyPositionUI
+INT WINAPI XNotifyPositionUI(DWORD dwPosition) {
+    FIXME("stub: (%d)\n", dwPosition);
+        return 0;
+}
+
+// #653: XNotifyDelayUI
+INT WINAPI XNotifyDelayUI(long delay) {
+    FIXME("stub: (%ld)\n", delay);
     return 0;
 }
