@@ -1,6 +1,9 @@
 /*
  * Copyright 2010 Austin English
+ * Copyright 2010 Stanislav Golovin
  * Copyright 2012 Tiziano Bacocco
+ * Copyright 2012 Giovanni Ongaro
+ * Copyright 2013 Peter Keel
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -21,6 +24,7 @@
 #include "config.h"
 
 #include <stdarg.h>
+#include <stdio.h>
 
 #include "windef.h"
 #include "winbase.h"
@@ -47,8 +51,7 @@ BOOL DirectoryExists(const char * szPath)
   return (dwAttrib != INVALID_FILE_ATTRIBUTES && 
          (dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
 }
-DWORD GetTitleID()
-{
+DWORD GetTitleID(void) {
     if ( !initialized )
     {
         ERR("Tried to retrieve titleid before init!");
@@ -105,25 +108,338 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 /* This DLL is completely undocumented. DLL ordinal functions were found using winedump
    and number of parameters determined using Python ctypes. See http://docs.python.org/library/ctypes.html */
 
-INT WINAPI XShowSigninUI(DWORD cPanes,DWORD dwFlags)
+// #1: XWSAStartup
+INT WINAPI XWSAStartup(WORD wVersionRequested, LPWSADATA lpWsaData)
 {
-    FIXME("Signing in user 0\n");
-    if ( dwFlags & XSSUI_FLAGS_LOCALSIGNINONLY )
-        Xliveusers[0].signedin = eXUserSigninState_SignedInLocally;
-    else
-        Xliveusers[0].signedin = eXUserSigninState_SignedInToLive;
+    FIXME("stub: %d %p\n",wVersionRequested,lpWsaData);
+    lpWsaData->wVersion = wVersionRequested;
     return 0;
 }
 
-
-
-INT WINAPI XLIVE_652(DWORD unknown)
+// #2: XWSACleanup
+void WINAPI XWSACleanup(void)
 {
-    FIXME("stub: %d\n", unknown);
+    FIXME("stub:\n");
+}
+
+// #3: XCreateSocket
+INT WINAPI XCreateSocket (int af, int type, int protocol) { 
+	FIXME ("stub: (%d, %d, %d)\n", af, type, protocol);
+	return -1;
+//         return INVALID_SOCKET; // probably better
+}
+
+// #4: XSocketClose
+INT WINAPI XSocketClose (long sock) {
+	FIXME ("stub: (%ld)\n", sock);
+	return 0;
+}
+
+// #5: XSocketShutdown
+INT WINAPI XSocketShutdown (long sock, int how) {
+	FIXME ("stub: (%ld, %d)\n", sock, how);
+	return 0; 
+}
+
+// #6: XSocketIOCTLSocket
+INT WINAPI XSocketIOCTLSocket (long sock, long cmd, long * argp) {
+	FIXME ("stub: (%ld, %ld, %p)\n", sock, cmd, argp);
+	return 0;
+}
+
+// #7: XSocketSetSockOpt
+INT WINAPI XSocketSetSockOpt (long sock, DWORD dw1, DWORD dw2, DWORD dw3, DWORD dw4) {
+	FIXME("stub: (%ld, %d, %d, %d, %d)\n", sock, dw1, dw2, dw3, dw4);
+	return 0;
+}
+
+// #8: XSocketGetSockOpt
+INT WINAPI XSocketGetSockOpt (long sock, DWORD a2, DWORD a3, void *p4, DWORD a5) {
+	FIXME("stub: (%ld, %d, %d, %p, %d)\n", sock, a2, a3, p4, a5);
+	return 0;
+}
+
+// #9: XSocketGetSockName
+INT WINAPI XSocketGetSockName (long sock, DWORD * name, int * namelen) {
+	FIXME ("stub: (%ld, %p, %p)\n", sock, name, namelen);
+	return 0;
+}
+
+// #11: XSocketBind
+INT WINAPI XSocketBind (SOCKET s, WORD * addr, int * addrlen) {
+	FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
+	return INVALID_SOCKET;
+}
+
+// #12: XSocketConnect
+INT WINAPI XSocketConnect (SOCKET s, DWORD * addr, int * addrlen) {
+	FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
+        return 0;
+}
+
+// #13: XSocketListen
+INT WINAPI XSocketListen (SOCKET s, int backlog) {
+	FIXME ("stub: (%d, %d)\n", s, backlog);
+        return 0;
+}
+
+// #14: XSocketAccept
+INT WINAPI XSocketAccept (SOCKET s, DWORD * addr, int * addrlen) {
+	FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
+	return INVALID_SOCKET;
+}
+
+// #15: XSocketSelect
+INT WINAPI XSocketSelect (int n, DWORD * readfds, DWORD * writefds, DWORD * exceptfds, DWORD * timeout) { 
+	FIXME ("stub: (%d, %p, %p, %p, %p)\n", n, readfds, writefds, exceptfds, timeout);
+	return 0;
+}
+
+// #18: XSocketRecv
+INT WINAPI XSocketRecv (SOCKET s, char * buf, int len, int flags) {
+        return 0;
+}
+
+// #20: XSocketRecvFrom
+INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, DWORD * from, int fromlen) {
+        return 0;
+}
+
+// #22: XSocketSend
+INT WINAPI XSocketSend (SOCKET s, char * buf, int len, int flags) {
+        return 0;
+}
+
+// #24: XSocketSendTo
+INT WINAPI XSocketSendTo (SOCKET s, char * buf, int len, int flags, DWORD * to, int tolen) {
+        return 0;
+}
+
+// #26: XSocketInet_Addr
+INT WINAPI XSocketInet_Addr (char * param) {
+        FIXME ("stub: (%p)\n", param);
+        return 0;
+}
+
+// #27 XWSAGetLastError
+INT WINAPI XWSAGetLastError(void) {
+	return WSAENETDOWN; // 0 ?
+}
+
+// #29: XWSACreateEvent
+WSAEVENT WINAPI XWSACreateEvent(void) {
+         return WSA_INVALID_EVENT;
+}
+
+// #38: NetDll_ntohs
+// another definition says this should be WORD XSocketNTOHS (WORD n) { return ((n&0xFF00) >> 8)|((n&0xFF) << 8);
+short WINAPI NetDll_ntohs(short in)
+{
+    return ntohs(in);
+}
+
+// #39: XSocketNTOHL
+DWORD WINAPI XSocketNTOHL (DWORD n) {
+        return ((n&0xFF000000) >> 24)|((n & 0x00FF0000) >> 8)|((n&0x0000FF00) << 8)|((n & 0x000000FF) << 24);
+}
+
+// #40: NetDll_htons
+short WINAPI NetDll_htons(short in)
+{
+    return htons(in);
+}
+
+// #51: XNetStartup
+INT WINAPI XNetStartup(XNetStartupParams * p) {
+    FIXME("stub: (%p)\n",p);
     return 0;
 }
 
+// #52: XNetCleanup
+INT WINAPI XNetCleanup (void) { 
+	return 0;
+}
 
+// #53: XNetRandom
+INT WINAPI XNetRandom (BYTE * pb, DWORD cb) {
+    DWORD i;
+    FIXME ("(%p, %d)\n", pb, cb);
+    if (cb) for (i = 0; i < cb; i++) pb[i] = (BYTE) (rand ());
+    return 0;
+}
+
+// #54: XNetCreateKey
+INT WINAPI XNetCreateKey (void * pxnkid, void * pxnkey) {
+        FIXME ("(%p, %p)\n", pxnkid, pxnkey);
+        return 0;
+}
+
+// #55: XNetRegisterKey
+INT WINAPI XNetRegisterKey (DWORD w1, DWORD w2) {
+        FIXME ("stub: (%d, %d)\n", w1, w2);
+        return 0;
+}
+
+// #56: XNetUnregisterKey
+INT WINAPI XNetUnregisterKey (DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return 0;
+}
+
+// #57: XNetXnAddrToInAddr
+INT WINAPI XNetXnAddrToInAddr (DWORD w1, DWORD w2, DWORD * p) {
+        FIXME ("stub: (%d, %d, %p)\n", w1, w2, p);
+        *p = 0;
+        return 0;
+}
+
+// #58: XNetServerToInAddr
+DWORD WINAPI XNetServerToInAddr (DWORD w1, DWORD w2, DWORD w3) {
+        FIXME ("stub: (%d, %d, %d)\n", w1, w2, w3);
+        return 0;
+}
+
+// #60: XNetInAddrToXnAddr
+DWORD WINAPI XNetInAddrToXnAddr (DWORD w1, DWORD w2, DWORD w3) {
+        FIXME ("stub: (%d, %d, %d)\n", w1, w2, w3);
+        return 0;
+}
+
+// #62:
+INT WINAPI XLIVE_62(DWORD w1 ,DWORD* w2,DWORD w3) {
+	FIXME("unk (%d, %p, %d)\n", w1, w2, w3);
+	return 0;
+}
+
+// #63: XNetUnregisterInAddr
+INT WINAPI XNetUnregisterInAddr (DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return 0;
+}
+
+// #64: XNetXnAddrToMachineId
+INT WINAPI XNetXnAddrToMachineId( void * addr1, void * pMachId)
+{
+  FIXME("stub: (%p %p)\n",addr1,pMachId);
+  return 0;
+}
+
+// #65: XNetConnect
+INT WINAPI XNetConnect (DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return 0;
+}
+
+// #66: XNetGetConnectStatus
+INT WINAPI XNetGetConnectStatus (DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return 0;
+}
+
+// #69: XNetQosListen
+DWORD WINAPI XNetQosListen (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+	FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0;
+}
+
+// #70: XNetQosLookup
+DWORD WINAPI XNetQosLookup (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8, DWORD w9, DWORD w10, DWORD w11, DWORD w12) {
+	FIXME("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12);
+        return 0;
+}
+
+// #71: NetDll_XNetQosServiceLookup
+INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, void ** ppxnqos)
+{
+	//FIXME("stub\n"); Commented out because this is called every frame
+	return 0;
+}
+
+// #72: XNetQosRelease
+DWORD WINAPI XNetQosRelease (DWORD w1) {
+        return 0;
+}
+
+// #73: XNetGetTitleXnAddr
+INT WINAPI XNetGetTitleXnAddr(DWORD * pAddr)
+{
+    *pAddr = 0x0100007F; //localhost
+    FIXME("localhost\n");
+    return 4;
+}
+
+// #75: XNetGetEthernetLinkStatus
+INT WINAPI XNetGetEthernetLinkStatus(void) {
+    //FIXME("stub\n"); Commented out because this is called every frame
+    return 1;
+}
+
+// #76: 
+DWORD WINAPI XLIVE_76(DWORD a1) {
+    FIXME("unk(%d), returning 0\n",a1);
+    return 0;
+}
+
+// #78: 
+DWORD WINAPI XLIVE_78(DWORD a1,DWORD a2,DWORD a3) {
+	FIXME("unk(%d %d %d), returning 0\n",a1,a2,a3);
+        return 0;
+}
+
+// #83: XNetGetSystemLinkPort
+INT WINAPI XNetGetSystemLinkPort(DWORD * LinkPort) {
+        FIXME("stub: (%p)\n",LinkPort);
+	*LinkPort = 0;
+        return WSAEACCES;
+}
+
+// #84: XNetSetSystemLinkPort
+INT WINAPI XNetSetSystemLinkPort(WORD newPort) {
+        FIXME("stub: (%d)\n",(int)newPort);
+	return 0;
+}
+
+// #473: XCustomGetLastActionPress
+INT WINAPI XCustomGetLastActionPress (DWORD w1, DWORD w2, DWORD w3) {
+        FIXME ("(%d, %d, %d)\n", w1, w2, w3);
+        return 0;
+}
+
+// #651: XNotifyGetNext
+INT WINAPI XNotifyGetNext(HANDLE hNotification, DWORD dwMsgFilter, DWORD * pdwId, void * pParam)
+{
+   // FIXME("stub: %d %d %p %p\n", hNotification, dwMsgFilter,  pdwId, pParam);
+    return 0;
+}
+
+// #652: XNotifyPositionUI
+INT WINAPI XNotifyPositionUI(DWORD dwPosition) {
+	FIXME("stub: (%d)\n", dwPosition);
+        return 0;
+}
+
+// #653: XNotifyDelayUI
+INT WINAPI XNotifyDelayUI(long delay) {
+	FIXME("stub: (%ld)\n", delay);
+	return 0;
+}
+
+// #1082: XGetOverlappedExtendedError
+INT WINAPI XGetOverlappedExtendedError (void * p0) {
+	FIXME("stub: (%p)\n", p0);
+	return 0;
+}
+
+// #1083: XGetOverlappedResult
+INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait)
+{
+  //FIXME("stub: %p %p %d\n",p0,pResult,bWait); Commented out because this is called every frame
+  if (pResult)
+		*pResult = 0;
+  return ERROR_SUCCESS;
+}
+
+// #5001: XliveInput
 INT WINAPI XliveInput(DWORD * p)
 {
     p[5] = 0;
@@ -131,43 +447,298 @@ INT WINAPI XliveInput(DWORD * p)
     return 1;
 }
 
-INT WINAPI XLIVE_5002(void)
+// #5002: XliveInput
+INT WINAPI XLiveRender(void)
 {
     //FIXME("stub\n"); Commented out because this is called every frame
     return 0;
 }
 
-INT WINAPI XLivePreTranslateMessage(DWORD unknown)
+// #5003: XLiveUninitialize
+INT WINAPI XLiveUninitialize(void) {
+	return 0;
+}
+
+// #5005: XLiveOnCreateDevice
+INT WINAPI XLiveOnCreateDevice(DWORD p0,DWORD p1) {
+	FIXME("stub: (%d %d)\n",p0,p1);
+	return 0;
+}
+
+// #5006: 
+INT WINAPI XLIVE_5006(void) {
+	FIXME("unk\n");
+	return 0;
+}
+
+// #5007: XLiveOnResetDevice
+INT WINAPI XLiveOnResetDevice(DWORD p0) {
+	FIXME("stub: (%d)\n",p0);
+	return 0;
+}
+
+// #5008: XHVCreateEngine
+INT WINAPI XHVCreateEngine(DWORD p0, DWORD p1, void ** ppEngine)
+{
+  if ( ppEngine)
+    *ppEngine = NULL;
+  FIXME("stub: (%d, %d, %p)\n",p0,p1,ppEngine);
+  return -1;
+}
+
+// should be defined somewhere else, needed by 5016
+typedef struct{
+        DWORD   dwMagick;       
+        DWORD   dwSize;
+        DWORD   __fill[2];
+        BYTE    bData[4];
+} FakeProtectedBuffer;
+
+// #5016: XLivePBufferAllocate
+DWORD WINAPI XLivePBufferAllocate (int size, FakeProtectedBuffer ** pBuffer) {
+    *pBuffer = (FakeProtectedBuffer *)malloc (size+16);
+    TRACE ("(%d, %p)\n", size, pBuffer);
+    if (!*pBuffer) {
+            return E_OUTOFMEMORY;
+    }
+
+    (*pBuffer)->dwMagick = 0xDEADDEAD;      // some arbitrary number
+    (*pBuffer)->dwSize = size;
+    return 0;
+}
+
+// #5017: XLivePBufferFree
+DWORD WINAPI XLivePBufferFree(FakeProtectedBuffer * pBuffer) {
+    FIXME("(%p)\n", pBuffer);
+    if (pBuffer && pBuffer->dwMagick == 0xDEADDEAD)
+        free (pBuffer);
+    return 0;
+}
+
+// #5018: XLivePBufferGetByte
+DWORD WINAPI XLivePBufferGetByte (FakeProtectedBuffer * pBuffer, DWORD offset, BYTE * value) {
+	TRACE ("(%p, %d, %p)\n", pBuffer, offset, value);
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || !value || offset > pBuffer->dwSize)
+                return 0;
+        *value = pBuffer->bData[offset];
+        return 0;
+}
+
+// #5019: XLivePBufferSetByte
+DWORD WINAPI XLivePBufferSetByte(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE value) {
+	TRACE ("(%p, %d, %p)\n", pBuffer, offset, value);
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || offset > pBuffer->dwSize)
+                return 0;
+        pBuffer->bData[offset] = value;
+        return 0;
+}
+
+// #5020: XLivePBufferGetDWORD
+DWORD WINAPI XLivePBufferGetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset, DWORD * pdwValue) {
+	TRACE ("(%p, %d, %p)\n", pBuffer, dwOffset, pdwValue);
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || dwOffset > pBuffer->dwSize-4 || !pdwValue)
+                return 0;
+        *pdwValue = *(DWORD *)(pBuffer->bData+dwOffset);
+        return 0;
+}
+
+// #5021: XLivePBufferSetDWORD
+DWORD WINAPI XLivePBufferSetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset, DWORD dwValue ) {
+	TRACE ("(%p, %d, %p)\n", pBuffer, dwOffset, dwValue);
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || dwOffset > pBuffer->dwSize-4)
+                return 0;
+        *(DWORD *)(pBuffer->bData+dwOffset) = dwValue;
+        return 0;
+}
+
+// #5022: XLiveGetUpdateInformation
+INT WINAPI XLiveGetUpdateInformation (DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return -1; // no update
+}
+
+// #5024: XLiveUpdateSystem
+INT WINAPI XLiveUpdateSystem (DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return -1; // no update
+}
+
+// #5026: XLiveSetSponsorToken
+DWORD WINAPI XLiveSetSponsorToken (LPCWSTR pwszToken, DWORD dwTitleId) {
+    FIXME ("stub: (, 0x%08x)\n", dwTitleId);
+    return S_OK;
+}
+
+// #5030: XLivePreTranslateMessage
+INT WINAPI XLivePreTranslateMessage(DWORD w1)
 {
     //FIXME("stub: %d\n", unknown);
     return 0;
 }
 
-DWORD WINAPI XUserReadProfileSettingsByXuid(
-         DWORD dwTitleId,
-         DWORD dwUserIndexRequester,
-         DWORD dwNumFor,
-         const XUID *pxuidFor,
-         DWORD dwNumSettingIds,
-         const DWORD *pdwSettingIds,
-         DWORD *pcbResults,
-         PXUSER_READ_PROFILE_SETTING_RESULT pResults,
-         void * pXOverlapped
-)
-{
-    FIXME("partial stub");
-    return XUserReadProfileSettings(dwTitleId,dwUserIndexRequester,dwNumSettingIds,pdwSettingIds,pcbResults,pResults,(DWORD)pXOverlapped);
+// #5031: XLiveSetDebugLevel
+DWORD WINAPI XLiveSetDebugLevel (DWORD xdlLevel, DWORD * pxdlOldLevel) { 
+	FIXME ("stub: (%d, %p)\n", xdlLevel, pxdlOldLevel);
+	return 0;
 }
 
-// #5372
-DWORD WINAPI xlive_5372 (HANDLE a1, DWORD a2, DWORD a3, DWORD a4, BYTE *a5, HANDLE a6)
+// #5034: XLiveProtectData
+DWORD WINAPI XLiveProtectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE h)
 {
-    FIXME("stub: %d %d %d %d %p %d\n",a1,a2,a3,a4,a5,a6);
-    return 1;
+  FIXME("stub: %p %d %p %p(%d) %d\n",pInBuffer,dwInDataSize,pOutBuffer,pDataSize,*pDataSize,h);
+  
+  if ( *pDataSize == 0 )
+  {
+    *pDataSize = dwInDataSize;
+    return 0x8007007A; //Insufficent buffer
+  }
+  if ( !pOutBuffer )
+      return 0x8007007A; //Insufficent buffer
+  if (*pDataSize >= dwInDataSize && pOutBuffer)
+  {
+     // HexDump(pInBuffer,dwInDataSize);
+     memcpy (pOutBuffer, pInBuffer, dwInDataSize);
+  }
+  else
+      return 0x8007007A; //Insufficent buffer
+    return 0;
 }
+
+// #5035: XLiveUnprotectData
+INT WINAPI XLiveUnprotectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE * ph)
+{
+    
+    if (!pDataSize || !ph)      // invalid parameter
+                return E_FAIL;
+    FIXME("stub: %p %d %p %p(%d) %p\n",pInBuffer,dwInDataSize, pOutBuffer,pDataSize,*pDataSize,ph);
+    if (!pOutBuffer)
+    {
+        *pDataSize = dwInDataSize;
+        return 0x8007007A;
+    }
+    *ph = (HANDLE)1;
+    if (!pOutBuffer || *pDataSize < dwInDataSize) {
+            *pDataSize = dwInDataSize;
+            return 0x8007007A;
+    }
+    *pDataSize = dwInDataSize;
+    // HexDump(pInBuffer,dwInDataSize);
+    memcpy (pOutBuffer, pInBuffer, dwInDataSize);
+    return 0;
+}
+
+// #5036: XLiveCreateProtectedDataContext
+INT WINAPI XLiveCreateProtectedDataContext(DWORD * dwType, PHANDLE pHandle)
+{
+	FIXME("stub: (%d, %p)\n",*dwType, pHandle);
+	if (pHandle)
+    	    *pHandle = (HANDLE)(++handlecounter);
+	return 0;
+}
+
+// #5037: XLiveQueryProtectedDataInformation
+INT WINAPI XLiveQueryProtectedDataInformation(HANDLE h, DWORD * p0)
+{
+    FIXME("stub: %d %p\n",h,p0);
+    return 0;
+}
+
+// #5038: XLiveCloseProtectedDataContext
+INT WINAPI XLiveCloseProtectedDataContext(HANDLE h)
+{
+    FIXME("stub: %d\n",h);
+  return 0;
+}
+
+// #5214: XShowPlayerReviewUI
+INT WINAPI XShowPlayerReviewUI (DWORD w1, DWORD w2, DWORD w3) {
+        FIXME ("stub: (%d, %d, %d)\n", w1, w2, w3);
+        return 0;
+}
+// #5215: XShowGuideUI
+INT WINAPI XShowGuideUI (DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return 1;
+}
+
+// #5216: XShowKeyboardUI
+INT WINAPI XShowKeyboardUI (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8) {
+        FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8);
+        return 0;
+}
+
+// #5236: 
+INT WINAPI XLIVE_5236(DWORD *d1,DWORD *d2) {
+  FIXME("unk (%p, %p)\n",d1,d2);
+  *d1=1;
+  *d2=1;
+  return 0;
+}
+
+// #5237: 
+INT WINAPI XLIVE_5237(DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return 0;
+}
+
+// #5251: XCloseHandle
+DWORD WINAPI XCloseHandle(DWORD p1)
+{
+  FIXME ("stub: (%d)\n",p1);
+  if ( !p1 || p1 == -1 )
+  {
+    SetLastError(87);
+  }
+  return 0;
+}
+
+// #5254: XLiveCancelOverlapped
+// another definition says this should be INT WINAPI XCancelOverlapped (DWORD)
+INT WINAPI XLiveCancelOverlapped(void * pOver)
+{
+  FIXME("stub: (%p)\n", pOver);
+  return ERROR_SUCCESS;
+}
+
+// #5256: XEnumerate
+INT WINAPI XEnumerate (HANDLE hEnum, void * pvBuffer, DWORD cbBuffer, DWORD * pcItemsReturned, void * pOverlapped)
+{
+	if (pcItemsReturned)
+		*pcItemsReturned = 0;
+	return 0;
+}
+
+// #5260: XShowSigninUI
+INT WINAPI XShowSigninUI(DWORD cPanes,DWORD dwFlags)
+{
+    FIXME("Signing in user 0 (%d, %d)\n", cPanes, dwFlags);
+    if ( dwFlags & XSSUI_FLAGS_LOCALSIGNINONLY )
+        Xliveusers[0].signedin = eXUserSigninState_SignedInLocally;
+    else
+        Xliveusers[0].signedin = eXUserSigninState_SignedInToLive;
+    return 0;
+}
+
+// #5261: XUserGetXUID
+INT WINAPI XUserGetXUID(DWORD dwUserIndex, PXUID pXuid)
+{
+ FIXME("stub: (%d, %p)\n", dwUserIndex, pXuid);
+    return Xliveusers[dwUserIndex].xuid;
+    return 0; // ???
+}
+
+// #5262: XUserGetSigninState
+XUSER_SIGNIN_STATE WINAPI XUserGetSigninState(DWORD dwUserIndex)
+{
+    if ( dwUserIndex > 2 )
+        return eXUserSigninState_NotSignedIn;
+    return Xliveusers[dwUserIndex].signedin;
+}
+
+// #5263: XUserGetName
 INT WINAPI XUserGetName(DWORD dwUserId, char * pBuffer, DWORD dwBufLen)
 {
-    FIXME("stub: %d %p %d\n", dwUserId, pBuffer, dwBufLen);
+    FIXME("stub: (%d, %p, %d)\n", dwUserId, pBuffer, dwBufLen);
     if ( dwUserId > 2 )
         return ERROR_NO_SUCH_USER;
     if ( !Xliveusers[dwUserId].signedin  )
@@ -180,10 +751,25 @@ INT WINAPI XUserGetName(DWORD dwUserId, char * pBuffer, DWORD dwBufLen)
     return ERROR_SUCCESS;
 }
 
+// #5264: XUserAreUsersFriends
+INT WINAPI XUserAreUsersFriends(DWORD dwUserIndex, DWORD * pXuids, DWORD dwXuidCount, DWORD * pResult, void * pOverlapped) {
+        FIXME ("stub: (%d, %p, %d, %p, %p)\n", dwUserIndex, pXuids, dwXuidCount, pResult, pOverlapped);
+	return ERROR_NOT_LOGGED_ON;
+}
 
+// #5265: XLiveUserCheckPrivilege
+// Another definition says this should be INT WINAPI XUserCheckPrivilege (DWORD user, DWORD priv, PBOOL b)
+DWORD WINAPI XLiveUserCheckPrivilege(DWORD uIndex,DWORD PrivType, PBOOL pfResult )
+{
+  FIXME("stub: (%d, %d, %p)\n",uIndex,PrivType,pfResult);
+  *pfResult = FALSE;
+  return ERROR_SUCCESS;
+}
+
+// #5267: XUserGetSigninInfo
 INT WINAPI XUserGetSigninInfo(DWORD dwUser, DWORD dwFlags, XUSER_SIGNIN_INFO * pInfo)
 {
-    FIXME("stub: %d %d %p\n", dwUser, dwFlags, pInfo);
+    FIXME("stub: (%d, %d, %p)\n", dwUser, dwFlags, pInfo);
     if ( !pInfo || dwUser > 2 )
         return ERROR_NO_SUCH_USER;
     memset(pInfo,0,sizeof(XUSER_SIGNIN_INFO));
@@ -200,16 +786,208 @@ INT WINAPI XUserGetSigninInfo(DWORD dwUser, DWORD dwFlags, XUSER_SIGNIN_INFO * p
 }
 
 
+// #5270: XNotifyCreateListener
+INT WINAPI XNotifyCreateListener(DWORD w1, DWORD w2)
+{
+    FIXME("stub: (%d, %d)\n", w1, w2);
+    return 1;
+}
+
+// #5273: XUserReadGamerpictureByKey
+INT WINAPI XUserReadGamerpictureByKey (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6) {
+        FIXME ("stub: (%d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6);
+        return 0;
+}
+
+// #5274: 
+INT WINAPI XLIVE_5274(long w1,long w2,long w3,long w4) {
+	FIXME ("unk: (%ld, %ld, %ld, %ld)\n", w1, w2, w3, w4);
+	return 0;
+}
+
+// #5275: XShowFriendsUI
+INT WINAPI XShowFriendsUI (DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return 0;
+}
+
+// #5277: XUserSetContext
+void WINAPI XUserSetContext( DWORD dwUserIndex, DWORD dwContextId,DWORD dwContextValue)
+{
+  if ( dwUserIndex > 2 )
+  {
+      ERR("invalid user id: %d\n",dwUserIndex);
+      return;
+  }
+  if ( dwContextId != X_CONTEXT_PRESENCE )
+  {
+      FIXME("Setting contexts different from X_CONTEXT_PRESENCE is not supported yet!\n");
+      return;
+  }
+  
+  Xliveusers[dwUserIndex].contextvalue = dwContextValue;
+}
+
+// #5278: XUserWriteAchievements
+INT WINAPI XUserWriteAchievements (DWORD dwNumAchievements,
+         CONST XUSER_ACHIEVEMENT *pAchievements,
+         void *pOverlapped)
+{
+    XUSER_ACHIEVEMENT * curr = pAchievements;
+    int k = 0;
+    HANDLE hFile;
+    for ( k = 0; k < dwNumAchievements; k++ )
+    {
+        char buf[512];
+        sprintf(buf,"%sachievements\\%d",xlivedir,curr->dwUserIndex);
+        if (!DirectoryExists(buf))
+        {
+            if ( !CreateDirectoryA(buf,NULL))
+            {
+                ERR("Cannot create directory %s\n",buf);
+                return E_FAIL;
+            }
+        }
+        sprintf(buf,"%sachievements\\%d\\%d.achievement",xlivedir,curr->dwUserIndex,curr->dwAchievementId);
+        hFile = CreateFileA(buf,GENERIC_WRITE,0x0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+        if ( hFile == INVALID_HANDLE_VALUE )
+        {
+            ERR("Cannot create file %s\n",buf);
+            return E_FAIL;
+        }
+        
+    }
+    return 0;
+}
+
+// #5280: XUserCreateAchievementEnumerator
+INT WINAPI XUserCreateAchievementEnumerator(DWORD dwTitleId, DWORD dwUserIndex, ULONGLONG xuid, DWORD dwDetailFlags, DWORD dwStartingIndex, DWORD cItem, DWORD * pcbBuffer, HANDLE * phEnum)
+{
+    FIXME("stub: (%d, %d, %ld, %d, %d, %d, %p, %p)\n", dwTitleId, dwUserIndex, xuid, dwDetailFlags, dwStartingIndex, cItem, pcbBuffer, phEnum);
+    if (pcbBuffer)
+        *pcbBuffer = 0;
+    if (phEnum)
+            *phEnum = INVALID_HANDLE_VALUE;
+    return 1;   // return error (otherwise, 0-size buffer will be allocated)
+}
+
+// #5281: XUserReadStats
+INT WINAPI XUserReadStats (DWORD dwTitleId,
+                           DWORD dwNumXuids,
+                           CONST XUID *pXuids,
+                           DWORD dwNumStatsSpecs,
+                           CONST XUSER_STATS_SPEC *pSpecs,
+                           PDWORD *pcbResults,
+                           PXUSER_STATS_READ_RESULTS pResults,
+                           void *pOverlapped)
+{
+    FIXME ("stub: (%d, %d, %p, %d, %p, %p, %p, %p)\n", dwTitleId, dwNumXuids, pXuids, dwNumStatsSpecs, pSpecs, pcbResults, pResults, pOverlapped);
+    if (pcbResults)
+    {
+        *pcbResults = sizeof(DWORD);
+        return 0;
+    }
+    if (pResults)
+    {
+            pResults->dwNumViews = 0;
+    }
+    return 0;
+}
+
+// #5282: 
+INT WINAPI XLIVE_5282 (long w1,long w2,long w3,long w4,long w5,long w6) {
+	FIXME ("unk: (%ld %ld %ld %ld %ld %ld)\n",w1,w2,w3,w4,w5,w6);
+	return 0;
+}
+
+// #5284: XUserCreateStatsEnumeratorByRank
+DWORD WINAPI XUserCreateStatsEnumeratorByRank (DWORD dwTitleId, DWORD dwRankStart, DWORD dwNumRows, DWORD dwNuStatSpec, void * pSpecs, DWORD * pcbBuffer, PHANDLE phEnum) {
+        FIXME ("stub: (%d, %d, %d, %d, %p, %p, %p)\n", dwTitleId, dwRankStart, dwNumRows, dwNuStatSpec, pSpecs, pcbBuffer, phEnum);
+    if (pcbBuffer)
+        *pcbBuffer = 0;
+        *phEnum = INVALID_HANDLE_VALUE;
+        return 1;
+}
+
+// #5286: XUserCreateStatsEnumeratorByXuid
+DWORD WINAPI XUserCreateStatsEnumeratorByXuid (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD * pcbBuffer, PHANDLE phEnum) {
+        FIXME ("stub: (%d, %d, %d, %d, %d, %d, %p, %p)\n", w1, w2, w3, w4, w5, w6, pcbBuffer, phEnum);
+    if (pcbBuffer)
+        pcbBuffer = 0;
+        *phEnum = INVALID_HANDLE_VALUE;
+        return 1;
+}
+
+// #5292 XUserSetContextEx
+INT WINAPI XUserSetContextEx (DWORD dwUserIndex, DWORD dwContextId, DWORD dwContextValue, void * pOverlapped) {
+	FIXME ("stub: (%d, %d, %d, %p)\n", dwUserIndex, dwContextId, dwContextValue, pOverlapped);
+	return 0;
+}
+
+// #5293: XUserSetPropertyEx
+INT WINAPI XUserSetPropertyEx (DWORD dwUserIndex, DWORD dwPropertyId, DWORD cbValue, void * pvValue, void * pOverlapped) { 
+       // FIXME ("XUserSetPropertyEx (%d, 0x%x, ...)\n", dwUserIndex, dwPropertyId);
+    char buf[512];
+    HANDLE hFile;
+    DWORD written;
+    if (pOverlapped )
+        FIXME("Overlapped ignored!\n");
+    sprintf(buf,"%sproperties\\%08X",xlivedir,dwPropertyId);
+    hFile = CreateFileA(buf,GENERIC_WRITE,0x0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+    if ( hFile == INVALID_HANDLE_VALUE )
+    {
+        ERR("Cannot write property!\n");
+        return ERROR_ACCESS_DENIED;
+    }
+    WriteFile(hFile,pvValue,cbValue,&written,NULL);
+    if (written < cbValue )
+    {
+        ERR("Cannot write property!\n");
+        return ERROR_ACCESS_DENIED;
+    }
+    CloseHandle(hFile);
+    return ERROR_SUCCESS;
+}
+
+// #5276: XUserSetProperty
+void WINAPI XUserSetProperty(
+         DWORD dwUserIndex,
+         DWORD dwPropertyId,
+         DWORD cbValue,
+         CONST VOID *pvValue
+)
+{
+    XUserSetPropertyEx(dwUserIndex,dwPropertyId,cbValue,pvValue,0x0);
+}
+
+// #5294: XLivePBufferGetByteArray
+DWORD WINAPI XLivePBufferGetByteArray(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE * destination, DWORD size) {
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || !destination || offset+size > pBuffer->dwSize)
+                return 0;
+        memcpy (destination, pBuffer->bData+offset, size);
+        return 0;
+}
+
+// #5295: XLivePBufferSetByteArray
+DWORD WINAPI XLivePBufferSetByteArray(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE * source, DWORD size) {
+        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || !source || offset+size > pBuffer->dwSize)
+                return 0;
+        memcpy (pBuffer->bData+offset, source, size);
+        return 0;
+}
+
+// #5297: XLiveInitializeEx
 INT WINAPI XLiveInitializeEx(XLIVE_INITIALIZE_INFO * pXii, DWORD dwVersion)
 {
+    char fullpathtogame[1024];
+    HANDLE exeFile;
+    DWORD dwTitleId;
+    char buf[512];
     
     FIXME("stub: %p %d\n", pXii, dwVersion);
-    
-    
     //TODO: Determine titelid correctly, for now we have to use crc32 of game executable
-    char fullpathtogame[1024];
     GetModuleFileNameA(0,fullpathtogame,1023);
-    HANDLE exeFile = CreateFileA(fullpathtogame,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    exeFile = CreateFileA(fullpathtogame,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
     if ( exeFile == INVALID_HANDLE_VALUE )
     {
         ERR("Cannot read executable");
@@ -232,14 +1010,13 @@ INT WINAPI XLiveInitializeEx(XLIVE_INITIALIZE_INFO * pXii, DWORD dwVersion)
       if ( GetLastError() != ERROR_ALREADY_EXISTS )
         ERR("Cannot create persistent storage dir!\n");
     }
-    DWORD dwTitleId = GetTitleID();
+    dwTitleId = GetTitleID();
     sprintf(xlivedir,"%s%08x\\",xlivebasedir,dwTitleId);
     if ( !CreateDirectoryA(xlivedir,NULL) )
     {
       if ( GetLastError() != ERROR_ALREADY_EXISTS )
         ERR("Cannot create persistent storage dir!\n");
     }
-    char buf[512];
     sprintf(buf,"%sachievements",xlivedir);
     if ( !CreateDirectoryA(buf,NULL) )
     {
@@ -252,177 +1029,161 @@ INT WINAPI XLiveInitializeEx(XLIVE_INITIALIZE_INFO * pXii, DWORD dwVersion)
       if ( GetLastError() != ERROR_ALREADY_EXISTS )
         ERR("Cannot create property storage dir!\n");
     }
-    
-    
     return 0;
 }
 
+// #5000: XLiveInitialize
 INT WINAPI XLiveInitialize(XLIVE_INITIALIZE_INFO * pXii)
 {
-    FIXME("stub: %p\n", pXii);
+    FIXME("stub: (%p)\n", pXii);
     XLiveInitializeEx(pXii,1);
     return 0;
 }
 
-INT WINAPI XNetStartup(XNetStartupParams * p)
-{
-    FIXME("stub: %p\n",p);
-    return 0;
+// #5300: XSessionCreate
+INT WINAPI XSessionCreate (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8) { 
+        FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8);
+	return -1;
 }
-INT WINAPI XNetGetEthernetLinkStatus()
-{
-    //FIXME("stub\n"); Commented out because this is called every frame
-    return 1;
-}
-INT WINAPI XNetGetTitleXnAddr(DWORD * pAddr)
-{
-    *pAddr = 0x0100007F; //localhost
-    FIXME("returning localhost\n");
-    return 4;
-}
-XUSER_SIGNIN_STATE WINAPI XUserGetSigninState(DWORD dwUserIndex)
-{
-    FIXME("trace\n");
-    if ( dwUserIndex > 2 )
-        return eXUserSigninState_NotSignedIn;
-    return Xliveusers[dwUserIndex].signedin;
-}
-INT WINAPI XUserGetXUID(DWORD dwUserIndex, PXUID pXuid)
-{
 
-    return Xliveusers[dwUserIndex].xuid;
-    return 0; // ???
+// #5303: XStringVerify
+DWORD WINAPI XStringVerify (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, WORD * pResult, DWORD w7) { 
+        FIXME ("stub: (%d, %d, %d, %d, %d, %p, %d, )\n", w1, w2, w3, w4, w5, pResult, w7);
+        *pResult = 0;
+        return 0;
 }
-INT WINAPI XWSAStartup(WORD wVersionRequested, LPWSADATA lpWsaData)
-{
-    FIXME("stub: %d %p\n",wVersionRequested,lpWsaData);
-    lpWsaData->wVersion = wVersionRequested;
-    return 0;
-}
-INT WINAPI XNetGetSystemLinkPort(DWORD * LinkPort)
-{
-    FIXME("stub: %p\n",LinkPort);
-    *LinkPort = 0;
-    return WSAEACCES;
-}
-short WINAPI NetDll_htons(short in)
-{
-    return htons(in);
-}
-short WINAPI NetDll_ntohs(short in)
-{
-    return ntohs(in);
-}
-INT WINAPI XNetSetSystemLinkPort(WORD newPort)
-{
-    FIXME("stub: %d\n",(int)newPort);
-    return 0;
-}
-INT WINAPI XHVCreateEngine(DWORD p0, DWORD p1, void ** ppEngine)
-{
-  if ( ppEngine)
-    *ppEngine = NULL;
-  FIXME("stub: %d %d %p\n",p0,p1,ppEngine);
-  return -1;
 
+// #5305: XStorageUploadFromMemory
+DWORD WINAPI XStorageUploadFromMemory (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+        FIXME ("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0;
 }
-void WINAPI XUserSetContext( DWORD dwUserIndex, DWORD dwContextId,DWORD dwContextValue)
-{
-  if ( dwUserIndex > 2 )
-  {
-      ERR("invalid user id: %d\n",dwUserIndex);
-      return;
-  }
-  if ( dwContextId != X_CONTEXT_PRESENCE )
-  {
-      FIXME("Setting contexts different from X_CONTEXT_PRESENCE is not supported yet!\n");
-      return;
-  }
-  
-  Xliveusers[dwUserIndex].contextvalue = dwContextValue;
 
+// #5306: XStorageEnumerate
+INT WINAPI XStorageEnumerate (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7) { 
+        FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7);
+        return 0;
 }
-INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait)
-{
-  //FIXME("stub: %p %p %d\n",p0,pResult,bWait); Commented out because this is called every frame
-  if (pResult)
-		*pResult = 0;
-  return ERROR_SUCCESS;
 
-}
-INT WINAPI XLiveOnResetDevice(DWORD p0)
-{
-  FIXME("stub: %d\n",p0);
-  return 0;
-}
-INT WINAPI XLiveOnCreateDevice(DWORD p0,DWORD p1)
-{
-  FIXME("stub: %d %d\n",p0,p1);
-  return 0;
-}
-INT WINAPI XLiveUninitialize()
-{
-FIXME("stub\n");
-  return 0;
-}
-INT WINAPI XNetXnAddrToMachineId( void * addr1, void * pMachId)
-{
-  FIXME("stub: %p %p\n",addr1,pMachId);
-  return 0;
-}
-DWORD WINAPI XLiveUserCheckPrivilege(DWORD uIndex,DWORD PrivType, PBOOL pfResult )
-{
-  FIXME("stub: %d %d %p\n",uIndex,PrivType,pfResult);
-  *pfResult = FALSE;
-  return ERROR_SUCCESS;
-}
-INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, void ** ppxnqos)
-{
-	//FIXME("stub\n"); Commented out because this is called every frame
-	return 0;
-}
-INT WINAPI XLiveCreateProtectedDataContext(DWORD * dwType, PHANDLE pHandle)
-{
-  FIXME("stub: type=%d\n",*dwType);
-  if (pHandle)
-      *pHandle = (HANDLE)(++handlecounter);
-  return 0;
-}
-INT WINAPI XLiveCloseProtectedDataContext(HANDLE h)
-{
-  FIXME("stub\n");
-  return 0;
-}
-DWORD WINAPI XLiveProtectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE h)
-{
-  FIXME("stub: %p %d %p %p(%d) %d\n",pInBuffer,dwInDataSize,pOutBuffer,pDataSize,*pDataSize,h);
-  
-  if ( *pDataSize == 0 )
-  {
-    *pDataSize = dwInDataSize;
-    return 0x8007007A; //Insufficent buffer
-  }
-  if ( !pOutBuffer )
-      return 0x8007007A; //Insufficent buffer
-  if (*pDataSize >= dwInDataSize && pOutBuffer)
-  {
-     HexDump(pInBuffer,dwInDataSize);
-     memcpy (pOutBuffer, pInBuffer, dwInDataSize);
-  }
-  else
-      return 0x8007007A; //Insufficent buffer
-    return 0;
-}
-INT WINAPI XLiveCancelOverlapped(void * pOver)
-{
-  FIXME("stub\n");
-  return ERROR_SUCCESS;
-}
+// #5310: XOnlineStartup
 INT WINAPI XOnlineStartup(void)
+{
+    FIXME("stub:\n");
+    return 0;
+}
+
+// #5311: XOnlineCleanup
+INT WINAPI XOnlineCleanup(void)
 {
     FIXME("stub\n");
     return 0;
 }
+
+// #5312: XFriendsCreateEnumerator
+INT WINAPI XFriendsCreateEnumerator(DWORD p0, DWORD p1, DWORD p2, DWORD p3, HANDLE * phEnum)
+{
+	*phEnum = INVALID_HANDLE_VALUE;
+	return 0; 
+}
+
+// #5313: 
+DWORD WINAPI XLIVE_5313(DWORD dw1)
+{
+  FIXME("unk (%d)\n",dw1);
+  return 0;
+}
+
+// #5314: XUserMuteListQuery
+INT WINAPI XUserMuteListQuery (DWORD w1, DWORD w2, DWORD w3, DWORD w4) {
+        FIXME ("stub: (%d, %d, %d, %d)\n", w1, w2, w3, w4);
+        return 0;
+}
+
+// #5315: XInviteGetAcceptedInfo
+INT WINAPI XInviteGetAcceptedInfo (DWORD w1, DWORD w2) {
+        FIXME ("stub: (%d, %d)\n", w1, w2);
+        return 1;
+}
+
+// #5316: XInviteSend
+INT WINAPI XInviteSend (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+        FIXME ("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0;
+}
+
+// #5317: XSessionWriteStats
+DWORD WINAPI XSessionWriteStats (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6) {
+        FIXME ("stub: (%d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6);
+        return 0;
+}
+
+// #5318: XSessionStart
+INT WINAPI XSessionStart (DWORD w1, DWORD w2, DWORD w3) {
+        FIXME ("stub: (%d, %d, %d)\n", w1, w2, w3);
+        return 0;
+}
+
+// #5319: XSessionSearchEx
+DWORD WINAPI XSessionSearchEx (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8, DWORD w9, DWORD w10, DWORD w11) {
+        FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11);
+        return 0;
+}
+
+// #5322: XSessionModify
+DWORD WINAPI XSessionModify (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+        FIXME ("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0;
+}
+
+// #5323: XSessionMigrateHost
+DWORD WINAPI XSessionMigrateHost (DWORD w1, DWORD w2, DWORD w3, DWORD w4) {
+        FIXME ("stub: (%d, %d, %d, %d)\n", w1, w2, w3, w4);
+        return 0;
+}
+
+// #5324 XOnlineGetNatType
+INT WINAPI  XOnlineGetNatType (void) { 
+	FIXME ("stub: \n");
+	return 0; 
+}
+
+// #5325: XSessionLeaveLocal
+DWORD WINAPI XSessionLeaveLocal (DWORD w1, DWORD w2, DWORD w3, DWORD w4) {
+        FIXME ("stub: (%d, %d, %d, %d)\n", w1, w2, w3, w4);
+        return 0;
+}
+
+// #5326: XSessionJoinRemote
+DWORD WINAPI XSessionJoinRemote (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+        FIXME ("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0;
+}
+
+// #5327: XSessionJoinLocal
+DWORD WINAPI XSessionJoinLocal (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+        FIXME ("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0;
+}
+
+// #5328: XSessionGetDetails
+DWORD WINAPI XSessionGetDetails (DWORD w1, DWORD w2, DWORD w3, DWORD w4) {
+        FIXME ("stub: (%d, %d, %d, %d)\n", w1, w2, w3, w4);
+        return 0;
+}
+
+// #5329: XSessionFlushStats
+INT WINAPI XSessionFlushStats (DWORD w1, DWORD w2) {
+        FIXME ("stub: (%d, %d)\n", w1, w2);
+        return 0;
+}
+
+// #5330: XSessionDelete
+DWORD WINAPI XSessionDelete (DWORD w1, DWORD w2) {
+        FIXME ("stub: (%d, %d)\n", w1, w2);
+        return 0;
+}
+
+// #5331: XUserReadProfileSettings
 INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dwNumSettingIds, 
 					DWORD * pdwSettingIds, DWORD * pcbResults, PXUSER_READ_PROFILE_SETTING_RESULT pResults, DWORD pOverlapped)
 {
@@ -430,6 +1191,9 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
     char path[1024];
     unsigned char * destptr;
     DWORD size;
+    HANDLE propFile;
+    DWORD bytesread;
+
     //FIXME("stub: %d %d %d %p %p %p %d\n",dwTitleId,dwUserIndex,dwNumSettingIds,pdwSettingIds,pcbResults,pResults,pOverlapped);
 	/*if (*pcbResults < 1036) {
 		*pcbResults = 1036;	// TODO: make correct calculation by IDs.
@@ -451,7 +1215,7 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
             continue;
         }
         sprintf(path,"%sproperties\\%08X",xlivedir,id);
-        HANDLE propFile = CreateFileA(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+        propFile = CreateFileA(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
         if ( propFile == INVALID_HANDLE_VALUE )
         {
             ERR("Setting ID: %d : Cannot load property\n",id);
@@ -473,7 +1237,6 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
         pResults->pSettings[i].user.xuid = Xliveusers[dwUserIndex].xuid;
         pResults->pSettings[i].data.type = XPROPERTYTYPEFROMID(id);
 
-        DWORD bytesread;
         switch ( XPROPERTYTYPEFROMID(id) )
         {
             case XUSER_DATA_TYPE_CONTEXT:
@@ -528,202 +1291,112 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
         {
             FIXME("Context value not handled yet!\n");
         }
-        
-        
-        
     }
-    
-    
     return 0;
 }
 
-INT WINAPI XFriendsCreateEnumerator(DWORD p0, DWORD p1, DWORD p2, DWORD p3, HANDLE * phEnum)
-{
+// #5332: XSessionEnd
+INT WINAPI XSessionEnd (DWORD w1, DWORD w2) {
+        FIXME ("stub: (%d, %d)\n", w1, w2);
+        return 0;
+}
+
+// #5333: XSessionArbitrationRegister
+DWORD WINAPI XSessionArbitrationRegister (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7) {
+        FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7);
+        return 0;
+}
+
+// #5335 XTitleServerCreateEnumerator
+INT WINAPI XTitleServerCreateEnumerator (LPCSTR pszServerInfo, DWORD cItem, DWORD * pcbBuffer, PHANDLE phEnum) {
+         FIXME ("stub: (%p, %d, %p, %p)\n", pszServerInfo, cItem, pcbBuffer, phEnum);
 	*phEnum = INVALID_HANDLE_VALUE;
-	return 0; 
-
-}
-INT WINAPI XEnumerate (HANDLE hEnum, void * pvBuffer, DWORD cbBuffer, DWORD * pcItemsReturned, void * pOverlapped)
-{
-	if (pcItemsReturned)
-		*pcItemsReturned = 0;
-	return 0;
-}
-INT WINAPI XGetOverlappedExtendedError (void * p0)
-{
-	return 0;
-}
-INT WINAPI XLiveUnprotectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE * ph)
-{
-    
-    if (!pDataSize || !ph)      // invalid parameter
-                return E_FAIL;
-    FIXME("stub: %d %d %p %p(%d) %p\n",pInBuffer,dwInDataSize, pOutBuffer,pDataSize,*pDataSize,ph);
-    if (!pOutBuffer)
-    {
-        *pDataSize = dwInDataSize;
-        return 0x8007007A;
-    }
-    *ph = (HANDLE)1;
-    if (!pOutBuffer || *pDataSize < dwInDataSize) {
-            *pDataSize = dwInDataSize;
-            return 0x8007007A;
-    }
-    *pDataSize = dwInDataSize;
-    HexDump(pInBuffer,dwInDataSize);
-    memcpy (pOutBuffer, pInBuffer, dwInDataSize);
-    return 0;
-}
-void WINAPI XWSACleanup(void)
-{
-    FIXME("stub\n");
-}
-INT WINAPI XOnlineCleanup(void)
-{
-    FIXME("stub\n");
-    return 0;
-}
-INT WINAPI XLiveQueryProtectedDataInformation(HANDLE h, DWORD * p0)
-{
-    FIXME("stub: %u %p\n",h,p0);
-    return 0;
-}
-INT WINAPI XUserWriteAchievements (DWORD dwNumAchievements,
-         CONST XUSER_ACHIEVEMENT *pAchievements,
-         void *pOverlapped)
-{
-    XUSER_ACHIEVEMENT * curr = pAchievements;
-    int k = 0;
-    for ( k = 0; k < dwNumAchievements; k++ )
-    {
-        char buf[512];
-        sprintf(buf,"%sachievements\\%d",xlivedir,curr->dwUserIndex);
-        if (!DirectoryExists(buf))
-        {
-            if ( !CreateDirectoryA(buf,NULL))
-            {
-                ERR("Cannot create directory %s\n",buf);
-                return E_FAIL;
-            }
-        }
-        sprintf(buf,"%sachievements\\%d\\%d.achievement",xlivedir,curr->dwUserIndex,curr->dwAchievementId);
-        HANDLE hFile = CreateFileA(buf,GENERIC_WRITE,0x0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
-        if ( hFile == INVALID_HANDLE_VALUE )
-        {
-            ERR("Cannot create file %s\n",buf);
-            return E_FAIL;
-        }
-        
-    }
-    return 0;
-}
-INT WINAPI XUserCreateAchievementEnumerator(DWORD dwTitleId, DWORD dwUserIndex, ULONGLONG xuid, DWORD dwDetailFlags, DWORD dwStartingIndex, DWORD cItem, DWORD * pcbBuffer, HANDLE * phEnum)
-{
-    FIXME("stub\n");
-    if (pcbBuffer)
-        *pcbBuffer = 0;
-    if (phEnum)
-            *phEnum = INVALID_HANDLE_VALUE;
-    return 1;   // return error (otherwise, 0-size buffer will be allocated)
-}
-INT WINAPI XUserReadStats (DWORD dwTitleId,
-                           DWORD dwNumXuids,
-                           CONST XUID *pXuids,
-                           DWORD dwNumStatsSpecs,
-                           CONST XUSER_STATS_SPEC *pSpecs,
-                           PDWORD *pcbResults,
-                           PXUSER_STATS_READ_RESULTS pResults,
-                           void *pOverlapped)
-{
-    FIXME("stub\n");
-    if (pcbResults)
-    {
-        *pcbResults = sizeof(DWORD);
-        return 0;
-    }
-    if (pResults)
-    {
-            pResults->dwNumViews = 0;
-    }
-    return 0;
-}
-
-typedef struct{
-        DWORD   dwMagick;       
-        DWORD   dwSize;
-        DWORD   __fill[2];
-        BYTE    bData[4];
-} FakeProtectedBuffer;
-DWORD WINAPI XLivePBufferAllocate (int size, FakeProtectedBuffer ** pBuffer) {
-    *pBuffer = (FakeProtectedBuffer *)malloc (size+16);
-    if (!*pBuffer) {
-            return E_OUTOFMEMORY;
-    }
-
-    (*pBuffer)->dwMagick = 0xDEADDEAD;      // some arbitrary number
-    (*pBuffer)->dwSize = size;
-    return 0;
-}
-DWORD WINAPI XLivePBufferFree(FakeProtectedBuffer * pBuffer)
-{
-    FIXME("stub\n");
-    if (pBuffer && pBuffer->dwMagick == 0xDEADDEAD)
-        free (pBuffer);
-    return 0;
-}
-DWORD WINAPI XLivePBufferSetByteArray(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE * source, DWORD size) {
-        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || !source || offset < 0 || offset+size > pBuffer->dwSize)
-                return 0;
-        memcpy (pBuffer->bData+offset, source, size);
-        return 0;
-}
-DWORD WINAPI XLivePBufferGetByteArray(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE * destination, DWORD size) {
-        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || !destination || offset < 0 || offset+size > pBuffer->dwSize)
-                return 0;
-        memcpy (destination, pBuffer->bData+offset, size);
-        return 0;
-}
-DWORD WINAPI XLivePBufferSetByte(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE value) {
-        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || offset < 0 || offset > pBuffer->dwSize)
-                return 0;
-        pBuffer->bData[offset] = value;
-        return 0;
-}
-DWORD WINAPI XLivePBufferGetByte (FakeProtectedBuffer * pBuffer, DWORD offset, BYTE * value) {
-        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || !value || offset < 0 || offset > pBuffer->dwSize)
-                return 0;
-        *value = pBuffer->bData[offset];
-        return 0;
-}
-DWORD WINAPI XLivePBufferGetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset, DWORD * pdwValue) {
-        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || dwOffset < 0 || dwOffset > pBuffer->dwSize-4 || !pdwValue)
-                return 0;
-        *pdwValue = *(DWORD *)(pBuffer->bData+dwOffset);
-        return 0;
-}
-DWORD WINAPI XLivePBufferSetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset, DWORD dwValue ) {
-        if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || dwOffset < 0 || dwOffset > pBuffer->dwSize-4)
-                return 0;
-        *(DWORD *)(pBuffer->bData+dwOffset) = dwValue;
-        return 0;
-}
-
-DWORD WINAPI XLiveContentCreateEnumerator (DWORD a1, void * a2, DWORD *pchBuffer, HANDLE * phContent) {
-  FIXME("stub: %d %p %p %p\n",a1,a2,pchBuffer,phContent);
-	if (phContent)
-		*phContent = INVALID_HANDLE_VALUE;
 	return 1;
 }
-DWORD WINAPI XLIVE_5313(DWORD dw1)
+
+// #5336: XSessionLeaveRemote
+DWORD WINAPI XSessionLeaveRemote (DWORD w1, DWORD w2, DWORD w3, DWORD w4) {
+        FIXME ("stub: (%d, %d, %d, %d)\n", w1, w2, w3, w4);
+        return 0;
+}
+
+// #5337 XUserWriteProfileSettings
+INT WINAPI XUserWriteProfileSettings (DWORD dw1, DWORD dw2, DWORD dw3, DWORD dw4) {
+        FIXME ("stub: (%d, %d, %d, %d)\n", dw1, dw2, dw3, dw4);
+	return 0;
+}
+
+// #5339: XUserReadProfileSettingsByXuid
+DWORD WINAPI XUserReadProfileSettingsByXuid(
+         DWORD dwTitleId,
+         DWORD dwUserIndexRequester,
+         DWORD dwNumFor,
+         const XUID *pxuidFor,
+         DWORD dwNumSettingIds,
+         const DWORD *pdwSettingIds,
+         DWORD *pcbResults,
+         PXUSER_READ_PROFILE_SETTING_RESULT pResults,
+         void * pXOverlapped
+) 
 {
-  FIXME("Unknown , dw1=%d\n",dw1);
+    FIXME("partial stub");
+    return XUserReadProfileSettings(dwTitleId,dwUserIndexRequester,dwNumSettingIds,pdwSettingIds,pcbResults,pResults,(DWORD)pXOverlapped);
+}
+
+// #5343: XLiveCalculateSkill
+DWORD WINAPI XLiveCalculateSkill (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
+        FIXME ("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
+        return 0;
+}
+
+// #5344: XStorageBuildServerPath
+DWORD WINAPI XStorageBuildServerPath (DWORD dwUserIndex, DWORD StorageFacility,
+                void * pvStorageFacilityInfo, DWORD dwStorageFacilityInfoSize,
+                void * pwszItemName, void * pwszServerPath, DWORD * pdwServerPathLength) {
+        FIXME ("stub: ()\n");
+        return 0;
+}
+
+// #5345: XStorageDownloadToMemory
+DWORD WINAPI XStorageDownloadToMemory (DWORD dwUserIndex, DWORD w2,DWORD w3, DWORD w4, DWORD w5, DWORD w6, void * p1) {
+        FIXME ("stub: ()\n");
+        return 0;
+}
+
+// #5349: XLiveProtectedVerifyFile
+DWORD WINAPI XLiveProtectedVerifyFile (HANDLE hContentAccess, VOID * pvReserved, PCWSTR pszFilePath) {
+        FIXME ("stub: ()\n");
+        return 0;
+}
+
+// #5350: XLiveContentCreateAccessHandle
+DWORD WINAPI XLiveContentCreateAccessHandle(DWORD dwTitleId, void * pContentInfo, 
+	DWORD dwLicenseInfoVersion, void * xebBuffer, DWORD dwOffset, HANDLE * phAccess, void * pOverlapped)
+{
+  FIXME("stub: ()\n");
+  if (phAccess)
+		*phAccess = INVALID_HANDLE_VALUE;
+  return E_OUTOFMEMORY;	
+}
+
+// #5352: XLiveContentUninstall
+DWORD WINAPI XLiveContentUninstall (void * pContentInfo, void * pxuidFor, void * pInstallCallbackParams) {
+        FIXME ("stub: ()\n");
+        return 0;
+}
+
+// #5355: XLiveContentGetPath
+DWORD WINAPI XLiveContentGetPath(DWORD errDesc , DWORD p2 , char* p3 , DWORD *p4) // maybe some func to get extended error str?
+// actually (DWORD dwUserIndex, void * pContentInfo, wchar_t * pszPath, DWORD * pcchPath)
+{
+    FIXME ("stub: ()\n");
+  if ( *p4 > 0 )
+    p3[0] = 0x0;
+    
   return 0;
 }
 
-DWORD WINAPI XLiveSetDebugLevel (DWORD xdlLevel, DWORD * pxdlOldLevel) { 
-	FIXME ("XLiveSetDebugLevel (%d)\n", xdlLevel);
-	return 0;
-}
+// should be defined somewhere else, needed by 5356
 INT FUNC001(DWORD * p1 , DWORD * p2)
 {
   p2[0] = p1[1];
@@ -731,10 +1404,14 @@ INT FUNC001(DWORD * p1 , DWORD * p2)
   memcpy(&p2[2],&p1[3],0x14);
   return 0;
 }
-DWORD WINAPI XLIVE_5356(DWORD p1,DWORD* p2,DWORD p3,DWORD *p4 /*some buffer size*/)
-{
-  FIXME ("UNK %d %p %d %p \n",p1,p2,p3,p4);
-  FIXME ("%p(%x) %p(%x)\n",p2,*p2,p4,*p4);
+
+// #5356
+DWORD WINAPI XLIVE_5356(DWORD p1,DWORD* p2,DWORD p3,DWORD *p4 /*some buffer size*/) {
+int result;
+DWORD v6[0x14+2];
+
+	FIXME ("unk: (%d, %p, %d, %p)\n",p1,p2,p3,p4);
+	FIXME ("%p(%x) %p(%x)\n",p2,*p2,p4,*p4);
   if ( *p4 == 0 )
   {
     *p4 = 0x10;//totally unk
@@ -742,80 +1419,38 @@ DWORD WINAPI XLIVE_5356(DWORD p1,DWORD* p2,DWORD p3,DWORD *p4 /*some buffer size
   }
   //if ( p1 || !p2 || !p4 || !p3 && !p4 )
     return -2147024809;
-  DWORD v6[0x14+2];
-  int result = FUNC001(p2,v6);
+    
+    result = FUNC001(p2,v6);
   //8c4 access
+    FIXME("result %i", result);
 	return 0;
 }
-DWORD WINAPI XCloseHandle(DWORD p1)
-{
-  FIXME ("%d\n",p1);
-  if ( !p1 || p1 == -1 )
-  {
-    SetLastError(87);
-  }
-  return 0;
-}
-DWORD WINAPI XLIVE_5355(DWORD errDesc , DWORD p2 , char* p3 , DWORD *p4) // maybe some func to get extended error str?
-{
-  FIXME("stub\n");
-  if ( *p4 > 0 )
-    p3[0] = 0x0;
-    
-  return 0;
-}
-DWORD WINAPI XLiveContentCreateAccessHandle(DWORD dwTitleId, void * pContentInfo, 
-	DWORD dwLicenseInfoVersion, void * xebBuffer, DWORD dwOffset, HANDLE * phAccess, void * pOverlapped)
-{
-  FIXME("stub\n");
-  if (phAccess)
-		*phAccess = INVALID_HANDLE_VALUE;
-  return E_OUTOFMEMORY;	
 
+// #5360: XLiveContentCreateEnumerator
+DWORD WINAPI XLiveContentCreateEnumerator (DWORD a1, void * a2, DWORD *pchBuffer, HANDLE * phContent) {
+  FIXME("stub: (%d, %p, %p, %p)\n",a1,a2,pchBuffer,phContent);
+	if (phContent)
+		*phContent = INVALID_HANDLE_VALUE;
+	return 1;
 }
 
-/* #5293: XUserSetPropertyEx*/
-INT WINAPI XUserSetPropertyEx (DWORD dwUserIndex, DWORD dwPropertyId, DWORD cbValue, void * pvValue, void * pOverlapped) { 
-       // FIXME ("XUserSetPropertyEx (%d, 0x%x, ...)\n", dwUserIndex, dwPropertyId);
-    char buf[512];
-    if (pOverlapped )
-        FIXME("Overlapped ignored!\n");
-    sprintf(buf,"%sproperties\\%08X",xlivedir,dwPropertyId);
-    HANDLE hFile = CreateFileA(buf,GENERIC_WRITE,0x0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
-    if ( hFile == INVALID_HANDLE_VALUE )
-    {
-        ERR("Cannot write property!\n");
-        return ERROR_ACCESS_DENIED;
-    }
-    DWORD written;
-    WriteFile(hFile,pvValue,cbValue,&written,NULL);
-    if (written < cbValue )
-    {
-        ERR("Cannot write property!\n");
-        return ERROR_ACCESS_DENIED;
-    }
-    CloseHandle(hFile);
-    return ERROR_SUCCESS;
+// #5361: XLiveContentRetrieveOffersByDate
+DWORD WINAPI XLiveContentRetrieveOffersByDate (DWORD dwUserIndex,DWORD dwOffserInfoVersion,        SYSTEMTIME * pstStartDate, void * pOffserInfoArray, DWORD * pcOfferInfo, void * pOverlapped) {
+        FIXME ("stub: ()\n");
+        if (pcOfferInfo)
+                *pcOfferInfo = 0;
+        return 0;
 }
 
-DWORD WINAPI XLIVE_76(DWORD a1)
-{
-    FIXME("unk(%d), returning 0\n",a1);
-    return 0;
-}
-DWORD WINAPI XLIVE_78(DWORD a1,DWORD a2,DWORD a3)
-{
-    FIXME("unk %d %d %d, returning 0\n",a1,a2,a3);
-    return 0;
-
+// #5365: XShowMarketplaceUI
+DWORD WINAPI XShowMarketplaceUI (DWORD dwUserIndex, DWORD dwEntryPoint, ULONGLONG dwOfferId, DWORD dwContentCategories) {
+        FIXME ("stub: ()\n");
+	return 1;
 }
 
-void WINAPI XUserSetProperty(
-         DWORD dwUserIndex,
-         DWORD dwPropertyId,
-         DWORD cbValue,
-         CONST VOID *pvValue
-)
+// #5372
+DWORD WINAPI XLIVE_5372 (HANDLE a1, DWORD a2, DWORD a3, DWORD a4, BYTE *b5, HANDLE h6)
 {
-    XUserSetPropertyEx(dwUserIndex,dwPropertyId,cbValue,pvValue,0x0);
+    FIXME("unk: (%d, %d, %d, %d, %p, %p)\n",a1,a2,a3,a4,b5,h6);
+    return 1;
 }
