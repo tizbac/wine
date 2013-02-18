@@ -128,65 +128,72 @@ void WINAPI XWSACleanup(void)
     FIXME("stub:\n");
 }
 
-// #3: XCreateSocket
-INT WINAPI XCreateSocket (int af, int type, int protocol) { 
+// #3: XSocketCreate
+INT WINAPI XSocketCreate (int af, int type, int protocol) { 
 	FIXME ("stub: (%d, %d, %d)\n", af, type, protocol);
 	return -1;
 //         return INVALID_SOCKET; // probably better
+				//  should return arg 2
 }
 
 // #4: XSocketClose
 INT WINAPI XSocketClose (long sock) {
 	FIXME ("stub: (%ld)\n", sock);
-	return 0;
+	return 0; // should return 4.
 }
 
 // #5: XSocketShutdown
 INT WINAPI XSocketShutdown (long sock, int how) {
 	FIXME ("stub: (%ld, %d)\n", sock, how);
-	return 0; 
+	return 0; // should return 8
 }
 
 // #6: XSocketIOCTLSocket
 INT WINAPI XSocketIOCTLSocket (long sock, long cmd, long * argp) {
 	FIXME ("stub: (%ld, %ld, %p)\n", sock, cmd, argp);
-	return 0;
+	return 0; // should return arg 2 ?
 }
 
 // #7: XSocketSetSockOpt
 INT WINAPI XSocketSetSockOpt (long sock, DWORD dw1, DWORD dw2, DWORD dw3, DWORD dw4) {
 	FIXME("stub: (%ld, %d, %d, %d, %d)\n", sock, dw1, dw2, dw3, dw4);
-	return 0;
+	return 0; // should return arg 4
 }
 
 // #8: XSocketGetSockOpt
 INT WINAPI XSocketGetSockOpt (long sock, DWORD a2, DWORD a3, void *p4, DWORD a5) {
 	FIXME("stub: (%ld, %d, %d, %p, %d)\n", sock, a2, a3, p4, a5);
-	return 0;
+	return 0; // should return arg 4
 }
 
 // #9: XSocketGetSockName
 INT WINAPI XSocketGetSockName (long sock, DWORD * name, int * namelen) {
 	FIXME ("stub: (%ld, %p, %p)\n", sock, name, namelen);
-	return 0;
+	return 0; // should return arg 2
+}
+
+// #10: XSocketGetPeerName
+INT WINAPI XSocketGetPeerName (SOCKET s, DWORD * addr, int * addrlen) {
+	FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
+	return INVALID_SOCKET; // should return arg 2
 }
 
 // #11: XSocketBind
 INT WINAPI XSocketBind (SOCKET s, WORD * addr, int * addrlen) {
 	FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
-	return INVALID_SOCKET;
+	return INVALID_SOCKET; // should return arg 2
 }
 
 // #12: XSocketConnect
 INT WINAPI XSocketConnect (SOCKET s, DWORD * addr, int * addrlen) {
 	FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
-        return 0;
+        return 0; // should return arg 2
 }
 
 // #13: XSocketListen
 INT WINAPI XSocketListen (SOCKET s, int backlog) {
 	FIXME ("stub: (%d, %d)\n", s, backlog);
-        return 0;
+        return 0; // should return arg 1 ?
 }
 
 // #14: XSocketAccept
@@ -342,6 +349,18 @@ INT WINAPI XNetGetConnectStatus (DWORD w1) {
         return 0;
 }
 
+// #67: XNetDnsLookup
+INT WINAPI XNetDnsLookup (DWORD w1, DWORD w2, DWORD w3) {
+        FIXME ("stub: (%d, %d, %d)\n", w1, w2, w3);
+        return w2; // might be a pointer, but arg 2 should be returned ?
+}
+
+// #68: XNetDnsLookup
+INT WINAPI XNetDnsRelease (DWORD w1) {
+        FIXME ("stub: (%d)\n", w1);
+        return 4;
+}
+
 // #69: XNetQosListen
 DWORD WINAPI XNetQosListen (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
 	FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
@@ -380,16 +399,40 @@ INT WINAPI XNetGetEthernetLinkStatus(void) {
     return 1;
 }
 
-// #76: 
-DWORD WINAPI XLIVE_76(DWORD a1) {
-    FIXME("unk(%d), returning 0\n",a1);
-    return 0;
+// #76: XNetGetBroadcastVersionStatus
+DWORD WINAPI XNetGetBroadcastVersionStatus (DWORD a1) {
+    FIXME("stub: (%d), returning 0\n",a1);
+    return 4; // this should return 4
 }
 
-// #78: 
-DWORD WINAPI XLIVE_78(DWORD a1,DWORD a2,DWORD a3) {
-	FIXME("unk(%d %d %d), returning 0\n",a1,a2,a3);
-        return 0;
+// #77: XNetQosGetListenStats
+DWORD WINAPI XNetQosGetListenStats (DWORD a1,DWORD a2) {
+	FIXME("stub: (%d, %d), returning 0\n",a1,a2);
+        return 8; // this should return 8
+}
+
+// #78: XNetGetOpt
+DWORD WINAPI XNetGetOpt (DWORD a1,DWORD a2,DWORD a3) {
+	FIXME("stub: (%d %d %d), returning 0\n",a1,a2,a3);
+        return a2; // this should return arg 2
+}
+
+// #79: XNetSetOpt
+DWORD WINAPI XNetSetOpt (DWORD a1,DWORD a2,DWORD a3) {
+	FIXME("stub: (%d %d %d), returning 0\n",a1,a2,a3);
+        return a2; // this should return arg 2
+}
+
+// #81: XNetReplaceKey
+DWORD WINAPI XNetReplaceKey (DWORD a1,DWORD a2) {
+	FIXME("stub: (%d %d), returning 0\n",a1,a2);
+        return 8; // this should return 8
+}
+
+// #82: 
+DWORD WINAPI XNetGetXnAddrPlatform (DWORD a1,DWORD a2) {
+	FIXME("stub: (%d %d), returning 0\n",a1,a2);
+        return 8; // this should return 8
 }
 
 // #83: XNetGetSystemLinkPort
@@ -410,7 +453,6 @@ INT WINAPI XCustomGetLastActionPress (DWORD w1, DWORD w2, DWORD w3) {
         FIXME ("(%d, %d, %d)\n", w1, w2, w3);
         return 0;
 }
-
 
 // #1082: XGetOverlappedExtendedError
 INT WINAPI XGetOverlappedExtendedError (void * p0) {

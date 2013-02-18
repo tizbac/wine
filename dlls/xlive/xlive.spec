@@ -7,7 +7,7 @@
 7 stdcall -noname XSocketSetSockOpt(long long long long long)
 8 stdcall -noname XSocketGetSockOpt(long long long long long)
 9 stdcall -noname XSocketGetSockName (long long long)
-10 stub -noname @
+10 stdcall -noname XSocketGetPeerName (long long long)
 11 stdcall -noname XSocketBind (long long long)
 12 stdcall -noname XSocketConnect (long long long)
 13 stdcall -noname XSocketListen (long long)
@@ -51,20 +51,20 @@
 64 stdcall -noname XNetXnAddrToMachineId (long long)
 65 stdcall -noname XNetConnect (long)
 66 stdcall -noname XNetGetConnectStatus (long)
-67 stub -noname @
-68 stub -noname @
+67 stdcall -noname XNetDnsLookup (long long long)
+68 stdcall -noname XNetDnsRelease (long long long)
 69 stdcall -noname XNetQosListen (long long long long long)
 70 stdcall -noname XNetQosLookup (long long long long long long long long long long long long)
 71 stdcall -noname NetDll_XNetQosServiceLookup (long long long)
 72 stdcall -noname XNetQosRelease (long)
 73 stdcall -noname XNetGetTitleXnAddr (long)
 75 stdcall -noname XNetGetEthernetLinkStatus ()
-76 stdcall -noname XLIVE_76 (long)
-77 stub -noname @
-78 stdcall -noname XLIVE_78 (long long long)
-79 stub -noname @
-81 stub -noname @
-82 stub -noname @
+76 stdcall -noname XNetGetBroadcastVersionStatus (long)
+77 stdcall -noname XNetQosGetListenStats (long long)
+78 stdcall -noname XNetGetOpt (long long long)
+79 stdcall -noname XNetSetOpt (long long long)
+81 stdcall -noname XNetReplaceKey (long long)
+82 stdcall -noname XNetGetXnAddrPlatform (long long)
 83 stdcall -noname XNetGetSystemLinkPort (long)
 84 stdcall -noname XNetSetSystemLinkPort (long)
 472 stub -noname @
