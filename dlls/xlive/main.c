@@ -117,15 +117,12 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
    and number of parameters determined using Python ctypes. See http://docs.python.org/library/ctypes.html */
 
 // #1: XWSAStartup
-INT WINAPI XWSAStartup(WORD wVersionRequested, LPWSADATA lpWsaData)
-{
-
+INT WINAPI XWSAStartup(WORD wVersionRequested, LPWSADATA lpWsaData) {
     return WSAStartup(wVersionRequested,lpWsaData);
 }
 
 // #2: XWSACleanup
-void WINAPI XWSACleanup(void)
-{
+void WINAPI XWSACleanup(void) {
     FIXME("stub:\n");
 }
 
@@ -142,13 +139,13 @@ INT WINAPI XSocketClose (long sock) {
 // #5: XSocketShutdown
 INT WINAPI XSocketShutdown (long sock, int how) {
     FIXME ("stub: (%ld, %d)\n", sock, how);
-    return 0; // should return 8
+    return 0;
 }
 
 // #6: XSocketIOCTLSocket
 INT WINAPI XSocketIOCTLSocket (long sock, long cmd, long * argp) {
     FIXME ("stub: (%ld, %ld, %p)\n", sock, cmd, argp);
-    return 0; // should return arg 2 ?
+    return 0;
 }
 
 // #7: XSocketSetSockOpt
@@ -164,13 +161,13 @@ INT WINAPI XSocketGetSockOpt (long sock, int level, int optname, char * optval, 
 // #9: XSocketGetSockName
 INT WINAPI XSocketGetSockName (long sock, DWORD * name, int * namelen) {
     FIXME ("stub: (%ld, %p, %p)\n", sock, name, namelen);
-    return 0; // should return arg 2
+    return 0;
 }
 
 // #10: XSocketGetPeerName
 INT WINAPI XSocketGetPeerName (SOCKET s, DWORD * addr, int * addrlen) {
     FIXME ("stub: (%d, %p, %p)\n", s, addr, addrlen);
-    return INVALID_SOCKET; // should return arg 2
+    return INVALID_SOCKET;
 }
 
 // #11: XSocketBind
@@ -208,18 +205,19 @@ DWORD WINAPI XWSAGetOverlappedResult (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DW
 // #17: XWSACancelOverlappedIO
 DWORD WINAPI XWSACancelOverlappedIO (DWORD w1) {
     FIXME("stub: (%d)\n", w1);
-    return 0; // should return$ 4
+    return 0;
 }
 
 // #18: XSocketRecv
 INT WINAPI XSocketRecv (SOCKET s, char * buf, int len, int flags) {
-    return 0; // should return arg 3
+    FIXME("stub: (%p, %p, %d, %d)\n", s, buf, len, flags);
+    return 0;
 }
 
 // #19: XWSARecv
 DWORD WINAPI XWSARecv (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7) {
     FIXME("stub: (%d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7);
-    return 0; // should return arg 6
+    return 0;
 }
 
 // #20: XSocketRecvFrom
@@ -230,7 +228,7 @@ INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, struct soc
 // #21: XWSARecvFrom
 DWORD WINAPI XWSARecvFrom (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8, DWORD w9) {
     FIXME("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8, w9);
-    return 0; // should return arg 8
+    return 0;
 }
 
 // #22: XSocketSend
@@ -242,100 +240,97 @@ INT WINAPI XSocketSend (SOCKET s, char * buf, int len, int flags) {
 // #23: XWSASend
 DWORD WINAPI XWSASend (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7) {
     FIXME("stub: (%d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7);
-    return 0; // should return arg 6
+    return 0;
 }
 
 // #24: XSocketSendTo
 INT WINAPI XSocketSendTo (SOCKET s, char * buf, int len, int flags, DWORD * to, int tolen) {
     FIXME("stub: (%p, %p, %d, %d, %p, %d)\n", s, buf, len, flags, to, tolen);
-    return 0; // should return arg 6
+    return 0;
 }
 
 // #25: XWSASendTo
 DWORD WINAPI XWSASendTo (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8, DWORD w9) {
     FIXME("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8, w9);
-    return 0; // should return arg 6
+    return 0;
 }
 
 // #26: XSocketInet_Addr
 INT WINAPI XSocketInet_Addr (char * param) {
     FIXME ("stub: (%p)\n", param);
-    return 0; // actually, jumps to NetDll_XSocketInet_Addr
+    return 0;
 }
 
 // #27 XWSAGetLastError
 INT WINAPI XWSAGetLastError(void) {
     FIXME ("stub:\n");
-    return WSAENETDOWN; // 0 ? jumps to NetDll_XWSAGetLastError
+    return WSAENETDOWN; // 0 ?
 }
 
 // #28 XWSASetLastError
 INT WINAPI XWSASetLastError(DWORD w1) {
     FIXME ("stub: (%d)\n", w1);
-    return WSAENETDOWN; // 0 ? jumps to NetDll_XWSASetLastError
+    return WSAENETDOWN; // 0 ?
 }
 
 // #29: XWSACreateEvent
 WSAEVENT WINAPI XWSACreateEvent(void) {
-    return WSA_INVALID_EVENT; // jumps to NetDll_XWSACreateEvent
+    return WSA_INVALID_EVENT;
 }
 
 // #30 XWSACloseEvent
 INT WINAPI XWSACloseEvent(DWORD w1) {
     FIXME ("stub: (%d)\n", w1);
-    return WSAENETDOWN; // 0 ? jumps to NetDll_XWSACloseEvent
+    return WSAENETDOWN; // 0 ?
 }
 
 // #31 XWSASetEvent
 INT WINAPI XWSASetEvent(DWORD w1) {
     FIXME ("stub: (%d)\n", w1);
-    return WSAENETDOWN; // 0 ? jumps to NetDll_XWSASetEvent
+    return WSAENETDOWN; // 0 ?
 }
 
 // #32 XWSAResetEvent
 INT WINAPI XWSAResetEvent(DWORD w1) {
     FIXME ("stub: (%d)\n", w1);
-    return WSAENETDOWN; // 0 ? jumps to NetDll_XWSAResetEvent
+    return WSAENETDOWN; // 0 ?
 }
 
 // #33: XWSAWaitForMultipleEvents
 DWORD WINAPI XWSAWaitForMultipleEvents (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5) {
     FIXME("stub: (%d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5);
-    return 0; // jumps to NetDll_XWSAWaitForMultipleEvents
+    return 0;
 }
 
 // #34 __XWSAFDIsSet
 INT WINAPI __XWSAFDIsSet(DWORD w1, DWORD w2) {
     FIXME ("stub: (%d, %d)\n", w1, w2);
-    return WSAENETDOWN; // 0 ? jumps to NetDll___XWSAFDIsSet
+    return WSAENETDOWN; // 0 ?
 }
 
 // 35: XWSAEventSelect
 WSAEVENT WINAPI XWSAEventSelect(DWORD w1, DWORD w2, DWORD w3) {
     FIXME("stub: (%d, %d, %d)\n", w1, w2, w3);
-    return 0; // should return arg 2
+    return 0;
 }
 
 // #37:  XSocketNTOHS
-short WINAPI XSocketNTOHS(short in)
-{
+short WINAPI XSocketNTOHS(short in) {
     return ntohs(in);
 }
 
 // #38: NetDll_ntohs
-short WINAPI NetDll_ntohs(short in)
-{
+short WINAPI NetDll_ntohs(short in) {
     return ntohs(in);
 }
 
 // #39: XSocketNTOHL
-DWORD WINAPI XSocketNTOHL (DWORD n) {
-    return ((n&0xFF000000) >> 24)|((n & 0x00FF0000) >> 8)|((n&0x0000FF00) << 8)|((n & 0x000000FF) << 24);
+DWORD WINAPI XSocketNTOHL (DWORD dw) {
+    return ntohl(dw);
 }
 
 // #40: NetDll_htons
-short WINAPI NetDll_htons(short in)
-{
+short WINAPI NetDll_htons(short in) {
     return htons(in);
 }
 
@@ -408,8 +403,7 @@ INT WINAPI XNetUnregisterInAddr (DWORD w1) {
 }
 
 // #64: XNetXnAddrToMachineId
-INT WINAPI XNetXnAddrToMachineId( void * addr1, void * pMachId)
-{
+INT WINAPI XNetXnAddrToMachineId( void * addr1, void * pMachId) {
     FIXME("stub: (%p %p)\n",addr1,pMachId);
     return 0;
 }
@@ -451,8 +445,7 @@ DWORD WINAPI XNetQosLookup (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DW
 }
 
 // #71: NetDll_XNetQosServiceLookup
-INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, void ** ppxnqos)
-{
+INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, void ** ppxnqos) {
     //FIXME("stub\n"); Commented out because this is called every frame
     return 0;
 }
@@ -463,8 +456,7 @@ DWORD WINAPI XNetQosRelease (DWORD w1) {
 }
 
 // #73: XNetGetTitleXnAddr
-INT WINAPI XNetGetTitleXnAddr(DWORD * pAddr)
-{
+INT WINAPI XNetGetTitleXnAddr(DWORD * pAddr) {
     *pAddr = 0x0100007F; //localhost
     FIXME("localhost\n");
     return 4;
@@ -485,31 +477,31 @@ DWORD WINAPI XNetGetBroadcastVersionStatus (int a1) {
 // #77: XNetQosGetListenStats
 DWORD WINAPI XNetQosGetListenStats (DWORD a1,DWORD a2) {
     FIXME("stub: (%d, %d), returning 0\n",a1,a2);
-    return 8; // this should return 8
+    return 8;
 }
 
 // #78: XNetGetOpt
 DWORD WINAPI XNetGetOpt (DWORD a1,DWORD a2,DWORD a3) {
     FIXME("stub: (%d %d %d), returning 0\n",a1,a2,a3);
-    return a2; // this should return arg 2
+    return a2;
 }
 
 // #79: XNetSetOpt
 DWORD WINAPI XNetSetOpt (DWORD a1,DWORD a2,DWORD a3) {
     FIXME("stub: (%d %d %d), returning 0\n",a1,a2,a3);
-    return a2; // this should return arg 2
+    return a2;
 }
 
 // #81: XNetReplaceKey
 DWORD WINAPI XNetReplaceKey (DWORD a1,DWORD a2) {
     FIXME("stub: (%d %d), returning 0\n",a1,a2);
-    return 8; // this should return 8
+    return 8;
 }
 
 // #82:
 DWORD WINAPI XNetGetXnAddrPlatform (DWORD a1,DWORD a2) {
     FIXME("trace: (%d %d), returning 0\n",a1,a2);
-    return 8; // this should return 8
+    return 8;
 }
 
 // #83: XNetGetSystemLinkPort
@@ -545,8 +537,7 @@ INT WINAPI XGetOverlappedExtendedError (void * p0) {
 }
 
 // #1083: XGetOverlappedResult
-INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait)
-{
+INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait) {
     //FIXME("stub: %p %p %d\n",p0,pResult,bWait); Commented out because this is called every frame
     if (pResult)
         *pResult = 0;
@@ -554,16 +545,14 @@ INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait)
 }
 
 // #5001: XliveInput
-INT WINAPI XliveInput(DWORD * p)
-{
+INT WINAPI XliveInput(DWORD * p) {
     p[5] = 0;
     //FIXME("stub: %p\n", p);
     return 1;
 }
 
 // #5002: XliveInput
-INT WINAPI XLiveRender(void)
-{
+INT WINAPI XLiveRender(void) {
     //FIXME("stub\n"); Commented out because this is called every frame
     return 0;
 }
@@ -579,9 +568,9 @@ INT WINAPI XLiveOnCreateDevice(DWORD p0,DWORD p1) {
     return 0;
 }
 
-// #5006:
-INT WINAPI XLIVE_5006(void) {
-    FIXME("unk\n");
+// #5006: XLiveOnDestroyDevice
+INT WINAPI XLiveOnDestroyDevice(void) {
+    FIXME("stub:\n");
     return 0;
 }
 
