@@ -39,7 +39,7 @@ INT WINAPI XNotifyCreateListener(unsigned long long qwAreas)
     return xlive_g_listener_count;
 }
 
-BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void * pParam)
+BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void ** pParam)
 {
     if ( index >= l->eventcount )
         return 0;
@@ -48,7 +48,8 @@ BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void * pPar
     int after = l->eventcount-(index+1);
     //Shift the event list to the left
     int k;
-    for ( XLiveEvent * ev = &l->events[index], k = 0;k < after; k++)
+    XLiveEvent * ev;
+    for ( ev = &l->events[index],k=0;k < after; k++)
     {
         XLiveEvent * next = ++ev;
         memcpy(ev,next,sizeof(XLiveEvent));
@@ -58,8 +59,9 @@ BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void * pPar
     return 1;
 }
 
-BOOL WINAPI XNotifyGetNext(HANDLE hNotificationListener, DWORD dwMsgFilter, DWORD * pdwId, void * pParam)
+BOOL WINAPI XNotifyGetNext(HANDLE hNotificationListener, DWORD dwMsgFilter, DWORD * pdwId, void ** pParam)
 {
+    int index = (int)(hNotificationListener-1);
     if ( !hNotificationListener )
         return 0;
     if ( hNotificationListener > xlive_g_listener_count )
@@ -67,9 +69,9 @@ BOOL WINAPI XNotifyGetNext(HANDLE hNotificationListener, DWORD dwMsgFilter, DWOR
         ERR("Invalid handle");
         return 0;
     }
-    if ( !dwMsgFilter && xlive_g_listeners[hNotificationListener-1].eventcount )
+    if ( !dwMsgFilter && xlive_g_listeners[index].eventcount )
     {
-        return _XNotifyRemoveEvent(&xlive_g_listeners[hNotificationListener-1],0,pdwId,pParam);
+        return _XNotifyRemoveEvent(&xlive_g_listeners[index],0,pdwId,pParam);
     }
     //TODO: Filter
     return 0;
