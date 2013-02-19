@@ -128,60 +128,60 @@
 5235 stdcall -noname XLocatorCreateServerEnumeratorByIDs (long long long long long long long long)
 5236 stdcall -noname XLocatorServiceInitialize(long long)
 5237 stdcall -noname XLocatorServiceUnInitialize (long)
-5238 stub -noname @
-5250 stub -noname @
+5238 stdcall -noname XLocatorCreateKey(long long)
+5250 stdcall -noname XShowAchievementsUI(long)
 5251 stdcall -noname XCloseHandle(long)
-5252 stub -noname @
+5252 stdcall -noname XShowGamerCardUI(long long long)
 5254 stdcall -noname XLiveCancelOverlapped(long)
-5255 stub -noname @
+5255 stdcall -noname XEnumerateBack(long long long long long)
 5256 stdcall -noname XEnumerate(long long long long long)
-5257 stub -noname @
-5258 stub -noname @
-5259 stub -noname @
+5257 stdcall -noname XLiveManageCredentials (long long long long)
+5258 stdcall -noname XLiveSignout(long)
+5259 stdcall -noname XLiveSignin(long long long long)
 5260 stdcall -noname XShowSigninUI(long long)
 5261 stdcall -noname XUserGetXUID(long long)
 5262 stdcall -noname XUserGetSigninState(long)
 5263 stdcall -noname XUserGetName(long long long)
 5264 stdcall -noname XUserAreUsersFriends (long long long long long)
 5265 stdcall -noname XLiveUserCheckPrivilege(long long long)
-5266 stub -noname @
+5266 stdcall -noname XShowMessageBoxUI(long long long long long long long long long)
 5267 stdcall -noname XUserGetSigninInfo(long long long)
 5270 stdcall -noname XNotifyCreateListener(long long)
-5271 stub -noname @
+5271 stdcall -noname XShowPlayersUI(long)
 5273 stdcall -noname XUserReadGamerpictureByKey (long long long long long long)
 5274 stdcall -noname XUserAwardGamerPicture (long long long long)
 5275 stdcall -noname XShowFriendsUI (long)
 5276 stdcall -noname XUserSetProperty(long long long long)
 5277 stdcall -noname XUserSetContext(long long long)
 5278 stdcall -noname XUserWriteAchievements(long long long)
-5279 stub -noname @
+5279 stdcall -noname XUserReadAchievementPicture(long long long long long long long)
 5280 stdcall -noname XUserCreateAchievementEnumerator(long long long long long long long long long)
 5281 stdcall -noname XUserReadStats(long long long long long long long long)
 5282 stdcall -noname XUserReadGamerPicture (long long long long long long)
 5284 stdcall -noname XUserCreateStatsEnumeratorByRank (long long long long long long long)
-5285 stub -noname @
+5285 stdcall -noname XUserCreateStatsEnumeratorByRating(long long long long long long long long)
 5286 stdcall -noname XUserCreateStatsEnumeratorByXuid (long long long long long long long long)
-5287 stub -noname @
-5288 stub -noname @
-5289 stub -noname @
-5290 stub -noname @
-5291 stub -noname @
+5287 stdcall -noname XUserResetStatsView(long long long)
+5288 stdcall -noname XUserGetProperty(long long long long)
+5289 stdcall -noname XUserGetContext(long long long)
+5290 stdcall -noname XUserGetReputationStars(long)
+5291 stdcall -noname XUserResetStatsViewAllUsers(long long)
 5292 stdcall -noname XUserSetContextEx (long long long long)
 5293 stdcall -noname XUserSetPropertyEx(long long long long long)
 5294 stdcall -noname XLivePBufferGetByteArray(long long long long)
 5295 stdcall -noname XLivePBufferSetByteArray(long long long long)
-5296 stub -noname @
+5296 stdcall -noname XLiveGetLocalOnlinePort(long)
 5297 stdcall -noname XLiveInitializeEx(long long)
-5298 stub -noname @
-5299 stub -noname @
+5298 stdcall -noname XLiveGetGuideKey(long)
+5299 stdcall -noname XShowGuideKeyRemapUI(long)
 5300 stdcall -noname XSessionCreate(long long long long long long long long)
 5303 stdcall -noname XStringVerify (long long long long long long long)
-5304 stub -noname @
+5304 stdcall -noname XStorageUploadFromMemoryGetProgress(long long long long)
 5305 stdcall -noname XStorageUploadFromMemory (long long long long long)
 5306 stdcall -noname XStorageEnumerate (long long long long long long long)
-5307 stub -noname @
-5308 stub -noname @
-5309 stub -noname @
+5307 stdcall -noname XStorageDownloadToMemoryGetProgress(long long long long)
+5308 stdcall -noname XStorageDelete(long long long)
+5309 stdcall -noname XStorageBuildServerPathByXuid(long long long long long long long long)
 5310 stdcall -noname XOnlineStartup()
 5311 stdcall -noname XOnlineCleanup()
 5312 stdcall -noname XFriendsCreateEnumerator (long long long long long)
@@ -192,8 +192,8 @@
 5317 stdcall -noname XSessionWriteStats (long long long long long long)
 5318 stdcall -noname XSessionStart (long long long)
 5319 stdcall -noname XSessionSearchEx (long long long long long long long long long long long)
-5320 stub -noname @
-5321 stub -noname @
+5320 stdcall -noname XSessionSearchByID(long long long long long long)                                         
+5321 stdcall -noname XSessionSearch(long long long long long long long long long long)
 5322 stdcall -noname XSessionModify (long long long long long)
 5323 stdcall -noname XSessionMigrateHost (long long long long)
 5324 stdcall -noname XOnlineGetNatType()
@@ -206,31 +206,31 @@
 5331 stdcall -noname XUserReadProfileSettings(long long long long long long long)
 5332 stdcall -noname XSessionEnd (long long)
 5333 stdcall -noname XSessionArbitrationRegister (long long long long long long long)
-5334 stub -noname @
+5334 stdcall -noname XOnlineGetServiceInfo(long long)
 5335 stdcall -noname XTitleServerCreateEnumerator (long long long long)
 5336 stdcall -noname XSessionLeaveRemote (long long long long)
 5337 stdcall -noname XUserWriteProfileSettings(long long long long)
-5338 stub -noname @
+5338 stdcall -noname XPresenceSubscribe(long long long)
 5339 stdcall -noname XUserReadProfileSettingsByXuid(long long long long long long long long long)
-5340 stub -noname @
-5341 stub -noname @
-5342 stub -noname @
+5340 stdcall -noname XPresenceCreateEnumerator(long long long long long long long)
+5341 stdcall -noname XPresenceUnsubscribe(long long long)
+5342 stdcall -noname XSessionModifySkill(long long long long)
 5343 stdcall -noname XLiveCalculateSkill (long long long long long)
 5344 stdcall -noname XStorageBuildServerPath (long long long long long long long)
 5345 stdcall -noname XStorageDownloadToMemory (long long long long long long long)
-5346 stub -noname @
-5347 stub -noname @
-5348 stub -noname @
+5346 stdcall -noname XUserEstimateRankForRating(long long long long long)
+5347 stdcall -noname XLiveProtectedLoadLibrary(long long long long long)
+5348 stdcall -noname XLiveProtectedCreateFile(long long long long long long long long long)
 5349 stdcall -noname XLiveProtectedVerifyFile (long long long)
 5350 stdcall -noname XLiveContentCreateAccessHandle(long long long long long long)
-5351 stub -noname @
+5351 stdcall -noname XLiveContentInstallPackage(long long long)
 5352 stdcall -noname XLiveContentUninstall (long long long)
-5354 stub -noname @
+5354 stdcall -noname XLiveContentVerifyInstalledPackage(long long)
 5355 stdcall -noname XLiveContentGetPath(long long long long)
 5356 stdcall -noname XLiveContentGetDisplayName(long long long long)
-5357 stub -noname @
-5358 stub -noname @
-5359 stub -noname @
+5357 stdcall -noname XLiveContentGetThumbnail(long long long long)
+5358 stdcall -noname XLiveContentInstallLicense(long long long)
+5359 stdcall -noname XLiveGetUPnPState(long)
 5360 stdcall -noname XLiveContentCreateEnumerator(long long long long)
 5361 stdcall -noname XLiveContentRetrieveOffersByDate (long long long long long long)
 5365 stdcall -noname XShowMarketplaceUI (long long long long)
