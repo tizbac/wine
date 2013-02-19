@@ -121,11 +121,11 @@
 5214 stdcall -noname XShowPlayerReviewUI (long long long)
 5215 stdcall -noname XShowGuideUI (long)
 5216 stdcall -noname XShowKeyboardUI (long long long long long long long long)
-5230 stub -noname @
-5231 stub -noname @
-5233 stub -noname @
-5234 stub -noname @
-5235 stub -noname @
+5230 stdcall -noname XLocatorServerAdvertise (long long long long long long long long long long long long long long long)
+5231 stdcall -noname XLocatorServerUnAdvertise (long long)
+5233 stdcall -noname XLocatorGetServiceProperty (long long long long)
+5234 stdcall -noname XLocatorCreateServerEnumerator (long long long long long long long long long long)
+5235 stdcall -noname XLocatorCreateServerEnumeratorByIDs (long long long long long long long long)
 5236 stdcall -noname XLIVE_5236(long long)
 5237 stdcall -noname XLIVE_5237(long)
 5238 stub -noname @

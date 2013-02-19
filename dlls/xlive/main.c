@@ -918,31 +918,31 @@ INT WINAPI XLiveVerifyDataFile(DWORD w1) {
 }
 
 // #5206 XShowMessagesUI
-XShowMessagesUI(int a1) {
+INT WINAPI XShowMessagesUI(int a1) {
     FIXME("stub: (%d)\n",a1);
     return 0;
 }
 
 // #5208 XShowGameInviteUI
-XShowGameInviteUI (unsigned int a2, const void *Src, int a4, int a5) {
+INT WINAPI XShowGameInviteUI (unsigned int a2, const void *Src, int a4, int a5) {
     FIXME("stub: (%d, %p, %d, %d)\n",a2, Src, a4, a5);
     return 0;
 }
 
 // #5209 XShowMessageComposeUI
-XShowMessageComposeUI (int a1, const void *Src, int a3, char *a4) {
+INT WINAPI XShowMessageComposeUI (int a1, const void *Src, int a3, char *a4) {
     FIXME("stub: (%d, %p, %d, %p)\n",a1, Src, a3, a4);
     return 0;
 }
 
 // #5210 XShowFriendRequestUI
-XShowFriendRequestUI (char a1, unsigned int a2, long int a3) {
+INT WINAPI XShowFriendRequestUI (char a1, unsigned int a2, long int a3) {
     FIXME("stub: (%d, %d, %d)\n",a1, a2, a3);
     return 0;
 }
 
 // #5212  XShowCustomPlayerListUI
-XShowCustomPlayerListUI(int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8, int a9, int a10, int a11, int a12) {
+INT WINAPI XShowCustomPlayerListUI(int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8, int a9, int a10, int a11, int a12) {
     FIXME("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)\n",a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12);
     return 0;
 }
@@ -961,6 +961,36 @@ INT WINAPI XShowGuideUI (DWORD w1) {
 // #5216: XShowKeyboardUI
 INT WINAPI XShowKeyboardUI (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8) {
     FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8);
+    return 0;
+}
+
+// #5230: XLocatorServerAdvertise
+INT WINAPI XLocatorServerAdvertise(int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8, int a9, int a10, unsigned int a11, unsigned int a12, unsigned int a13, int a14, int a15) {
+    FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)\n", a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12);
+    return 0;
+}
+
+// #5231: XLocatorServerUnAdvertise
+INT WINAPI XLocatorServerUnAdvertise(int a1, int *a2) {
+    FIXME ("stub: (%d, %p)\n", a1, a2);
+    return 0;
+}
+
+// #5233: XLocatorGetServiceProperty
+INT WINAPI XLocatorGetServiceProperty (int a3, unsigned int a4, int a5, int *a6) {
+    FIXME ("stub: (%d, %d, %d, %p)\n", a3, a4, a5, a6);
+    return 0;
+}
+
+// #5234: XLocatorCreateServerEnumerator
+INT WINAPI XLocatorCreateServerEnumerator (int a3, unsigned int a4, unsigned int a5, int Src, unsigned int a7, int a8, unsigned int a9, int a10, int a11, int a12) {
+    FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d)\n", a3, a4, a5, Src, a7, a8, a9, a10, a11, a12);
+    return 0;
+}
+
+// #5235: XLocatorCreateServerEnumeratorByIDs
+INT WINAPI XLocatorCreateServerEnumeratorByIDs (int a3, unsigned int a4, unsigned int a5, int a6, unsigned int a7, const void *Src, int a9, int a10) {
+    FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d)\n", a3, a4, a5, a6, a7, Src, a9, a10);
     return 0;
 }
 
