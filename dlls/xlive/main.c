@@ -994,17 +994,18 @@ INT WINAPI XLocatorCreateServerEnumeratorByIDs (int a3, unsigned int a4, unsigne
     return 0;
 }
 
-// #5236:
-INT WINAPI XLIVE_5236(DWORD *d1,DWORD *d2) {
-    FIXME("unk (%p, %p)\n",d1,d2);
+// #5236: XLocatorServiceInitialize
+INT WINAPI XLocatorServiceInitialize(DWORD *d1,DWORD *d2) {
+// correct would be: XLocatorServiceInitialize(struct _XLOCATOR_INIT_INFO *a1, void **a2)
+    FIXME("(%p, %p)\n",d1,d2);
     *d1=1;
     *d2=1;
     return 0;
 }
 
-// #5237:
-INT WINAPI XLIVE_5237(DWORD w1) {
-    FIXME ("stub: (%d)\n", w1);
+// #5237: XLocatorServiceUnInitialize
+INT WINAPI XLocatorServiceUnInitialize(void *a1) {
+    FIXME ("stub: (%p)\n", a1);
     return 0;
 }
 

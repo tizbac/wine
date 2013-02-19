@@ -126,8 +126,8 @@
 5233 stdcall -noname XLocatorGetServiceProperty (long long long long)
 5234 stdcall -noname XLocatorCreateServerEnumerator (long long long long long long long long long long)
 5235 stdcall -noname XLocatorCreateServerEnumeratorByIDs (long long long long long long long long)
-5236 stdcall -noname XLIVE_5236(long long)
-5237 stdcall -noname XLIVE_5237(long)
+5236 stdcall -noname XLocatorServiceInitialize(long long)
+5237 stdcall -noname XLocatorServiceUnInitialize (long)
 5238 stub -noname @
 5250 stub -noname @
 5251 stdcall -noname XCloseHandle(long)
