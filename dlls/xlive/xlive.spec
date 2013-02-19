@@ -112,12 +112,12 @@
 5036 stdcall -noname XLiveCreateProtectedDataContext (long long)
 5037 stdcall -noname XLiveQueryProtectedDataInformation (long long)
 5038 stdcall -noname XLiveCloseProtectedDataContext (long)
-5039 stub -noname @
-5206 stub -noname @
-5208 stub -noname @
-5209 stub -noname @
-5210 stub -noname @
-5212 stub -noname @
+5039 stdcall -noname XLiveVerifyDataFile(long)
+5206 stdcall -noname XShowMessagesUI (long)
+5208 stdcall -noname XShowGameInviteUI(long long long long)
+5209 stdcall -noname XShowMessageComposeUI(long long long long)
+5210 stdcall -noname XShowFriendRequestUI(long long long)
+5212 stdcall -noname XShowCustomPlayerListUI(long long long long long long long long long long long long)
 5214 stdcall -noname XShowPlayerReviewUI (long long long)
 5215 stdcall -noname XShowGuideUI (long)
 5216 stdcall -noname XShowKeyboardUI (long long long long long long long long)

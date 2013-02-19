@@ -831,8 +831,7 @@ INT WINAPI XLiveFreeLibrary(HMODULE hLibModule) {
 }
 
 // #5030: XLivePreTranslateMessage
-INT WINAPI XLivePreTranslateMessage(DWORD w1)
-{
+INT WINAPI XLivePreTranslateMessage(DWORD w1) {
     //FIXME("stub: %d\n", unknown);
     return 0;
 }
@@ -850,8 +849,7 @@ INT WINAPI XLiveVerifyArcadeLicense(struct __SecureBufferHandleStruct *a1, int a
 }
 
 // #5034: XLiveProtectData
-DWORD WINAPI XLiveProtectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE h)
-{
+DWORD WINAPI XLiveProtectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE h) {
     FIXME("stub: %p %d %p %p(%d) %d\n",pInBuffer,dwInDataSize,pOutBuffer,pDataSize,*pDataSize,h);
 
     if ( *pDataSize == 0 )
@@ -872,8 +870,7 @@ DWORD WINAPI XLiveProtectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutB
 }
 
 // #5035: XLiveUnprotectData
-INT WINAPI XLiveUnprotectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE * ph)
-{
+INT WINAPI XLiveUnprotectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE * ph) {
 
     if (!pDataSize || !ph)      // invalid parameter
         return E_FAIL;
@@ -895,8 +892,7 @@ INT WINAPI XLiveUnprotectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutB
 }
 
 // #5036: XLiveCreateProtectedDataContext
-INT WINAPI XLiveCreateProtectedDataContext(DWORD * dwType, PHANDLE pHandle)
-{
+INT WINAPI XLiveCreateProtectedDataContext(DWORD * dwType, PHANDLE pHandle) {
     FIXME("stub: (%d, %p)\n",*dwType, pHandle);
     if (pHandle)
         *pHandle = (HANDLE)(++handlecounter);
@@ -904,16 +900,50 @@ INT WINAPI XLiveCreateProtectedDataContext(DWORD * dwType, PHANDLE pHandle)
 }
 
 // #5037: XLiveQueryProtectedDataInformation
-INT WINAPI XLiveQueryProtectedDataInformation(HANDLE h, DWORD * p0)
-{
+INT WINAPI XLiveQueryProtectedDataInformation(HANDLE h, DWORD * p0) {
     FIXME("stub: %d %p\n",h,p0);
     return 0;
 }
 
 // #5038: XLiveCloseProtectedDataContext
-INT WINAPI XLiveCloseProtectedDataContext(HANDLE h)
-{
+INT WINAPI XLiveCloseProtectedDataContext(HANDLE h) {
     FIXME("stub: %d\n",h);
+    return 0;
+}
+
+// #5039: XLiveVerifyDataFile
+INT WINAPI XLiveVerifyDataFile(DWORD w1) {
+    FIXME("stub: (%d)\n",w1);
+    return 0;
+}
+
+// #5206 XShowMessagesUI
+XShowMessagesUI(int a1) {
+    FIXME("stub: (%d)\n",a1);
+    return 0;
+}
+
+// #5208 XShowGameInviteUI
+XShowGameInviteUI (unsigned int a2, const void *Src, int a4, int a5) {
+    FIXME("stub: (%d, %p, %d, %d)\n",a2, Src, a4, a5);
+    return 0;
+}
+
+// #5209 XShowMessageComposeUI
+XShowMessageComposeUI (int a1, const void *Src, int a3, char *a4) {
+    FIXME("stub: (%d, %p, %d, %p)\n",a1, Src, a3, a4);
+    return 0;
+}
+
+// #5210 XShowFriendRequestUI
+XShowFriendRequestUI (char a1, unsigned int a2, long int a3) {
+    FIXME("stub: (%d, %d, %d)\n",a1, a2, a3);
+    return 0;
+}
+
+// #5212  XShowCustomPlayerListUI
+XShowCustomPlayerListUI(int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8, int a9, int a10, int a11, int a12) {
+    FIXME("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)\n",a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12);
     return 0;
 }
 
