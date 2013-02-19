@@ -6,10 +6,12 @@
 
 @ cdecl ActivateKeyboardLayout(long long) macdrv_ActivateKeyboardLayout
 @ cdecl Beep() macdrv_Beep
+@ cdecl ChangeDisplaySettingsEx(ptr ptr long long long) macdrv_ChangeDisplaySettingsEx
 @ cdecl CreateDesktopWindow(long) macdrv_CreateDesktopWindow
 @ cdecl CreateWindow(long) macdrv_CreateWindow
 @ cdecl DestroyWindow(long) macdrv_DestroyWindow
 @ cdecl EnumDisplayMonitors(long ptr ptr long) macdrv_EnumDisplayMonitors
+@ cdecl EnumDisplaySettingsEx(ptr long ptr long) macdrv_EnumDisplaySettingsEx
 @ cdecl GetKeyboardLayout(long) macdrv_GetKeyboardLayout
 @ cdecl GetKeyboardLayoutName(ptr) macdrv_GetKeyboardLayoutName
 @ cdecl GetKeyNameText(long ptr long) macdrv_GetKeyNameText

@@ -320,7 +320,7 @@ HRESULT to_boolean(jsval_t,BOOL*) DECLSPEC_HIDDEN;
 HRESULT to_number(script_ctx_t*,jsval_t,double*) DECLSPEC_HIDDEN;
 HRESULT to_integer(script_ctx_t*,jsval_t,double*) DECLSPEC_HIDDEN;
 HRESULT to_int32(script_ctx_t*,jsval_t,INT*) DECLSPEC_HIDDEN;
-HRESULT to_uint32(script_ctx_t*,jsval_t,DWORD*) DECLSPEC_HIDDEN;
+HRESULT to_uint32(script_ctx_t*,jsval_t,UINT32*) DECLSPEC_HIDDEN;
 HRESULT to_string(script_ctx_t*,jsval_t,jsstr_t**) DECLSPEC_HIDDEN;
 HRESULT to_object(script_ctx_t*,jsval_t,IDispatch**) DECLSPEC_HIDDEN;
 
@@ -442,8 +442,10 @@ HRESULT create_jscaller(script_ctx_t*) DECLSPEC_HIDDEN;
 #define REM_CHECK_GLOBAL   0x0001
 #define REM_RESET_INDEX    0x0002
 #define REM_NO_CTX_UPDATE  0x0004
-HRESULT regexp_match_next(script_ctx_t*,jsdisp_t*,DWORD,jsstr_t*,const WCHAR**,match_result_t**,
-        DWORD*,DWORD*,match_result_t*) DECLSPEC_HIDDEN;
+#define REM_ALLOC_RESULT   0x0008
+#define REM_NO_PARENS      0x0010
+struct match_state_t;
+HRESULT regexp_match_next(script_ctx_t*,jsdisp_t*,DWORD,jsstr_t*,struct match_state_t**) DECLSPEC_HIDDEN;
 HRESULT parse_regexp_flags(const WCHAR*,DWORD,DWORD*) DECLSPEC_HIDDEN;
 HRESULT regexp_string_match(script_ctx_t*,jsdisp_t*,jsstr_t*,jsval_t*) DECLSPEC_HIDDEN;
 

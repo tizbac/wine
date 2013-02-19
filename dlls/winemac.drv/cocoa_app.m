@@ -38,6 +38,7 @@ int macdrv_err_on;
 @implementation WineApplication
 
     @synthesize keyboardType, lastFlagsChanged;
+    @synthesize orderedWineWindows;
 
     - (id) init
     {
@@ -48,8 +49,12 @@ int macdrv_err_on;
             eventQueuesLock = [[NSLock alloc] init];
 
             keyWindows = [[NSMutableArray alloc] init];
+            orderedWineWindows = [[NSMutableArray alloc] init];
 
-            if (!eventQueues || !eventQueuesLock || !keyWindows)
+            originalDisplayModes = [[NSMutableDictionary alloc] init];
+
+            if (!eventQueues || !eventQueuesLock || !keyWindows || !orderedWineWindows ||
+                !originalDisplayModes)
             {
                 [self release];
                 return nil;
@@ -60,6 +65,8 @@ int macdrv_err_on;
 
     - (void) dealloc
     {
+        [originalDisplayModes release];
+        [orderedWineWindows release];
         [keyWindows release];
         [eventQueues release];
         [eventQueuesLock release];
@@ -251,6 +258,208 @@ int macdrv_err_on;
         return point;
     }
 
+    - (void) wineWindow:(WineWindow*)window
+                ordered:(NSWindowOrderingMode)order
+             relativeTo:(WineWindow*)otherWindow
+    {
+        NSUInteger index;
+
+        switch (order)
+        {
+            case NSWindowAbove:
+                [window retain];
+                [orderedWineWindows removeObjectIdenticalTo:window];
+                if (otherWindow)
+                {
+                    index = [orderedWineWindows indexOfObjectIdenticalTo:otherWindow];
+                    if (index == NSNotFound)
+                        index = 0;
+                }
+                else
+                {
+                    index = 0;
+                    for (otherWindow in orderedWineWindows)
+                    {
+                        if ([otherWindow levelWhenActive] <= [window levelWhenActive])
+                            break;
+                        index++;
+                    }
+                }
+                [orderedWineWindows insertObject:window atIndex:index];
+                [window release];
+                break;
+            case NSWindowBelow:
+                [window retain];
+                [orderedWineWindows removeObjectIdenticalTo:window];
+                if (otherWindow)
+                {
+                    index = [orderedWineWindows indexOfObjectIdenticalTo:otherWindow];
+                    if (index == NSNotFound)
+                        index = [orderedWineWindows count];
+                }
+                else
+                {
+                    index = 0;
+                    for (otherWindow in orderedWineWindows)
+                    {
+                        if ([otherWindow levelWhenActive] < [window levelWhenActive])
+                            break;
+                        index++;
+                    }
+                }
+                [orderedWineWindows insertObject:window atIndex:index];
+                [window release];
+                break;
+            case NSWindowOut:
+            default:
+                break;
+        }
+    }
+
+    - (void) sendDisplaysChanged:(BOOL)activating
+    {
+        macdrv_event event;
+        WineEventQueue* queue;
+
+        event.type = DISPLAYS_CHANGED;
+        event.window = NULL;
+        event.displays_changed.activating = activating;
+
+        [eventQueuesLock lock];
+        for (queue in eventQueues)
+            [queue postEvent:&event];
+        [eventQueuesLock unlock];
+    }
+
+    // We can compare two modes directly using CFEqual, but that may require that
+    // they are identical to a level that we don't need.  In particular, when the
+    // OS switches between the integrated and discrete GPUs, the set of display
+    // modes can change in subtle ways.  We're interested in whether two modes
+    // match in their most salient features, even if they aren't identical.
+    - (BOOL) mode:(CGDisplayModeRef)mode1 matchesMode:(CGDisplayModeRef)mode2
+    {
+        NSString *encoding1, *encoding2;
+        uint32_t ioflags1, ioflags2, different;
+        double refresh1, refresh2;
+
+        if (CGDisplayModeGetWidth(mode1) != CGDisplayModeGetWidth(mode2)) return FALSE;
+        if (CGDisplayModeGetHeight(mode1) != CGDisplayModeGetHeight(mode2)) return FALSE;
+
+        encoding1 = [(NSString*)CGDisplayModeCopyPixelEncoding(mode1) autorelease];
+        encoding2 = [(NSString*)CGDisplayModeCopyPixelEncoding(mode2) autorelease];
+        if (![encoding1 isEqualToString:encoding2]) return FALSE;
+
+        ioflags1 = CGDisplayModeGetIOFlags(mode1);
+        ioflags2 = CGDisplayModeGetIOFlags(mode2);
+        different = ioflags1 ^ ioflags2;
+        if (different & (kDisplayModeValidFlag | kDisplayModeSafeFlag | kDisplayModeStretchedFlag |
+                         kDisplayModeInterlacedFlag | kDisplayModeTelevisionFlag))
+            return FALSE;
+
+        refresh1 = CGDisplayModeGetRefreshRate(mode1);
+        if (refresh1 == 0) refresh1 = 60;
+        refresh2 = CGDisplayModeGetRefreshRate(mode2);
+        if (refresh2 == 0) refresh2 = 60;
+        if (fabs(refresh1 - refresh2) > 0.1) return FALSE;
+
+        return TRUE;
+    }
+
+    - (CGDisplayModeRef)modeMatchingMode:(CGDisplayModeRef)mode forDisplay:(CGDirectDisplayID)displayID
+    {
+        CGDisplayModeRef ret = NULL;
+        NSArray *modes = [(NSArray*)CGDisplayCopyAllDisplayModes(displayID, NULL) autorelease];
+        for (id candidateModeObject in modes)
+        {
+            CGDisplayModeRef candidateMode = (CGDisplayModeRef)candidateModeObject;
+            if ([self mode:candidateMode matchesMode:mode])
+            {
+                ret = candidateMode;
+                break;
+            }
+        }
+        return ret;
+    }
+
+    - (BOOL) setMode:(CGDisplayModeRef)mode forDisplay:(CGDirectDisplayID)displayID
+    {
+        BOOL ret = FALSE;
+        NSNumber* displayIDKey = [NSNumber numberWithUnsignedInt:displayID];
+        CGDisplayModeRef currentMode, originalMode;
+
+        currentMode = CGDisplayCopyDisplayMode(displayID);
+        if (!currentMode) // Invalid display ID
+            return FALSE;
+
+        if ([self mode:mode matchesMode:currentMode]) // Already there!
+        {
+            CGDisplayModeRelease(currentMode);
+            return TRUE;
+        }
+
+        mode = [self modeMatchingMode:mode forDisplay:displayID];
+        if (!mode)
+        {
+            CGDisplayModeRelease(currentMode);
+            return FALSE;
+        }
+
+        originalMode = (CGDisplayModeRef)[originalDisplayModes objectForKey:displayIDKey];
+        if (!originalMode)
+            originalMode = currentMode;
+
+        if ([self mode:mode matchesMode:originalMode])
+        {
+            if ([originalDisplayModes count] == 1) // If this is the last changed display, do a blanket reset
+            {
+                CGRestorePermanentDisplayConfiguration();
+                CGReleaseAllDisplays();
+                [originalDisplayModes removeAllObjects];
+                ret = TRUE;
+            }
+            else // ... otherwise, try to restore just the one display
+            {
+                if (CGDisplaySetDisplayMode(displayID, mode, NULL) == CGDisplayNoErr)
+                {
+                    [originalDisplayModes removeObjectForKey:displayIDKey];
+                    ret = TRUE;
+                }
+            }
+        }
+        else
+        {
+            if ([originalDisplayModes count] || CGCaptureAllDisplays() == CGDisplayNoErr)
+            {
+                if (CGDisplaySetDisplayMode(displayID, mode, NULL) == CGDisplayNoErr)
+                {
+                    [originalDisplayModes setObject:(id)originalMode forKey:displayIDKey];
+                    ret = TRUE;
+                }
+                else if (![originalDisplayModes count])
+                {
+                    CGRestorePermanentDisplayConfiguration();
+                    CGReleaseAllDisplays();
+                }
+            }
+        }
+
+        CGDisplayModeRelease(currentMode);
+
+        if (ret)
+        {
+            [orderedWineWindows enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(id obj, NSUInteger idx, BOOL *stop){
+                [(WineWindow*)obj adjustWindowLevel];
+            }];
+        }
+
+        return ret;
+    }
+
+    - (BOOL) areDisplaysCaptured
+    {
+        return ([originalDisplayModes count] > 0);
+    }
+
 
     /*
      * ---------- NSApplication method overrides ----------
@@ -267,9 +476,31 @@ int macdrv_err_on;
     /*
      * ---------- NSApplicationDelegate methods ----------
      */
+    - (void)applicationDidBecomeActive:(NSNotification *)notification
+    {
+        [orderedWineWindows enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(id obj, NSUInteger idx, BOOL *stop){
+            WineWindow* window = obj;
+            if ([window levelWhenActive] != [window level])
+                [window setLevel:[window levelWhenActive]];
+        }];
+
+        // If a Wine process terminates abruptly while it has the display captured
+        // and switched to a different resolution, Mac OS X will uncapture the
+        // displays and switch their resolutions back.  However, the other Wine
+        // processes won't have their notion of the desktop rect changed back.
+        // This can lead them to refuse to draw or acknowledge clicks in certain
+        // portions of their windows.
+        //
+        // To solve this, we synthesize a displays-changed event whenever we're
+        // activated.  This will provoke a re-synchronization of Wine's notion of
+        // the desktop rect with the actual state.
+        [self sendDisplaysChanged:TRUE];
+    }
+
     - (void)applicationDidChangeScreenParameters:(NSNotification *)notification
     {
         primaryScreenHeightValid = FALSE;
+        [self sendDisplaysChanged:FALSE];
     }
 
     - (void)applicationDidResignActive:(NSNotification *)notification
@@ -307,6 +538,7 @@ int macdrv_err_on;
                     usingBlock:^(NSNotification *note){
             NSWindow* window = [note object];
             [keyWindows removeObjectIdenticalTo:window];
+            [orderedWineWindows removeObjectIdenticalTo:window];
         }];
 
         [nc addObserver:self
@@ -319,6 +551,16 @@ int macdrv_err_on;
         [NSTextInputContext self];
 
         self.keyboardType = LMGetKbdType();
+    }
+
+    - (void)applicationWillResignActive:(NSNotification *)notification
+    {
+        [orderedWineWindows enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(id obj, NSUInteger idx, BOOL *stop){
+            WineWindow* window = obj;
+            NSInteger level = window.floating ? NSFloatingWindowLevel : NSNormalWindowLevel;
+            if ([window level] > level)
+                [window setLevel:level];
+        }];
     }
 
 @end
@@ -415,4 +657,19 @@ void macdrv_beep(void)
     OnMainThreadAsync(^{
         NSBeep();
     });
+}
+
+/***********************************************************************
+ *              macdrv_set_display_mode
+ */
+int macdrv_set_display_mode(const struct macdrv_display* display,
+                            CGDisplayModeRef display_mode)
+{
+    __block int ret;
+
+    OnMainThread(^{
+        ret = [NSApp setMode:display_mode forDisplay:display->displayID];
+    });
+
+    return ret;
 }

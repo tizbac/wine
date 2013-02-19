@@ -151,35 +151,6 @@ static void get_mac_rect_offset(struct macdrv_win_data *data, DWORD style, RECT 
 
 
 /***********************************************************************
- *              show_window
- */
-static void show_window(struct macdrv_win_data *data)
-{
-    TRACE("win %p/%p\n", data->hwnd, data->cocoa_window);
-
-    data->on_screen = macdrv_order_cocoa_window(data->cocoa_window, NULL, NULL);
-    if (data->on_screen)
-    {
-        HWND hwndFocus = GetFocus();
-        if (hwndFocus && (data->hwnd == hwndFocus || IsChild(data->hwnd, hwndFocus)))
-            macdrv_SetFocus(hwndFocus);
-    }
-}
-
-
-/***********************************************************************
- *              hide_window
- */
-static void hide_window(struct macdrv_win_data *data)
-{
-    TRACE("win %p/%p\n", data->hwnd, data->cocoa_window);
-
-    macdrv_hide_cocoa_window(data->cocoa_window);
-    data->on_screen = FALSE;
-}
-
-
-/***********************************************************************
  *              macdrv_window_to_mac_rect
  *
  * Convert a rect from client to Mac window coordinates
@@ -303,10 +274,12 @@ static void release_win_data(struct macdrv_win_data *data)
  *
  * Return the Mac window associated with the full area of a window
  */
-static macdrv_window macdrv_get_cocoa_window(HWND hwnd)
+static macdrv_window macdrv_get_cocoa_window(HWND hwnd, BOOL require_on_screen)
 {
     struct macdrv_win_data *data = get_win_data(hwnd);
-    macdrv_window ret = data ? data->cocoa_window : NULL;
+    macdrv_window ret = NULL;
+    if (data && (data->on_screen || !require_on_screen))
+        ret = data->cocoa_window;
     release_win_data(data);
     return ret;
 }
@@ -330,7 +303,7 @@ static void set_cocoa_window_properties(struct macdrv_win_data *data)
     ex_style = GetWindowLongW(data->hwnd, GWL_EXSTYLE);
 
     owner = GetWindow(data->hwnd, GW_OWNER);
-    owner_win = macdrv_get_cocoa_window(owner);
+    owner_win = macdrv_get_cocoa_window(owner, TRUE);
     macdrv_set_cocoa_parent_window(data->cocoa_window, owner_win);
 
     get_cocoa_window_features(data, style, ex_style, &wf);
@@ -603,6 +576,55 @@ static struct macdrv_win_data *macdrv_create_win_data(HWND hwnd, const RECT *win
 
 
 /***********************************************************************
+ *              show_window
+ */
+static void show_window(struct macdrv_win_data *data)
+{
+    HWND prev = NULL;
+    HWND next = NULL;
+    macdrv_window prev_window = NULL;
+    macdrv_window next_window = NULL;
+
+    /* find window that this one must be after */
+    prev = GetWindow(data->hwnd, GW_HWNDPREV);
+    while (prev && !((GetWindowLongW(prev, GWL_STYLE) & WS_VISIBLE) &&
+                     (prev_window = macdrv_get_cocoa_window(prev, TRUE))))
+        prev = GetWindow(prev, GW_HWNDPREV);
+    if (!prev_window)
+    {
+        /* find window that this one must be before */
+        next = GetWindow(data->hwnd, GW_HWNDNEXT);
+        while (next && !((GetWindowLongW(next, GWL_STYLE) & WS_VISIBLE) &&
+                         (next_window = macdrv_get_cocoa_window(next, TRUE))))
+            next = GetWindow(next, GW_HWNDNEXT);
+    }
+
+    TRACE("win %p/%p below %p/%p above %p/%p\n",
+          data->hwnd, data->cocoa_window, prev, prev_window, next, next_window);
+
+    data->on_screen = macdrv_order_cocoa_window(data->cocoa_window, prev_window, next_window);
+    if (data->on_screen)
+    {
+        HWND hwndFocus = GetFocus();
+        if (hwndFocus && (data->hwnd == hwndFocus || IsChild(data->hwnd, hwndFocus)))
+            macdrv_SetFocus(hwndFocus);
+    }
+}
+
+
+/***********************************************************************
+ *              hide_window
+ */
+static void hide_window(struct macdrv_win_data *data)
+{
+    TRACE("win %p/%p\n", data->hwnd, data->cocoa_window);
+
+    macdrv_hide_cocoa_window(data->cocoa_window);
+    data->on_screen = FALSE;
+}
+
+
+/***********************************************************************
  *              get_region_data
  *
  * Calls GetRegionData on the given region and converts the rectangle
@@ -690,30 +712,7 @@ static void sync_window_position(struct macdrv_win_data *data, UINT swp_flags)
           wine_dbgstr_rect(&data->whole_rect));
 
     if (data->on_screen && (!(swp_flags & SWP_NOZORDER) || (swp_flags & SWP_SHOWWINDOW)))
-    {
-        HWND next = NULL;
-        macdrv_window prev_window = NULL;
-        macdrv_window next_window = NULL;
-
-        /* find window that this one must be after */
-        HWND prev = GetWindow(data->hwnd, GW_HWNDPREV);
-        while (prev && !((GetWindowLongW(prev, GWL_STYLE) & WS_VISIBLE) &&
-                         (prev_window = macdrv_get_cocoa_window(prev))))
-            prev = GetWindow(prev, GW_HWNDPREV);
-        if (!prev_window)
-        {
-            /* find window that this one must be before */
-            next = GetWindow(data->hwnd, GW_HWNDNEXT);
-            while (next && !((GetWindowLongW(next, GWL_STYLE) & WS_VISIBLE) &&
-                             (next_window = macdrv_get_cocoa_window(next))))
-                next = GetWindow(next, GW_HWNDNEXT);
-        }
-
-        data->on_screen = macdrv_order_cocoa_window(data->cocoa_window, prev_window, next_window);
-
-        TRACE("win %p/%p below %p/%p above %p/%p\n",
-              data->hwnd, data->cocoa_window, prev, prev_window, next, next_window);
-    }
+        show_window(data);
 }
 
 
@@ -853,11 +852,10 @@ void CDECL macdrv_SetFocus(HWND hwnd)
     if (!(hwnd = GetAncestor(hwnd, GA_ROOT))) return;
     if (!(data = get_win_data(hwnd))) return;
 
-    if (data->cocoa_window)
+    if (data->cocoa_window && data->on_screen)
     {
         /* Set Mac focus */
         macdrv_give_cocoa_window_focus(data->cocoa_window);
-        data->on_screen = TRUE;
     }
 
     release_win_data(data);
@@ -988,7 +986,7 @@ void CDECL macdrv_SetWindowText(HWND hwnd, LPCWSTR text)
 
     TRACE("%p, %s\n", hwnd, debugstr_w(text));
 
-    if ((win = macdrv_get_cocoa_window(hwnd)))
+    if ((win = macdrv_get_cocoa_window(hwnd, FALSE)))
         macdrv_set_cocoa_window_title(win, text, strlenW(text));
 }
 
@@ -1190,6 +1188,39 @@ LRESULT CDECL macdrv_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             release_win_data(data);
         }
         return 0;
+    case WM_MACDRV_UPDATE_DESKTOP_RECT:
+        if (hwnd == GetDesktopWindow())
+        {
+            CGRect new_desktop_rect;
+            RECT current_desktop_rect;
+
+            macdrv_reset_device_metrics();
+            new_desktop_rect = macdrv_get_desktop_rect();
+            if (!GetWindowRect(hwnd, &current_desktop_rect) ||
+                !CGRectEqualToRect(cgrect_from_rect(current_desktop_rect), new_desktop_rect))
+            {
+                SendMessageTimeoutW(HWND_BROADCAST, WM_MACDRV_RESET_DEVICE_METRICS, 0, 0,
+                                    SMTO_ABORTIFHUNG, 2000, NULL);
+                SetWindowPos(hwnd, 0, CGRectGetMinX(new_desktop_rect), CGRectGetMinY(new_desktop_rect),
+                             CGRectGetWidth(new_desktop_rect), CGRectGetHeight(new_desktop_rect),
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_DEFERERASE);
+                SendMessageTimeoutW(HWND_BROADCAST, WM_MACDRV_DISPLAYCHANGE, wp, lp,
+                                    SMTO_ABORTIFHUNG, 2000, NULL);
+            }
+        }
+        return 0;
+    case WM_MACDRV_RESET_DEVICE_METRICS:
+        macdrv_reset_device_metrics();
+        return 0;
+    case WM_MACDRV_DISPLAYCHANGE:
+        if ((data = get_win_data(hwnd)))
+        {
+            if (data->cocoa_window && data->on_screen)
+                sync_window_position(data, SWP_NOZORDER | SWP_NOACTIVATE);
+            release_win_data(data);
+        }
+        SendMessageW(hwnd, WM_DISPLAYCHANGE, wp, lp);
+        return 0;
     }
 
     FIXME("unrecognized window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
@@ -1337,17 +1368,6 @@ void CDECL macdrv_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags,
             hide_window(data);
     }
 
-    if (new_style & WS_VISIBLE)
-    {
-        if (!data->on_screen || (swp_flags & (SWP_FRAMECHANGED|SWP_STATECHANGED)))
-            set_cocoa_window_properties(data);
-
-        /* layered windows are not shown until their attributes are set */
-        if (!data->on_screen &&
-            (data->layered || !(GetWindowLongW( hwnd, GWL_EXSTYLE ) & WS_EX_LAYERED)))
-            show_window(data);
-    }
-
     /* check if we are currently processing an event relevant to this window */
     if (!thread_data || !thread_data->current_event ||
         thread_data->current_event->window != data->cocoa_window ||
@@ -1357,6 +1377,17 @@ void CDECL macdrv_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags,
     {
         sync_window_position(data, swp_flags);
         set_cocoa_window_properties(data);
+    }
+
+    if (new_style & WS_VISIBLE)
+    {
+        if (!data->on_screen || (swp_flags & (SWP_FRAMECHANGED|SWP_STATECHANGED)))
+            set_cocoa_window_properties(data);
+
+        /* layered windows are not shown until their attributes are set */
+        if (!data->on_screen &&
+            (data->layered || !(GetWindowLongW( hwnd, GWL_EXSTYLE ) & WS_EX_LAYERED)))
+            show_window(data);
     }
 
 done:

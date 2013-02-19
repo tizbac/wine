@@ -51,11 +51,17 @@
     BOOL forceNextMouseMoveAbsolute;
     double mouseMoveDeltaX, mouseMoveDeltaY;
 
+    NSInteger levelWhenActive;
+
     BOOL causing_becomeKeyWindow;
     BOOL ignore_windowMiniaturize;
     BOOL ignore_windowDeminiaturize;
 }
 
 @property (retain, readonly, nonatomic) WineEventQueue* queue;
+@property (readonly, nonatomic) BOOL floating;
+@property (readonly, nonatomic) NSInteger levelWhenActive;
+
+    - (void) adjustWindowLevel;
 
 @end
