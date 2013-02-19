@@ -149,7 +149,7 @@
 5270 stdcall -noname XNotifyCreateListener(long long)
 5271 stub -noname @
 5273 stdcall -noname XUserReadGamerpictureByKey (long long long long long long)
-5274 stdcall -noname XLIVE_5274(long long long long)
+5274 stdcall -noname XUserAwardGamerPicture (long long long long)
 5275 stdcall -noname XShowFriendsUI (long)
 5276 stdcall -noname XUserSetProperty(long long long long)
 5277 stdcall -noname XUserSetContext(long long long)
@@ -157,7 +157,7 @@
 5279 stub -noname @
 5280 stdcall -noname XUserCreateAchievementEnumerator(long long long long long long long long long)
 5281 stdcall -noname XUserReadStats(long long long long long long long long)
-5282 stdcall -noname XLIVE_5282 (long long long long long long)
+5282 stdcall -noname XUserReadGamerPicture (long long long long long long)
 5284 stdcall -noname XUserCreateStatsEnumeratorByRank (long long long long long long long)
 5285 stub -noname @
 5286 stdcall -noname XUserCreateStatsEnumeratorByXuid (long long long long long long long long)
@@ -185,7 +185,7 @@
 5310 stdcall -noname XOnlineStartup()
 5311 stdcall -noname XOnlineCleanup()
 5312 stdcall -noname XFriendsCreateEnumerator (long long long long long)
-5313 stdcall -noname XLIVE_5313(long)
+5313 stdcall -noname XPresenceInitialize(long)
 5314 stdcall -noname XUserMuteListQuery (long long long long)
 5315 stdcall -noname XInviteGetAcceptedInfo (long long)
 5316 stdcall -noname XInviteSend (long long long long long)
@@ -227,7 +227,7 @@
 5352 stdcall -noname XLiveContentUninstall (long long long)
 5354 stub -noname @
 5355 stdcall -noname XLiveContentGetPath(long long long long)
-5356 stdcall -noname XLIVE_5356(long long long long)
+5356 stdcall -noname XLiveContentGetDisplayName(long long long long)
 5357 stub -noname @
 5358 stub -noname @
 5359 stub -noname @

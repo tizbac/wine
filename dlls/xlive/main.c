@@ -1119,9 +1119,9 @@ INT WINAPI XUserReadGamerpictureByKey (DWORD w1, DWORD w2, DWORD w3, DWORD w4, D
     return 0;
 }
 
-// #5274:
-INT WINAPI XLIVE_5274(long w1,long w2,long w3,long w4) {
-    FIXME ("unk: (%ld, %ld, %ld, %ld)\n", w1, w2, w3, w4);
+// #5274: XUserAwardGamerPicture
+INT WINAPI XUserAwardGamerPicture(int a1, int a2, int a3, int *a4) {
+    FIXME ("stub: (%d, %d, %d, %p)\n", a1, a2, a3, a4);
     return 0;
 }
 
@@ -1214,9 +1214,9 @@ INT WINAPI XUserReadStats (DWORD dwTitleId,
     return 0;
 }
 
-// #5282:
-INT WINAPI XLIVE_5282 (long w1,long w2,long w3,long w4,long w5,long w6) {
-    FIXME ("unk: (%ld %ld %ld %ld %ld %ld)\n",w1,w2,w3,w4,w5,w6);
+// #5282: XUserReadGamerPicture
+INT WINAPI XUserReadGamerPicture(int a2, int a3, int a4, int a5, int a6, int *a7) {
+    FIXME ("unk: (%d %d %d %d %d %p)\n",a2,a3,a4,a5,a6,a7);
     return 0;
 }
 
@@ -1406,10 +1406,9 @@ INT WINAPI XFriendsCreateEnumerator(DWORD p0, DWORD p1, DWORD p2, DWORD p3, HAND
     return 0;
 }
 
-// #5313:
-DWORD WINAPI XLIVE_5313(DWORD dw1)
-{
-    FIXME("unk (%d)\n",dw1);
+// #5313: XPresenceInitialize
+DWORD WINAPI XPresenceInitialize(int a1) {
+    FIXME("stub: (%d)\n",a1);
     return 0;
 }
 
@@ -1725,12 +1724,13 @@ INT FUNC001(DWORD * p1 , DWORD * p2)
     return 0;
 }
 
-// #5356
-DWORD WINAPI XLIVE_5356(DWORD p1,DWORD* p2,DWORD p3,DWORD *p4 /*some buffer size*/) {
+// #5356: XLiveContentGetDisplayName
+DWORD WINAPI XLiveContentGetDisplayName(DWORD p1,DWORD* p2,DWORD p3,DWORD *p4 /*some buffer size*/) {
+// would be (int a2, struct _XLIVE_CONTENT_INFO_V1 *a3, char *a4, unsigned __int32 *a5)
     int result;
     DWORD v6[0x14+2];
 
-    FIXME ("unk: (%d, %p, %d, %p)\n",p1,p2,p3,p4);
+    FIXME ("stub: (%d, %p, %d, %p)\n",p1,p2,p3,p4);
     FIXME ("%p(%x) %p(%x)\n",p2,*p2,p4,*p4);
     if ( *p4 == 0 )
     {
