@@ -478,9 +478,9 @@ INT WINAPI XNetGetEthernetLinkStatus(void) {
 }
 
 // #76: XNetGetBroadcastVersionStatus
-DWORD WINAPI XNetGetBroadcastVersionStatus (int a1) {
-    FIXME("stub: (%d), returning 0\n",a1);
-    return 0;
+DWORD WINAPI XNetGetBroadcastVersionStatus (BOOL fReset) {
+    //FIXME("stub: (%d), returning 0\n",a1);
+    return 0;// Zero means that there are no wrong-version clients around
 }
 
 // #77: XNetQosGetListenStats
@@ -1331,8 +1331,7 @@ DWORD WINAPI XSessionMigrateHost (DWORD w1, DWORD w2, DWORD w3, DWORD w4) {
 
 // #5324 XOnlineGetNatType
 INT WINAPI  XOnlineGetNatType (void) {
-    FIXME ("stub: \n");
-    return 0;
+    return XONLINE_NAT_OPEN; //Since we are going to use it in LAN , NAT is always open
 }
 
 // #5325: XSessionLeaveLocal

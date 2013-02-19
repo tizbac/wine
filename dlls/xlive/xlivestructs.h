@@ -92,6 +92,12 @@
 #define XNET_OPTID_CALLER_RECV_BYTES                8
 #define XNET_OPTID_CALLER_RECV_FRAMES               9
 
+typedef enum 
+{
+    XONLINE_NAT_OPEN = 1,
+    XONLINE_NAT_MODERATE,
+    XONLINE_NAT_STRICT
+} XONLINE_NAT_TYPE;
 struct XUSER_READ_PROFILE_SETTINGS {
 	DWORD	dwLength;
 	BYTE *	pSettings;
