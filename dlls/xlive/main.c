@@ -642,9 +642,19 @@ INT WINAPI XCustomGetCurrentGamercard (DWORD w1, DWORD w2) {
 }
 
 // #1082: XGetOverlappedExtendedError
-INT WINAPI XGetOverlappedExtendedError (void * p0) {
-    FIXME("stub: (%p)\n", p0);
-    return 0;
+// INT WINAPI XGetOverlappedExtendedError (void * p0) {
+INT WINAPI XGetOverlappedExtendedError (int a1) {
+    DWORD result;
+    result = 996;
+    if (a1) {
+        if ((DWORD)a1 != 997)
+            result = (DWORD)(a1 + 24);
+        }
+        else {
+            result = result = GetLastError();
+	}
+    TRACE("(%d, %d)\n", a1, result);
+    return result;
 }
 
 // #1083: XGetOverlappedResult
@@ -1993,6 +2003,12 @@ DWORD WINAPI XLiveContentRetrieveOffersByDate (DWORD dwUserIndex,DWORD dwOffserI
 // #5365: XShowMarketplaceUI
 DWORD WINAPI XShowMarketplaceUI (DWORD dwUserIndex, DWORD dwEntryPoint, ULONGLONG dwOfferId, DWORD dwContentCategories) {
     FIXME ("stub: ()\n");
+    return 1;
+}
+
+// #5367:
+DWORD WINAPI XLIVE_5367 (HANDLE h, DWORD w1, DWORD w2, BYTE * b1, DWORD w3) {
+    FIXME ("stub: (%d, %d, %d, %p, %d)\n", h, w1, w2, b1, w3);
     return 1;
 }
 
