@@ -707,7 +707,7 @@ INT WINAPI XHVCreateEngine(DWORD p0, DWORD p1, void ** ppEngine)
     if ( ppEngine)
         *ppEngine = NULL;
     FIXME("stub: (%d, %d, %p)\n",p0,p1,ppEngine);
-    return -1;
+    return -1; // disable live voice
 }
 
 // #5010: XLiveRegisterDataSection
@@ -1100,6 +1100,7 @@ INT WINAPI XShowSigninUI(DWORD cPanes,DWORD dwFlags){
 // #5261: XUserGetXUID
 INT WINAPI XUserGetXUID(DWORD dwUserIndex, PXUID pXuid) {
     FIXME("stub: (%d, %p)\n", dwUserIndex, pXuid);
+    pXuid[0] = pXuid[1] = 0x10001000;
     return Xliveusers[dwUserIndex].xuid;
     return 0; // ???
 }
@@ -1107,22 +1108,25 @@ INT WINAPI XUserGetXUID(DWORD dwUserIndex, PXUID pXuid) {
 // #5262: XUserGetSigninState
 XUSER_SIGNIN_STATE WINAPI XUserGetSigninState(DWORD dwUserIndex){
     TRACE("(%d)\n", dwUserIndex);
-    if ( dwUserIndex > 2 )
+    if ( dwUserIndex > 2 ) {
         return eXUserSigninState_NotSignedIn;
+    }
     return Xliveusers[dwUserIndex].signedin;
+    // return 1; // eXUserSigninState_SignedInLocally
 }
 
 // #5263: XUserGetName
 INT WINAPI XUserGetName(DWORD dwUserId, char * pBuffer, DWORD dwBufLen) {
     TRACE("(%d, %p, %d)\n", dwUserId, pBuffer, dwBufLen);
-    if ( dwUserId > 2 )
-        return ERROR_NO_SUCH_USER;
-    if ( !Xliveusers[dwUserId].signedin  )
-    {
+    if ( dwUserId > 2 ) {
         return ERROR_NO_SUCH_USER;
     }
-    if (!pBuffer)
+    if ( !Xliveusers[dwUserId].signedin  ) {
+        return ERROR_NO_SUCH_USER;
+    }
+    if (!pBuffer) {
         return 1;
+    }
     lstrcpynA(pBuffer,Xliveusers[dwUserId].username,dwBufLen);
     return ERROR_SUCCESS;
 }
@@ -2010,8 +2014,20 @@ DWORD WINAPI XLIVE_5367 (HANDLE h, DWORD w1, DWORD w2, BYTE * b1, DWORD w3) {
 }
 
 // #5372
-DWORD WINAPI XLIVE_5372 (HANDLE a1, DWORD a2, DWORD a3, DWORD a4, BYTE *b5, HANDLE h6)
-{
+DWORD WINAPI XLIVE_5372 (HANDLE a1, DWORD a2, DWORD a3, DWORD a4, BYTE *b5, HANDLE h6) {
     FIXME("unk: (xx, %d, %d, %d, %p, xx)\n",a2,a3,a4,b5);
-    return 1;
+    return -1; // might be 1 also
 }
+
+// #5374
+DWORD WINAPI XLIVE_5374 (void) {
+    FIXME("unk:\n");
+    return 65535;
+}
+
+// #5376
+DWORD WINAPI XLIVE_5376 (HANDLE a1, DWORD a2, DWORD a3, DWORD a4, DWORD a5, DWORD a6) {
+    FIXME("unk: (%d, %d, %d, %d, %d, %d)\n",a1,a2,a3,a4,a5,a6);
+    return 65535;
+}
+
