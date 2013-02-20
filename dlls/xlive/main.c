@@ -148,7 +148,7 @@ INT WINAPI XSocketShutdown (long sock, int how) {
 }
 
 // #6: XSocketIOCTLSocket
-INT WINAPI XSocketIOCTLSocket (long sock, long cmd, long * argp) {
+INT WINAPI XSocketIOCTLSocket (long sock, long cmd, ULONG * argp) {
     return ioctlsocket(sock,cmd,argp);
 }
 
@@ -163,22 +163,22 @@ INT WINAPI XSocketGetSockOpt (long sock, int level, int optname, char * optval, 
 }
 
 // #9: XSocketGetSockName
-INT WINAPI XSocketGetSockName (long sock, DWORD * name, int * namelen) {
+INT WINAPI XSocketGetSockName (SOCKET sock, struct sockaddr * name, int * namelen) {
     return getsockname(sock,name,namelen);
 }
 
 // #10: XSocketGetPeerName
-INT WINAPI XSocketGetPeerName (SOCKET s, DWORD * addr, int * addrlen) {
+INT WINAPI XSocketGetPeerName (SOCKET s, struct sockaddr * addr, int * addrlen) {
     return getpeername(s,addr,addrlen);
 }
 
 // #11: XSocketBind
-INT WINAPI XSocketBind (SOCKET s, WORD * addr, int * addrlen) {
+INT WINAPI XSocketBind (SOCKET s, struct sockaddr * addr, int addrlen) {
     return bind(s,addr,addrlen);
 }
 
 // #12: XSocketConnect
-INT WINAPI XSocketConnect (SOCKET s, DWORD * addr, int * addrlen) {
+INT WINAPI XSocketConnect (SOCKET s, struct sockaddr * addr, int addrlen) {
     return connect(s,addr,addrlen);
 }
 
@@ -188,12 +188,12 @@ INT WINAPI XSocketListen (SOCKET s, int backlog) {
 }
 
 // #14: XSocketAccept
-INT WINAPI XSocketAccept (SOCKET s, DWORD * addr, int * addrlen) {
+INT WINAPI XSocketAccept (SOCKET s, struct sockaddr * addr, int * addrlen) {
     return accept(s,addr,addrlen);
 }
 
 // #15: XSocketSelect
-INT WINAPI XSocketSelect (int n, DWORD * readfds, DWORD * writefds, DWORD * exceptfds, DWORD * timeout) {
+INT WINAPI XSocketSelect (int n, struct fd_set * readfds, struct fd_set * writefds, struct fd_set * exceptfds, struct timeval * timeout) {
     return select(n,readfds,writefds,exceptfds,timeout);
 }
 
@@ -222,7 +222,7 @@ DWORD WINAPI XWSARecv (SOCKET s, LPWSABUF lpBuffers,DWORD dwBufferCount,LPDWORD 
 }
 
 // #20: XSocketRecvFrom
-INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, struct sockaddr * from, int fromlen) {
+INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, struct sockaddr * from, int * fromlen) {
     DWORD rb = recvfrom(s,buf,len,flags,from,fromlen);
     xnet_sent_bytes += rb;
     return rb;
@@ -248,7 +248,7 @@ DWORD WINAPI XWSASend (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w
 
 // #24: XSocketSendTo
 INT WINAPI XSocketSendTo (SOCKET s, char * buf, int len, int flags, DWORD * to, int tolen) {
-    FIXME("stub: (%d, %p, %d, %d, %p, %d)\n", s, buf, len, flags, to, tolen);
+    FIXME("stub: (%p, %d, %d, %p, %d)\n", buf, len, flags, to, tolen);
     return 0;
 }
 
@@ -651,7 +651,7 @@ INT WINAPI XGetOverlappedExtendedError (int a1) {
             result = (DWORD)(a1 + 24);
         }
         else {
-            result = result = GetLastError();
+            result = GetLastError();
 	}
     TRACE("(%d, %d)\n", a1, result);
     return result;
@@ -861,7 +861,7 @@ INT WINAPI XLiveVerifyArcadeLicense(struct __SecureBufferHandleStruct *a1, int a
 
 // #5034: XLiveProtectData
 DWORD WINAPI XLiveProtectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE h) {
-    FIXME("stub: %p %d %p %p(%d) %d\n",pInBuffer,dwInDataSize,pOutBuffer,pDataSize,*pDataSize,h);
+    FIXME("stub: %p %d %p %p(%d)\n",pInBuffer,dwInDataSize,pOutBuffer,pDataSize,*pDataSize);
 
     if ( *pDataSize == 0 ) {
         *pDataSize = dwInDataSize;
@@ -912,13 +912,13 @@ INT WINAPI XLiveCreateProtectedDataContext(DWORD * dwType, PHANDLE pHandle) {
 
 // #5037: XLiveQueryProtectedDataInformation
 INT WINAPI XLiveQueryProtectedDataInformation(HANDLE h, DWORD * p0) {
-    FIXME("stub: %d %p\n",h,p0);
+    FIXME("stub: %p\n",p0);
     return 0;
 }
 
 // #5038: XLiveCloseProtectedDataContext
 INT WINAPI XLiveCloseProtectedDataContext(HANDLE h) {
-    FIXME("stub: %d\n",h);
+    FIXME("stub:\n");
     return 0;
 }
 
@@ -1071,19 +1071,19 @@ INT WINAPI XEnumerate (HANDLE hEnum, void * pvBuffer, DWORD cbBuffer, DWORD * pc
 
 // #5257: XLiveManageCredentials 
 INT WINAPI XLiveManageCredentials(char *a1, const unsigned __int16 *a2, char a3, ULONG_PTR dwData) {
-    FIXME ("stub: (%p, %p, %d, %p)\n", a1, a2, a3, dwData);
+    FIXME ("stub: (%p, %p, %d)\n", a1, a2, a3);
     return 0;
 }
 
 // #5258: XLiveSignout
 INT WINAPI XLiveSignout(ULONG_PTR a1) {
-    FIXME ("stub: (%p)\n", a1);
+    FIXME ("stub:\n");
     return 0;
 }
 
 // #5259: XLiveSignin
 INT WINAPI XLiveSignin(const unsigned __int16 *a1, unsigned __int16 *a2, char a3, ULONG_PTR a4) {
-    FIXME ("stub: (%p, %p, %d, %p)\n", a1, a2, a3, a4);
+    FIXME ("stub: (%p, %p, %d)\n", a1, a2, a3);
     return 0;
 }
 
@@ -2005,13 +2005,13 @@ DWORD WINAPI XShowMarketplaceUI (DWORD dwUserIndex, DWORD dwEntryPoint, ULONGLON
 
 // #5367:
 DWORD WINAPI XLIVE_5367 (HANDLE h, DWORD w1, DWORD w2, BYTE * b1, DWORD w3) {
-    FIXME ("stub: (%d, %d, %d, %p, %d)\n", h, w1, w2, b1, w3);
+    FIXME ("stub: (xx, %d, %d, %p, %d)\n", w1, w2, b1, w3);
     return 1;
 }
 
 // #5372
 DWORD WINAPI XLIVE_5372 (HANDLE a1, DWORD a2, DWORD a3, DWORD a4, BYTE *b5, HANDLE h6)
 {
-    FIXME("unk: (%d, %d, %d, %d, %p, %p)\n",a1,a2,a3,a4,b5,h6);
+    FIXME("unk: (xx, %d, %d, %d, %p, xx)\n",a2,a3,a4,b5);
     return 1;
 }
