@@ -1063,8 +1063,7 @@ INT WINAPI XEnumerateBack(int a1, int a2, int a3, int a4, int a5) {
 }
 
 // #5256: XEnumerate
-INT WINAPI XEnumerate (HANDLE hEnum, void * pvBuffer, DWORD cbBuffer, DWORD * pcItemsReturned, void * pOverlapped)
-{
+INT WINAPI XEnumerate (HANDLE hEnum, void * pvBuffer, DWORD cbBuffer, DWORD * pcItemsReturned, void * pOverlapped) {
     if (pcItemsReturned)
         *pcItemsReturned = 0;
     return 0;
@@ -1107,15 +1106,15 @@ INT WINAPI XUserGetXUID(DWORD dwUserIndex, PXUID pXuid) {
 
 // #5262: XUserGetSigninState
 XUSER_SIGNIN_STATE WINAPI XUserGetSigninState(DWORD dwUserIndex){
+    TRACE("(%d)\n", dwUserIndex);
     if ( dwUserIndex > 2 )
         return eXUserSigninState_NotSignedIn;
     return Xliveusers[dwUserIndex].signedin;
 }
 
 // #5263: XUserGetName
-INT WINAPI XUserGetName(DWORD dwUserId, char * pBuffer, DWORD dwBufLen)
-{
-    FIXME("stub: (%d, %p, %d)\n", dwUserId, pBuffer, dwBufLen);
+INT WINAPI XUserGetName(DWORD dwUserId, char * pBuffer, DWORD dwBufLen) {
+    TRACE("(%d, %p, %d)\n", dwUserId, pBuffer, dwBufLen);
     if ( dwUserId > 2 )
         return ERROR_NO_SUCH_USER;
     if ( !Xliveusers[dwUserId].signedin  )
@@ -1136,8 +1135,7 @@ INT WINAPI XUserAreUsersFriends(DWORD dwUserIndex, DWORD * pXuids, DWORD dwXuidC
 
 // #5265: XLiveUserCheckPrivilege
 // Another definition says this should be INT WINAPI XUserCheckPrivilege (DWORD user, DWORD priv, PBOOL b)
-DWORD WINAPI XLiveUserCheckPrivilege(DWORD uIndex,DWORD PrivType, PBOOL pfResult )
-{
+DWORD WINAPI XLiveUserCheckPrivilege(DWORD uIndex,DWORD PrivType, PBOOL pfResult ) {
     FIXME("stub: (%d, %d, %p)\n",uIndex,PrivType,pfResult);
     *pfResult = FALSE;
     return ERROR_SUCCESS;
@@ -1150,8 +1148,7 @@ INT WINAPI XShowMessageBoxUI(int a3, char *a4, char *a5, int a6, int a7, unsigne
 }
 
 // #5267: XUserGetSigninInfo
-INT WINAPI XUserGetSigninInfo(DWORD dwUser, DWORD dwFlags, XUSER_SIGNIN_INFO * pInfo)
-{
+INT WINAPI XUserGetSigninInfo(DWORD dwUser, DWORD dwFlags, XUSER_SIGNIN_INFO * pInfo) {
     FIXME("stub: (%d, %d, %p)\n", dwUser, dwFlags, pInfo);
     if ( !pInfo || dwUser > 2 )
         return ERROR_NO_SUCH_USER;
