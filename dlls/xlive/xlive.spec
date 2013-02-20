@@ -234,4 +234,5 @@
 5360 stdcall -noname XLiveContentCreateEnumerator(long long long long)
 5361 stdcall -noname XLiveContentRetrieveOffersByDate (long long long long long long)
 5365 stdcall -noname XShowMarketplaceUI (long long long long)
+5367 stdcall -noname XLIVE_5367(long long long long long)
 5372 stdcall -noname XLIVE_5372(long long long long long long)

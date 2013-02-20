@@ -38,8 +38,7 @@ void _XListenerAddEvent_PDW(XLiveListener *l, int type, DWORD param )
 }
 
 
-void _XNotifySigninChanged_Event()
-{
+void _XNotifySigninChanged_Event(void) {
     int i;
     for ( i = 0; i < xlive_g_listener_count; i++ )
     {
@@ -68,18 +67,18 @@ INT WINAPI XNotifyCreateListener(unsigned long long qwAreas)
     return xlive_g_listener_count;
 }
 
-BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void ** pParam)
-{
+BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void ** pParam) {
+    int after;
+    int k;
+    XLiveEvent * ev;
+
     if ( index >= l->eventcount )
         return 0;
     *pdwId = l->events[index].type;
     *pParam = l->events[index].param;
-    int after = l->eventcount-(index+1);
+    after = l->eventcount-(index+1);
     //Shift the event list to the left
-    int k;
-    XLiveEvent * ev;
-    for ( ev = &l->events[index],k=0;k < after; k++)
-    {
+    for ( ev = &l->events[index],k=0;k < after; k++) {
         XLiveEvent * next = ++ev;
         memcpy(ev,next,sizeof(XLiveEvent));
         //WARNING: High chance of crap code, coded at 2:25 AM
@@ -89,8 +88,7 @@ BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void ** pPa
     return 1;
 }
 // #651: XNotifyGetNext
-BOOL WINAPI XNotifyGetNext(HANDLE hNotificationListener, DWORD dwMsgFilter, DWORD * pdwId, void ** pParam)
-{
+BOOL WINAPI XNotifyGetNext(HANDLE hNotificationListener, DWORD dwMsgFilter, DWORD * pdwId, void ** pParam) {
     int index = (int)(hNotificationListener-1);
     if ( !hNotificationListener )
         return 0;
