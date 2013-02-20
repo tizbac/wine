@@ -248,7 +248,7 @@ DWORD WINAPI XWSASend (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w
 
 // #24: XSocketSendTo
 INT WINAPI XSocketSendTo (SOCKET s, char * buf, int len, int flags, DWORD * to, int tolen) {
-    FIXME("stub: (%p, %p, %d, %d, %p, %d)\n", s, buf, len, flags, to, tolen);
+    FIXME("stub: (%d, %p, %d, %d, %p, %d)\n", s, buf, len, flags, to, tolen);
     return 0;
 }
 
@@ -637,7 +637,7 @@ INT WINAPI XCustomRegisterDynamicActions (void) {
 
 // #479 XCustomGetCurrentGamercard
 INT WINAPI XCustomGetCurrentGamercard (DWORD w1, DWORD w2) {
-    FIXME ("(%d, %d, %d)\n", w1, w2);
+    FIXME ("(%d, %d)\n", w1, w2);
     return 0;
 }
 
@@ -758,7 +758,7 @@ DWORD WINAPI XLivePBufferGetByte (FakeProtectedBuffer * pBuffer, DWORD offset, B
 
 // #5019: XLivePBufferSetByte
 DWORD WINAPI XLivePBufferSetByte(FakeProtectedBuffer * pBuffer, DWORD offset, BYTE value) {
-    TRACE ("(%p, %d, %p)\n", pBuffer, offset, value);
+    TRACE ("(%p, %d, %d)\n", pBuffer, offset, value);
     if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || offset > pBuffer->dwSize)
         return 0;
     pBuffer->bData[offset] = value;
@@ -776,7 +776,7 @@ DWORD WINAPI XLivePBufferGetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset
 
 // #5021: XLivePBufferSetDWORD
 DWORD WINAPI XLivePBufferSetDWORD (FakeProtectedBuffer * pBuffer, DWORD dwOffset, DWORD dwValue ) {
-    TRACE ("(%p, %d, %p)\n", pBuffer, dwOffset, dwValue);
+    TRACE ("(%p, %d, %d)\n", pBuffer, dwOffset, dwValue);
     if (!pBuffer || pBuffer->dwMagick != 0xDEADDEAD || dwOffset > pBuffer->dwSize-4)
         return 0;
     *(DWORD *)(pBuffer->bData+dwOffset) = dwValue;
@@ -853,20 +853,20 @@ INT WINAPI XLiveVerifyArcadeLicense(struct __SecureBufferHandleStruct *a1, int a
 DWORD WINAPI XLiveProtectData(BYTE * pInBuffer, DWORD dwInDataSize, BYTE * pOutBuffer, DWORD * pDataSize, HANDLE h) {
     FIXME("stub: %p %d %p %p(%d) %d\n",pInBuffer,dwInDataSize,pOutBuffer,pDataSize,*pDataSize,h);
 
-    if ( *pDataSize == 0 )
-    {
+    if ( *pDataSize == 0 ) {
         *pDataSize = dwInDataSize;
         return 0x8007007A; //Insufficent buffer
     }
-    if ( !pOutBuffer )
+    if ( !pOutBuffer ) {
         return 0x8007007A; //Insufficent buffer
-    if (*pDataSize >= dwInDataSize && pOutBuffer)
-    {
+    }
+    if (*pDataSize >= dwInDataSize && pOutBuffer) {
         // HexDump(pInBuffer,dwInDataSize);
         memcpy (pOutBuffer, pInBuffer, dwInDataSize);
     }
-    else
+    else {
         return 0x8007007A; //Insufficent buffer
+    }
     return 0;
 }
 
@@ -938,7 +938,7 @@ INT WINAPI XShowMessageComposeUI (int a1, const void *Src, int a3, char *a4) {
 
 // #5210 XShowFriendRequestUI
 INT WINAPI XShowFriendRequestUI (char a1, unsigned int a2, long int a3) {
-    FIXME("stub: (%d, %d, %d)\n",a1, a2, a3);
+    FIXME("stub: (%d, %d, %ld)\n",a1, a2, a3);
     return 0;
 }
 
@@ -991,7 +991,7 @@ INT WINAPI XLocatorCreateServerEnumerator (int a3, unsigned int a4, unsigned int
 
 // #5235: XLocatorCreateServerEnumeratorByIDs
 INT WINAPI XLocatorCreateServerEnumeratorByIDs (int a3, unsigned int a4, unsigned int a5, int a6, unsigned int a7, const void *Src, int a9, int a10) {
-    FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d)\n", a3, a4, a5, a6, a7, Src, a9, a10);
+    FIXME ("stub: (%d, %d, %d, %d, %d, %p, %d, %d)\n", a3, a4, a5, a6, a7, Src, a9, a10);
     return 0;
 }
 
@@ -1035,7 +1035,7 @@ DWORD WINAPI XCloseHandle(DWORD p1) {
 // #5252: XShowGamerCardUI
 INT WINAPI XShowGamerCardUI(unsigned __int32 a1, __int64 a2, DWORD w1) {
 // third param might be wrong
-    FIXME ("stub: (%d, %d)\n", a1, a2);
+    FIXME ("stub: (%d, %lld, %d)\n", a1, a2, w1);
     return 0;
 }
 
@@ -1229,7 +1229,7 @@ INT WINAPI XUserReadAchievementPicture (int a2, int a3, int a4, int a5, int a6, 
 
 // #5280: XUserCreateAchievementEnumerator
 INT WINAPI XUserCreateAchievementEnumerator(DWORD dwTitleId, DWORD dwUserIndex, ULONGLONG xuid, DWORD dwDetailFlags, DWORD dwStartingIndex, DWORD cItem, DWORD * pcbBuffer, HANDLE * phEnum) {
-    FIXME("stub: (%d, %d, %ld, %d, %d, %d, %p, %p)\n", dwTitleId, dwUserIndex, xuid, dwDetailFlags, dwStartingIndex, cItem, pcbBuffer, phEnum);
+    FIXME("stub: (%d, %d, %lld, %d, %d, %d, %p, %p)\n", dwTitleId, dwUserIndex, xuid, dwDetailFlags, dwStartingIndex, cItem, pcbBuffer, phEnum);
     if (pcbBuffer)
         *pcbBuffer = 0;
     if (phEnum)
@@ -1273,8 +1273,8 @@ DWORD WINAPI XUserCreateStatsEnumeratorByRank (DWORD dwTitleId, DWORD dwRankStar
 }
 
 // #5285: XUserCreateStatsEnumeratorByRating
-INT WINAPI XUserCreateStatsEnumeratorByRating(int a1, int a2, int a3, int a4, int a5, const void *Src, int a7, int a8) {
-    FIXME ("stub: (%d, %d, %d, %d, %d, %p, %d, %d)\n", a1, a2, a3, a4, a5, Src, a7, a8);
+INT WINAPI XUserCreateStatsEnumeratorByRating (DWORD dwTitleId, DWORD dwRankStart, DWORD dwNumRows, DWORD dwNuStatSpec, void * pSpecs, DWORD * pcbBuffer, PHANDLE phEnum) {
+    FIXME ("stub: (%d, %d, %d, %d, %p, %p, %p)\n", dwTitleId, dwRankStart, dwNumRows, dwNuStatSpec, pSpecs, pcbBuffer, phEnum);
     if (pcbBuffer)
         pcbBuffer = 0;
     *phEnum = INVALID_HANDLE_VALUE;
@@ -1386,6 +1386,9 @@ INT WINAPI XLiveInitializeEx(XLIVE_INITIALIZE_INFO * pXii, DWORD dwVersion) {
     HANDLE exeFile;
     DWORD dwTitleId;
     char buf[512];
+    char * crcbuf;
+    DWORD bytesread;
+    DWORD crc32;
 
     FIXME("stub: %p %d\n", pXii, dwVersion);
     //TODO: Determine titelid correctly, for now we have to use crc32 of game executable
@@ -1395,9 +1398,9 @@ INT WINAPI XLiveInitializeEx(XLIVE_INITIALIZE_INFO * pXii, DWORD dwVersion) {
         ERR("Cannot read executable");
         return E_FAIL;
     }
-    char * crcbuf = fullpathtogame; //Will invalidate fullpathtogame , but it is no longer needed and that will save stack space
-    DWORD bytesread = 1;
-    DWORD crc32 = 0x0;
+    crcbuf = fullpathtogame; //Will invalidate fullpathtogame , but it is no longer needed and that will save stack space
+    bytesread = 1;
+    crc32 = 0x0;
     while ( ReadFile(exeFile,crcbuf,1024,&bytesread,NULL) && bytesread ) {
         crc32 = XLIVEPRIVComputeCrc32(crcbuf,bytesread,crc32);
     }
@@ -1827,7 +1830,7 @@ INT WINAPI XUserEstimateRankForRating(int a1, int a2, int a3, int a4, int a5) {
 
 // #5347: XLiveProtectedLoadLibrary
 INT WINAPI XLiveProtectedLoadLibrary(void *a2, int a3, void *lpLibFileName, DWORD dwFlags, int a6) {
-    FIXME ("stub: (%p, %d, %d, %p, %p)\n", a2, a3, lpLibFileName, dwFlags, a6);
+    FIXME ("stub: (%p, %d, %p, %d, %d)\n", a2, a3, lpLibFileName, dwFlags, a6);
     return 0;
 }
 
