@@ -668,7 +668,7 @@ static void buffer_direct_upload(struct wined3d_buffer *This, const struct wined
      * caller always takes care of this. */
     GL_EXTCALL(glBindBufferARB(This->buffer_type_hint, This->buffer_object));
     checkGLcall("glBindBufferARB");
-    if (gl_info->supported[ARB_MAP_BUFFER_RANGE])
+    if ( 0 && gl_info->supported[ARB_MAP_BUFFER_RANGE])
     {
         GLbitfield mapflags;
         mapflags = GL_MAP_WRITE_BIT | GL_MAP_FLUSH_EXPLICIT_BIT;
@@ -708,7 +708,7 @@ static void buffer_direct_upload(struct wined3d_buffer *This, const struct wined
 
         memcpy(map + start, This->resource.allocatedMemory + start, len);
 
-        if (gl_info->supported[ARB_MAP_BUFFER_RANGE])
+        if (0 && gl_info->supported[ARB_MAP_BUFFER_RANGE])
         {
             GL_EXTCALL(glFlushMappedBufferRange(This->buffer_type_hint, start, len));
             checkGLcall("glFlushMappedBufferRange");
@@ -1030,7 +1030,7 @@ HRESULT CDECL wined3d_buffer_map(struct wined3d_buffer *buffer, UINT offset, UIN
                     context_invalidate_state(context, STATE_INDEXBUFFER);
                 GL_EXTCALL(glBindBufferARB(buffer->buffer_type_hint, buffer->buffer_object));
 
-                if (gl_info->supported[ARB_MAP_BUFFER_RANGE])
+                if (0 && gl_info->supported[ARB_MAP_BUFFER_RANGE])
                 {
                     GLbitfield mapflags = buffer_gl_map_flags(flags);
                     buffer->resource.allocatedMemory = GL_EXTCALL(glMapBufferRange(buffer->buffer_type_hint,
@@ -1141,7 +1141,7 @@ void CDECL wined3d_buffer_unmap(struct wined3d_buffer *buffer)
             context_invalidate_state(context, STATE_INDEXBUFFER);
         GL_EXTCALL(glBindBufferARB(buffer->buffer_type_hint, buffer->buffer_object));
 
-        if (gl_info->supported[ARB_MAP_BUFFER_RANGE])
+        if (0 && gl_info->supported[ARB_MAP_BUFFER_RANGE])
         {
             for (i = 0; i < buffer->modified_areas; ++i)
             {
@@ -1216,7 +1216,7 @@ static HRESULT buffer_init(struct wined3d_buffer *buffer, struct wined3d_device 
         buffer->flags |= WINED3D_BUFFER_DOUBLEBUFFER;
     }
 
-    dynamic_buffer_ok = gl_info->supported[APPLE_FLUSH_BUFFER_RANGE] || gl_info->supported[ARB_MAP_BUFFER_RANGE];
+    dynamic_buffer_ok = gl_info->supported[APPLE_FLUSH_BUFFER_RANGE] || ( 0 && gl_info->supported[ARB_MAP_BUFFER_RANGE]);
 
     /* Observations show that drawStridedSlow is faster on dynamic VBs than converting +
      * drawStridedFast (half-life 2 and others).
