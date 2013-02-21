@@ -357,6 +357,7 @@ short WINAPI NetDll_htons(short in) {
 
 // #51: XNetStartup
 INT WINAPI XNetStartup(XNetStartupParams * p) {
+    TRACE ("%d",p);
     memcpy(&xnetparams,p,sizeof(XNetStartupParams));
     return 0;
 }
@@ -1130,6 +1131,7 @@ XUSER_SIGNIN_STATE WINAPI XUserGetSigninState(DWORD dwUserIndex){
     if ( dwUserIndex > 2 ) {
         return eXUserSigninState_NotSignedIn;
     }
+    TRACE(".signedin: %d\n", Xliveusers[dwUserIndex].signedin);
     return Xliveusers[dwUserIndex].signedin;
     // return 1; // eXUserSigninState_SignedInLocally
 }
@@ -1333,8 +1335,12 @@ INT WINAPI XUserGetProperty(int a1, int a2, int a3, int a4) {
 }
 
 // #5289: XUserGetContext
-INT WINAPI XUserGetContext (int a2, int a3, int *a4) {
-    FIXME ("stub: (%d, %d, %p)\n", a2, a3, a4);
+INT WINAPI XUserGetContext (int a2, int pContext, int *a4) {
+    FIXME ("stub: (%d, %d, %p)\n", a2, pContext, a4);
+    if (!pContext) {
+	TRACE ("pContext must not be NULL.");
+        return 87;
+    }
     return 0;
 }
 
@@ -1911,13 +1917,29 @@ INT WINAPI XLiveContentVerifyInstalledPackage(struct _XLIVE_CONTENT_INFO_V1 *a1,
 }
 
 // #5355: XLiveContentGetPath
-DWORD WINAPI XLiveContentGetPath(DWORD errDesc , DWORD p2 , char* p3 , DWORD *p4) // maybe some func to get extended error str?
-// actually (DWORD dwUserIndex, void * pContentInfo, wchar_t * pszPath, DWORD * pcchPath)
-{
-    FIXME ("stub: ()\n");
-    if ( *p4 > 0 )
-        p3[0] = 0x0;
+DWORD WINAPI XLiveContentGetPath(DWORD dwUserIndex, void * pContentInfo, wchar_t * pszPath, DWORD * pcchPath) {
+    if (dwUserIndex) {
+        TRACE("Invalid dwUserIndex, must always be 0");
+        return -2147024809;
+    }
+    if (!pContentInfo) {
+        TRACE("Invalid pContentInfo. Must not be NULL");
+        return -2147024809;
+    }
+    // enforce the following tests
+    if ( *pszPath > 0 ) {
+        pcchPath[0] = 0x0;
+    }
+    if (!pcchPath) {
+        TRACE("Invalid pcchPath. Must not be NULL");
+        return -2147024809;
+    }
+    if (!pszPath && pcchPath) {
+        TRACE("Invalid pcchPath. Must be 0 if pszPath is NULL");
+        return -2147024809;
+    }
 
+    FIXME ("stub: ()\n");
     return 0;
 }
 
@@ -1931,22 +1953,31 @@ INT FUNC001(DWORD * p1 , DWORD * p2)
 }
 
 // #5356: XLiveContentGetDisplayName
-DWORD WINAPI XLiveContentGetDisplayName(DWORD p1,DWORD* p2,DWORD p3,DWORD *p4 /*some buffer size*/) {
-// would be (int a2, struct _XLIVE_CONTENT_INFO_V1 *a3, char *a4, unsigned __int32 *a5)
+DWORD WINAPI XLiveContentGetDisplayName(DWORD dwUserIndex,DWORD* pContentInfo, wchar_t * pszDisplayName, DWORD * pcchDisplayName) {
     int result;
     DWORD v6[0x14+2];
 
-    FIXME ("stub: (%d, %p, %d, %p)\n",p1,p2,p3,p4);
-    FIXME ("%p(%x) %p(%x)\n",p2,*p2,p4,*p4);
-    if ( *p4 == 0 )
-    {
-        *p4 = 0x10;//totally unk
-        return -2147024774;
-    }
-    //if ( p1 || !p2 || !p4 || !p3 && !p4 )
-    return -2147024809;
+    FIXME ("stub: (%d, %p, %d, %p)\n",dwUserIndex,pContentInfo,pszDisplayName,pcchDisplayName);
+    FIXME ("%p(%x) %p(%x)\n",dwUserIndex,*pContentInfo,pszDisplayName,*pcchDisplayName);
 
-    result = FUNC001(p2,v6);
+    if (dwUserIndex) {
+        TRACE("Invalid dwUserIndex, must always be 0");
+        return -2147024809;
+    }
+    if (!pContentInfo) {
+        TRACE("Invalid pContentInfo. Must not be NULL");
+        return -2147024809;
+    }
+    if (!pcchDisplayName) {
+        TRACE("Invalid pcchDisplayName. Must not be NULL");
+        return -2147024809;
+    }
+    if (!pszDisplayName && pcchDisplayName) {
+        TRACE("Invalid pcchDisplayName. Must be 0 if pszDisplayName is NULL");
+        return -2147024809;
+    }
+
+    result = FUNC001(pContentInfo,v6);
     //8c4 access
     FIXME("result %i", result);
     return 0;
