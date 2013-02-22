@@ -236,3 +236,7 @@
 5365 stdcall -noname XShowMarketplaceUI (long long long long)
 5367 stdcall -noname XLIVE_5367(long long long long long)
 5372 stdcall -noname XLIVE_5372(long long long long long long)
+5374 stdcall -noname XLIVE_5374()
+5376 stdcall -noname XLIVE_5376(long long long long long long)
+
+
