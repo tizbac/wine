@@ -53,8 +53,9 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
                                     DWORD * pdwSettingIds, DWORD * pcbResults, PXUSER_READ_PROFILE_SETTING_RESULT pResults, DWORD pOverlapped);
 BOOL WINAPI XLivepIsUserIndexValid(DWORD userid,DWORD unk1, DWORD unk2)
 {
-    if ( userid < 3 )
+    if ( userid < 3 ) {
         return TRUE;
+    }
     return FALSE;
 }
 BOOL DirectoryExists(const char * szPath)
@@ -158,31 +159,31 @@ INT WINAPI XSocketCreate (int af, int type, int protocol) {
 
 // #4: XSocketClose
 INT WINAPI XSocketClose (long sock) {
-    TRACE("(%d)\n",sock);
+    TRACE("(%ld)\n",sock);
     return closesocket(sock);
 }
 
 // #5: XSocketShutdown
 INT WINAPI XSocketShutdown (long sock, int how) {
-    TRACE("(%d,%d)\n",sock,how);
+    TRACE("(%ld,%d)\n",sock,how);
     return shutdown(sock,how);
 }
 
 // #6: XSocketIOCTLSocket
 INT WINAPI XSocketIOCTLSocket (long sock, long cmd, ULONG * argp) {
-    TRACE("(%d,%d,%ul)\n",sock,cmd,*argp);
+    TRACE("(%ld,%ld,%ul)\n",sock,cmd,*argp);
     return ioctlsocket(sock,cmd,argp);
 }
 
 // #7: XSocketSetSockOpt
 INT WINAPI XSocketSetSockOpt (long sock, int level, int optname, const char * optval, int optlen) {
-    TRACE("(%d,%d,%d,%p%d)\n",sock,level,optname,optval,optlen);
+    TRACE("(%ld,%d,%d,%p%d)\n",sock,level,optname,optval,optlen);
     return setsockopt(sock,level,optname,optval,optlen);
 }
 
 // #8: XSocketGetSockOpt
 INT WINAPI XSocketGetSockOpt (long sock, int level, int optname, char * optval, int * optlen) {
-    TRACE("(%d,%d,%d,%p%d)\n",sock,level,optname,optval,optlen);
+    TRACE("(%ld,%d,%d,%p%d)\n",sock,level,optname,optval,optlen);
     return getsockopt(sock,level,optname,optval,optlen);
 }
 
@@ -273,6 +274,7 @@ DWORD WINAPI XWSARecvFrom (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWO
 
 // #22: XSocketSend
 INT WINAPI XSocketSend (SOCKET s, char * buf, int len, int flags) {
+    TRACE("(%d,%p,%d,0x%08x)=%d\n",s,buf,len,flags);
     xnet_sent_bytes += len;
     return send(s,buf,len,flags);
 }
@@ -375,6 +377,7 @@ short WINAPI NetDll_htons(short in) {
 
 // #51: XNetStartup
 INT WINAPI XNetStartup(XNetStartupParams * p) {
+    TRACE ("%d",p);
     memcpy(&xnetparams,p,sizeof(XNetStartupParams));
     
     
@@ -662,9 +665,9 @@ DWORD WINAPI XNetReplaceKey (DWORD a1,DWORD a2) {
     return 8;
 }
 
-// #82:
+// #82: XNetGetXnAddrPlatform
 DWORD WINAPI XNetGetXnAddrPlatform (DWORD a1,DWORD a2) {
-    FIXME("trace: (%d %d), returning 0\n",a1,a2);
+    FIXME("stub: (%d %d), returning 0\n",a1,a2);
     return 8;
 }
 
@@ -751,7 +754,7 @@ INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait) {
 INT WINAPI XliveInput(DWORD * p) {
     p[5] = 0;
     //FIXME("stub: %p\n", p);
-    return 1;
+    return 1; // do not handle window message calls
 }
 
 // #5002: XliveInput
@@ -789,7 +792,7 @@ INT WINAPI XHVCreateEngine(DWORD p0, DWORD p1, void ** ppEngine)
     if ( ppEngine)
         *ppEngine = NULL;
     FIXME("stub: (%d, %d, %p)\n",p0,p1,ppEngine);
-    return -1;
+    return -1; // disable live voice
 }
 
 // #5010: XLiveRegisterDataSection
@@ -1189,22 +1192,26 @@ INT WINAPI XUserGetXUID(DWORD dwUserIndex, PXUID pXuid) {
 // #5262: XUserGetSigninState
 XUSER_SIGNIN_STATE WINAPI XUserGetSigninState(DWORD dwUserIndex){
     TRACE("(%d)\n", dwUserIndex);
-    if ( dwUserIndex > 2 )
+    if ( dwUserIndex > 2 ) {
         return eXUserSigninState_NotSignedIn;
+    }
+    TRACE(".signedin: %d\n", Xliveusers[dwUserIndex].signedin);
     return Xliveusers[dwUserIndex].signedin;
+    // return 1; // eXUserSigninState_SignedInLocally
 }
 
 // #5263: XUserGetName
 INT WINAPI XUserGetName(DWORD dwUserId, char * pBuffer, DWORD dwBufLen) {
     TRACE("(%d, %p, %d)\n", dwUserId, pBuffer, dwBufLen);
-    if ( dwUserId > 2 )
-        return ERROR_NO_SUCH_USER;
-    if ( !Xliveusers[dwUserId].signedin  )
-    {
+    if ( dwUserId > 2 ) {
         return ERROR_NO_SUCH_USER;
     }
-    if (!pBuffer)
+    if ( !Xliveusers[dwUserId].signedin  ) {
+        return ERROR_NO_SUCH_USER;
+    }
+    if (!pBuffer) {
         return 1;
+    }
     lstrcpynA(pBuffer,Xliveusers[dwUserId].username,dwBufLen);
     return ERROR_SUCCESS;
 }
@@ -1217,8 +1224,20 @@ INT WINAPI XUserAreUsersFriends(DWORD dwUserIndex, DWORD * pXuids, DWORD dwXuidC
 
 // #5265: XLiveUserCheckPrivilege
 // Another definition says this should be INT WINAPI XUserCheckPrivilege (DWORD user, DWORD priv, PBOOL b)
-DWORD WINAPI XLiveUserCheckPrivilege(DWORD uIndex,DWORD PrivType, PBOOL pfResult ) {
-    FIXME("stub: (%d, %d, %p)\n",uIndex,PrivType,pfResult);
+DWORD WINAPI XLiveUserCheckPrivilege(DWORD dwUserIndex,DWORD PrivType, PBOOL pfResult ) {
+    FIXME("stub: (%d, %d, %p(%d))\n",dwUserIndex,PrivType,pfResult,*pfResult);
+    if ( PrivType != 254 && PrivType != 252 && PrivType != 251 && PrivType != 249
+         && PrivType != 248 && PrivType != 247  && PrivType != 246 
+         && PrivType != 245 && PrivType != 244 && PrivType != 243 
+         && PrivType != 238 && PrivType != 235 && PrivType != 234 
+         && PrivType != 226 ) {
+         FIXME ("invalid PrivType %d", PrivType);
+         return 87;
+    }
+    if (!pfResult) {
+        FIXME ("pfResult must not be NULL");
+        return 87;
+    }
     *pfResult = FALSE;
     return ERROR_SUCCESS;
 }
@@ -1392,8 +1411,12 @@ INT WINAPI XUserGetProperty(int a1, int a2, int a3, int a4) {
 }
 
 // #5289: XUserGetContext
-INT WINAPI XUserGetContext (int a2, int a3, int *a4) {
-    FIXME ("stub: (%d, %d, %p)\n", a2, a3, a4);
+INT WINAPI XUserGetContext (int a2, int pContext, int *a4) {
+    FIXME ("stub: (%d, %d, %p)\n", a2, pContext, a4);
+    if (!pContext) {
+        TRACE ("pContext must not be NULL.");
+        return 87;
+    }
     return 0;
 }
 
@@ -1753,7 +1776,14 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
         propFile = CreateFileA(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
         if ( propFile == INVALID_HANDLE_VALUE ) {
             ERR("Setting ID: %d : Cannot load property\n",id);
-            continue;
+            // fallback
+            if (*pcbResults < sizeof(DWORD)+sizeof(XUSER_PROFILE_SETTING)*dwNumSettingIds) {
+                *pcbResults = sizeof(DWORD)+sizeof(XUSER_PROFILE_SETTING)*dwNumSettingIds; /* TODO: make correct calculation by IDs.*/
+            }
+            memset (pResults, 0, *pcbResults);
+            pResults->dwSettingsLen = *pcbResults-sizeof (XUSER_PROFILE_SETTING);
+            pResults->pSettings = (BYTE *)pResults+sizeof (XUSER_PROFILE_SETTING);
+            return 0;
         }
 
 // XUSER_DATA_TYPE_CONTEXT     ((BYTE)0)
@@ -1960,8 +1990,39 @@ DWORD WINAPI XLiveContentCreateAccessHandle(DWORD dwTitleId, void * pContentInfo
 }
 
 // #5351: XLiveContentInstallPackage
-INT WINAPI XLiveContentInstallPackage(struct _XLIVE_CONTENT_INFO_V1 *a1, unsigned __int16 *a2, struct _XLIVE_CONTENT_INSTALL_CALLBACK_PARAMS *a3) {
-    FIXME ("stub: (%p, %p, %p)\n", a1, a2, a3);
+INT WINAPI XLiveContentInstallPackage(struct _XLIVE_CONTENT_INFO_V1 *pContentInfo, unsigned __int16 *szCabFilePath, struct _XLIVE_CONTENT_INSTALL_CALLBACK_PARAMS *pInstallCallbackParams) {
+    FIXME ("stub: (%p, %p, %p)\n", pContentInfo, szCabFilePath, pInstallCallbackParams);
+    if (!pContentInfo) {
+        FIXME("Invalid pContentInfo.  Must not be NULL.");
+        return -2147467261;
+    }
+    if (!szCabFilePath) {
+       FIXME("Invalid szCabFilePath.  Must not be NULL.");
+        return -2147467261;
+    }
+    if (*(DWORD *)pContentInfo != 1) {
+        FIXME("Invalid pContentInfo->dwContentAPIVersion. Must be 1");
+        return -2147467261;
+    }
+    if (!*(DWORD *)pContentInfo + 1) {
+        FIXME("Invalid Invalid pContentInfo->dwTitleID. ");
+        return -2147467261;
+    }
+    if ( (*(DWORD *)pContentInfo + 2) != 2) {
+        FIXME("Invalid Invalid pContentInfo->dwContentType. Must be XCONTENTTYPE_MARKETPLACE (==2)");
+        return -2147467261;
+    }
+    if (pInstallCallbackParams)  {
+        if (*(DWORD *)pInstallCallbackParams !=12 ){
+            FIXME("nvalid pInstallCallbackParams->cbSize. Must be sizeof(XLIVE_CONTENT_INSTALL_CALLBACK_PARAMS)");
+        return -2147467261;
+        }
+        if (!*(DWORD *)pInstallCallbackParams +1 ){
+            FIXME("Invalid pInstallCallbackParams->pInstallCallback.  Must not be NULL.");
+        return -2147467261;
+        }
+    }
+    // now it should call TranslateContentInfoV1ToInternal
     return 0;
 }
 
@@ -1978,13 +2039,29 @@ INT WINAPI XLiveContentVerifyInstalledPackage(struct _XLIVE_CONTENT_INFO_V1 *a1,
 }
 
 // #5355: XLiveContentGetPath
-DWORD WINAPI XLiveContentGetPath(DWORD errDesc , DWORD p2 , char* p3 , DWORD *p4) // maybe some func to get extended error str?
-// actually (DWORD dwUserIndex, void * pContentInfo, wchar_t * pszPath, DWORD * pcchPath)
-{
-    FIXME ("stub: ()\n");
-    if ( *p4 > 0 )
-        p3[0] = 0x0;
+DWORD WINAPI XLiveContentGetPath(DWORD dwUserIndex, void * pContentInfo, wchar_t * pszPath, DWORD * pcchPath) {
+    if (dwUserIndex) {
+        TRACE("Invalid dwUserIndex, must always be 0");
+        return -2147024809;
+    }
+    if (!pContentInfo) {
+        TRACE("Invalid pContentInfo. Must not be NULL");
+        return -2147024809;
+    }
+    // enforce the following tests
+    if ( *pszPath > 0 ) {
+        pcchPath[0] = 0x0;
+    }
+    if (!pcchPath) {
+        TRACE("Invalid pcchPath. Must not be NULL");
+        return -2147024809;
+    }
+    if (!pszPath && pcchPath) {
+        TRACE("Invalid pcchPath. Must be 0 if pszPath is NULL");
+        return -2147024809;
+    }
 
+    FIXME ("stub: ()\n");
     return 0;
 }
 
@@ -1998,22 +2075,31 @@ INT FUNC001(DWORD * p1 , DWORD * p2)
 }
 
 // #5356: XLiveContentGetDisplayName
-DWORD WINAPI XLiveContentGetDisplayName(DWORD p1,DWORD* p2,DWORD p3,DWORD *p4 /*some buffer size*/) {
-// would be (int a2, struct _XLIVE_CONTENT_INFO_V1 *a3, char *a4, unsigned __int32 *a5)
+DWORD WINAPI XLiveContentGetDisplayName(DWORD dwUserIndex,DWORD* pContentInfo, wchar_t * pszDisplayName, DWORD * pcchDisplayName) {
     int result;
     DWORD v6[0x14+2];
 
-    FIXME ("stub: (%d, %p, %d, %p)\n",p1,p2,p3,p4);
-    FIXME ("%p(%x) %p(%x)\n",p2,*p2,p4,*p4);
-    if ( *p4 == 0 )
-    {
-        *p4 = 0x10;//totally unk
-        return -2147024774;
-    }
-    //if ( p1 || !p2 || !p4 || !p3 && !p4 )
-    return -2147024809;
+    FIXME ("stub: (%d, %p, %ls, %p)\n",dwUserIndex,pContentInfo,pszDisplayName,pcchDisplayName);
+    FIXME ("%d, (%x), %p, (%x)\n",dwUserIndex,*pContentInfo,pszDisplayName,*pcchDisplayName);
 
-    result = FUNC001(p2,v6);
+    if (dwUserIndex) {
+        TRACE("Invalid dwUserIndex, must always be 0");
+        return -2147024809;
+    }
+    if (!pContentInfo) {
+        TRACE("Invalid pContentInfo. Must not be NULL");
+        return -2147024809;
+    }
+    if (!pcchDisplayName) {
+        TRACE("Invalid pcchDisplayName. Must not be NULL");
+        return -2147024809;
+    }
+    if (!pszDisplayName && pcchDisplayName) {
+        TRACE("Invalid pcchDisplayName. Must be 0 if pszDisplayName is NULL");
+        return -2147024809;
+    }
+
+    result = FUNC001(pContentInfo,v6);
     //8c4 access
     FIXME("result %i", result);
     return 0;
@@ -2100,8 +2186,20 @@ DWORD WINAPI XLIVE_5367 (HANDLE h, DWORD w1, DWORD w2, BYTE * b1, DWORD w3) {
 }
 
 // #5372
-DWORD WINAPI XLIVE_5372 (HANDLE a1, DWORD a2, DWORD a3, DWORD a4, BYTE *b5, HANDLE h6)
-{
+DWORD WINAPI XLIVE_5372 (HANDLE a1, DWORD a2, DWORD a3, DWORD a4, BYTE *b5, HANDLE h6) {
     FIXME("unk: (xx, %d, %d, %d, %p, xx)\n",a2,a3,a4,b5);
-    return 1;
+    return -1; // might be 1 also
 }
+
+// #5374
+DWORD WINAPI XLIVE_5374 (void) {
+    FIXME("unk:\n");
+    return 65535;
+}
+
+// #5376
+DWORD WINAPI XLIVE_5376 (HANDLE a1, DWORD a2, DWORD a3, DWORD a4, DWORD a5, DWORD a6) {
+    FIXME("unk: (xx, %d, %d, %d, %d, %d)\n",a2,a3,a4,a5,a6);
+    return 65535;
+}
+
