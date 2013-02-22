@@ -1182,8 +1182,8 @@ INT WINAPI XShowSigninUI(DWORD cPanes,DWORD dwFlags){
 // #5261: XUserGetXUID
 INT WINAPI XUserGetXUID(DWORD dwUserIndex, PXUID pXuid) {
     FIXME("stub: (%d, %p)\n", dwUserIndex, pXuid);
-    return Xliveusers[dwUserIndex].xuid;
-    return 0; // ???
+    *pXuid = Xliveusers[dwUserIndex].xuid;
+    return ERROR_SUCCESS;
 }
 
 // #5262: XUserGetSigninState
