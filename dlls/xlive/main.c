@@ -1927,8 +1927,39 @@ DWORD WINAPI XLiveContentCreateAccessHandle(DWORD dwTitleId, void * pContentInfo
 }
 
 // #5351: XLiveContentInstallPackage
-INT WINAPI XLiveContentInstallPackage(struct _XLIVE_CONTENT_INFO_V1 *a1, unsigned __int16 *a2, struct _XLIVE_CONTENT_INSTALL_CALLBACK_PARAMS *a3) {
-    FIXME ("stub: (%p, %p, %p)\n", a1, a2, a3);
+INT WINAPI XLiveContentInstallPackage(struct _XLIVE_CONTENT_INFO_V1 *pContentInfo, unsigned __int16 *szCabFilePath, struct _XLIVE_CONTENT_INSTALL_CALLBACK_PARAMS *pInstallCallbackParams) {
+    FIXME ("stub: (%p, %p, %p)\n", pContentInfo, szCabFilePath, pInstallCallbackParams);
+    if (!pContentInfo) {
+        FIXME("Invalid pContentInfo.  Must not be NULL.");
+        return -2147467261;
+    }
+    if (!szCabFilePath) {
+       FIXME("Invalid szCabFilePath.  Must not be NULL.");
+        return -2147467261;
+    }
+    if (*(DWORD *)pContentInfo != 1) {
+        FIXME("Invalid pContentInfo->dwContentAPIVersion. Must be 1");
+        return -2147467261;
+    }
+    if (!*(DWORD *)pContentInfo + 1) {
+        FIXME("Invalid Invalid pContentInfo->dwTitleID. ");
+        return -2147467261;
+    }
+    if ( (*(DWORD *)pContentInfo + 2) != 2) {
+        FIXME("Invalid Invalid pContentInfo->dwContentType. Must be XCONTENTTYPE_MARKETPLACE (==2)");
+        return -2147467261;
+    }
+    if (pInstallCallbackParams)  {
+        if (*(DWORD *)pInstallCallbackParams !=12 ){
+            FIXME("nvalid pInstallCallbackParams->cbSize. Must be sizeof(XLIVE_CONTENT_INSTALL_CALLBACK_PARAMS)");
+        return -2147467261;
+        }
+        if (!*(DWORD *)pInstallCallbackParams +1 ){
+            FIXME("Invalid pInstallCallbackParams->pInstallCallback.  Must not be NULL.");
+        return -2147467261;
+        }
+    }
+    // now it should call TranslateContentInfoV1ToInternal
     return 0;
 }
 
