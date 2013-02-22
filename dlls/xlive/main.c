@@ -88,6 +88,24 @@ void HexDump(unsigned char * data, unsigned int len)
     sprintf(&buf[strlen(buf)],"\n");
     FIXME("%s",buf);
 }
+
+
+//TODO: TEMPORARY FOR DEBUGGING RE5
+INT __cdecl Re5Log(void * logClassInstance,const char * format,char * funcname,void * p0,void * p1,void *p2,void * p3)
+{
+
+    printf(format,funcname,p0,p1,p2,p3);
+    return 0;
+}
+
+//TODO: TEMPORARY FOR DEBUGGING RE5
+INT __cdecl Re5Log0x20(void * logClassInstance,const char * UNK,char *f2,void * p0,void * p1,void *p2,void * p3)
+{
+
+    printf(f2,p0,p1,p2,p3);
+    return 0;
+}
+
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
     int i;
@@ -134,71 +152,85 @@ void WINAPI XWSACleanup(void) {
 
 // #3: XSocketCreate
 INT WINAPI XSocketCreate (int af, int type, int protocol) {
+    TRACE("(%d,%d,%d)\n",af,type,protocol);
     return socket(af,type,protocol);
 }
 
 // #4: XSocketClose
 INT WINAPI XSocketClose (long sock) {
+    TRACE("(%d)\n",sock);
     return closesocket(sock);
 }
 
 // #5: XSocketShutdown
 INT WINAPI XSocketShutdown (long sock, int how) {
+    TRACE("(%d,%d)\n",sock,how);
     return shutdown(sock,how);
 }
 
 // #6: XSocketIOCTLSocket
 INT WINAPI XSocketIOCTLSocket (long sock, long cmd, ULONG * argp) {
+    TRACE("(%d,%d,%ul)\n",sock,cmd,*argp);
     return ioctlsocket(sock,cmd,argp);
 }
 
 // #7: XSocketSetSockOpt
 INT WINAPI XSocketSetSockOpt (long sock, int level, int optname, const char * optval, int optlen) {
+    TRACE("(%d,%d,%d,%p%d)\n",sock,level,optname,optval,optlen);
     return setsockopt(sock,level,optname,optval,optlen);
 }
 
 // #8: XSocketGetSockOpt
 INT WINAPI XSocketGetSockOpt (long sock, int level, int optname, char * optval, int * optlen) {
+    TRACE("(%d,%d,%d,%p%d)\n",sock,level,optname,optval,optlen);
     return getsockopt(sock,level,optname,optval,optlen);
 }
 
 // #9: XSocketGetSockName
 INT WINAPI XSocketGetSockName (SOCKET sock, struct sockaddr * name, int * namelen) {
+    TRACE("(%d,%p,%p)\n",sock,name,namelen);
     return getsockname(sock,name,namelen);
 }
 
 // #10: XSocketGetPeerName
 INT WINAPI XSocketGetPeerName (SOCKET s, struct sockaddr * addr, int * addrlen) {
+    TRACE("(%d,%p,%p)\n",s,addr,addrlen);
     return getpeername(s,addr,addrlen);
 }
 
 // #11: XSocketBind
 INT WINAPI XSocketBind (SOCKET s, struct sockaddr * addr, int addrlen) {
+    TRACE("(%d,%p,%p)\n",s,addr,addrlen);
     return bind(s,addr,addrlen);
 }
 
 // #12: XSocketConnect
 INT WINAPI XSocketConnect (SOCKET s, struct sockaddr * addr, int addrlen) {
+    TRACE("(%d,%p,%p)\n",s,addr,addrlen);
     return connect(s,addr,addrlen);
 }
 
 // #13: XSocketListen
 INT WINAPI XSocketListen (SOCKET s, int backlog) {
+    TRACE("(%d,%d)\n",s,backlog);
     return listen(s,backlog);
 }
 
 // #14: XSocketAccept
 INT WINAPI XSocketAccept (SOCKET s, struct sockaddr * addr, int * addrlen) {
+    TRACE("(%d,%p,%p)\n",s,addr,addrlen);
     return accept(s,addr,addrlen);
 }
 
 // #15: XSocketSelect
 INT WINAPI XSocketSelect (int n, struct fd_set * readfds, struct fd_set * writefds, struct fd_set * exceptfds, struct timeval * timeout) {
+    TRACE("(%d,%p,%p,%p,%p)\n",n,readfds,writefds,exceptfds,timeout);
     return select(n,readfds,writefds,exceptfds,timeout);
 }
 
 // #16: XWSAGetOverlappedResult
 DWORD WINAPI XWSAGetOverlappedResult (SOCKET s, LPWSAOVERLAPPED lpOverlapped, LPDWORD lpcbTransfer, BOOL fWait, LPDWORD lpdwFlags) {
+    TRACE("(%d,%p,%p,%d,%p)\n",s,lpOverlapped,lpcbTransfer,fWait,lpdwFlags);
     return WSAGetOverlappedResult(s,lpOverlapped,lpcbTransfer,fWait,lpdwFlags);
 }
 
@@ -211,20 +243,25 @@ DWORD WINAPI XWSACancelOverlappedIO (DWORD w1) {
 
 // #18: XSocketRecv
 INT WINAPI XSocketRecv (SOCKET s, char * buf, int len, int flags) {
+    
     DWORD rb = recv(s,buf,len,flags);
+    TRACE("(%d,%p,%d,0x%08x)=%d\n",s,buf,len,flags,rb);
     xnet_sent_bytes += rb;
     return rb;
 }
 
 // #19: XWSARecv
 DWORD WINAPI XWSARecv (SOCKET s, LPWSABUF lpBuffers,DWORD dwBufferCount,LPDWORD lpNumberOfBytesRecvd,LPDWORD lpFlags, LPWSAOVERLAPPED lpOverlapped,LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine) {
+    TRACE("(%d,%p,%d,%p,%p,%p,%p)\n",s,lpBuffers,dwBufferCount,lpNumberOfBytesRecvd,lpFlags,lpOverlapped,lpCompletionRoutine);
     return WSARecv(s,lpBuffers,dwBufferCount,lpNumberOfBytesRecvd,lpFlags,lpOverlapped,lpCompletionRoutine);
 }
 
 // #20: XSocketRecvFrom
 INT WINAPI XSocketRecvFrom (SOCKET s, char * buf, int len, int flags, struct sockaddr * from, int * fromlen) {
     DWORD rb = recvfrom(s,buf,len,flags,from,fromlen);
-    xnet_sent_bytes += rb;
+    TRACE("(%d,%p,%d,0x%08x,%p,%p)=%d\n",s,buf,len,flags,from,fromlen,rb);
+    TRACE("WSAGetLastError: %d\n",WSAGetLastError());
+    xnet_sent_bytes += rb > 0 ? rb : 0;
     return rb;
 }
 
@@ -339,6 +376,51 @@ short WINAPI NetDll_htons(short in) {
 // #51: XNetStartup
 INT WINAPI XNetStartup(XNetStartupParams * p) {
     memcpy(&xnetparams,p,sizeof(XNetStartupParams));
+    
+    
+    
+    
+    //WARNING::: TEMPORARY HACK TO LOG RE5 internal stuff, hopefully xlive is initialized before xliveinit
+    
+    
+    if ( curr_titleId = 0x434307F7 )
+    {
+        DWORD handle = (DWORD)GetModuleHandleA(NULL);
+
+        BYTE * pImageBase = (BYTE*)(handle); 
+        PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER) (handle);
+        PIMAGE_NT_HEADERS pNtHeader  = (PIMAGE_NT_HEADERS) (pImageBase+pDosHeader->e_lfanew);
+        PIMAGE_SECTION_HEADER pSection = IMAGE_FIRST_SECTION(pNtHeader);
+        int iSection;
+        for (iSection = 0; iSection < pNtHeader->FileHeader.NumberOfSections; ++iSection, ++pSection) 
+        {
+            char * pszSectionName = (char *)(pSection->Name);
+            if (!strcmp (pszSectionName, ".text") || !strcmp (pszSectionName, ".rdata")) 
+            {
+                DWORD dwPhysSize = (pSection->Misc.VirtualSize + 4095) & ~4095;    
+                FIXME("[EXE] unprotecting section '%s': addr = 0x%08x, size = 0x%08x\n", pSection->Name, pSection->VirtualAddress, dwPhysSize);
+
+                DWORD oldProtect;
+                DWORD newProtect = (pSection->Characteristics & IMAGE_SCN_MEM_EXECUTE) ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE;
+                if (!VirtualProtect ((void*)(handle+pSection->VirtualAddress), dwPhysSize, newProtect, &oldProtect)) 
+                {
+                    FIXME("[EXE] Virtual protect error\n");
+                    abort();
+                }
+            }
+        }
+
+    
+        void * ptr1 = *(void **)(0x1361154);
+        FIXME("ptr1 is %p\n",ptr1);
+        void * ptr2 = *(void **)(ptr1);
+        void * ptr3 = ptr2+0x24;
+        FIXME("memory patch has to be applied on %p, new address : %p\n",ptr3,&Re5Log);
+        *(void**)(ptr3) = (void*)&Re5Log;
+        ptr3 = ptr2+0x20;
+        FIXME("memory patch has to be applied on %p, new address : %p\n",ptr3,&Re5Log);
+        *(void**)(ptr3) = (void*)&Re5Log0x20;
+    }
     return 0;
 }
 
@@ -1436,6 +1518,14 @@ INT WINAPI XLiveInitializeEx(XLIVE_INITIALIZE_INFO * pXii, DWORD dwVersion) {
         if ( GetLastError() != ERROR_ALREADY_EXISTS )
             ERR("Cannot create property storage dir!\n");
     }
+    
+    
+    
+    
+    
+    
+    
+    
     return 0;
 }
 
