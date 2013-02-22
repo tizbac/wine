@@ -53,8 +53,9 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
                                     DWORD * pdwSettingIds, DWORD * pcbResults, PXUSER_READ_PROFILE_SETTING_RESULT pResults, DWORD pOverlapped);
 BOOL WINAPI XLivepIsUserIndexValid(DWORD userid,DWORD unk1, DWORD unk2)
 {
-    if ( userid < 3 )
+    if ( userid < 3 ) {
         return TRUE;
+    }
     return FALSE;
 }
 BOOL DirectoryExists(const char * szPath)
@@ -600,9 +601,9 @@ DWORD WINAPI XNetReplaceKey (DWORD a1,DWORD a2) {
     return 8;
 }
 
-// #82:
+// #82: XNetGetXnAddrPlatform
 DWORD WINAPI XNetGetXnAddrPlatform (DWORD a1,DWORD a2) {
-    FIXME("trace: (%d %d), returning 0\n",a1,a2);
+    FIXME("stub: (%d %d), returning 0\n",a1,a2);
     return 8;
 }
 
@@ -689,7 +690,7 @@ INT WINAPI XGetOverlappedResult(void * p0, DWORD * pResult, DWORD bWait) {
 INT WINAPI XliveInput(DWORD * p) {
     p[5] = 0;
     //FIXME("stub: %p\n", p);
-    return 1;
+    return 1; // do not handle window message calls
 }
 
 // #5002: XliveInput
@@ -1120,6 +1121,14 @@ INT WINAPI XShowSigninUI(DWORD cPanes,DWORD dwFlags){
 // #5261: XUserGetXUID
 INT WINAPI XUserGetXUID(DWORD dwUserIndex, PXUID pXuid) {
     FIXME("stub: (%d, %p)\n", dwUserIndex, pXuid);
+    if (dwUserIndex) {
+        TRACE("Invalid dwUserIndex, must always be 0");
+        return -2147024809;
+    }
+    if (!pXuid) {
+        TRACE("pXuid must not be NULL");
+    return 87;
+    }
     pXuid[0] = pXuid[1] = 0x10001000;
     return Xliveusers[dwUserIndex].xuid;
     return 0; // ???
@@ -1160,8 +1169,20 @@ INT WINAPI XUserAreUsersFriends(DWORD dwUserIndex, DWORD * pXuids, DWORD dwXuidC
 
 // #5265: XLiveUserCheckPrivilege
 // Another definition says this should be INT WINAPI XUserCheckPrivilege (DWORD user, DWORD priv, PBOOL b)
-DWORD WINAPI XLiveUserCheckPrivilege(DWORD uIndex,DWORD PrivType, PBOOL pfResult ) {
-    FIXME("stub: (%d, %d, %p)\n",uIndex,PrivType,pfResult);
+DWORD WINAPI XLiveUserCheckPrivilege(DWORD dwUserIndex,DWORD PrivType, PBOOL pfResult ) {
+    FIXME("stub: (%d, %d, %p(%d))\n",dwUserIndex,PrivType,pfResult,*pfResult);
+    if ( PrivType != 254 && PrivType != 252 && PrivType != 251 && PrivType != 249
+         && PrivType != 248 && PrivType != 247  && PrivType != 246 
+         && PrivType != 245 && PrivType != 244 && PrivType != 243 
+         && PrivType != 238 && PrivType != 235 && PrivType != 234 
+         && PrivType != 226 ) {
+         FIXME ("invalid PrivType %d", PrivType);
+         return 87;
+    }
+    if (!pfResult) {
+        FIXME ("pfResult must not be NULL");
+        return 87;
+    }
     *pfResult = FALSE;
     return ERROR_SUCCESS;
 }
@@ -1692,7 +1713,14 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
         propFile = CreateFileA(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
         if ( propFile == INVALID_HANDLE_VALUE ) {
             ERR("Setting ID: %d : Cannot load property\n",id);
-            continue;
+	    // fallback
+	    if (*pcbResults < sizeof(DWORD)+sizeof(XUSER_PROFILE_SETTING)*dwNumSettingIds) {
+	        *pcbResults = sizeof(DWORD)+sizeof(XUSER_PROFILE_SETTING)*dwNumSettingIds; /* TODO: make correct calculation by IDs.*/
+	    }
+	    memset (pResults, 0, *pcbResults);
+	    pResults->dwSettingsLen = *pcbResults-sizeof (XUSER_PROFILE_SETTING);
+	    pResults->pSettings = (BYTE *)pResults+sizeof (XUSER_PROFILE_SETTING);
+	    return 0;
         }
 
 // XUSER_DATA_TYPE_CONTEXT     ((BYTE)0)
@@ -1957,8 +1985,8 @@ DWORD WINAPI XLiveContentGetDisplayName(DWORD dwUserIndex,DWORD* pContentInfo, w
     int result;
     DWORD v6[0x14+2];
 
-    FIXME ("stub: (%d, %p, %d, %p)\n",dwUserIndex,pContentInfo,pszDisplayName,pcchDisplayName);
-    FIXME ("%p(%x) %p(%x)\n",dwUserIndex,*pContentInfo,pszDisplayName,*pcchDisplayName);
+    FIXME ("stub: (%d, %p, %ls, %p)\n",dwUserIndex,pContentInfo,pszDisplayName,pcchDisplayName);
+    FIXME ("%d, (%x), %p, (%x)\n",dwUserIndex,*pContentInfo,pszDisplayName,*pcchDisplayName);
 
     if (dwUserIndex) {
         TRACE("Invalid dwUserIndex, must always be 0");
