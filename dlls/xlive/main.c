@@ -386,7 +386,7 @@ INT WINAPI XNetStartup(XNetStartupParams * p) {
     //WARNING::: TEMPORARY HACK TO LOG RE5 internal stuff, hopefully xlive is initialized before xliveinit
     
     
-    if ( curr_titleId = 0x434307F7 )
+    if ( curr_titleId == 0x434307F7 )
     {
         DWORD handle = (DWORD)GetModuleHandleA(NULL);
 
