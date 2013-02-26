@@ -546,7 +546,7 @@ INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, XNQOS ** pp
     xqos->cxnqos = 1;
     xqos->cxnqosPending = 0;
     
-    xqos->axnqosinfo[0].bFlags = XNET_XNQOSINFO_COMPLETE;
+    xqos->axnqosinfo[0].bFlags = XNET_XNQOSINFO_COMPLETE | XNET_XNQOSINFO_TARGET_CONTACTED ;
     xqos->axnqosinfo[0].cProbesXmit = 1;
     xqos->axnqosinfo[0].cProbesRecv = 1;
     xqos->axnqosinfo[0].cbData = 0;
@@ -555,6 +555,7 @@ INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, XNQOS ** pp
     xqos->axnqosinfo[0].wRttMedInMsecs = 100;
     xqos->axnqosinfo[0].dwDnBitsPerSec = 640000;
     xqos->axnqosinfo[0].dwUpBitsPerSec = 320000;
+    *ppxnqos = xqos;
     return 0;
 }
 
