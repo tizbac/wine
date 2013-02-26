@@ -34,7 +34,7 @@
 #include <wine/server_protocol.h>
 #include "crc32.c"
 #include "xlivestructs.h"
-
+#include "wine/library.h"
 WINE_DEFAULT_DEBUG_CHANNEL(xlive);
 
 const char xlivebasedir[] = "C:\\xlive\\"; //TODO: Make it tied to system
@@ -122,16 +122,24 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
     case DLL_PROCESS_DETACH:
         break;
     }
-
+    const char * username = wine_get_user_name();
     for ( i = 0; i < 3; i++)
     {
         memset(&Xliveusers[i],0,sizeof(WINEXLIVEUSER));
         sprintf(Xliveusers[i].username,"Wineplayer%d",i);
-        Xliveusers[i].xuid = 0x0000100010001000L * (i+1);
+        
         if ( i == 0 )
             Xliveusers[i].signedin = eXUserSigninState_SignedInToLive;
         else
             Xliveusers[i].signedin = eXUserSigninState_NotSignedIn;
+        
+        if ( Xliveusers[i].signedin == eXUserSigninState_SignedInToLive )
+            Xliveusers[i].xuid = 0x2000100010001000L | ( (unsigned long long)(i+1) << 62L ) | XLIVEPRIVComputeCrc32(username,strlen(username),0x0);
+        else if ( Xliveusers[i].signedin == eXUserSigninState_SignedInLocally )
+            Xliveusers[i].xuid = 0x1000100010001000L | ( (unsigned long long)(i+1) << 62L ) | XLIVEPRIVComputeCrc32(username,strlen(username),0x0);
+        else
+            Xliveusers[i].xuid = 0x0;
+        FIXME("Generated XUID For Player %s(%s) : %llx\n",Xliveusers[i].username,username,Xliveusers[i].xuid);
     }
 
     return TRUE;
@@ -386,7 +394,7 @@ INT WINAPI XNetStartup(XNetStartupParams * p) {
     //WARNING::: TEMPORARY HACK TO LOG RE5 internal stuff, hopefully xlive is initialized before xliveinit
     
     
-    if ( curr_titleId == 0x434307F7 )
+    if ( curr_titleId == 0xc7db11d3 )
     {
         DWORD handle = (DWORD)GetModuleHandleA(NULL);
 
@@ -532,19 +540,34 @@ DWORD WINAPI XNetQosLookup (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DW
 }
 
 // #71: NetDll_XNetQosServiceLookup
-INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, void ** ppxnqos) {
-    //FIXME("stub\n"); Commented out because this is called every frame
+INT WINAPI NetDll_XNetQosServiceLookup(DWORD flags, WSAEVENT hEvent, XNQOS ** ppxnqos) {
+    FIXME("stub\n");// Commented out because this is called every frame
+    XNQOS * xqos = (XNQOS *)malloc(sizeof(XNQOS));
+    xqos->cxnqos = 1;
+    xqos->cxnqosPending = 0;
+    
+    xqos->axnqosinfo[0].bFlags = XNET_XNQOSINFO_COMPLETE;
+    xqos->axnqosinfo[0].cProbesXmit = 1;
+    xqos->axnqosinfo[0].cProbesRecv = 1;
+    xqos->axnqosinfo[0].cbData = 0;
+    xqos->axnqosinfo[0].pbData = 0x0;
+    xqos->axnqosinfo[0].wRttMinInMsecs = 100;
+    xqos->axnqosinfo[0].wRttMedInMsecs = 100;
+    xqos->axnqosinfo[0].dwDnBitsPerSec = 640000;
+    xqos->axnqosinfo[0].dwUpBitsPerSec = 320000;
     return 0;
 }
 
 // #72: XNetQosRelease
-DWORD WINAPI XNetQosRelease (DWORD w1) {
+DWORD WINAPI XNetQosRelease (XNQOS * pxnqos) {
+    FIXME("stub\n");
+    free(pxnqos);
     return 0;
 }
 
 // #73: XNetGetTitleXnAddr
 INT WINAPI XNetGetTitleXnAddr(DWORD * pAddr) {
-    *pAddr = 0x0100007F; //localhost
+    *pAddr = 0x01FEFEFE; //localhost
     FIXME("localhost\n");
     return 4;
 }
@@ -1239,6 +1262,9 @@ DWORD WINAPI XLiveUserCheckPrivilege(DWORD dwUserIndex,DWORD PrivType, PBOOL pfR
         return 87;
     }
     *pfResult = FALSE;
+    if ( PrivType == 254 && XLivepIsUserIndexValid(dwUserIndex,0,0) && Xliveusers[dwUserIndex].signedin == eXUserSigninState_SignedInToLive )
+        *pfResult = TRUE;
+    
     return ERROR_SUCCESS;
 }
 
@@ -1255,7 +1281,7 @@ INT WINAPI XUserGetSigninInfo(DWORD dwUser, DWORD dwFlags, XUSER_SIGNIN_INFO * p
         return ERROR_NO_SUCH_USER;
     memset(pInfo,0,sizeof(XUSER_SIGNIN_INFO));
     if ( dwFlags & XUSER_GET_SIGNIN_INFO_ONLINE_XUID_ONLY )
-        pInfo->xuid = INVALID_XUID;
+        pInfo->xuid = Xliveusers[dwUser].xuid;
     else
         pInfo->xuid = Xliveusers[dwUser].xuid;
     pInfo->dwInfoFlags = 0;
@@ -1355,9 +1381,9 @@ INT WINAPI XUserReadStats (DWORD dwTitleId,
                            PXUSER_STATS_READ_RESULTS pResults,
                            void *pOverlapped) {
     FIXME ("stub: (%d, %d, %p, %d, %p, %p, %p, %p)\n", dwTitleId, dwNumXuids, pXuids, dwNumStatsSpecs, pSpecs, pcbResults, pResults, pOverlapped);
-    if (pcbResults) {
+    if (pcbResults && (*pcbResults) < sizeof(DWORD)) {
         *pcbResults = sizeof(DWORD);
-        return 0;
+        return ERROR_INSUFFICIENT_BUFFER;
     }
     if (pResults) {
         pResults->dwNumViews = 0;

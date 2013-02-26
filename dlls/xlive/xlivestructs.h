@@ -92,6 +92,31 @@
 #define XNET_OPTID_CALLER_RECV_BYTES                8
 #define XNET_OPTID_CALLER_RECV_FRAMES               9
 
+#define XNET_XNQOSINFO_COMPLETE         0x01    // Qos has finished processing this entry
+#define XNET_XNQOSINFO_TARGET_CONTACTED 0x02    // Target host was successfully contacted
+#define XNET_XNQOSINFO_TARGET_DISABLED  0x04    // Target host has disabled its Qos listener
+#define XNET_XNQOSINFO_DATA_RECEIVED    0x08    // Target host supplied Qos data
+#define XNET_XNQOSINFO_PARTIAL_COMPLETE 0x10    // Qos has unfinished estimates for this entry
+
+
+typedef struct {
+    BYTE bFlags;
+    BYTE bReserved;
+    WORD cProbesXmit;
+    BYTE cProbesRecv;
+    WORD cbData;
+    BYTE *pbData;
+    WORD wRttMinInMsecs;
+    WORD wRttMedInMsecs;
+    DWORD dwUpBitsPerSec;
+    DWORD dwDnBitsPerSec;
+} XNQOSINFO ;
+typedef struct {
+    UINT cxnqos;
+    UINT cxnqosPending;
+    XNQOSINFO axnqosinfo[1];
+} XNQOS;
+
 typedef enum 
 {
     XONLINE_NAT_OPEN = 1,
