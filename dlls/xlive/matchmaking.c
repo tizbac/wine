@@ -11,13 +11,107 @@
 #include <wine/server_protocol.h>
 #include "xlivestructs.h"
 #include "wine/library.h"
+
 WINE_DEFAULT_DEBUG_CHANNEL(xlive_matchmaking);
+VOID WineXliveSessionCopy(WINEXLIVESESSION * src, WINEXLIVESESSION * dst )
+{
+    memcpy(dst,src,sizeof(WINEXLIVESESSION));
+    if ( src->xlive_session.cContexts > 0 && src->xlive_session.pContexts )
+    {
+        dst->xlive_session.pContexts = (PXUSER_CONTEXT)malloc(src->xlive_session.cContexts*sizeof(XUSER_CONTEXT));
+        memcpy(dst->xlive_session.pContexts,src->xlive_session.pContexts,src->xlive_session.cContexts*sizeof(XUSER_CONTEXT));
+    }else{
+        dst->xlive_session.pContexts = 0x0;
+    }
+    if ( src->xlive_session.cProperties > 0 && src->xlive_session.pProperties )
+    {
+        dst->xlive_session.pProperties= (PXUSER_PROPERTY)malloc(src->xlive_session.cProperties*sizeof(XUSER_PROPERTY));
+        memcpy(dst->xlive_session.pProperties,src->xlive_session.pProperties,src->xlive_session.cProperties*sizeof(XUSER_PROPERTY));
+    }else{
+        dst->xlive_session.pProperties = 0x0;
+    }
+}
+VOID WineXliveSessionSubFree(WINEXLIVESESSION * s)
+{
+    if ( s->xlive_session.pContexts )
+        free(s->xlive_session.pContexts);
+    if ( s->xlive_session.pProperties )
+        free(s->xlive_session.pProperties);
+}
 
 
+typedef struct {
+    WINEXLIVESESSION * m_sessions;
+    DWORD session_count;
+    
+    
+} CSessionMgr;
+/// @param xs Pointer to WINEXLIVESESSION , function will duplicate it so caller can free it just after
+/// @return Index of the session on the list
+DWORD CSessionMgr_addSession(CSessionMgr* I, WINEXLIVESESSION* xs)
+{
+    if ( !I->m_sessions )
+        I->m_sessions = malloc(sizeof(WINEXLIVESESSION)*(I->session_count+1));
+    else
+        I->m_sessions = realloc(I->m_sessions,sizeof(WINEXLIVESESSION)*(I->session_count+1));
+    WineXliveSessionCopy(&(I->m_sessions[I->session_count]),xs);
+    I->session_count++;
+}
+/// @brief Remove a session
+/// @param id Index on the list of the session
+void CSessionMgr_removeSession(CSessionMgr* I, DWORD id)
+{
+    if ( id >= I->session_count )
+    {
+        ERR("Invalid session id\n");
+        return;
+    }
+    //Free the removed session
+    WineXliveSessionSubFree(&I->m_sessions[id]);
+    //Shift left elements , no need to reallocate internal pointers
+    int index = 0;
+    for ( index = id; index < I->session_count-1; index++ )
+    {
+        memcpy(&I->m_sessions[index],&I->m_sessions[index+1],sizeof(WINEXLIVESESSION));
+    }
+    I->session_count--;
+    I->m_sessions = realloc(I->m_sessions,sizeof(WINEXLIVESESSION)*(I->session_count));
+}
+
+void CSessionMgr_CSessionMgr(CSessionMgr* I)
+{
+    I->m_sessions = 0x0;
+    I->session_count = 0;
+}
+
+CSessionMgr * sMgr = 0x0; 
+void MatchMakingStartup()
+{
+    FIXME("trace always\n");
+    sMgr = (CSessionMgr*)malloc(sizeof(CSessionMgr));
+    CSessionMgr_CSessionMgr(sMgr);
+}
 // #5300: XSessionCreate
-INT WINAPI XSessionCreate (DWORD w1, DWORD w2, DWORD w3, DWORD w4, DWORD w5, DWORD w6, DWORD w7, DWORD w8) {
-    FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d)\n", w1, w2, w3, w4, w5, w6, w7, w8);
-    return -1;
+INT WINAPI XSessionCreate (DWORD dwFlags,
+         DWORD dwUserIndex,
+         DWORD dwMaxPublicSlots,
+         DWORD dwMaxPrivateSlots,
+         ULONGLONG *pqwSessionNonce,
+         PXSESSION_INFO pSessionInfo,
+         PXOVERLAPPED pXOverlapped,
+         HANDLE *ph) {
+    FIXME ("stub: (%d, %d, %d, %d, %p, %p, %p, %p)\n", dwFlags,dwUserIndex,dwMaxPublicSlots,dwMaxPrivateSlots,pqwSessionNonce,pSessionInfo,pXOverlapped,ph);
+    WINEXLIVESESSION s;
+    s.dwFlags = dwFlags;
+    s.xlive_session.dwOpenPublicSlots = dwMaxPublicSlots;
+    s.xlive_session.dwOpenPrivateSlots = dwMaxPrivateSlots;
+    s.xlive_session.dwFilledPrivateSlots = 0;
+    s.xlive_session.dwFilledPublicSlots = 0;
+    memcpy(&(s.xlive_session.info),pSessionInfo,sizeof(XSESSION_INFO));
+    s.xlive_session.pProperties = NULL;
+    s.xlive_session.pContexts = NULL;
+    *ph = CSessionMgr_addSession(sMgr,&s);
+    return ERROR_SUCCESS;
 }
 
 // #5317: XSessionWriteStats
@@ -45,9 +139,23 @@ INT WINAPI XSessionSearchByID(int a1, int a2, int a3, int a4, int a5, int *a6) {
 }
 
 // #5321: XSessionSearch
-INT WINAPI XSessionSearch(int a3, int a4, int a5, __int16 a6, __int16 a7, int a8, int a9, int a10, int a11, int *a12) {
-    FIXME ("stub: (%d, %d, %d, %d, %d, %d, %d, %d, %d, %p)\n", a3, a4, a5, a6, a7, a8, a9, a10, a11, a12);
-    return 0;
+INT WINAPI XSessionSearch( DWORD dwProcedureIndex,
+         DWORD dwUserIndex,
+         DWORD dwNumResults,
+         WORD wNumProperties,
+         WORD wNumContexts,
+         PXUSER_PROPERTY pSearchProperties,
+         PXUSER_CONTEXT pSearchContexts,
+         DWORD *pcbResultsBuffer,
+         PXSESSION_SEARCHRESULT_HEADER pSearchResults,
+         PXOVERLAPPED pXOverlapped) {
+    FIXME ("stub: (%d, %d, %d, %d, %d, %p, %p, %p, %p, %p)\n",dwUserIndex,dwNumResults,wNumProperties,wNumContexts,pSearchProperties,pSearchContexts,pcbResultsBuffer,pSearchResults,pXOverlapped);
+    if ( !pSearchResults || *pcbResultsBuffer < sizeof(PXSESSION_SEARCHRESULT_HEADER))
+    {
+        *pcbResultsBuffer = sizeof(PXSESSION_SEARCHRESULT_HEADER);
+        return ERROR_INSUFFICIENT_BUFFER;
+    }
+    return ERROR_SUCCESS;
 }
 
 // #5322: XSessionModify

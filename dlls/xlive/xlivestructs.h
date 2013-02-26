@@ -1,3 +1,4 @@
+#include <windows.h>
 #define XUSER_NAME_SIZE                 16
 #define XUSER_INFO_FLAG_LIVE_ENABLED    0x00000001
 #define XUSER_INFO_FLAG_GUEST           0x00000002
@@ -274,3 +275,63 @@ typedef struct {
     ULONGLONG xuid;
     DWORD contextvalue;
 } WINEXLIVEUSER;
+
+
+typedef struct  {
+    DWORD dwPropertyId;
+    XUSER_DATA value;
+} XUSER_PROPERTY, *PXUSER_PROPERTY;
+typedef struct  {
+    DWORD dwContextId;
+    DWORD dwValue;
+} XUSER_CONTEXT, *PXUSER_CONTEXT;
+typedef VOID (*PXOVERLAPPED_COMPLETION_ROUTINE)(DWORD dwErrorCode,DWORD dwNumberOfBytesTransfered,void* /*TODO: WTF */ pOverlapped);
+typedef struct _XOVERLAPPED {
+    ULONG_PTR InternalLow;
+    ULONG_PTR InternalHigh;
+    ULONG_PTR InternalContext;
+    HANDLE hEvent;
+    PXOVERLAPPED_COMPLETION_ROUTINE pCompletionRoutine;
+    DWORD_PTR dwCompletionContext;
+    DWORD dwExtendedError;
+} XOVERLAPPED, *PXOVERLAPPED;
+typedef struct {
+    IN_ADDR ina;
+    IN_ADDR inaOnline;
+    WORD wPortOnline;
+    BYTE abEnet[6];
+    BYTE abOnline[20];
+} XNADDR;
+typedef struct {
+    BYTE        ab[16];                         // xbox to xbox key exchange key
+} XNKEY;
+typedef struct {
+    BYTE        ab[8];                          // xbox to xbox key identifier
+} XNKID;
+typedef struct {
+    XNKID sessionID;
+    XNADDR hostAddress;
+    XNKEY keyExchangeKey;
+} XSESSION_INFO, *PXSESSION_INFO;
+typedef struct {
+    XSESSION_INFO info;
+    DWORD dwOpenPublicSlots;
+    DWORD dwOpenPrivateSlots;
+    DWORD dwFilledPublicSlots;
+    DWORD dwFilledPrivateSlots;
+    DWORD cProperties;
+    DWORD cContexts;
+    PXUSER_PROPERTY pProperties;
+    PXUSER_CONTEXT pContexts;
+} XSESSION_SEARCHRESULT, *PXSESSION_SEARCHRESULT;
+typedef struct {
+    DWORD dwSearchResults;
+    XSESSION_SEARCHRESULT *pResults;
+} XSESSION_SEARCHRESULT_HEADER, *PXSESSION_SEARCHRESULT_HEADER;
+
+typedef struct {
+    XSESSION_SEARCHRESULT xlive_session;
+    unsigned long long last_announce_ms;
+    BOOL isCreatedLocal;
+    DWORD dwFlags;
+} WINEXLIVESESSION;

@@ -48,7 +48,7 @@ unsigned short x_syslinkport = 3074;
 int xnet_recv_bytes = 0;
 int xnet_sent_bytes = 0;
 XNetStartupParams xnetparams;
-
+void MatchMakingStartup();
 INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dwNumSettingIds,
                                     DWORD * pdwSettingIds, DWORD * pcbResults, PXUSER_READ_PROFILE_SETTING_RESULT pResults, DWORD pOverlapped);
 BOOL WINAPI XLivepIsUserIndexValid(DWORD userid,DWORD unk1, DWORD unk2)
@@ -432,6 +432,7 @@ INT WINAPI XNetStartup(XNetStartupParams * p) {
         FIXME("memory patch has to be applied on %p, new address : %p\n",ptr3,&Re5Log);
         *(void**)(ptr3) = (void*)&Re5Log0x20;
     }
+    MatchMakingStartup();
     return 0;
 }
 
