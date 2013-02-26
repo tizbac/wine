@@ -2,6 +2,7 @@ MODULE    = xlive.dll
 IMPORTS   = ws2_32
 C_SRCS = \
 	main.c \
-	notify.c
+	notify.c \
+	matchmaking.c
 
 @MAKE_DLL_RULES@
