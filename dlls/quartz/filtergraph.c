@@ -162,11 +162,11 @@ typedef struct _IFilterGraphImpl {
     IGraphConfig IGraphConfig_iface;
     IMediaPosition IMediaPosition_iface;
     IObjectWithSite IObjectWithSite_iface;
+    IGraphVersion IGraphVersion_iface;
     /* IAMGraphStreams */
     /* IAMStats */
     /* IFilterChain */
     /* IFilterMapper2 */
-    /* IGraphVersion */
     /* IQueueCommand */
     /* IRegisterServiceProvider */
     /* IResourceMananger */
@@ -179,7 +179,7 @@ typedef struct _IFilterGraphImpl {
     IFilterMapper2 * pFilterMapper2;
     IBaseFilter ** ppFiltersInGraph;
     LPWSTR * pFilterNames;
-    int nFilters;
+    ULONG nFilters;
     int filterCapacity;
     LONG nameIndex;
     IReferenceClock *refClock;
@@ -204,6 +204,7 @@ typedef struct _IFilterGraphImpl {
     LONGLONG stop_position;
     LONG recursioncount;
     IUnknown *pSite;
+    LONG version;
 } IFilterGraphImpl;
 
 static inline IFilterGraphImpl *impl_from_IUnknown(IUnknown *iface)
@@ -269,6 +270,9 @@ static HRESULT WINAPI FilterGraphInner_QueryInterface(IUnknown *iface, REFIID ri
     } else if (IsEqualGUID(&IID_IFilterMapper3, riid)) {
         *ppvObj = This->pFilterMapper2;
         TRACE("   returning IFilterMapper3 interface from aggregated filtermapper (%p)\n", *ppvObj);
+    } else if (IsEqualGUID(&IID_IGraphVersion, riid)) {
+        *ppvObj = &This->IGraphConfig_iface;
+        TRACE("   returning IGraphConfig interface (%p)\n", *ppvObj);
     } else {
         *ppvObj = NULL;
 	FIXME("unknown interface %s\n", debugstr_guid(riid));
@@ -454,6 +458,7 @@ static HRESULT WINAPI FilterGraph2_AddFilter(IFilterGraph2 *iface, IBaseFilter *
         This->ppFiltersInGraph[This->nFilters] = pFilter;
         This->pFilterNames[This->nFilters] = wszFilterName;
         This->nFilters++;
+        This->version++;
         IBaseFilter_SetSyncSource(pFilter, This->refClock);
     }
     else
@@ -539,6 +544,7 @@ static HRESULT WINAPI FilterGraph2_RemoveFilter(IFilterGraph2 *iface, IBaseFilte
                 memmove(This->ppFiltersInGraph+i, This->ppFiltersInGraph+i+1, sizeof(IBaseFilter*)*(This->nFilters - 1 - i));
                 memmove(This->pFilterNames+i, This->pFilterNames+i+1, sizeof(LPWSTR)*(This->nFilters - 1 - i));
                 This->nFilters--;
+                This->version++;
                 /* Invalidate interfaces in the cache */
                 for (i = 0; i < This->nItfCacheEntries; i++)
                     if (pFilter == This->ItfCacheEntries[i].filter)
@@ -562,7 +568,7 @@ static HRESULT WINAPI FilterGraph2_EnumFilters(IFilterGraph2 *iface, IEnumFilter
 
     TRACE("(%p/%p)->(%p)\n", This, iface, ppEnum);
 
-    return IEnumFiltersImpl_Construct(This->ppFiltersInGraph, This->nFilters, ppEnum);
+    return IEnumFiltersImpl_Construct(&This->IGraphVersion_iface, &This->ppFiltersInGraph, &This->nFilters, ppEnum);
 }
 
 static HRESULT WINAPI FilterGraph2_FindFilterByName(IFilterGraph2 *iface, LPCWSTR pName,
@@ -5547,6 +5553,53 @@ static const IGraphConfigVtbl IGraphConfig_VTable =
     GraphConfig_RemoveFilterEx
 };
 
+static inline IFilterGraphImpl *impl_from_IGraphVersion(IGraphVersion *iface)
+{
+    return CONTAINING_RECORD(iface, IFilterGraphImpl, IGraphVersion_iface);
+}
+
+static HRESULT WINAPI GraphVersion_QueryInterface(IGraphVersion *iface, REFIID riid, void **ppv)
+{
+    IFilterGraphImpl *This = impl_from_IGraphVersion(iface);
+
+    return IUnknown_QueryInterface(This->outer_unk, riid, ppv);
+}
+
+static ULONG WINAPI GraphVersion_AddRef(IGraphVersion *iface)
+{
+    IFilterGraphImpl *This = impl_from_IGraphVersion(iface);
+
+    return IUnknown_AddRef(This->outer_unk);
+}
+
+static ULONG WINAPI GraphVersion_Release(IGraphVersion *iface)
+{
+    IFilterGraphImpl *This = impl_from_IGraphVersion(iface);
+
+    return IUnknown_Release(This->outer_unk);
+}
+
+static HRESULT WINAPI GraphVersion_QueryVersion(IGraphVersion *iface, LONG *pVersion)
+{
+    IFilterGraphImpl *This = impl_from_IGraphVersion(iface);
+
+    if(!pVersion)
+        return E_POINTER;
+
+    TRACE("(%p)->(%p): current version %i\n", This, pVersion, This->version);
+
+    *pVersion = This->version;
+    return S_OK;
+}
+
+static const IGraphVersionVtbl IGraphVersion_VTable =
+{
+    GraphVersion_QueryInterface,
+    GraphVersion_AddRef,
+    GraphVersion_Release,
+    GraphVersion_QueryVersion,
+};
+
 static const IUnknownVtbl IInner_VTable =
 {
     FilterGraphInner_QueryInterface,
@@ -5579,6 +5632,7 @@ HRESULT FilterGraph_create(IUnknown *pUnkOuter, LPVOID *ppObj)
     fimpl->IGraphConfig_iface.lpVtbl = &IGraphConfig_VTable;
     fimpl->IMediaPosition_iface.lpVtbl = &IMediaPosition_VTable;
     fimpl->IObjectWithSite_iface.lpVtbl = &IObjectWithSite_VTable;
+    fimpl->IGraphVersion_iface.lpVtbl = &IGraphVersion_VTable;
     fimpl->ref = 1;
     fimpl->ppFiltersInGraph = NULL;
     fimpl->pFilterNames = NULL;
@@ -5606,6 +5660,7 @@ HRESULT FilterGraph_create(IUnknown *pUnkOuter, LPVOID *ppObj)
     fimpl->stop_position = -1;
     fimpl->punkFilterMapper2 = NULL;
     fimpl->recursioncount = 0;
+    fimpl->version = 0;
 
     if (pUnkOuter)
         fimpl->outer_unk = pUnkOuter;

@@ -1370,6 +1370,21 @@ static void _test_anchor_put_name(unsigned line, IUnknown *unk, const char *name
     _test_anchor_name(line, unk, name);
 }
 
+#define test_anchor_hostname(a,h) _test_anchor_hostname(__LINE__,a,h)
+static void _test_anchor_hostname(unsigned line, IUnknown *unk, const char *hostname)
+{
+    IHTMLAnchorElement *anchor = _get_anchor_iface(line, unk);
+    BSTR str;
+    HRESULT hres;
+
+    hres = IHTMLAnchorElement_get_hostname(anchor, &str);
+    ok_(__FILE__,line)(hres == S_OK, "get_name failed: %08x\n", hres);
+    if(hostname)
+        ok_(__FILE__,line)(!strcmp_wa(str, hostname), "hostname = %s, expected %s\n", wine_dbgstr_w(str), hostname);
+    else
+        ok_(__FILE__,line)(str == NULL, "hostname = %s, expected NULL\n", wine_dbgstr_w(str));
+    SysFreeString(str);
+}
 
 #define test_option_text(o,t) _test_option_text(__LINE__,o,t)
 static void _test_option_text(unsigned line, IHTMLOptionElement *option, const char *text)
@@ -2609,6 +2624,18 @@ static void test_dynamic_properties(IHTMLElement *elem)
     SysFreeString(attr1);
 }
 
+#define test_attr_node_name(a,b) _test_attr_node_name(__LINE__,a,b)
+static void _test_attr_node_name(unsigned line, IHTMLDOMAttribute *attr, const char *exname)
+{
+    BSTR str;
+    HRESULT hres;
+
+    hres = IHTMLDOMAttribute_get_nodeName(attr, &str);
+    ok_(__FILE__,line)(hres == S_OK, "get_nodeName failed: %08x\n", hres);
+    ok_(__FILE__,line)(!strcmp_wa(str, exname), "node name is %s, expected %s\n", wine_dbgstr_w(str), exname);
+    SysFreeString(str);
+}
+
 static void test_attr_collection_disp(IDispatch *disp)
 {
     IDispatchEx *dispex;
@@ -2647,10 +2674,9 @@ static void test_attr_collection_disp(IDispatch *disp)
     ok(V_DISPATCH(&var) != NULL, "V_DISPATCH(var) == NULL\n");
     hres = IDispatch_QueryInterface(V_DISPATCH(&var), &IID_IHTMLDOMAttribute, (void**)&attr);
     ok(hres == S_OK, "QueryInterface failed: %08x\n", hres);
-    hres = IHTMLDOMAttribute_get_nodeName(attr, &bstr);
-    ok(hres == S_OK, "get_nodeName failed: %08x\n", hres);
-    ok(!strcmp_wa(bstr, "attr1"), "node name is %s, expected attr1\n", wine_dbgstr_w(bstr));
-    SysFreeString(bstr);
+
+    test_attr_node_name(attr, "attr1");
+
     IHTMLDOMAttribute_Release(attr);
     VariantClear(&var);
 
@@ -6024,10 +6050,12 @@ static void test_elems(IHTMLDocument2 *doc)
         /* Change the href */
         test_anchor_put_href((IUnknown*)elem, "http://test1/");
         test_anchor_href((IUnknown*)elem, "http://test1/");
+        test_anchor_hostname((IUnknown*)elem, "test1");
 
         /* Restore the href */
         test_anchor_put_href((IUnknown*)elem, "http://test/");
         test_anchor_href((IUnknown*)elem, "http://test/");
+        test_anchor_hostname((IUnknown*)elem, "test");
 
         /* target */
         test_anchor_get_target((IUnknown*)elem, NULL);
@@ -6399,6 +6427,7 @@ static void test_create_elems(IHTMLDocument2 *doc)
 {
     IHTMLElement *elem, *body, *elem2;
     IHTMLDOMNode *node, *node2, *node3, *comment;
+    IHTMLDOMAttribute *attr;
     IHTMLDocument5 *doc5;
     IDispatch *disp;
     VARIANT var;
@@ -6488,6 +6517,20 @@ static void test_create_elems(IHTMLDocument2 *doc)
             test_comment_attrs((IUnknown*)comment);
 
             IHTMLDOMNode_Release(comment);
+        }
+
+        str = a2bstr("Test");
+        hres = IHTMLDocument5_createAttribute(doc5, str, &attr);
+        ok(hres == S_OK, "createAttribute dailed: %08x\n", hres);
+        SysFreeString(str);
+        if(SUCCEEDED(hres)) {
+            test_disp((IUnknown*)attr, &DIID_DispHTMLDOMAttribute, "[object]");
+            test_ifaces((IUnknown*)attr, attr_iids);
+            test_no_iface((IUnknown*)attr, &IID_IHTMLDOMNode);
+
+            test_attr_node_name(attr, "Test");
+
+            IHTMLDOMAttribute_Release(attr);
         }
 
         IHTMLDocument5_Release(doc5);

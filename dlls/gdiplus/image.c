@@ -116,10 +116,9 @@ static INT ipicture_pixel_height(IPicture *pic)
 
     IPicture_get_Height(pic, &y);
 
-    hdcref = GetDC(0);
-
+    hdcref = CreateCompatibleDC(0);
     y = MulDiv(y, GetDeviceCaps(hdcref, LOGPIXELSY), INCH_HIMETRIC);
-    ReleaseDC(0, hdcref);
+    DeleteDC(hdcref);
 
     return y;
 }
@@ -131,11 +130,9 @@ static INT ipicture_pixel_width(IPicture *pic)
 
     IPicture_get_Width(pic, &x);
 
-    hdcref = GetDC(0);
-
+    hdcref = CreateCompatibleDC(0);
     x = MulDiv(x, GetDeviceCaps(hdcref, LOGPIXELSX), INCH_HIMETRIC);
-
-    ReleaseDC(0, hdcref);
+    DeleteDC(hdcref);
 
     return x;
 }
@@ -300,7 +297,6 @@ GpStatus WINGDIPAPI GdipBitmapGetPixel(GpBitmap* bitmap, INT x, INT y,
     BYTE r, g, b, a;
     BYTE index;
     BYTE *row;
-    TRACE("%p %d %d %p\n", bitmap, x, y, color);
 
     if(!bitmap || !color ||
        x < 0 || y < 0 || x >= bitmap->width || y >= bitmap->height)
@@ -506,7 +502,6 @@ GpStatus WINGDIPAPI GdipBitmapSetPixel(GpBitmap* bitmap, INT x, INT y,
 {
     BYTE a, r, g, b;
     BYTE *row;
-    TRACE("bitmap:%p, x:%d, y:%d, color:%08x\n", bitmap, x, y, color);
 
     if(!bitmap || x < 0 || y < 0 || x >= bitmap->width || y >= bitmap->height)
         return InvalidParameter;
@@ -1688,7 +1683,7 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHICON(HICON hicon, GpBitmap** bitmap)
     bih.biClrUsed = 0;
     bih.biClrImportant = 0;
 
-    screendc = GetDC(0);
+    screendc = CreateCompatibleDC(0);
     if (iinfo.hbmColor)
     {
         GetDIBits(screendc, iinfo.hbmColor, 0, height, lockeddata.Scan0, (BITMAPINFO*)&bih, DIB_RGB_COLORS);
@@ -1756,7 +1751,7 @@ GpStatus WINGDIPAPI GdipCreateBitmapFromHICON(HICON hicon, GpBitmap** bitmap)
         }
     }
 
-    ReleaseDC(0, screendc);
+    DeleteDC(screendc);
 
     DeleteObject(iinfo.hbmColor);
     DeleteObject(iinfo.hbmMask);
@@ -1806,14 +1801,14 @@ static void generate_halftone_palette(ARGB *entries, UINT count)
 
 static GpStatus get_screen_resolution(REAL *xres, REAL *yres)
 {
-    HDC screendc = GetDC(0);
+    HDC screendc = CreateCompatibleDC(0);
 
     if (!screendc) return GenericError;
 
     *xres = (REAL)GetDeviceCaps(screendc, LOGPIXELSX);
     *yres = (REAL)GetDeviceCaps(screendc, LOGPIXELSY);
 
-    ReleaseDC(0, screendc);
+    DeleteDC(screendc);
 
     return Ok;
 }

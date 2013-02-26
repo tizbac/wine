@@ -144,8 +144,6 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
 
 @property (readwrite, nonatomic) NSInteger levelWhenActive;
 
-    + (void) flipRect:(NSRect*)rect;
-
 @end
 
 
@@ -255,7 +253,7 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
         WineContentView* contentView;
         NSTrackingArea* trackingArea;
 
-        [self flipRect:&window_frame];
+        [NSApp flipRect:&window_frame];
 
         window = [[[self alloc] initWithContentRect:window_frame
                                           styleMask:style_mask_for_features(wf)
@@ -264,7 +262,6 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
 
         if (!window) return nil;
         window->normalStyleMask = [window styleMask];
-        window->forceNextMouseMoveAbsolute = TRUE;
 
         /* Standardize windows to eliminate differences between titled and
            borderless windows and between NSWindow and NSPanel. */
@@ -274,6 +271,7 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
         [window disableCursorRects];
         [window setShowsResizeIndicator:NO];
         [window setHasShadow:wf->shadow];
+        [window setAcceptsMouseMovedEvents:YES];
         [window setColorSpace:[NSColorSpace genericRGBColorSpace]];
         [window setDelegate:window];
         window.hwnd = hwnd;
@@ -284,9 +282,10 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
             return nil;
         [contentView setAutoresizesSubviews:NO];
 
+        /* We use tracking areas in addition to setAcceptsMouseMovedEvents:YES
+           because they give us mouse moves in the background. */
         trackingArea = [[[NSTrackingArea alloc] initWithRect:[contentView bounds]
-                                                     options:(NSTrackingMouseEnteredAndExited |
-                                                              NSTrackingMouseMoved |
+                                                     options:(NSTrackingMouseMoved |
                                                               NSTrackingActiveAlways |
                                                               NSTrackingInVisibleRect)
                                                        owner:window
@@ -306,11 +305,6 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
         [latentParentWindow release];
         [shape release];
         [super dealloc];
-    }
-
-    + (void) flipRect:(NSRect*)rect
-    {
-        rect->origin.y = NSMaxY([[[NSScreen screens] objectAtIndex:0] frame]) - NSMaxY(*rect);
     }
 
     - (void) adjustFeaturesForState
@@ -508,7 +502,6 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
     {
         self.latentParentWindow = [self parentWindow];
         [latentParentWindow removeChildWindow:self];
-        forceNextMouseMoveAbsolute = TRUE;
         [self orderOut:nil];
         [NSApp wineWindow:self ordered:NSWindowOut relativeTo:nil];
         [NSApp removeWindowsItem:self];
@@ -524,7 +517,7 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
 
         /* Origin is (left, top) in a top-down space.  Need to convert it to
            (left, bottom) in a bottom-up space. */
-        [[self class] flipRect:&contentRect];
+        [NSApp flipRect:&contentRect];
 
         if (on_screen)
         {
@@ -739,11 +732,11 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
                 event:theEvent];
     }
 
-    - (void) postMouseMovedEvent:(NSEvent *)theEvent
+    - (void) postMouseMovedEvent:(NSEvent *)theEvent absolute:(BOOL)absolute
     {
         macdrv_event event;
 
-        if (forceNextMouseMoveAbsolute)
+        if (absolute)
         {
             CGPoint point = CGEventGetLocation([theEvent CGEvent]);
 
@@ -753,8 +746,6 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
 
             mouseMoveDeltaX = 0;
             mouseMoveDeltaY = 0;
-
-            forceNextMouseMoveAbsolute = FALSE;
         }
         else
         {
@@ -961,14 +952,6 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
         }
     }
 
-    - (void) mouseEntered:(NSEvent *)theEvent { forceNextMouseMoveAbsolute = TRUE; }
-    - (void) mouseExited:(NSEvent *)theEvent  { forceNextMouseMoveAbsolute = TRUE; }
-
-    - (void) mouseMoved:(NSEvent *)theEvent         { [self postMouseMovedEvent:theEvent]; }
-    - (void) mouseDragged:(NSEvent *)theEvent       { [self postMouseMovedEvent:theEvent]; }
-    - (void) rightMouseDragged:(NSEvent *)theEvent  { [self postMouseMovedEvent:theEvent]; }
-    - (void) otherMouseDragged:(NSEvent *)theEvent  { [self postMouseMovedEvent:theEvent]; }
-
     - (void) scrollWheel:(NSEvent *)theEvent
     {
         CGPoint pt;
@@ -1104,7 +1087,7 @@ static inline void fix_generic_modifiers_by_device(NSUInteger* modifiers)
         macdrv_event event;
         NSRect frame = [self contentRectForFrameRect:[self frame]];
 
-        [[self class] flipRect:&frame];
+        [NSApp flipRect:&frame];
 
         /* Coalesce events by discarding any previous ones still in the queue. */
         [queue discardEventsMatchingMask:event_mask_for_type(WINDOW_FRAME_CHANGED)
@@ -1324,7 +1307,7 @@ void macdrv_get_cocoa_window_frame(macdrv_window w, CGRect* out_frame)
         NSRect frame;
 
         frame = [window contentRectForFrameRect:[window frame]];
-        [[window class] flipRect:&frame];
+        [NSApp flipRect:&frame];
         *out_frame = NSRectToCGRect(frame);
     });
 }

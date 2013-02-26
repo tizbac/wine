@@ -118,6 +118,13 @@ extern void macdrv_window_rejected_focus(const struct macdrv_event *event) DECLS
 extern void macdrv_beep(void) DECLSPEC_HIDDEN;
 
 
+/* cursor */
+extern void macdrv_set_cursor(CFStringRef name, CFArrayRef frames) DECLSPEC_HIDDEN;
+extern int macdrv_get_cursor_position(CGPoint *pos) DECLSPEC_HIDDEN;
+extern int macdrv_set_cursor_position(CGPoint pos) DECLSPEC_HIDDEN;
+extern int macdrv_clip_cursor(CGRect rect) DECLSPEC_HIDDEN;
+
+
 /* display */
 extern int macdrv_get_displays(struct macdrv_display** displays, int* count) DECLSPEC_HIDDEN;
 extern void macdrv_free_displays(struct macdrv_display* displays) DECLSPEC_HIDDEN;
