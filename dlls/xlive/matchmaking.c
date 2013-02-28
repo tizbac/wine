@@ -13,7 +13,7 @@
 #include "wine/library.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(xlive_matchmaking);
-VOID WineXliveSessionCopy(WINEXLIVESESSION * src, WINEXLIVESESSION * dst )
+VOID WineXliveSessionCopy(WINEXLIVESESSION * dst, WINEXLIVESESSION * src )
 {
     memcpy(dst,src,sizeof(WINEXLIVESESSION));
     if ( src->xlive_session.cContexts > 0 && src->xlive_session.pContexts )
@@ -43,7 +43,7 @@ VOID WineXliveSessionSubFree(WINEXLIVESESSION * s)
 typedef struct {
     WINEXLIVESESSION * m_sessions;
     DWORD session_count;
-    
+    HANDLE announceThread;
     
 } CSessionMgr;
 /// @param xs Pointer to WINEXLIVESESSION , function will duplicate it so caller can free it just after
@@ -77,11 +77,22 @@ void CSessionMgr_removeSession(CSessionMgr* I, DWORD id)
     I->session_count--;
     I->m_sessions = realloc(I->m_sessions,sizeof(WINEXLIVESESSION)*(I->session_count));
 }
-
+void CSessionMgr_announceThreadMain(CSessionMgr* I)
+{
+    FIXME("Announce thread started (I=%p)\n",I);
+    while ( 1 )
+    {
+        
+        
+        Sleep(500);
+    }
+}
 void CSessionMgr_CSessionMgr(CSessionMgr* I)
 {
     I->m_sessions = 0x0;
     I->session_count = 0;
+    FIXME("Starting announce thread...\n");
+    I->announceThread = CreateThread(NULL,0,&CSessionMgr_announceThreadMain,I,0x0,NULL);
 }
 
 CSessionMgr * sMgr = 0x0; 
@@ -90,6 +101,7 @@ void MatchMakingStartup()
     FIXME("trace always\n");
     sMgr = (CSessionMgr*)malloc(sizeof(CSessionMgr));
     CSessionMgr_CSessionMgr(sMgr);
+    
 }
 // #5300: XSessionCreate
 INT WINAPI XSessionCreate (DWORD dwFlags,
@@ -110,6 +122,8 @@ INT WINAPI XSessionCreate (DWORD dwFlags,
     memcpy(&(s.xlive_session.info),pSessionInfo,sizeof(XSESSION_INFO));
     s.xlive_session.pProperties = NULL;
     s.xlive_session.pContexts = NULL;
+    s.xlive_session.cContexts = 0;
+    s.xlive_session.cProperties = 0;
     *ph = CSessionMgr_addSession(sMgr,&s);
     return ERROR_SUCCESS;
 }

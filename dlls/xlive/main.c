@@ -48,6 +48,7 @@ unsigned short x_syslinkport = 3074;
 int xnet_recv_bytes = 0;
 int xnet_sent_bytes = 0;
 XNetStartupParams xnetparams;
+void _XNotifyPresenceChanged_Event(void);
 void MatchMakingStartup();
 INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dwNumSettingIds,
                                     DWORD * pdwSettingIds, DWORD * pcbResults, PXUSER_READ_PROFILE_SETTING_RESULT pResults, DWORD pOverlapped);
@@ -1328,6 +1329,7 @@ void WINAPI XUserSetContext( DWORD dwUserIndex, DWORD dwContextId,DWORD dwContex
         FIXME("Setting contexts different from X_CONTEXT_PRESENCE is not supported yet!\n");
         return;
     }
+    _XNotifyPresenceChanged_Event();
     Xliveusers[dwUserIndex].contextvalue = dwContextValue;
 }
 
@@ -1463,6 +1465,7 @@ INT WINAPI XUserResetStatsViewAllUsers (int a2, int *a3) {
 // #5292 XUserSetContextEx
 INT WINAPI XUserSetContextEx (DWORD dwUserIndex, DWORD dwContextId, DWORD dwContextValue, void * pOverlapped) {
     FIXME ("stub: (%d, %d, %d, %p)\n", dwUserIndex, dwContextId, dwContextValue, pOverlapped);
+    XUserSetContext(dwUserIndex,dwContextId,dwContextValue);
     return 0;
 }
 

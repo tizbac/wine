@@ -36,7 +36,17 @@ void _XListenerAddEvent_PDW(XLiveListener *l, int type, DWORD param )
     FIXME("trace: new event: %d %d(%p)\n",type,param,l->events[l->eventcount].param);
     l->eventcount++;
 }
-
+void _XListenerAddEvent_VOID(XLiveListener *l, int type)
+{
+    if ( l->eventcount >= 128 )
+    {
+        ERR("Too many unprocessed events!\n");
+        return;
+    }
+    l->events[l->eventcount].type = type;
+    FIXME("trace: new event: %d (%p)\n",type,l->events[l->eventcount].param);
+    l->eventcount++;
+}
 
 void _XNotifySigninChanged_Event(void) {
     int i;
@@ -50,6 +60,21 @@ void _XNotifySigninChanged_Event(void) {
         
     }
 }
+void _XNotifyPresenceChanged_Event(void) {
+    
+    int i;
+    for ( i = 0; i < xlive_g_listener_count; i++ )
+    {
+        if ( xlive_g_listeners[i].areas & XNOTIFY_LIVE )
+        {
+            _XListenerAddEvent_VOID(&xlive_g_listeners[i],XN_LIVE_PRESENCE_CHANGED);
+            
+        }
+        
+    }
+}
+
+
 // #5270: XNotifyCreateListener
 //TODO: WaitForSingleObject support, atm only polling is supported
 INT WINAPI XNotifyCreateListener(unsigned long long qwAreas)
@@ -89,6 +114,7 @@ BOOL _XNotifyRemoveEvent(XLiveListener *l,int index,  DWORD * pdwId, void ** pPa
 }
 // #651: XNotifyGetNext
 BOOL WINAPI XNotifyGetNext(HANDLE hNotificationListener, DWORD dwMsgFilter, DWORD * pdwId, void ** pParam) {
+    TRACE("(%d %d %p %p)\n",hNotificationListener,dwMsgFilter,pdwId,pParam);
     int index = (int)(hNotificationListener-1);
     if ( !hNotificationListener )
         return 0;
