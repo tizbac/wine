@@ -1708,7 +1708,6 @@ INT WINAPI XUserReadProfileSettings(DWORD dwTitleId, DWORD dwUserIndex, DWORD dw
         propFile = CreateFileA(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
         if ( propFile == INVALID_HANDLE_VALUE ) {
             ERR("Setting ID: %d : Cannot load property\n",id);
-            pResults->pSettings = (BYTE *)pResults+sizeof (XUSER_PROFILE_SETTING);
             continue;
         }
 
