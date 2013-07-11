@@ -222,6 +222,7 @@ extern int shape_layered_windows DECLSPEC_HIDDEN;
 extern const struct gdi_dc_funcs *X11DRV_XRender_Init(void) DECLSPEC_HIDDEN;
 
 extern struct opengl_funcs *get_glx_driver(UINT) DECLSPEC_HIDDEN;
+extern struct d3dadapter_funcs *get_d3d_dri2_driver(UINT) DECLSPEC_HIDDEN;
 
 /* IME support */
 extern void IME_SetOpenStatus(BOOL fOpen) DECLSPEC_HIDDEN;
@@ -296,6 +297,7 @@ struct x11drv_escape_get_drawable
     Drawable                 drawable;     /* X drawable */
     Drawable                 gl_drawable;  /* GL drawable */
     int                      pixel_format; /* internal GL pixel format */
+    RECT                     dc_rect;      /* DC rectangle relative to drawable */
 };
 
 struct x11drv_escape_flush_gl_drawable
@@ -379,6 +381,7 @@ extern int show_systray DECLSPEC_HIDDEN;
 extern int grab_pointer DECLSPEC_HIDDEN;
 extern int grab_fullscreen DECLSPEC_HIDDEN;
 extern int usexcomposite DECLSPEC_HIDDEN;
+extern int usexfixes DECLSPEC_HIDDEN;
 extern int managed_mode DECLSPEC_HIDDEN;
 extern int decorated_mode DECLSPEC_HIDDEN;
 extern int private_color_map DECLSPEC_HIDDEN;
@@ -579,6 +582,8 @@ extern XIC X11DRV_get_ic( HWND hwnd ) DECLSPEC_HIDDEN;
 extern void sync_gl_drawable( HWND hwnd, const RECT *visible_rect, const RECT *client_rect ) DECLSPEC_HIDDEN;
 extern void set_gl_drawable_parent( HWND hwnd, HWND parent ) DECLSPEC_HIDDEN;
 extern void destroy_gl_drawable( HWND hwnd ) DECLSPEC_HIDDEN;
+
+extern void destroy_d3dadapter_drawable( HWND hwnd ) DECLSPEC_HIDDEN;
 
 extern void wait_for_withdrawn_state( HWND hwnd, BOOL set ) DECLSPEC_HIDDEN;
 extern Window init_clip_window(void) DECLSPEC_HIDDEN;

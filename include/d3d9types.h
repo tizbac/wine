@@ -1544,6 +1544,14 @@ typedef struct D3DDISPLAYMODEEX
     D3DSCANLINEORDERING ScanLineOrdering;
 } D3DDISPLAYMODEEX;
 
+typedef struct _D3DPRESENTSTATS {
+    UINT PresentCount;
+    UINT PresentRefreshCount;
+    UINT SyncRefreshCount;
+    LARGE_INTEGER SyncQPCTime;
+    LARGE_INTEGER SyncGPUTime;
+} D3DPRESENTSTATS;
+
 typedef enum D3DDISPLAYROTATION
 {
     D3DDISPLAYROTATION_IDENTITY = 1,
