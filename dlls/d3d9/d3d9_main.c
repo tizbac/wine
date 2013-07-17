@@ -148,9 +148,17 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
 {
     /* At process attach */
     TRACE("fdwReason=%d\n", fdwReason);
-    if (fdwReason == DLL_PROCESS_ATTACH)
-        DisableThreadLibraryCalls(hInstDLL);
+    switch (fdwReason)
+    {
+        case DLL_PROCESS_ATTACH:
+            d3dadapter9_init(hInstDLL);
+            DisableThreadLibraryCalls(hInstDLL);
+            break;
 
+        case DLL_PROCESS_DETACH:
+            d3dadapter9_destroy(hInstDLL);
+            break;
+    }
     return TRUE;
 }
 
