@@ -37,7 +37,7 @@ static void do_include (const char *arg)
     free(globals.directory);
     globals.directory = newIncludes;
   }
-  globals.do_code = 1;
+  globals.do_code = TRUE;
 }
 
 
@@ -68,8 +68,8 @@ static void do_demangle (const char *arg)
 {
     if (globals.mode != NONE) fatal("Only one mode can be specified\n");
     globals.mode = DMGL;
-    globals.do_code = 1;
-    globals.do_demangle = 1;
+    globals.do_code = TRUE;
+    globals.do_demangle = TRUE;
 }
 
 
@@ -77,44 +77,44 @@ static void do_dump (const char *arg)
 {
     if (globals.mode != NONE) fatal("Only one mode can be specified\n");
     globals.mode = DUMP;
-    globals.do_code = 1;
+    globals.do_code = TRUE;
 }
 
 
 static void do_code (const char *arg)
 {
-  globals.do_code = 1;
+  globals.do_code = TRUE;
 }
 
 
 static void do_trace (const char *arg)
 {
-  globals.do_trace = 1;
-  globals.do_code = 1;
+  globals.do_trace = TRUE;
+  globals.do_code = TRUE;
 }
 
 
 static void do_forward (const char *arg)
 {
   globals.forward_dll = arg;
-  globals.do_trace = 1;
-  globals.do_code = 1;
+  globals.do_trace = TRUE;
+  globals.do_code = TRUE;
 }
 
 static void do_document (const char *arg)
 {
-  globals.do_documentation = 1;
+  globals.do_documentation = TRUE;
 }
 
 static void do_cdecl (const char *arg)
 {
-  globals.do_cdecl = 1;
+  globals.do_cdecl = TRUE;
 }
 
 
 static void do_quiet (const char *arg)
 {
-  globals.do_quiet = 1;
+  globals.do_quiet = TRUE;
 }
 
 
@@ -160,18 +160,18 @@ static void do_symfile (const char *arg)
 
 static void do_verbose (const char *arg)
 {
-  globals.do_verbose = 1;
+  globals.do_verbose = TRUE;
 }
 
 
 static void do_symdmngl (const char *arg)
 {
-    globals.do_demangle = 1;
+    globals.do_demangle = TRUE;
 }
 
 static void do_dumphead (const char *arg)
 {
-    globals.do_dumpheader = 1;
+    globals.do_dumpheader = TRUE;
 }
 
 static void do_dumpsect (const char* arg)
@@ -181,20 +181,20 @@ static void do_dumpsect (const char* arg)
 
 static void do_rawdebug (const char *arg)
 {
-    globals.do_debug = 1;
+    globals.do_debug = TRUE;
 }
 
 static void do_dumpall(const char *arg)
 {
-    globals.do_dumpheader = 1;
-    globals.do_dump_rawdata = 1;
-    globals.do_symbol_table = 1;
+    globals.do_dumpheader = TRUE;
+    globals.do_dump_rawdata = TRUE;
+    globals.do_symbol_table = TRUE;
     globals.dumpsect = "ALL";
 }
 
 static void do_symtable(const char* arg)
 {
-    globals.do_symbol_table = 1;
+    globals.do_symbol_table = TRUE;
 }
 
 struct my_option
@@ -207,30 +207,30 @@ struct my_option
 };
 
 static const struct my_option option_table[] = {
-  {"--help",NONE, 0, do_usage,    "--help       Display this help message"},
-  {"-h",    NONE, 0, do_usage,    "-h           Synonym for --help"},
-  {"-?",    NONE, 0, do_usage,    "-?           Synonym for --help"},
-  {"sym",   DMGL, 0, do_demangle, "sym <sym>    Demangle C++ symbol <sym> and exit"},
-  {"spec",  SPEC, 0, do_spec,     "spec <dll>   Use dll for input file and generate implementation code"},
-  {"-I",    SPEC, 1, do_include,  "-I dir       Look for prototypes in 'dir' (implies -c)"},
-  {"-c",    SPEC, 0, do_code,     "-c           Generate skeleton code (requires -I)"},
-  {"-t",    SPEC, 0, do_trace,    "-t           TRACE arguments (implies -c)"},
-  {"-f",    SPEC, 1, do_forward,  "-f dll       Forward calls to 'dll' (implies -t)"},
-  {"-D",    SPEC, 0, do_document, "-D           Generate documentation"},
-  {"-o",    SPEC, 1, do_name,     "-o name      Set the output dll name (default: dll). note: strips .dll extensions"},
-  {"-C",    SPEC, 0, do_cdecl,    "-C           Assume __cdecl calls (default: __stdcall)"},
-  {"-s",    SPEC, 1, do_start,    "-s num       Start prototype search after symbol 'num'"},
-  {"-e",    SPEC, 1, do_end,      "-e num       End prototype search after symbol 'num'"},
-  {"-S",    SPEC, 1, do_symfile,  "-S symfile   Search only prototype names found in 'symfile'"},
-  {"-q",    SPEC, 0, do_quiet,    "-q           Don't show progress (quiet)."},
-  {"-v",    SPEC, 0, do_verbose,  "-v           Show lots of detail while working (verbose)."},
-  {"dump",  DUMP, 0, do_dump,     "dump <file>  Dumps the contents of a file (dll, exe, lib...)"},
-  {"-C",    DUMP, 0, do_symdmngl, "-C           Turns on symbol demangling"},
-  {"-f",    DUMP, 0, do_dumphead, "-f           Dumps file header information"},
-  {"-G",    DUMP, 0, do_rawdebug, "-G           Dumps raw debug information"},
-  {"-j",    DUMP, 1, do_dumpsect, "-j sect_name Dumps only the content of section sect_name (import, export, debug, resource, tls, clr, reloc, except)"},
-  {"-t",    DUMP, 0, do_symtable, "-t           Dumps symbol table"},
-  {"-x",    DUMP, 0, do_dumpall,  "-x           Dumps everything"},
+  {"--help",NONE, 0, do_usage,    "--help          Display this help message"},
+  {"-h",    NONE, 0, do_usage,    "-h              Synonym for --help"},
+  {"-?",    NONE, 0, do_usage,    "-?              Synonym for --help"},
+  {"sym",   DMGL, 0, do_demangle, "sym <sym>       Demangle C++ symbol <sym> and exit"},
+  {"spec",  SPEC, 0, do_spec,     "spec <dll>      Use 'dll' for input file and generate implementation code"},
+  {"-I",    SPEC, 1, do_include,  "-I <dir>        Look for prototypes in 'dir' (implies -c)"},
+  {"-c",    SPEC, 0, do_code,     "-c              Generate skeleton code (requires -I)"},
+  {"-t",    SPEC, 0, do_trace,    "-t              TRACE arguments (implies -c)"},
+  {"-f",    SPEC, 1, do_forward,  "-f <dll>        Forward calls to 'dll' (implies -t)"},
+  {"-D",    SPEC, 0, do_document, "-D              Generate documentation"},
+  {"-o",    SPEC, 1, do_name,     "-o <name>       Set the output dll name (default: dll). Note: strips .dll extensions"},
+  {"-C",    SPEC, 0, do_cdecl,    "-C              Assume __cdecl calls (default: __stdcall)"},
+  {"-s",    SPEC, 1, do_start,    "-s <num>        Start prototype search after symbol 'num'"},
+  {"-e",    SPEC, 1, do_end,      "-e <num>        End prototype search after symbol 'num'"},
+  {"-S",    SPEC, 1, do_symfile,  "-S <symfile>    Search only prototype names found in 'symfile'"},
+  {"-q",    SPEC, 0, do_quiet,    "-q              Don't show progress (quiet)."},
+  {"-v",    SPEC, 0, do_verbose,  "-v              Show lots of detail while working (verbose)."},
+  {"dump",  DUMP, 0, do_dump,     "dump <file>     Dump the contents of 'file' (dll, exe, lib...)"},
+  {"-C",    DUMP, 0, do_symdmngl, "-C              Turn on symbol demangling"},
+  {"-f",    DUMP, 0, do_dumphead, "-f              Dump file header information"},
+  {"-G",    DUMP, 0, do_rawdebug, "-G              Dump raw debug information"},
+  {"-j",    DUMP, 1, do_dumpsect, "-j <sect_name>  Dump only the content of section 'sect_name' (import, export, debug, resource, tls, clr, reloc, except)"},
+  {"-t",    DUMP, 0, do_symtable, "-t              Dump symbol table"},
+  {"-x",    DUMP, 0, do_dumpall,  "-x              Dump everything"},
   {NULL,    NONE, 0, NULL,        NULL}
 };
 
@@ -346,15 +346,15 @@ static void set_module_name(unsigned setUC)
 
 /* Marks the symbol as 'found'! */
 /* return: perform-search */
-static int symbol_searched(int count, const char *symbolname)
+static BOOL symbol_searched(int count, const char *symbolname)
 {
     search_symbol *search_symbol;
 
     if (!(count >= globals.start_ordinal
           && (!globals.end_ordinal || count <= globals.end_ordinal)))
-        return 0;
+        return FALSE;
     if (!globals.search_symbol)
-        return 1;
+        return TRUE;
     for (search_symbol = globals.search_symbol;
          search_symbol;
          search_symbol = search_symbol->next)
@@ -362,17 +362,17 @@ static int symbol_searched(int count, const char *symbolname)
         if (!strcmp(symbolname, search_symbol->symbolname))
         {
             search_symbol->found = 1;
-            return 1;
+            return TRUE;
         }
     }
-    return 0;
+    return FALSE;
 }
 
 /* return: some symbols weren't found */
-static int symbol_finish(void)
+static BOOL symbol_finish(void)
 {
     const search_symbol *search_symbol;
-    int started = 0;
+    BOOL started = FALSE;
 
     for (search_symbol = globals.search_symbol;
          search_symbol;
@@ -384,7 +384,7 @@ static int symbol_finish(void)
         {
             /* stderr? not a practice here */
             puts("These requested <symfile> symbols weren't found:");
-            started = 1;
+            started = TRUE;
         }
         printf("\t%s\n",search_symbol->symbolname);
     }
@@ -415,7 +415,7 @@ int   main (int argc, char *argv[])
     switch (globals.mode)
     {
     case DMGL:
-	VERBOSE = 1;
+        VERBOSE = TRUE;
 
         if (globals.input_name == NULL)
             fatal("No symbol name has been given\n");

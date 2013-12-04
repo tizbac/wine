@@ -3605,10 +3605,9 @@ static void test_flip(void)
             "Got unexpected caps %#x.\n", surface_desc.ddsCaps.dwCaps);
 
     hr = IDirectDrawSurface_GetAttachedSurface(backbuffer3, &caps, &surface);
-    todo_wine ok(SUCCEEDED(hr), "Failed to get attached surface, hr %#x.\n", hr);
-    todo_wine ok(surface == primary, "Got unexpected surface %p, expected %p.\n", surface, primary);
-    if (surface)
-        IDirectDrawSurface_Release(surface);
+    ok(SUCCEEDED(hr), "Failed to get attached surface, hr %#x.\n", hr);
+    ok(surface == primary, "Got unexpected surface %p, expected %p.\n", surface, primary);
+    IDirectDrawSurface_Release(surface);
 
     memset(&surface_desc, 0, sizeof(surface_desc));
     surface_desc.dwSize = sizeof(surface_desc);
@@ -3619,11 +3618,11 @@ static void test_flip(void)
     hr = IDirectDraw_CreateSurface(ddraw, &surface_desc, &surface, NULL);
     ok(SUCCEEDED(hr), "Failed to create surface, hr %#x.\n", hr);
     hr = IDirectDrawSurface_Flip(primary, surface, DDFLIP_WAIT);
-    todo_wine ok(hr == DDERR_NOTFLIPPABLE, "Got unexpected hr %#x.\n", hr);
+    ok(hr == DDERR_NOTFLIPPABLE, "Got unexpected hr %#x.\n", hr);
     IDirectDrawSurface_Release(surface);
 
     hr = IDirectDrawSurface_Flip(primary, primary, DDFLIP_WAIT);
-    todo_wine ok(hr == DDERR_NOTFLIPPABLE, "Got unexpected hr %#x.\n", hr);
+    ok(hr == DDERR_NOTFLIPPABLE, "Got unexpected hr %#x.\n", hr);
     hr = IDirectDrawSurface_Flip(backbuffer1, NULL, DDFLIP_WAIT);
     ok(hr == DDERR_NOTFLIPPABLE, "Got unexpected hr %#x.\n", hr);
     hr = IDirectDrawSurface_Flip(backbuffer2, NULL, DDFLIP_WAIT);
