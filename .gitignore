@@ -325,3 +325,4 @@ tools/wrc/parser.tab.c
 tools/wrc/parser.tab.h
 tools/wrc/parser.yy.c
 tools/wrc/wrc
+/build*/
