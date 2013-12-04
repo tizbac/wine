@@ -80,11 +80,11 @@ static DWORD CALLBACK host_object_proc(LPVOID p)
     ok_ole_success(hr, CoMarshalInterface);
 
     /* force the message queue to be created before signaling parent thread */
-    PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+    PeekMessageA(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
 
     SetEvent(data->marshal_event);
 
-    while (GetMessage(&msg, NULL, 0, 0))
+    while (GetMessageA(&msg, NULL, 0, 0))
     {
         if (msg.hwnd == NULL && msg.message == RELEASEMARSHALDATA)
         {
@@ -93,7 +93,7 @@ static DWORD CALLBACK host_object_proc(LPVOID p)
             SetEvent((HANDLE)msg.lParam);
         }
         else
-            DispatchMessage(&msg);
+            DispatchMessageA(&msg);
     }
 
     HeapFree(GetProcessHeap(), 0, data);
@@ -106,7 +106,7 @@ static DWORD CALLBACK host_object_proc(LPVOID p)
 static DWORD start_host_object2(IStream *stream, REFIID riid, IUnknown *object, MSHLFLAGS marshal_flags, IMessageFilter *filter, HANDLE *thread)
 {
     DWORD tid = 0;
-    HANDLE marshal_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    HANDLE marshal_event = CreateEventA(NULL, FALSE, FALSE, NULL);
     struct host_object_data *data = HeapAlloc(GetProcessHeap(), 0, sizeof(*data));
 
     data->stream = stream;
@@ -135,8 +135,8 @@ static DWORD start_host_object(IStream *stream, REFIID riid, IUnknown *object, M
  * same thread that marshaled the interface in the first place. */
 static void release_host_object(DWORD tid)
 {
-    HANDLE event = CreateEvent(NULL, FALSE, FALSE, NULL);
-    PostThreadMessage(tid, RELEASEMARSHALDATA, 0, (LPARAM)event);
+    HANDLE event = CreateEventA(NULL, FALSE, FALSE, NULL);
+    PostThreadMessageA(tid, RELEASEMARSHALDATA, 0, (LPARAM)event);
     WaitForSingleObject(event, INFINITE);
     CloseHandle(event);
 }
@@ -144,7 +144,7 @@ static void release_host_object(DWORD tid)
 
 static void end_host_object(DWORD tid, HANDLE thread)
 {
-    BOOL ret = PostThreadMessage(tid, WM_QUIT, 0, 0);
+    BOOL ret = PostThreadMessageA(tid, WM_QUIT, 0, 0);
     ok(ret, "PostThreadMessage failed with error %d\n", GetLastError());
     /* be careful of races - don't return until hosting thread has terminated */
     WaitForSingleObject(thread, INFINITE);
@@ -995,7 +995,7 @@ static ITypeInfo *get_type_info(REFIID riid)
     ITypeLib *pTypeLib;
     HRESULT hr;
 
-    hr = LoadRegTypeLib(&LIBID_TestTypelib, 1, 0, LOCALE_NEUTRAL, &pTypeLib);
+    hr = LoadRegTypeLib(&LIBID_TestTypelib, 2, 5, LOCALE_NEUTRAL, &pTypeLib);
     ok_ole_success(hr, LoadRegTypeLib);
     if (FAILED(hr))
         return NULL;
@@ -1178,7 +1178,7 @@ static INonOleAutomation NonOleAutomation = { &NonOleAutomation_VTable };
 static ITypeInfo *NonOleAutomation_GetTypeInfo(void)
 {
     ITypeLib *pTypeLib;
-    HRESULT hr = LoadRegTypeLib(&LIBID_TestTypelib, 1, 0, LOCALE_NEUTRAL, &pTypeLib);
+    HRESULT hr = LoadRegTypeLib(&LIBID_TestTypelib, 2, 5, LOCALE_NEUTRAL, &pTypeLib);
     ok_ole_success(hr, LoadRegTypeLib);
     if (SUCCEEDED(hr))
     {
@@ -1807,7 +1807,7 @@ static void test_libattr(void)
     HRESULT hr;
     TLIBATTR *pattr;
 
-    hr = LoadRegTypeLib(&LIBID_TestTypelib, 1, 0, LOCALE_NEUTRAL, &pTypeLib);
+    hr = LoadRegTypeLib(&LIBID_TestTypelib, 2, 5, LOCALE_NEUTRAL, &pTypeLib);
     ok_ole_success(hr, LoadRegTypeLib);
     if (FAILED(hr))
         return;
@@ -1952,7 +1952,7 @@ START_TEST(tmarshal)
     test_libattr();
     test_external_connection();
 
-    hr = UnRegisterTypeLib(&LIBID_TestTypelib, 1, 0, LOCALE_NEUTRAL,
+    hr = UnRegisterTypeLib(&LIBID_TestTypelib, 2, 5, LOCALE_NEUTRAL,
                            sizeof(void*) == 8 ? SYS_WIN64 : SYS_WIN32);
     ok_ole_success(hr, UnRegisterTypeLib);
 

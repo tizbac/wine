@@ -419,6 +419,9 @@ HRESULT WINAPI BaseOutputPinImpl_Connect(IPin * iface, IPin * pReceivePin, const
     TRACE("(%p/%p)->(%p, %p)\n", This, iface, pReceivePin, pmt);
     dump_AM_MEDIA_TYPE(pmt);
 
+    if (!pReceivePin)
+        return E_POINTER;
+
     /* If we try to connect to ourselves, we will definitely deadlock.
      * There are other cases where we could deadlock too, but this
      * catches the obvious case */
@@ -465,9 +468,11 @@ HRESULT WINAPI BaseOutputPinImpl_Connect(IPin * iface, IPin * pReceivePin, const
             /* then try receiver filter's media types */
             if (hr != S_OK && SUCCEEDED(hr = IPin_EnumMediaTypes(pReceivePin, &pEnumCandidates))) /* if we haven't already connected successfully */
             {
+                ULONG fetched;
+
                 hr = VFW_E_NO_ACCEPTABLE_TYPES; /* Assume the worst, but set to S_OK if connected successfully */
 
-                while (S_OK == IEnumMediaTypes_Next(pEnumCandidates, 1, &pmtCandidate, NULL))
+                while (S_OK == IEnumMediaTypes_Next(pEnumCandidates, 1, &pmtCandidate, &fetched))
                 {
                     assert(pmtCandidate);
                     dump_AM_MEDIA_TYPE(pmtCandidate);
@@ -981,7 +986,7 @@ HRESULT WINAPI BaseInputPinImpl_EndOfStream(IPin * iface)
     if (This->flushing)
         hr = S_FALSE;
     else
-        This->end_of_stream = 1;
+        This->end_of_stream = TRUE;
     LeaveCriticalSection(This->pin.pCritSec);
 
     if (hr == S_OK)
@@ -1001,7 +1006,7 @@ HRESULT WINAPI BaseInputPinImpl_BeginFlush(IPin * iface)
     TRACE("() semi-stub\n");
 
     EnterCriticalSection(This->pin.pCritSec);
-    This->flushing = 1;
+    This->flushing = TRUE;
 
     hr = SendFurther( iface, deliver_beginflush, NULL, NULL );
     LeaveCriticalSection(This->pin.pCritSec);
@@ -1021,7 +1026,7 @@ HRESULT WINAPI BaseInputPinImpl_EndFlush(IPin * iface)
     TRACE("(%p)\n", This);
 
     EnterCriticalSection(This->pin.pCritSec);
-    This->flushing = This->end_of_stream = 0;
+    This->flushing = This->end_of_stream = FALSE;
 
     hr = SendFurther( iface, deliver_endflush, NULL, NULL );
     LeaveCriticalSection(This->pin.pCritSec);
@@ -1232,12 +1237,12 @@ static HRESULT InputPin_Init(const IPinVtbl *InputPin_Vtbl, const PIN_INFO * pPi
         IMemAllocator_AddRef(pPinImpl->preferred_allocator);
     pPinImpl->pin.IPin_iface.lpVtbl = InputPin_Vtbl;
     pPinImpl->IMemInputPin_iface.lpVtbl = &MemInputPin_Vtbl;
-    pPinImpl->flushing = pPinImpl->end_of_stream = 0;
+    pPinImpl->flushing = pPinImpl->end_of_stream = FALSE;
 
     return S_OK;
 }
 
-HRESULT BaseInputPin_Construct(const IPinVtbl *InputPin_Vtbl, const PIN_INFO * pPinInfo,
+HRESULT BaseInputPin_Construct(const IPinVtbl *InputPin_Vtbl, LONG inputpin_size, const PIN_INFO * pPinInfo,
                                const BasePinFuncTable* pBaseFuncsTable, const BaseInputPinFuncTable* pBaseInputFuncsTable,
                                LPCRITICAL_SECTION pCritSec, IMemAllocator *allocator, IPin ** ppPin)
 {
@@ -1245,6 +1250,7 @@ HRESULT BaseInputPin_Construct(const IPinVtbl *InputPin_Vtbl, const PIN_INFO * p
 
     *ppPin = NULL;
 
+    assert(inputpin_size >= sizeof(BaseInputPin));
     assert(pBaseFuncsTable->pfnCheckMediaType);
 
     if (pPinInfo->dir != PINDIR_INPUT)
@@ -1253,7 +1259,7 @@ HRESULT BaseInputPin_Construct(const IPinVtbl *InputPin_Vtbl, const PIN_INFO * p
         return E_INVALIDARG;
     }
 
-    pPinImpl = CoTaskMemAlloc(sizeof(*pPinImpl));
+    pPinImpl = CoTaskMemAlloc(inputpin_size);
 
     if (!pPinImpl)
         return E_OUTOFMEMORY;

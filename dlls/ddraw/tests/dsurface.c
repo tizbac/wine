@@ -740,7 +740,7 @@ static void QueryInterface(void)
 {
     IDirectDrawSurface *dsurface;
     DDSURFACEDESC surface;
-    LPVOID object;
+    void *object;
     HRESULT ret;
 
     /* Create a surface */
@@ -1129,7 +1129,8 @@ static void AttachmentTest7(void)
     DWORD ref;
     UINT num;
     DDSCAPS2 caps = {DDSCAPS_TEXTURE, 0, 0, 0}, caps2 = {DDSCAPS_BACKBUFFER,0,0,0};
-    HWND window = CreateWindow( "static", "ddraw_test", WS_OVERLAPPEDWINDOW, 100, 100, 160, 160, NULL, NULL, NULL, NULL );
+    HWND window = CreateWindowA("static", "ddraw_test", WS_OVERLAPPEDWINDOW,
+            100, 100, 160, 160, NULL, NULL, NULL, NULL);
 
     hr = IDirectDraw_QueryInterface(lpDD, &IID_IDirectDraw7, (void **) &dd7);
     ok(hr == DD_OK, "IDirectDraw_QueryInterface returned %08x\n", hr);
@@ -1429,7 +1430,8 @@ static void AttachmentTest(void)
     DWORD ref;
     DDSCAPS caps = {DDSCAPS_TEXTURE};
     BOOL refrast = FALSE;
-    HWND window = CreateWindow( "static", "ddraw_test", WS_OVERLAPPEDWINDOW, 100, 100, 160, 160, NULL, NULL, NULL, NULL );
+    HWND window = CreateWindowA("static", "ddraw_test", WS_OVERLAPPEDWINDOW,
+            100, 100, 160, 160, NULL, NULL, NULL, NULL);
 
     memset(&ddsd, 0, sizeof(ddsd));
     ddsd.dwSize = sizeof(ddsd);
@@ -2507,7 +2509,8 @@ static void SizeTest(void)
     IDirectDrawSurface *dsurface = NULL;
     DDSURFACEDESC desc;
     HRESULT ret;
-    HWND window = CreateWindow( "static", "ddraw_test", WS_OVERLAPPEDWINDOW, 100, 100, 160, 160, NULL, NULL, NULL, NULL );
+    HWND window = CreateWindowA("static", "ddraw_test", WS_OVERLAPPEDWINDOW,
+            100, 100, 160, 160, NULL, NULL, NULL, NULL);
 
     /* Create an offscreen surface surface without a size */
     ZeroMemory(&desc, sizeof(desc));
@@ -2760,7 +2763,7 @@ static void BltParamTest(void)
     hr = IDirectDrawSurface_Blt(surface1, &valid, NULL, NULL, DDBLT_COLORFILL, &BltFx);
     ok(hr == DD_OK, "IDirectDrawSurface_Blt with a valid rectangle for color fill returned %08x\n", hr);
     hr = IDirectDrawSurface_Blt(surface1, &valid, NULL, &invalid3, DDBLT_COLORFILL, &BltFx);
-    ok(hr == DD_OK, "IDirectDrawSurface_Blt with a invalid, unused rectangle returned %08x\n", hr);
+    ok(hr == DD_OK, "IDirectDrawSurface_Blt with an invalid, unused rectangle returned %08x\n", hr);
     hr = IDirectDrawSurface_Blt(surface2, &invalid1, NULL, NULL, DDBLT_COLORFILL, &BltFx);
     ok(hr == DDERR_INVALIDRECT, "IDirectDrawSurface_Blt with a with invalid rectangle 1 returned %08x\n", hr);
     hr = IDirectDrawSurface_Blt(surface2, &invalid2, NULL, NULL, DDBLT_COLORFILL, &BltFx);
@@ -3094,11 +3097,9 @@ static void SurfaceCapsTest(void)
     };
     UINT i;
 
-    /* Tests various surface flags, what changes do they undergo during surface creation. Forsaken
-     * engine expects texture surfaces without memory flag to get a video memory flag right after
-     * creation. Currently, Wine adds DDSCAPS_FRONTBUFFER to primary surface, but native doesn't do this
-     * for single buffered primaries. Because of this primary surface creation tests are todo_wine. No real
-     * app is known so far to care about this. */
+    /* Tests various surface flags, what changes do they undergo during
+     * surface creation. Forsaken engine expects texture surfaces without
+     * memory flag to get a video memory flag right after creation. */
 
     if (!(ddcaps.ddsCaps.dwCaps & DDSCAPS_VIDEOMEMORY))
     {
@@ -3139,14 +3140,9 @@ static void SurfaceCapsTest(void)
             hr = IDirectDrawSurface_GetSurfaceDesc(surface1, &desc);
             ok(hr == DD_OK, "IDirectDrawSurface_GetSurfaceDesc failed with %08x\n", hr);
 
-            if (!(create_caps[i] & DDSCAPS_PRIMARYSURFACE))
-                ok(desc.ddsCaps.dwCaps == expected_caps[i],
-                    "GetSurfaceDesc test %d returned caps %x, expected %x\n", i,
-                    desc.ddsCaps.dwCaps, expected_caps[i]);
-            else
-                todo_wine ok(desc.ddsCaps.dwCaps == expected_caps[i],
-                                "GetSurfaceDesc test %d returned caps %x, expected %x\n", i,
-                                desc.ddsCaps.dwCaps, expected_caps[i]);
+            ok(desc.ddsCaps.dwCaps == expected_caps[i],
+                    "GetSurfaceDesc test %d returned caps %x, expected %x\n",
+                    i, desc.ddsCaps.dwCaps, expected_caps[i]);
 
             IDirectDrawSurface_Release(surface1);
         }
@@ -3194,14 +3190,9 @@ static void SurfaceCapsTest(void)
                 hr = IDirectDrawSurface7_GetSurfaceDesc(surface7, &desc2);
                 ok(hr == DD_OK, "IDirectDrawSurface_GetSurfaceDesc failed with %08x\n", hr);
 
-                if (!(create_caps[i] & DDSCAPS_PRIMARYSURFACE))
-                    ok(desc2.ddsCaps.dwCaps == expected_caps[i],
-                        "GetSurfaceDesc test %d returned caps %x, expected %x\n", i,
-                        desc2.ddsCaps.dwCaps, expected_caps[i]);
-                else
-                    todo_wine ok(desc2.ddsCaps.dwCaps == expected_caps[i],
-                                    "GetSurfaceDesc test %d returned caps %x, expected %x\n", i,
-                                    desc2.ddsCaps.dwCaps, expected_caps[i]);
+                ok(desc2.ddsCaps.dwCaps == expected_caps[i],
+                        "GetSurfaceDesc test %d returned caps %x, expected %x\n",
+                        i, desc2.ddsCaps.dwCaps, expected_caps[i]);
 
                 IDirectDrawSurface7_Release(surface7);
             }
@@ -3732,7 +3723,8 @@ static void BackBufferAttachmentFlipTest(void)
     HRESULT hr;
     IDirectDrawSurface *surface1, *surface2, *surface3, *surface4;
     DDSURFACEDESC ddsd;
-    HWND window = CreateWindow( "static", "ddraw_test", WS_OVERLAPPEDWINDOW, 100, 100, 160, 160, NULL, NULL, NULL, NULL );
+    HWND window = CreateWindowA("static", "ddraw_test", WS_OVERLAPPEDWINDOW,
+            100, 100, 160, 160, NULL, NULL, NULL, NULL);
 
     hr = IDirectDraw_SetCooperativeLevel(lpDD, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
     ok(hr == DD_OK, "SetCooperativeLevel returned %08x\n", hr);
@@ -4361,258 +4353,6 @@ static void pixelformat_flag_test(void)
     test_ddsd(&ddsd, FALSE, TRUE, "Z buffer", 16);
 }
 
-static void set_surface_desc_test(void)
-{
-    HRESULT hr;
-    DDSURFACEDESC ddsd;
-    IDirectDrawSurface *surface;
-    IDirectDrawSurface3 *surface3;
-    BYTE data[16*16*4];
-
-    reset_ddsd(&ddsd);
-    ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS | DDSD_PIXELFORMAT;
-    ddsd.dwWidth = 8;
-    ddsd.dwHeight = 8;
-    ddsd.ddpfPixelFormat.dwSize = sizeof(ddsd.ddpfPixelFormat);
-    ddsd.ddpfPixelFormat.dwFlags = DDPF_RGB;
-    U1(ddsd.ddpfPixelFormat).dwRGBBitCount = 32;
-    U2(ddsd.ddpfPixelFormat).dwRBitMask = 0x00ff0000;
-    U3(ddsd.ddpfPixelFormat).dwGBitMask = 0x0000ff00;
-    U4(ddsd.ddpfPixelFormat).dwBBitMask = 0x000000ff;
-    ddsd.ddsCaps.dwCaps = DDSCAPS_SYSTEMMEMORY;
-
-    hr = IDirectDraw_CreateSurface(lpDD, &ddsd, &surface, NULL);
-    ok(SUCCEEDED(hr), "CreateSurface failed, hr %#x.\n", hr);
-
-    hr = IDirectDrawSurface_QueryInterface(surface, &IID_IDirectDrawSurface3, (void **) &surface3);
-    ok(SUCCEEDED(hr), "QueryInterface failed, hr %#x.\n", hr);
-    IDirectDrawSurface_Release(surface);
-
-    reset_ddsd(&ddsd);
-    ddsd.dwFlags = DDSD_LPSURFACE;
-    ddsd.lpSurface = data;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(SUCCEEDED(hr), "SetSurfaceDesc failed, hr %#x.\n", hr);
-
-    /* Redundantly setting the same lpSurface is not an error */
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(SUCCEEDED(hr), "SetSurfaceDesc failed, hr %#x.\n", hr);
-
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 1);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, NULL, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    IDirectDrawSurface_Release(surface3);
-
-    reset_ddsd(&ddsd);
-    ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS | DDSD_PIXELFORMAT;
-    ddsd.dwWidth = 8;
-    ddsd.dwHeight = 8;
-    ddsd.ddpfPixelFormat.dwSize = sizeof(ddsd.ddpfPixelFormat);
-    ddsd.ddpfPixelFormat.dwFlags = DDPF_RGB;
-    U1(ddsd.ddpfPixelFormat).dwRGBBitCount = 32;
-    U2(ddsd.ddpfPixelFormat).dwRBitMask = 0x00ff0000;
-    U3(ddsd.ddpfPixelFormat).dwGBitMask = 0x0000ff00;
-    U4(ddsd.ddpfPixelFormat).dwBBitMask = 0x000000ff;
-    ddsd.ddsCaps.dwCaps = DDSCAPS_SYSTEMMEMORY;
-
-    hr = IDirectDraw_CreateSurface(lpDD, &ddsd, &surface, NULL);
-    ok(SUCCEEDED(hr), "CreateSurface failed, hr %#x.\n", hr);
-    hr = IDirectDrawSurface_QueryInterface(surface, &IID_IDirectDrawSurface3, (void **) &surface3);
-    ok(SUCCEEDED(hr), "QueryInterface failed, hr %#x.\n", hr);
-    IDirectDrawSurface_Release(surface);
-    hr = IDirectDrawSurface3_GetSurfaceDesc(surface3, &ddsd);
-    ok(SUCCEEDED(hr), "GetSurfaceDesc failed, hr %#x.\n", hr);
-
-    /* Setting the caps is an error. This also means the original description cannot be reapplied */
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    ddsd.dwFlags = DDSD_CAPS;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    /* TODO: The INVALIDCAPS return value suggests that some caps can be set. */
-    ddsd.dwFlags = DDSD_CAPS | DDSD_LPSURFACE;
-    ddsd.lpSurface = data;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDCAPS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDCAPS);
-    ddsd.ddsCaps.dwCaps = DDSCAPS_SYSTEMMEMORY;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDCAPS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDCAPS);
-
-    /* Setting the height is allowed, but it cannot be set to 0, and only if LPSURFACE is set too */
-    reset_ddsd(&ddsd);
-    ddsd.dwFlags = DDSD_HEIGHT;
-    ddsd.dwHeight = 16;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    ddsd.lpSurface = data;
-    ddsd.dwFlags = DDSD_HEIGHT | DDSD_LPSURFACE;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(SUCCEEDED(hr), "SetSurfaceDesc failed, hr %#x.\n", hr);
-
-    ddsd.dwHeight = 0;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    reset_ddsd(&ddsd);
-    hr = IDirectDrawSurface3_GetSurfaceDesc(surface3, &ddsd);
-    ok(SUCCEEDED(hr), "GetSurfaceDesc failed, hr %#x.\n", hr);
-    ok(ddsd.dwWidth == 8, "SetSurfaceDesc: Expected width 8, got %u.\n", ddsd.dwWidth);
-    ok(ddsd.dwHeight == 16, "SetSurfaceDesc: Expected height 16, got %u.\n", ddsd.dwHeight);
-
-    /* Pitch and width can be set, but only together, and only with LPSURFACE. They must not be 0 */
-    reset_ddsd(&ddsd);
-    ddsd.dwFlags = DDSD_PITCH;
-    U1(ddsd).lPitch = 8 * 4;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    ddsd.dwFlags = DDSD_WIDTH;
-    ddsd.dwWidth = 16;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    ddsd.dwFlags = DDSD_PITCH | DDSD_LPSURFACE;
-    ddsd.lpSurface = data;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    ddsd.dwFlags = DDSD_WIDTH | DDSD_LPSURFACE;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    ddsd.dwFlags = DDSD_WIDTH | DDSD_PITCH | DDSD_LPSURFACE;
-    U1(ddsd).lPitch = 16 * 4;
-    ddsd.dwWidth = 16;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(SUCCEEDED(hr), "SetSurfaceDesc failed, hr %#x.\n", hr);
-
-    reset_ddsd(&ddsd);
-    hr = IDirectDrawSurface3_GetSurfaceDesc(surface3, &ddsd);
-    ok(SUCCEEDED(hr), "GetSurfaceDesc failed, hr %#x.\n", hr);
-    ok(ddsd.dwWidth == 16, "SetSurfaceDesc: Expected width 8, got %u.\n", ddsd.dwWidth);
-    ok(ddsd.dwHeight == 16, "SetSurfaceDesc: Expected height 16, got %u.\n", ddsd.dwHeight);
-    ok(U1(ddsd).lPitch == 16 * 4, "SetSurfaceDesc: Expected pitch 64, got %u.\n", U1(ddsd).lPitch);
-
-    /* The pitch must be 32 bit aligned and > 0, but is not verified for sanity otherwise
-     *
-     * VMware rejects those calls, but all real drivers accept it. Mark the VMware behavior broken. */
-    ddsd.dwFlags = DDSD_WIDTH | DDSD_PITCH | DDSD_LPSURFACE;
-    U1(ddsd).lPitch = 4 * 4;
-    ddsd.lpSurface = data;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(SUCCEEDED(hr) || broken(hr == DDERR_INVALIDPARAMS), "SetSurfaceDesc failed, hr %#x.\n", hr);
-
-    U1(ddsd).lPitch = 4;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(SUCCEEDED(hr) || broken(hr == DDERR_INVALIDPARAMS), "SetSurfaceDesc failed, hr %#x.\n", hr);
-
-    U1(ddsd).lPitch = 16 * 4 + 1;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    U1(ddsd).lPitch = 16 * 4 + 3;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    U1(ddsd).lPitch = -4; /* lPitch is signed */
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    U1(ddsd).lPitch = 16 * 4;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(SUCCEEDED(hr), "SetSurfaceDesc failed, hr %#x.\n", hr);
-
-    reset_ddsd(&ddsd);
-    ddsd.dwFlags = DDSD_WIDTH | DDSD_PITCH | DDSD_LPSURFACE;
-    U1(ddsd).lPitch = 0;
-    ddsd.dwWidth = 16;
-    ddsd.lpSurface = data;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    ddsd.dwFlags = DDSD_WIDTH | DDSD_PITCH | DDSD_LPSURFACE;
-    U1(ddsd).lPitch = 16 * 4;
-    ddsd.dwWidth = 0;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    /* Setting the pixelformat without lpsurface is an error, but with LPSURFACE it works */
-    ddsd.dwFlags = DDSD_PIXELFORMAT;
-    ddsd.ddpfPixelFormat.dwSize = sizeof(ddsd.ddpfPixelFormat);
-    ddsd.ddpfPixelFormat.dwFlags = DDPF_RGB;
-    U1(ddsd.ddpfPixelFormat).dwRGBBitCount = 32;
-    U2(ddsd.ddpfPixelFormat).dwRBitMask = 0x00ff0000;
-    U3(ddsd.ddpfPixelFormat).dwGBitMask = 0x0000ff00;
-    U4(ddsd.ddpfPixelFormat).dwBBitMask = 0x000000ff;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    ddsd.dwFlags = DDSD_PIXELFORMAT | DDSD_LPSURFACE;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DD_OK, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DD_OK);
-
-    /* Can't set color keys */
-    reset_ddsd(&ddsd);
-    ddsd.dwFlags = DDSD_CKSRCBLT;
-    ddsd.ddckCKSrcBlt.dwColorSpaceLowValue = 0x00ff0000;
-    ddsd.ddckCKSrcBlt.dwColorSpaceHighValue = 0x00ff0000;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    ddsd.dwFlags = DDSD_CKSRCBLT | DDSD_LPSURFACE;
-    ddsd.lpSurface = data;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDPARAMS, "SetSurfaceDesc returned %#x, expected %#x.\n", hr, DDERR_INVALIDPARAMS);
-
-    IDirectDrawSurface_Release(surface3);
-
-    /* Need systemmemory surfaces
-     *
-     * As a sidenote, fourcc surfaces aren't allowed in sysmem, thus testing DDSD_LINEARSIZE is moot */
-    reset_ddsd(&ddsd);
-    ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS | DDSD_PIXELFORMAT;
-    ddsd.dwWidth = 8;
-    ddsd.dwHeight = 8;
-    ddsd.ddpfPixelFormat.dwSize = sizeof(ddsd.ddpfPixelFormat);
-    ddsd.ddpfPixelFormat.dwFlags = DDPF_RGB;
-    U1(ddsd.ddpfPixelFormat).dwRGBBitCount = 32;
-    U2(ddsd.ddpfPixelFormat).dwRBitMask = 0x00ff0000;
-    U3(ddsd.ddpfPixelFormat).dwGBitMask = 0x0000ff00;
-    U4(ddsd.ddpfPixelFormat).dwBBitMask = 0x000000ff;
-    ddsd.ddsCaps.dwCaps = DDSCAPS_VIDEOMEMORY;
-
-    hr = IDirectDraw_CreateSurface(lpDD, &ddsd, &surface, NULL);
-    ok(SUCCEEDED(hr) || hr == DDERR_NODIRECTDRAWHW, "CreateSurface failed, hr %#x.\n", hr);
-    if (FAILED(hr))
-    {
-        skip("Cannot create a video memory surface, skipping vidmem SetSurfaceDesc test.\n");
-        return;
-    }
-    hr = IDirectDrawSurface_QueryInterface(surface, &IID_IDirectDrawSurface3, (void **) &surface3);
-    ok(SUCCEEDED(hr), "QueryInterface failed, hr %#x.\n", hr);
-    IDirectDrawSurface_Release(surface);
-
-    reset_ddsd(&ddsd);
-    ddsd.dwFlags = DDSD_LPSURFACE;
-    ddsd.lpSurface = data;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDSURFACETYPE, "SetSurfaceDesc returned %#x, expected %#x.\n",
-            hr, DDERR_INVALIDSURFACETYPE);
-
-    ddsd.dwFlags = DDSD_WIDTH;
-    hr = IDirectDrawSurface3_SetSurfaceDesc(surface3, &ddsd, 0);
-    ok(hr == DDERR_INVALIDSURFACETYPE, "SetSurfaceDesc returned %#x, expected %#x.\n",
-            hr, DDERR_INVALIDSURFACETYPE);
-
-    IDirectDrawSurface3_Release(surface3);
-}
-
 static BOOL fourcc_supported(DWORD fourcc, DWORD caps)
 {
     DDSURFACEDESC ddsd;
@@ -4906,7 +4646,6 @@ START_TEST(dsurface)
     no_ddsd_caps_test();
     zbufferbitdepth_test();
     pixelformat_flag_test();
-    set_surface_desc_test();
     partial_block_lock_test();
     create_surface_test();
     ReleaseDirectDraw();

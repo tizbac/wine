@@ -49,7 +49,7 @@ typedef struct _CertificateChainEngine
     DWORD      dwUrlRetrievalTimeout;
     DWORD      MaximumCachedCertificates;
     DWORD      CycleDetectionModulus;
-} CertificateChainEngine, *PCertificateChainEngine;
+} CertificateChainEngine;
 
 static inline void CRYPT_AddStoresToCollection(HCERTSTORE collection,
  DWORD cStores, HCERTSTORE *stores)
@@ -120,7 +120,7 @@ HCERTCHAINENGINE CRYPT_CreateChainEngine(HCERTSTORE root,
     static const WCHAR caW[] = { 'C','A',0 };
     static const WCHAR myW[] = { 'M','y',0 };
     static const WCHAR trustW[] = { 'T','r','u','s','t',0 };
-    PCertificateChainEngine engine =
+    CertificateChainEngine *engine =
      CryptMemAlloc(sizeof(CertificateChainEngine));
 
     if (engine)
@@ -208,7 +208,7 @@ BOOL WINAPI CertCreateCertificateChainEngine(PCERT_CHAIN_ENGINE_CONFIG pConfig,
 
 VOID WINAPI CertFreeCertificateChainEngine(HCERTCHAINENGINE hChainEngine)
 {
-    PCertificateChainEngine engine = (PCertificateChainEngine)hChainEngine;
+    CertificateChainEngine *engine = (CertificateChainEngine*)hChainEngine;
 
     TRACE("(%p)\n", hChainEngine);
 
@@ -247,7 +247,7 @@ typedef struct _CertificateChain
     CERT_CHAIN_CONTEXT context;
     HCERTSTORE world;
     LONG ref;
-} CertificateChain, *PCertificateChain;
+} CertificateChain;
 
 static BOOL CRYPT_IsCertificateSelfSigned(PCCERT_CONTEXT cert)
 {
@@ -477,7 +477,7 @@ static void CRYPT_CheckTrustedStatus(HCERTSTORE hRoot,
         CertFreeCertificateContext(trustedRoot);
 }
 
-static void CRYPT_CheckRootCert(HCERTCHAINENGINE hRoot,
+static void CRYPT_CheckRootCert(HCERTSTORE hRoot,
  PCERT_CHAIN_ELEMENT rootElement)
 {
     PCCERT_CONTEXT root = rootElement->pCertContext;
@@ -566,7 +566,7 @@ static BOOL CRYPT_DecodeBasicConstraints(PCCERT_CONTEXT cert,
  * Returns TRUE if the element can be a CA, and the length of the remaining
  * chain is valid.
  */
-static BOOL CRYPT_CheckBasicConstraintsForCA(PCertificateChainEngine engine,
+static BOOL CRYPT_CheckBasicConstraintsForCA(CertificateChainEngine *engine,
  PCCERT_CONTEXT cert, CERT_BASIC_CONSTRAINTS2_INFO *chainConstraints,
  DWORD remainingCAs, BOOL isRoot, BOOL *pathLengthConstraintViolated)
 {
@@ -1712,7 +1712,7 @@ static void dump_element(PCCERT_CONTEXT cert)
         dump_extension(&cert->pCertInfo->rgExtension[i]);
 }
 
-static BOOL CRYPT_KeyUsageValid(PCertificateChainEngine engine,
+static BOOL CRYPT_KeyUsageValid(CertificateChainEngine *engine,
  PCCERT_CONTEXT cert, BOOL isRoot, BOOL isCA, DWORD index)
 {
     PCERT_EXTENSION ext;
@@ -1868,7 +1868,7 @@ static BOOL CRYPT_IsCertVersionValid(PCCERT_CONTEXT cert)
     return ret;
 }
 
-static void CRYPT_CheckSimpleChain(PCertificateChainEngine engine,
+static void CRYPT_CheckSimpleChain(CertificateChainEngine *engine,
  PCERT_SIMPLE_CHAIN chain, LPFILETIME time)
 {
     PCERT_CHAIN_ELEMENT rootElement = chain->rgpElement[chain->cElement - 1];
@@ -1971,8 +1971,83 @@ static void CRYPT_CheckSimpleChain(PCertificateChainEngine engine,
     CRYPT_CombineTrustStatus(&chain->TrustStatus, &rootElement->TrustStatus);
 }
 
-static PCCERT_CONTEXT CRYPT_GetIssuer(HCERTSTORE store, PCCERT_CONTEXT subject,
- PCCERT_CONTEXT prevIssuer, DWORD *infoStatus)
+static PCCERT_CONTEXT CRYPT_FindIssuer(const CertificateChainEngine *engine, const CERT_CONTEXT *cert,
+        HCERTSTORE store, DWORD type, void *para, DWORD flags, PCCERT_CONTEXT prev_issuer)
+{
+    CRYPT_URL_ARRAY *urls;
+    PCCERT_CONTEXT issuer;
+    DWORD size;
+    BOOL res;
+
+    issuer = CertFindCertificateInStore(store, cert->dwCertEncodingType, 0, type, para, prev_issuer);
+    if(issuer) {
+        TRACE("Found in store %p\n", issuer);
+        return issuer;
+    }
+
+    /* FIXME: For alternate issuers, we don't search world store nor try to retrieve issuer from URL.
+     * This needs more tests.
+     */
+    if(prev_issuer)
+        return NULL;
+
+    if(engine->hWorld) {
+        issuer = CertFindCertificateInStore(engine->hWorld, cert->dwCertEncodingType, 0, type, para, NULL);
+        if(issuer) {
+            TRACE("Found in world %p\n", issuer);
+            return issuer;
+        }
+    }
+
+    res = CryptGetObjectUrl(URL_OID_CERTIFICATE_ISSUER, (void*)cert, 0, NULL, &size, NULL, NULL, NULL);
+    if(!res)
+        return NULL;
+
+    urls = HeapAlloc(GetProcessHeap(), 0, size);
+    if(!urls)
+        return NULL;
+
+    res = CryptGetObjectUrl(URL_OID_CERTIFICATE_ISSUER, (void*)cert, 0, urls, &size, NULL, NULL, NULL);
+    if(res)
+    {
+        CERT_CONTEXT *new_cert;
+        HCERTSTORE new_store;
+        unsigned i;
+
+        for(i=0; i < urls->cUrl; i++)
+        {
+            TRACE("Trying URL %s\n", debugstr_w(urls->rgwszUrl[i]));
+
+            res = CryptRetrieveObjectByUrlW(urls->rgwszUrl[i], CONTEXT_OID_CERTIFICATE,
+             (flags & CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL) ? CRYPT_CACHE_ONLY_RETRIEVAL : CRYPT_AIA_RETRIEVAL,
+             0, (void**)&new_cert, NULL, NULL, NULL, NULL);
+            if(!res)
+            {
+                TRACE("CryptRetrieveObjectByUrlW failed: %u\n", GetLastError());
+                continue;
+            }
+
+            /* FIXME: Use new_cert->hCertStore once cert ref count bug is fixed. */
+            new_store = CertOpenStore(CERT_STORE_PROV_MEMORY, 0, 0, CERT_STORE_CREATE_NEW_FLAG, NULL);
+            CertAddCertificateContextToStore(new_store, new_cert, CERT_STORE_ADD_NEW, NULL);
+            issuer = CertFindCertificateInStore(new_store, cert->dwCertEncodingType, 0, type, para, NULL);
+            CertFreeCertificateContext(new_cert);
+            CertCloseStore(new_store, 0);
+            if(issuer)
+            {
+                TRACE("Found downloaded issuer %p\n", issuer);
+                break;
+            }
+        }
+    }
+
+    HeapFree(GetProcessHeap(), 0, urls);
+    return issuer;
+}
+
+static PCCERT_CONTEXT CRYPT_GetIssuer(const CertificateChainEngine *engine,
+        HCERTSTORE store, PCCERT_CONTEXT subject, PCCERT_CONTEXT prevIssuer,
+        DWORD flags, DWORD *infoStatus)
 {
     PCCERT_CONTEXT issuer = NULL;
     PCERT_EXTENSION ext;
@@ -2000,9 +2075,8 @@ static PCCERT_CONTEXT CRYPT_GetIssuer(HCERTSTORE store, PCCERT_CONTEXT subject,
                  sizeof(CERT_NAME_BLOB));
                 memcpy(&id.u.IssuerSerialNumber.SerialNumber,
                  &info->CertSerialNumber, sizeof(CRYPT_INTEGER_BLOB));
-                issuer = CertFindCertificateInStore(store,
-                 subject->dwCertEncodingType, 0, CERT_FIND_CERT_ID, &id,
-                 prevIssuer);
+
+                issuer = CRYPT_FindIssuer(engine, subject, store, CERT_FIND_CERT_ID, &id, flags, prevIssuer);
                 if (issuer)
                 {
                     TRACE_(chain)("issuer found by issuer/serial number\n");
@@ -2012,10 +2086,9 @@ static PCCERT_CONTEXT CRYPT_GetIssuer(HCERTSTORE store, PCCERT_CONTEXT subject,
             else if (info->KeyId.cbData)
             {
                 id.dwIdChoice = CERT_ID_KEY_IDENTIFIER;
+
                 memcpy(&id.u.KeyId, &info->KeyId, sizeof(CRYPT_HASH_BLOB));
-                issuer = CertFindCertificateInStore(store,
-                 subject->dwCertEncodingType, 0, CERT_FIND_CERT_ID, &id,
-                 prevIssuer);
+                issuer = CRYPT_FindIssuer(engine, subject, store, CERT_FIND_CERT_ID, &id, flags, prevIssuer);
                 if (issuer)
                 {
                     TRACE_(chain)("issuer found by key id\n");
@@ -2059,9 +2132,8 @@ static PCCERT_CONTEXT CRYPT_GetIssuer(HCERTSTORE store, PCCERT_CONTEXT subject,
                     memcpy(&id.u.IssuerSerialNumber.SerialNumber,
                      &info->AuthorityCertSerialNumber,
                      sizeof(CRYPT_INTEGER_BLOB));
-                    issuer = CertFindCertificateInStore(store,
-                     subject->dwCertEncodingType, 0, CERT_FIND_CERT_ID, &id,
-                     prevIssuer);
+
+                    issuer = CRYPT_FindIssuer(engine, subject, store, CERT_FIND_CERT_ID, &id, flags, prevIssuer);
                     if (issuer)
                     {
                         TRACE_(chain)("issuer found by directory name\n");
@@ -2075,9 +2147,7 @@ static PCCERT_CONTEXT CRYPT_GetIssuer(HCERTSTORE store, PCCERT_CONTEXT subject,
             {
                 id.dwIdChoice = CERT_ID_KEY_IDENTIFIER;
                 memcpy(&id.u.KeyId, &info->KeyId, sizeof(CRYPT_HASH_BLOB));
-                issuer = CertFindCertificateInStore(store,
-                 subject->dwCertEncodingType, 0, CERT_FIND_CERT_ID, &id,
-                 prevIssuer);
+                issuer = CRYPT_FindIssuer(engine, subject, store, CERT_FIND_CERT_ID, &id, flags, prevIssuer);
                 if (issuer)
                 {
                     TRACE_(chain)("issuer found by key id\n");
@@ -2089,9 +2159,8 @@ static PCCERT_CONTEXT CRYPT_GetIssuer(HCERTSTORE store, PCCERT_CONTEXT subject,
     }
     else
     {
-        issuer = CertFindCertificateInStore(store,
-         subject->dwCertEncodingType, 0, CERT_FIND_SUBJECT_NAME,
-         &subject->pCertInfo->Issuer, prevIssuer);
+        issuer = CRYPT_FindIssuer(engine, subject, store, CERT_FIND_SUBJECT_NAME,
+         &subject->pCertInfo->Issuer, flags, prevIssuer);
         TRACE_(chain)("issuer found by name\n");
         *infoStatus = CERT_TRUST_HAS_NAME_MATCH_ISSUER;
     }
@@ -2102,7 +2171,7 @@ static PCCERT_CONTEXT CRYPT_GetIssuer(HCERTSTORE store, PCCERT_CONTEXT subject,
  * until reaching a self-signed cert, or until no issuer can be found.
  */
 static BOOL CRYPT_BuildSimpleChain(const CertificateChainEngine *engine,
- HCERTSTORE world, PCERT_SIMPLE_CHAIN chain)
+ HCERTSTORE world, DWORD flags, PCERT_SIMPLE_CHAIN chain)
 {
     BOOL ret = TRUE;
     PCCERT_CONTEXT cert = chain->rgpElement[chain->cElement - 1]->pCertContext;
@@ -2110,7 +2179,7 @@ static BOOL CRYPT_BuildSimpleChain(const CertificateChainEngine *engine,
     while (ret && !CRYPT_IsSimpleChainCyclic(chain) &&
      !CRYPT_IsCertificateSelfSigned(cert))
     {
-        PCCERT_CONTEXT issuer = CRYPT_GetIssuer(world, cert, NULL,
+        PCCERT_CONTEXT issuer = CRYPT_GetIssuer(engine, world, cert, NULL, flags,
          &chain->rgpElement[chain->cElement - 1]->TrustStatus.dwInfoStatus);
 
         if (issuer)
@@ -2140,8 +2209,8 @@ static LPCSTR debugstr_filetime(LPFILETIME pTime)
     return wine_dbg_sprintf("%p (%s)", pTime, filetime_to_str(pTime));
 }
 
-static BOOL CRYPT_GetSimpleChainForCert(PCertificateChainEngine engine,
- HCERTSTORE world, PCCERT_CONTEXT cert, LPFILETIME pTime,
+static BOOL CRYPT_GetSimpleChainForCert(CertificateChainEngine *engine,
+ HCERTSTORE world, PCCERT_CONTEXT cert, LPFILETIME pTime, DWORD flags,
  PCERT_SIMPLE_CHAIN *ppChain)
 {
     BOOL ret = FALSE;
@@ -2157,7 +2226,7 @@ static BOOL CRYPT_GetSimpleChainForCert(PCertificateChainEngine engine,
         ret = CRYPT_AddCertToSimpleChain(engine, chain, cert, 0);
         if (ret)
         {
-            ret = CRYPT_BuildSimpleChain(engine, world, chain);
+            ret = CRYPT_BuildSimpleChain(engine, world, flags, chain);
             if (ret)
                 CRYPT_CheckSimpleChain(engine, chain, pTime);
         }
@@ -2171,11 +2240,10 @@ static BOOL CRYPT_GetSimpleChainForCert(PCertificateChainEngine engine,
     return ret;
 }
 
-static BOOL CRYPT_BuildCandidateChainFromCert(HCERTCHAINENGINE hChainEngine,
- PCCERT_CONTEXT cert, LPFILETIME pTime, HCERTSTORE hAdditionalStore,
- PCertificateChain *ppChain)
+static BOOL CRYPT_BuildCandidateChainFromCert(CertificateChainEngine *engine,
+ PCCERT_CONTEXT cert, LPFILETIME pTime, HCERTSTORE hAdditionalStore, DWORD flags,
+ CertificateChain **ppChain)
 {
-    PCertificateChainEngine engine = (PCertificateChainEngine)hChainEngine;
     PCERT_SIMPLE_CHAIN simpleChain = NULL;
     HCERTSTORE world;
     BOOL ret;
@@ -2188,10 +2256,9 @@ static BOOL CRYPT_BuildCandidateChainFromCert(HCERTCHAINENGINE hChainEngine,
     /* FIXME: only simple chains are supported for now, as CTLs aren't
      * supported yet.
      */
-    if ((ret = CRYPT_GetSimpleChainForCert(engine, world, cert, pTime,
-     &simpleChain)))
+    if ((ret = CRYPT_GetSimpleChainForCert(engine, world, cert, pTime, flags, &simpleChain)))
     {
-        PCertificateChain chain = CryptMemAlloc(sizeof(CertificateChain));
+        CertificateChain *chain = CryptMemAlloc(sizeof(CertificateChain));
 
         if (chain)
         {
@@ -2270,7 +2337,7 @@ static PCERT_SIMPLE_CHAIN CRYPT_CopySimpleChainToElement(
     return copy;
 }
 
-static void CRYPT_FreeLowerQualityChains(PCertificateChain chain)
+static void CRYPT_FreeLowerQualityChains(CertificateChain *chain)
 {
     DWORD i;
 
@@ -2281,7 +2348,7 @@ static void CRYPT_FreeLowerQualityChains(PCertificateChain chain)
     chain->context.rgpLowerQualityChainContext = NULL;
 }
 
-static void CRYPT_FreeChainContext(PCertificateChain chain)
+static void CRYPT_FreeChainContext(CertificateChain *chain)
 {
     DWORD i;
 
@@ -2296,10 +2363,10 @@ static void CRYPT_FreeChainContext(PCertificateChain chain)
 /* Makes and returns a copy of chain, up to and including element iElement of
  * simple chain iChain.
  */
-static PCertificateChain CRYPT_CopyChainToElement(PCertificateChain chain,
+static CertificateChain *CRYPT_CopyChainToElement(CertificateChain *chain,
  DWORD iChain, DWORD iElement)
 {
-    PCertificateChain copy = CryptMemAlloc(sizeof(CertificateChain));
+    CertificateChain *copy = CryptMemAlloc(sizeof(CertificateChain));
 
     if (copy)
     {
@@ -2361,21 +2428,20 @@ static PCertificateChain CRYPT_CopyChainToElement(PCertificateChain chain,
     return copy;
 }
 
-static PCertificateChain CRYPT_BuildAlternateContextFromChain(
- HCERTCHAINENGINE hChainEngine, LPFILETIME pTime, HCERTSTORE hAdditionalStore,
- PCertificateChain chain)
+static CertificateChain *CRYPT_BuildAlternateContextFromChain(
+ CertificateChainEngine *engine, LPFILETIME pTime, HCERTSTORE hAdditionalStore,
+ DWORD flags, CertificateChain *chain)
 {
-    PCertificateChainEngine engine = (PCertificateChainEngine)hChainEngine;
-    PCertificateChain alternate;
+    CertificateChain *alternate;
 
-    TRACE("(%p, %s, %p, %p)\n", hChainEngine, debugstr_filetime(pTime),
+    TRACE("(%p, %s, %p, %p)\n", engine, debugstr_filetime(pTime),
      hAdditionalStore, chain);
 
     /* Always start with the last "lower quality" chain to ensure a consistent
      * order of alternate creation:
      */
     if (chain->context.cLowerQualityChainContext)
-        chain = (PCertificateChain)chain->context.rgpLowerQualityChainContext[
+        chain = (CertificateChain*)chain->context.rgpLowerQualityChainContext[
          chain->context.cLowerQualityChainContext - 1];
     /* A chain with only one element can't have any alternates */
     if (chain->context.cChain <= 1 && chain->context.rgpChain[0]->cElement <= 1)
@@ -2395,8 +2461,8 @@ static PCertificateChain CRYPT_BuildAlternateContextFromChain(
                 PCCERT_CONTEXT prevIssuer = CertDuplicateCertificateContext(
                  chain->context.rgpChain[i]->rgpElement[j + 1]->pCertContext);
 
-                alternateIssuer = CRYPT_GetIssuer(prevIssuer->hCertStore,
-                 subject, prevIssuer, &infoStatus);
+                alternateIssuer = CRYPT_GetIssuer(engine, prevIssuer->hCertStore,
+                 subject, prevIssuer, flags, &infoStatus);
             }
         if (alternateIssuer)
         {
@@ -2415,7 +2481,7 @@ static PCertificateChain CRYPT_BuildAlternateContextFromChain(
                 if (ret)
                 {
                     ret = CRYPT_BuildSimpleChain(engine, alternate->world,
-                     alternate->context.rgpChain[i]);
+                     flags, alternate->context.rgpChain[i]);
                     if (ret)
                         CRYPT_CheckSimpleChain(engine,
                          alternate->context.rgpChain[i], pTime);
@@ -2474,8 +2540,8 @@ static DWORD CRYPT_ChainQuality(const CertificateChain *chain)
  * alternate chains.  Returns the highest quality chain, with all other
  * chains as lower quality chains of it.
  */
-static PCertificateChain CRYPT_ChooseHighestQualityChain(
- PCertificateChain chain)
+static CertificateChain *CRYPT_ChooseHighestQualityChain(
+ CertificateChain *chain)
 {
     DWORD i;
 
@@ -2487,8 +2553,8 @@ static PCertificateChain CRYPT_ChooseHighestQualityChain(
      */
     for (i = 0; i < chain->context.cLowerQualityChainContext; i++)
     {
-        PCertificateChain alternate =
-         (PCertificateChain)chain->context.rgpLowerQualityChainContext[i];
+        CertificateChain *alternate =
+         (CertificateChain*)chain->context.rgpLowerQualityChainContext[i];
 
         if (CRYPT_ChainQuality(alternate) > CRYPT_ChainQuality(chain))
         {
@@ -2506,7 +2572,7 @@ static PCertificateChain CRYPT_ChooseHighestQualityChain(
     return chain;
 }
 
-static BOOL CRYPT_AddAlternateChainToChain(PCertificateChain chain,
+static BOOL CRYPT_AddAlternateChainToChain(CertificateChain *chain,
  const CertificateChain *alternate)
 {
     BOOL ret;
@@ -2550,7 +2616,7 @@ static PCERT_CHAIN_ELEMENT CRYPT_FindIthElementInChain(
 typedef struct _CERT_CHAIN_PARA_NO_EXTRA_FIELDS {
     DWORD            cbSize;
     CERT_USAGE_MATCH RequestedUsage;
-} CERT_CHAIN_PARA_NO_EXTRA_FIELDS, *PCERT_CHAIN_PARA_NO_EXTRA_FIELDS;
+} CERT_CHAIN_PARA_NO_EXTRA_FIELDS;
 
 static void CRYPT_VerifyChainRevocation(PCERT_CHAIN_CONTEXT chain,
  LPFILETIME pTime, HCERTSTORE hAdditionalStore,
@@ -2799,10 +2865,11 @@ BOOL WINAPI CertGetCertificateChain(HCERTCHAINENGINE hChainEngine,
  PCERT_CHAIN_PARA pChainPara, DWORD dwFlags, LPVOID pvReserved,
  PCCERT_CHAIN_CONTEXT* ppChainContext)
 {
+    CertificateChainEngine *engine = (CertificateChainEngine*)hChainEngine;
     BOOL ret;
-    PCertificateChain chain = NULL;
+    CertificateChain *chain = NULL;
 
-    TRACE("(%p, %p, %s, %p, %p, %08x, %p, %p)\n", hChainEngine, pCertContext,
+    TRACE("(%p, %p, %s, %p, %p, %08x, %p, %p)\n", engine, pCertContext,
      debugstr_filetime(pTime), hAdditionalStore, pChainPara, dwFlags,
      pvReserved, ppChainContext);
 
@@ -2819,21 +2886,21 @@ BOOL WINAPI CertGetCertificateChain(HCERTCHAINENGINE hChainEngine,
         return FALSE;
     }
 
-    if (!hChainEngine)
-        hChainEngine = CRYPT_GetDefaultChainEngine();
+    if (!engine)
+        engine = CRYPT_GetDefaultChainEngine();
     if (TRACE_ON(chain))
         dump_chain_para(pChainPara);
     /* FIXME: what about HCCE_LOCAL_MACHINE? */
-    ret = CRYPT_BuildCandidateChainFromCert(hChainEngine, pCertContext, pTime,
-     hAdditionalStore, &chain);
+    ret = CRYPT_BuildCandidateChainFromCert(engine, pCertContext, pTime,
+     hAdditionalStore, dwFlags, &chain);
     if (ret)
     {
-        PCertificateChain alternate = NULL;
+        CertificateChain *alternate = NULL;
         PCERT_CHAIN_CONTEXT pChain;
 
         do {
-            alternate = CRYPT_BuildAlternateContextFromChain(hChainEngine,
-             pTime, hAdditionalStore, chain);
+            alternate = CRYPT_BuildAlternateContextFromChain(engine,
+             pTime, hAdditionalStore, dwFlags, chain);
 
             /* Alternate contexts are added as "lower quality" contexts of
              * chain, to avoid loops in alternate chain creation.
@@ -2863,7 +2930,7 @@ BOOL WINAPI CertGetCertificateChain(HCERTCHAINENGINE hChainEngine,
 PCCERT_CHAIN_CONTEXT WINAPI CertDuplicateCertificateChain(
  PCCERT_CHAIN_CONTEXT pChainContext)
 {
-    PCertificateChain chain = (PCertificateChain)pChainContext;
+    CertificateChain *chain = (CertificateChain*)pChainContext;
 
     TRACE("(%p)\n", pChainContext);
 
@@ -2874,7 +2941,7 @@ PCCERT_CHAIN_CONTEXT WINAPI CertDuplicateCertificateChain(
 
 VOID WINAPI CertFreeCertificateChain(PCCERT_CHAIN_CONTEXT pChainContext)
 {
-    PCertificateChain chain = (PCertificateChain)pChainContext;
+    CertificateChain *chain = (CertificateChain*)pChainContext;
 
     TRACE("(%p)\n", pChainContext);
 

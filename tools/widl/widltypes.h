@@ -70,6 +70,7 @@ enum attr_type
     ATTR_ANNOTATION,
     ATTR_APPOBJECT,
     ATTR_ASYNC,
+    ATTR_ASYNCUUID,
     ATTR_AUTO_HANDLE,
     ATTR_BINDABLE,
     ATTR_BROADCAST,
@@ -242,6 +243,7 @@ enum statement_type
     STMT_TYPEDEF,
     STMT_IMPORT,
     STMT_IMPORTLIB,
+    STMT_PRAGMA,
     STMT_CPPQUOTE
 };
 

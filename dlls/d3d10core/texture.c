@@ -258,7 +258,6 @@ HRESULT d3d10_texture2d_init(struct d3d10_texture2d *texture, struct d3d10_devic
         }
     }
 
-    FIXME("Implement DXGI<->wined3d usage conversion\n");
     if (desc->ArraySize != 1)
         FIXME("Array textures not implemented.\n");
     if (desc->SampleDesc.Count > 1)
@@ -268,14 +267,14 @@ HRESULT d3d10_texture2d_init(struct d3d10_texture2d *texture, struct d3d10_devic
     wined3d_desc.format = wined3dformat_from_dxgi_format(desc->Format);
     wined3d_desc.multisample_type = desc->SampleDesc.Count > 1 ? desc->SampleDesc.Count : WINED3D_MULTISAMPLE_NONE;
     wined3d_desc.multisample_quality = desc->SampleDesc.Quality;
-    wined3d_desc.usage = desc->Usage;
+    wined3d_desc.usage = wined3d_usage_from_d3d10core(desc->BindFlags, desc->Usage);
     wined3d_desc.pool = WINED3D_POOL_DEFAULT;
     wined3d_desc.width = desc->Width;
     wined3d_desc.height = desc->Height;
     wined3d_desc.depth = 1;
     wined3d_desc.size = 0;
 
-    if (FAILED(hr = wined3d_texture_create_2d(device->wined3d_device, &wined3d_desc, desc->MipLevels,
+    if (FAILED(hr = wined3d_texture_create(device->wined3d_device, &wined3d_desc, desc->MipLevels,
             0, texture, &d3d10_texture2d_wined3d_parent_ops, &texture->wined3d_texture)))
     {
         WARN("Failed to create wined3d texture, hr %#x.\n", hr);
@@ -482,21 +481,19 @@ HRESULT d3d10_texture3d_init(struct d3d10_texture3d *texture, struct d3d10_devic
     texture->refcount = 1;
     texture->desc = *desc;
 
-    FIXME("Implement DXGI<->wined3d usage conversion.\n");
-
     wined3d_desc.resource_type = WINED3D_RTYPE_VOLUME_TEXTURE;
     wined3d_desc.format = wined3dformat_from_dxgi_format(desc->Format);
     wined3d_desc.multisample_type = WINED3D_MULTISAMPLE_NONE;
     wined3d_desc.multisample_quality = 0;
-    wined3d_desc.usage = desc->Usage;
+    wined3d_desc.usage = wined3d_usage_from_d3d10core(desc->BindFlags, desc->Usage);
     wined3d_desc.pool = WINED3D_POOL_DEFAULT;
     wined3d_desc.width = desc->Width;
     wined3d_desc.height = desc->Height;
     wined3d_desc.depth = desc->Depth;
     wined3d_desc.size = 0;
 
-    if (FAILED(hr = wined3d_texture_create_3d(device->wined3d_device, &wined3d_desc, desc->MipLevels,
-            texture, &d3d10_texture3d_wined3d_parent_ops, &texture->wined3d_texture)))
+    if (FAILED(hr = wined3d_texture_create(device->wined3d_device, &wined3d_desc, desc->MipLevels,
+            0, texture, &d3d10_texture3d_wined3d_parent_ops, &texture->wined3d_texture)))
     {
         WARN("Failed to create wined3d texture, hr %#x.\n", hr);
         return hr;

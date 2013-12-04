@@ -129,10 +129,11 @@ struct domdoc
     VARIANT_BOOL validating;
     VARIANT_BOOL resolving;
     domdoc_properties* properties;
-    bsc_t *bsc;
     HRESULT error;
 
-    /* IObjectWithSite*/
+    WCHAR *url;
+
+    /* IObjectWithSite */
     IUnknown *site;
 
     /* IObjectSafety */
@@ -940,9 +941,6 @@ static ULONG WINAPI domdoc_Release( IXMLDOMDocument3 *iface )
     {
         int eid;
 
-        if(This->bsc)
-            detach_bsc(This->bsc);
-
         if (This->site)
             IUnknown_Release( This->site );
         destroy_xmlnode(&This->node);
@@ -950,6 +948,7 @@ static ULONG WINAPI domdoc_Release( IXMLDOMDocument3 *iface )
         for (eid = 0; eid < EVENTID_LAST; eid++)
             if (This->events[eid]) IDispatch_Release(This->events[eid]);
 
+        CoTaskMemFree(This->url);
         release_namespaces(This);
         heap_free(This);
     }
@@ -1934,9 +1933,6 @@ static HRESULT WINAPI domdoc_createNode(
     hr = get_node_type(Type, &node_type);
     if(FAILED(hr)) return hr;
 
-    if(namespaceURI && namespaceURI[0] && node_type != NODE_ELEMENT)
-        FIXME("nodes with namespaces currently not supported.\n");
-
     TRACE("node_type %d\n", node_type);
 
     /* exit earlier for types that need name */
@@ -1979,8 +1975,26 @@ static HRESULT WINAPI domdoc_createNode(
         break;
     }
     case NODE_ATTRIBUTE:
-        xmlnode = (xmlNodePtr)xmlNewDocProp(get_doc(This), xml_name, NULL);
+    {
+        xmlChar *local, *prefix;
+
+        local = xmlSplitQName2(xml_name, &prefix);
+
+        xmlnode = (xmlNodePtr)xmlNewDocProp(get_doc(This), local ? local : xml_name, NULL);
+
+        if (local || (href && *href))
+        {
+            /* we need a floating namespace here, it can't be created linked to attribute from
+               a start */
+            xmlNsPtr ns = xmlNewNs(NULL, href, prefix);
+            xmlSetNs(xmlnode, ns);
+        }
+
+        xmlFree(local);
+        xmlFree(prefix);
+
         break;
+    }
     case NODE_TEXT:
         xmlnode = (xmlNodePtr)xmlNewDocText(get_doc(This), NULL);
         break;
@@ -2052,7 +2066,7 @@ static HRESULT domdoc_onDataAvailable(void *obj, char *ptr, DWORD len)
         return attach_xmldoc(This, xmldoc);
     }
 
-    return S_OK;
+    return E_FAIL;
 }
 
 static HRESULT domdoc_load_moniker(domdoc *This, IMoniker *mon)
@@ -2064,14 +2078,7 @@ static HRESULT domdoc_load_moniker(domdoc *This, IMoniker *mon)
     if(FAILED(hr))
         return hr;
 
-    if(This->bsc) {
-        hr = detach_bsc(This->bsc);
-        if(FAILED(hr))
-            return hr;
-    }
-
-    This->bsc = bsc;
-    return S_OK;
+    return detach_bsc(bsc);
 }
 
 static HRESULT WINAPI domdoc_load(
@@ -2195,10 +2202,15 @@ static HRESULT WINAPI domdoc_load(
     {
         IMoniker *mon;
 
+        CoTaskMemFree(This->url);
+        This->url = NULL;
+
         hr = create_moniker_from_url( filename, &mon);
         if ( SUCCEEDED(hr) )
         {
             hr = domdoc_load_moniker( This, mon );
+            if (hr == S_OK)
+                IMoniker_GetDisplayName(mon, NULL, NULL, &This->url);
             IMoniker_Release(mon);
         }
 
@@ -2261,11 +2273,25 @@ static HRESULT WINAPI domdoc_get_parseError(
 
 static HRESULT WINAPI domdoc_get_url(
     IXMLDOMDocument3 *iface,
-    BSTR* urlString )
+    BSTR* url )
 {
     domdoc *This = impl_from_IXMLDOMDocument3(iface);
-    FIXME("(%p)->(%p)\n", This, urlString);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%p)\n", This, url);
+
+    if (!url)
+        return E_INVALIDARG;
+
+    if (This->url)
+    {
+        *url = SysAllocString(This->url);
+        if (!*url)
+            return E_OUTOFMEMORY;
+
+        return S_OK;
+    }
+    else
+        return return_null_bstr(url);
 }
 
 
@@ -3540,9 +3566,9 @@ HRESULT get_domdoc_from_xmldoc(xmlDocPtr xmldoc, IXMLDOMDocument3 **document)
     doc->error = S_OK;
     doc->site = NULL;
     doc->safeopt = 0;
-    doc->bsc = NULL;
     doc->cp_list = NULL;
     doc->namespaces = NULL;
+    doc->url = NULL;
     memset(doc->events, 0, sizeof(doc->events));
 
     /* events connection points */

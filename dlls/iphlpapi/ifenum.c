@@ -79,6 +79,10 @@
 #include <ifaddrs.h>
 #endif
 
+#ifdef HAVE_LINUX_RTNETLINK_H
+#include <linux/rtnetlink.h>
+#endif
+
 #include "ifenum.h"
 #include "ws2ipdef.h"
 
@@ -105,9 +109,9 @@
 
 /* Functions */
 
-static int isLoopbackInterface(int fd, const char *name)
+static BOOL isLoopbackInterface(int fd, const char *name)
 {
-  int ret = 0;
+  BOOL ret = FALSE;
 
   if (name) {
     struct ifreq ifr;
@@ -116,7 +120,7 @@ static int isLoopbackInterface(int fd, const char *name)
     if (ioctl(fd, SIOCGIFFLAGS, &ifr) == 0)
       ret = ifr.ifr_flags & IFF_LOOPBACK;
   }
-  return ret;
+  return !!ret;
 }
 
 /* The comments say MAX_ADAPTER_NAME is required, but really only IF_NAMESIZE
@@ -161,104 +165,238 @@ BOOL isIfIndexLoopback(ULONG idx)
   return ret;
 }
 
-DWORD getNumNonLoopbackInterfaces(void)
+#ifdef HAVE_IF_NAMEINDEX
+DWORD get_interface_indices( BOOL skip_loopback, InterfaceIndexTable **table )
 {
-  DWORD numInterfaces;
-  int fd = socket(PF_INET, SOCK_DGRAM, 0);
+    DWORD count = 0, i;
+    struct if_nameindex *p, *indices = if_nameindex();
+    InterfaceIndexTable *ret;
 
-  if (fd != -1) {
-    struct if_nameindex *indexes = if_nameindex();
+    if (table) *table = NULL;
+    if (!indices) return 0;
 
-    if (indexes) {
-      struct if_nameindex *p;
-
-      for (p = indexes, numInterfaces = 0; p && p->if_name; p++)
-        if (!isLoopbackInterface(fd, p->if_name))
-          numInterfaces++;
-      if_freenameindex(indexes);
+    for (p = indices; p->if_name; p++)
+    {
+        if (skip_loopback && isIfIndexLoopback( p->if_index )) continue;
+        count++;
     }
-    else
-      numInterfaces = 0;
-    close(fd);
-  }
-  else
-    numInterfaces = 0;
-  return numInterfaces;
-}
 
-DWORD getNumInterfaces(void)
-{
-  DWORD numInterfaces;
-  struct if_nameindex *indexes = if_nameindex();
-
-  if (indexes) {
-    struct if_nameindex *p;
-
-    for (p = indexes, numInterfaces = 0; p && p->if_name; p++)
-      numInterfaces++;
-    if_freenameindex(indexes);
-  }
-  else
-    numInterfaces = 0;
-  return numInterfaces;
-}
-
-InterfaceIndexTable *getInterfaceIndexTable(void)
-{
-  DWORD numInterfaces;
-  InterfaceIndexTable *ret;
-  struct if_nameindex *indexes = if_nameindex();
-
-  if (indexes) {
-    struct if_nameindex *p;
-
-    for (p = indexes, numInterfaces = 0; p && p->if_name; p++)
-      numInterfaces++;
-    ret = HeapAlloc(GetProcessHeap(), 0, FIELD_OFFSET(InterfaceIndexTable, indexes[numInterfaces]));
-    if (ret) {
-      ret->numIndexes = 0;
-      for (p = indexes; p && p->if_name; p++)
-        ret->indexes[ret->numIndexes++] = p->if_index;
+    if (table)
+    {
+        ret = HeapAlloc( GetProcessHeap(), 0, FIELD_OFFSET(InterfaceIndexTable, indexes[count]) );
+        if (!ret)
+        {
+            count = 0;
+            goto end;
+        }
+        for (p = indices, i = 0; p->if_name && i < count; p++)
+        {
+            if (skip_loopback && isIfIndexLoopback( p->if_index )) continue;
+            ret->indexes[i++] = p->if_index;
+        }
+        ret->numIndexes = count = i;
+        *table = ret;
     }
-    if_freenameindex(indexes);
-  }
-  else
-    ret = NULL;
-  return ret;
+
+end:
+    if_freenameindex( indices );
+    return count;
 }
 
-InterfaceIndexTable *getNonLoopbackInterfaceIndexTable(void)
+#elif defined(HAVE_LINUX_RTNETLINK_H)
+static int open_netlink( int *pid )
 {
-  DWORD numInterfaces;
-  InterfaceIndexTable *ret;
-  int fd = socket(PF_INET, SOCK_DGRAM, 0);
+    int fd = socket( AF_NETLINK, SOCK_RAW, NETLINK_ROUTE );
+    struct sockaddr_nl addr;
+    socklen_t len;
 
-  if (fd != -1) {
-    struct if_nameindex *indexes = if_nameindex();
+    if (fd < 0) return fd;
 
-    if (indexes) {
-      struct if_nameindex *p;
+    memset( &addr, 0, sizeof(addr) );
+    addr.nl_family = AF_NETLINK;
 
-      for (p = indexes, numInterfaces = 0; p && p->if_name; p++)
-        if (!isLoopbackInterface(fd, p->if_name))
-          numInterfaces++;
-      ret = HeapAlloc(GetProcessHeap(), 0, FIELD_OFFSET(InterfaceIndexTable, indexes[numInterfaces]));
-      if (ret) {
-        ret->numIndexes = 0;
-        for (p = indexes; p && p->if_name; p++)
-          if (!isLoopbackInterface(fd, p->if_name))
-            ret->indexes[ret->numIndexes++] = p->if_index;
-      }
-      if_freenameindex(indexes);
-    }
-    else
-      ret = NULL;
-    close(fd);
-  }
-  else
-    ret = NULL;
-  return ret;
+    if (bind( fd, (struct sockaddr *)&addr, sizeof(addr) ) < 0)
+        goto fail;
+
+    len = sizeof(addr);
+    if (getsockname( fd, (struct sockaddr *)&addr, &len ) < 0)
+        goto fail;
+
+    *pid = addr.nl_pid;
+    return fd;
+fail:
+    close( fd );
+    return -1;
 }
+
+static int send_netlink_req( int fd, int pid, int type, int *seq_no )
+{
+    static LONG seq;
+    struct request
+    {
+        struct nlmsghdr hdr;
+        struct rtgenmsg gen;
+    } req;
+    struct sockaddr_nl addr;
+
+    req.hdr.nlmsg_len = sizeof(req);
+    req.hdr.nlmsg_type = type;
+    req.hdr.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
+    req.hdr.nlmsg_pid = pid;
+    req.hdr.nlmsg_seq = InterlockedIncrement( &seq );
+    req.gen.rtgen_family = AF_UNSPEC;
+
+    memset( &addr, 0, sizeof(addr) );
+    addr.nl_family = AF_NETLINK;
+    if (sendto( fd, &req, sizeof(req), 0, (struct sockaddr *)&addr, sizeof(addr) ) != sizeof(req))
+        return -1;
+    *seq_no = req.hdr.nlmsg_seq;
+    return 0;
+}
+
+struct netlink_reply
+{
+    struct netlink_reply *next;
+    int size;
+    struct nlmsghdr *hdr;
+};
+
+static void free_netlink_reply( struct netlink_reply *data )
+{
+    struct netlink_reply *ptr;
+    while( data )
+    {
+        ptr = data->next;
+        HeapFree( GetProcessHeap(), 0, data );
+        data = ptr;
+    }
+}
+
+static int recv_netlink_reply( int fd, int pid, int seq, struct netlink_reply **data )
+{
+    int bufsize = getpagesize();
+    int left, read;
+    BOOL done = FALSE;
+    socklen_t sa_len;
+    struct sockaddr_nl addr;
+    struct netlink_reply *cur, *last = NULL;
+    struct nlmsghdr *hdr;
+    char *buf;
+
+    *data = NULL;
+    buf = HeapAlloc( GetProcessHeap(), 0, bufsize );
+    if (!buf) return -1;
+
+    do
+    {
+        left = read = recvfrom( fd, buf, bufsize, 0, (struct sockaddr *)&addr, &sa_len );
+        if (read < 0) goto fail;
+        if (addr.nl_pid != 0) continue; /* not from kernel */
+
+        for (hdr = (struct nlmsghdr *)buf; NLMSG_OK(hdr, left); hdr = NLMSG_NEXT(hdr, left))
+        {
+            if (hdr->nlmsg_pid != pid || hdr->nlmsg_seq != seq) continue;
+            if (hdr->nlmsg_type == NLMSG_DONE)
+            {
+                done = TRUE;
+                break;
+            }
+        }
+
+        cur = HeapAlloc( GetProcessHeap(), 0, sizeof(*cur) + read );
+        if (!cur) goto fail;
+        cur->next = NULL;
+        cur->size = read;
+        cur->hdr = (struct nlmsghdr *)(cur + 1);
+        memcpy( cur->hdr, buf, read );
+        if (last) last->next = cur;
+        else *data = cur;
+        last = cur;
+    } while (!done);
+
+    HeapFree( GetProcessHeap(), 0, buf );
+    return 0;
+
+fail:
+    free_netlink_reply( *data );
+    HeapFree( GetProcessHeap(), 0, buf );
+    return -1;
+}
+
+
+static DWORD get_indices_from_reply( struct netlink_reply *reply, int pid, int seq,
+                                     BOOL skip_loopback, InterfaceIndexTable *table )
+{
+    struct nlmsghdr *hdr;
+    struct netlink_reply *r;
+    int count = 0;
+
+    for (r = reply; r; r = r->next)
+    {
+        int size = r->size;
+        for (hdr = r->hdr; NLMSG_OK(hdr, size); hdr = NLMSG_NEXT(hdr, size))
+        {
+            if (hdr->nlmsg_pid != pid || hdr->nlmsg_seq != seq) continue;
+            if (hdr->nlmsg_type == NLMSG_DONE) break;
+
+            if (hdr->nlmsg_type == RTM_NEWLINK)
+            {
+                struct ifinfomsg *info = NLMSG_DATA(hdr);
+
+                if (skip_loopback && (info->ifi_flags & IFF_LOOPBACK)) continue;
+                if (table) table->indexes[count] = info->ifi_index;
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+DWORD get_interface_indices( BOOL skip_loopback, InterfaceIndexTable **table )
+{
+    int fd, pid, seq;
+    struct netlink_reply *reply = NULL;
+    DWORD count = 0;
+
+    if (table) *table = NULL;
+    fd = open_netlink( &pid );
+    if (fd < 0) return 0;
+
+    if (send_netlink_req( fd, pid, RTM_GETLINK, &seq ) < 0)
+        goto end;
+
+    if (recv_netlink_reply( fd, pid, seq, &reply ) < 0)
+        goto end;
+
+    count = get_indices_from_reply( reply, pid, seq, skip_loopback, NULL );
+
+    if (table)
+    {
+        InterfaceIndexTable *ret = HeapAlloc( GetProcessHeap(), 0, FIELD_OFFSET(InterfaceIndexTable, indexes[count]) );
+        if (!ret)
+        {
+            count = 0;
+            goto end;
+        }
+
+        ret->numIndexes = count;
+        get_indices_from_reply( reply, pid, seq, skip_loopback, ret );
+        *table = ret;
+    }
+
+end:
+    free_netlink_reply( reply );
+    close( fd );
+    return count;
+}
+
+#else
+DWORD get_interface_indices( BOOL skip_loopback, InterfaceIndexTable **table )
+{
+    if (table) *table = NULL;
+    return 0;
+}
+#endif
 
 static DWORD getInterfaceBCastAddrByName(const char *name)
 {
@@ -748,7 +886,7 @@ DWORD getIPAddrTable(PMIB_IPADDRTABLE *ppIpAddrTable, HANDLE heap, DWORD flags)
   return ret;
 }
 
-ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_addrs)
+ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_addrs, SOCKET_ADDRESS **masks)
 {
   struct ifaddrs *ifa;
   ULONG ret;
@@ -768,10 +906,14 @@ ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_ad
     {
       *addrs = HeapAlloc(GetProcessHeap(), 0, n * (sizeof(SOCKET_ADDRESS) +
                          sizeof(struct WS_sockaddr_in6)));
-      if (*addrs)
+      *masks = HeapAlloc(GetProcessHeap(), 0, n * (sizeof(SOCKET_ADDRESS) +
+                         sizeof(struct WS_sockaddr_in6)));
+      if (*addrs && *masks)
       {
         struct WS_sockaddr_in6 *next_addr = (struct WS_sockaddr_in6 *)(
             (BYTE *)*addrs + n * sizeof(SOCKET_ADDRESS));
+        struct WS_sockaddr_in6 *mask_addr = (struct WS_sockaddr_in6 *)(
+            (BYTE *)*masks + n * sizeof(SOCKET_ADDRESS));
 
         for (p = ifa, n = 0; p; p = p->ifa_next)
         {
@@ -779,6 +921,7 @@ ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_ad
               !strcmp(name, p->ifa_name))
           {
             struct sockaddr_in6 *addr = (struct sockaddr_in6 *)p->ifa_addr;
+            struct sockaddr_in6 *mask = (struct sockaddr_in6 *)p->ifa_netmask;
 
             next_addr->sin6_family = WS_AF_INET6;
             next_addr->sin6_port = addr->sin6_port;
@@ -789,6 +932,16 @@ ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_ad
             (*addrs)[n].lpSockaddr = (LPSOCKADDR)next_addr;
             (*addrs)[n].iSockaddrLength = sizeof(struct WS_sockaddr_in6);
             next_addr++;
+
+            mask_addr->sin6_family = WS_AF_INET6;
+            mask_addr->sin6_port = mask->sin6_port;
+            mask_addr->sin6_flowinfo = mask->sin6_flowinfo;
+            memcpy(&mask_addr->sin6_addr, &mask->sin6_addr,
+             sizeof(mask_addr->sin6_addr));
+            mask_addr->sin6_scope_id = mask->sin6_scope_id;
+            (*masks)[n].lpSockaddr = (LPSOCKADDR)mask_addr;
+            (*masks)[n].iSockaddrLength = sizeof(struct WS_sockaddr_in6);
+            mask_addr++;
             n++;
           }
         }
@@ -796,12 +949,17 @@ ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_ad
         ret = ERROR_SUCCESS;
       }
       else
+      {
+        HeapFree(GetProcessHeap(), 0, *addrs);
+        HeapFree(GetProcessHeap(), 0, *masks);
         ret = ERROR_OUTOFMEMORY;
+      }
     }
     else
     {
       *addrs = NULL;
       *num_addrs = 0;
+      *masks = NULL;
       ret = ERROR_SUCCESS;
     }
     freeifaddrs(ifa);
@@ -935,10 +1093,11 @@ DWORD getIPAddrTable(PMIB_IPADDRTABLE *ppIpAddrTable, HANDLE heap, DWORD flags)
   return ret;
 }
 
-ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_addrs)
+ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_addrs, SOCKET_ADDRESS **masks)
 {
   *addrs = NULL;
   *num_addrs = 0;
+  *masks = NULL;
   return ERROR_SUCCESS;
 }
 

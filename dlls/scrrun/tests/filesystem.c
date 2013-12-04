@@ -254,6 +254,491 @@ static void test_GetFileVersion(void)
     SysFreeString(path);
 }
 
+static void test_GetParentFolderName(void)
+{
+    static const WCHAR path1[] = {'a',0};
+    static const WCHAR path2[] = {'a','/','a','/','a',0};
+    static const WCHAR path3[] = {'a','\\','a','\\','a',0};
+    static const WCHAR path4[] = {'a','/','a','/','/','\\','\\',0};
+    static const WCHAR path5[] = {'c',':','\\','\\','a',0};
+    static const WCHAR path6[] = {'a','c',':','\\','a',0};
+    static const WCHAR result2[] = {'a','/','a',0};
+    static const WCHAR result3[] = {'a','\\','a',0};
+    static const WCHAR result4[] = {'a',0};
+    static const WCHAR result5[] = {'c',':','\\',0};
+    static const WCHAR result6[] = {'a','c',':',0};
+
+    static const struct {
+        const WCHAR *path;
+        const WCHAR *result;
+    } tests[] = {
+        {NULL, NULL},
+        {path1, NULL},
+        {path2, result2},
+        {path3, result3},
+        {path4, result4},
+        {path5, result5},
+        {path6, result6}
+    };
+
+    BSTR path, result;
+    HRESULT hr;
+    int i;
+
+    hr = IFileSystem3_GetParentFolderName(fs3, NULL, NULL);
+    ok(hr == E_POINTER, "GetParentFolderName returned %x, expected E_POINTER\n", hr);
+
+    for(i=0; i<sizeof(tests)/sizeof(tests[0]); i++) {
+        result = (BSTR)0xdeadbeef;
+        path = tests[i].path ? SysAllocString(tests[i].path) : NULL;
+        hr = IFileSystem3_GetParentFolderName(fs3, path, &result);
+        ok(hr == S_OK, "%d) GetParentFolderName returned %x, expected S_OK\n", i, hr);
+        if(!tests[i].result)
+            ok(!result, "%d) result = %s\n", i, wine_dbgstr_w(result));
+        else
+            ok(!lstrcmpW(result, tests[i].result), "%d) result = %s\n", i, wine_dbgstr_w(result));
+        SysFreeString(path);
+        SysFreeString(result);
+    }
+}
+
+static void test_GetFileName(void)
+{
+    static const WCHAR path1[] = {'a',0};
+    static const WCHAR path2[] = {'a','/','a','.','b',0};
+    static const WCHAR path3[] = {'a','\\',0};
+    static const WCHAR path4[] = {'c',':',0};
+    static const WCHAR path5[] = {'/','\\',0};
+    static const WCHAR result2[] = {'a','.','b',0};
+    static const WCHAR result3[] = {'a',0};
+
+    static const struct {
+        const WCHAR *path;
+        const WCHAR *result;
+    } tests[] = {
+        {NULL, NULL},
+        {path1, path1},
+        {path2, result2},
+        {path3, result3},
+        {path4, NULL},
+        {path5, NULL}
+    };
+
+    BSTR path, result;
+    HRESULT hr;
+    int i;
+
+    hr = IFileSystem3_GetFileName(fs3, NULL, NULL);
+    ok(hr == E_POINTER, "GetFileName returned %x, expected E_POINTER\n", hr);
+
+    for(i=0; i<sizeof(tests)/sizeof(tests[0]); i++) {
+        result = (BSTR)0xdeadbeef;
+        path = tests[i].path ? SysAllocString(tests[i].path) : NULL;
+        hr = IFileSystem3_GetFileName(fs3, path, &result);
+        ok(hr == S_OK, "%d) GetFileName returned %x, expected S_OK\n", i, hr);
+        if(!tests[i].result)
+            ok(!result, "%d) result = %s\n", i, wine_dbgstr_w(result));
+        else
+            ok(!lstrcmpW(result, tests[i].result), "%d) result = %s\n", i, wine_dbgstr_w(result));
+        SysFreeString(path);
+        SysFreeString(result);
+    }
+}
+
+static void test_GetBaseName(void)
+{
+    static const WCHAR path1[] = {'a',0};
+    static const WCHAR path2[] = {'a','/','a','.','b','.','c',0};
+    static const WCHAR path3[] = {'a','.','b','\\',0};
+    static const WCHAR path4[] = {'c',':',0};
+    static const WCHAR path5[] = {'/','\\',0};
+    static const WCHAR path6[] = {'.','a',0};
+    static const WCHAR result1[] = {'a',0};
+    static const WCHAR result2[] = {'a','.','b',0};
+    static const WCHAR result6[] = {0};
+
+    static const struct {
+        const WCHAR *path;
+        const WCHAR *result;
+    } tests[] = {
+        {NULL, NULL},
+        {path1, result1},
+        {path2, result2},
+        {path3, result1},
+        {path4, NULL},
+        {path5, NULL},
+        {path6, result6}
+    };
+
+    BSTR path, result;
+    HRESULT hr;
+    int i;
+
+    hr = IFileSystem3_GetBaseName(fs3, NULL, NULL);
+    ok(hr == E_POINTER, "GetBaseName returned %x, expected E_POINTER\n", hr);
+
+    for(i=0; i<sizeof(tests)/sizeof(tests[0]); i++) {
+        result = (BSTR)0xdeadbeef;
+        path = tests[i].path ? SysAllocString(tests[i].path) : NULL;
+        hr = IFileSystem3_GetBaseName(fs3, path, &result);
+        ok(hr == S_OK, "%d) GetBaseName returned %x, expected S_OK\n", i, hr);
+        if(!tests[i].result)
+            ok(!result, "%d) result = %s\n", i, wine_dbgstr_w(result));
+        else
+            ok(!lstrcmpW(result, tests[i].result), "%d) result = %s\n", i, wine_dbgstr_w(result));
+        SysFreeString(path);
+        SysFreeString(result);
+    }
+}
+
+static void test_GetAbsolutePathName(void)
+{
+    static const WCHAR dir1[] = {'t','e','s','t','_','d','i','r','1',0};
+    static const WCHAR dir2[] = {'t','e','s','t','_','d','i','r','2',0};
+    static const WCHAR dir_match1[] = {'t','e','s','t','_','d','i','r','*',0};
+    static const WCHAR dir_match2[] = {'t','e','s','t','_','d','i','*',0};
+    static const WCHAR cur_dir[] = {'.',0};
+
+    WIN32_FIND_DATAW fdata;
+    HANDLE find;
+    WCHAR buf[MAX_PATH], buf2[MAX_PATH];
+    BSTR path, result;
+    HRESULT hr;
+
+    hr = IFileSystem3_GetAbsolutePathName(fs3, NULL, NULL);
+    ok(hr == E_POINTER, "GetAbsolutePathName returned %x, expected E_POINTER\n", hr);
+
+    hr = IFileSystem3_GetAbsolutePathName(fs3, NULL, &result);
+    ok(hr == S_OK, "GetAbsolutePathName returned %x, expected S_OK\n", hr);
+    GetFullPathNameW(cur_dir, MAX_PATH, buf, NULL);
+    ok(!lstrcmpiW(buf, result), "result = %s, expected %s\n", wine_dbgstr_w(result), wine_dbgstr_w(buf));
+    SysFreeString(result);
+
+    find = FindFirstFileW(dir_match2, &fdata);
+    if(find != INVALID_HANDLE_VALUE) {
+        skip("GetAbsolutePathName tests\n");
+        FindClose(find);
+        return;
+    }
+
+    path = SysAllocString(dir_match1);
+    hr = IFileSystem3_GetAbsolutePathName(fs3, path, &result);
+    ok(hr == S_OK, "GetAbsolutePathName returned %x, expected S_OK\n", hr);
+    GetFullPathNameW(dir_match1, MAX_PATH, buf2, NULL);
+    ok(!lstrcmpiW(buf2, result), "result = %s, expected %s\n", wine_dbgstr_w(result), wine_dbgstr_w(buf2));
+    SysFreeString(result);
+
+    ok(CreateDirectoryW(dir1, NULL), "CreateDirectory(%s) failed\n", wine_dbgstr_w(dir1));
+    hr = IFileSystem3_GetAbsolutePathName(fs3, path, &result);
+    ok(hr == S_OK, "GetAbsolutePathName returned %x, expected S_OK\n", hr);
+    GetFullPathNameW(dir1, MAX_PATH, buf, NULL);
+    ok(!lstrcmpiW(buf, result) || broken(!lstrcmpiW(buf2, result)), "result = %s, expected %s\n",
+                wine_dbgstr_w(result), wine_dbgstr_w(buf));
+    SysFreeString(result);
+
+    ok(CreateDirectoryW(dir2, NULL), "CreateDirectory(%s) failed\n", wine_dbgstr_w(dir2));
+    hr = IFileSystem3_GetAbsolutePathName(fs3, path, &result);
+    ok(hr == S_OK, "GetAbsolutePathName returned %x, expected S_OK\n", hr);
+    if(!lstrcmpiW(buf, result) || !lstrcmpiW(buf2, result)) {
+        ok(!lstrcmpiW(buf, result) || broken(!lstrcmpiW(buf2, result)), "result = %s, expected %s\n",
+                wine_dbgstr_w(result), wine_dbgstr_w(buf));
+    }else {
+        GetFullPathNameW(dir2, MAX_PATH, buf, NULL);
+        ok(!lstrcmpiW(buf, result), "result = %s, expected %s\n",
+                wine_dbgstr_w(result), wine_dbgstr_w(buf));
+    }
+    SysFreeString(result);
+
+    SysFreeString(path);
+    path = SysAllocString(dir_match2);
+    hr = IFileSystem3_GetAbsolutePathName(fs3, path, &result);
+    ok(hr == S_OK, "GetAbsolutePathName returned %x, expected S_OK\n", hr);
+    GetFullPathNameW(dir_match2, MAX_PATH, buf, NULL);
+    ok(!lstrcmpiW(buf, result), "result = %s, expected %s\n", wine_dbgstr_w(result), wine_dbgstr_w(buf));
+    SysFreeString(result);
+    SysFreeString(path);
+
+    RemoveDirectoryW(dir1);
+    RemoveDirectoryW(dir2);
+}
+
+static void test_GetFile(void)
+{
+    static const WCHAR get_file[] = {'g','e','t','_','f','i','l','e','.','t','s','t',0};
+
+    BSTR path = SysAllocString(get_file);
+    FileAttribute fa;
+    VARIANT size;
+    DWORD gfa;
+    IFile *file;
+    HRESULT hr;
+    HANDLE hf;
+
+    hr = IFileSystem3_GetFile(fs3, path, NULL);
+    ok(hr == E_POINTER, "GetFile returned %x, expected E_POINTER\n", hr);
+    hr = IFileSystem3_GetFile(fs3, NULL, &file);
+    ok(hr == E_INVALIDARG, "GetFile returned %x, expected E_INVALIDARG\n", hr);
+
+    if(GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES) {
+        skip("File already exists, skipping GetFile tests\n");
+        SysFreeString(path);
+        return;
+    }
+
+    file = (IFile*)0xdeadbeef;
+    hr = IFileSystem3_GetFile(fs3, path, &file);
+    ok(!file, "file != NULL\n");
+    ok(hr == CTL_E_FILENOTFOUND, "GetFile returned %x, expected CTL_E_FILENOTFOUND\n", hr);
+
+    hf = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_READONLY, NULL);
+    if(hf == INVALID_HANDLE_VALUE) {
+        skip("Can't create temporary file\n");
+        SysFreeString(path);
+        return;
+    }
+    CloseHandle(hf);
+
+    hr = IFileSystem3_GetFile(fs3, path, &file);
+    ok(hr == S_OK, "GetFile returned %x, expected S_OK\n", hr);
+
+    hr = IFile_get_Attributes(file, &fa);
+    gfa = GetFileAttributesW(get_file) & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN |
+            FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_ARCHIVE |
+            FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_COMPRESSED);
+    ok(hr == S_OK, "get_Attributes returned %x, expected S_OK\n", hr);
+    ok(fa == gfa, "fa = %x, expected %x\n", fa, gfa);
+
+    hr = IFile_get_Size(file, &size);
+    ok(hr == S_OK, "get_Size returned %x, expected S_OK\n", hr);
+    ok(V_VT(&size) == VT_I4, "V_VT(&size) = %d, expected VT_I4\n", V_VT(&size));
+    ok(V_I4(&size) == 0, "V_I4(&size) = %d, expected 0\n", V_I4(&size));
+    IFile_Release(file);
+
+    hr = IFileSystem3_DeleteFile(fs3, path, FALSE);
+    ok(hr==CTL_E_PERMISSIONDENIED || broken(hr==S_OK),
+            "DeleteFile returned %x, expected CTL_E_PERMISSIONDENIED\n", hr);
+    if(hr != S_OK) {
+        hr = IFileSystem3_DeleteFile(fs3, path, TRUE);
+        ok(hr == S_OK, "DeleteFile returned %x, expected S_OK\n", hr);
+    }
+    hr = IFileSystem3_DeleteFile(fs3, path, TRUE);
+    ok(hr == CTL_E_FILENOTFOUND, "DeleteFile returned %x, expected CTL_E_FILENOTFOUND\n", hr);
+
+    SysFreeString(path);
+}
+
+static inline BOOL create_file(const WCHAR *name)
+{
+    HANDLE f = CreateFileW(name, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
+    CloseHandle(f);
+    return f != INVALID_HANDLE_VALUE;
+}
+
+static inline void create_path(const WCHAR *folder, const WCHAR *name, WCHAR *ret)
+{
+    DWORD len = lstrlenW(folder);
+    memmove(ret, folder, len*sizeof(WCHAR));
+    ret[len] = '\\';
+    memmove(ret+len+1, name, (lstrlenW(name)+1)*sizeof(WCHAR));
+}
+
+static void test_CopyFolder(void)
+{
+    static const WCHAR filesystem3_dir[] = {'f','i','l','e','s','y','s','t','e','m','3','_','t','e','s','t',0};
+    static const WCHAR s1[] = {'s','r','c','1',0};
+    static const WCHAR s[] = {'s','r','c','*',0};
+    static const WCHAR d[] = {'d','s','t',0};
+    static const WCHAR empty[] = {0};
+
+    WCHAR tmp[MAX_PATH];
+    BSTR bsrc, bdst;
+    HRESULT hr;
+
+    if(!CreateDirectoryW(filesystem3_dir, NULL)) {
+        skip("can't create temporary directory\n");
+        return;
+    }
+
+    create_path(filesystem3_dir, s1, tmp);
+    bsrc = SysAllocString(tmp);
+    create_path(filesystem3_dir, d, tmp);
+    bdst = SysAllocString(tmp);
+    hr = IFileSystem3_CopyFile(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == CTL_E_FILENOTFOUND, "CopyFile returned %x, expected CTL_E_FILENOTFOUND\n", hr);
+
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == CTL_E_PATHNOTFOUND, "CopyFolder returned %x, expected CTL_E_PATHNOTFOUND\n", hr);
+
+    ok(create_file(bsrc), "can't create %s file\n", wine_dbgstr_w(bsrc));
+    hr = IFileSystem3_CopyFile(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == S_OK, "CopyFile returned %x, expected S_OK\n", hr);
+
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == CTL_E_PATHNOTFOUND, "CopyFolder returned %x, expected CTL_E_PATHNOTFOUND\n", hr);
+
+    hr = IFileSystem3_DeleteFile(fs3, bsrc, VARIANT_FALSE);
+    ok(hr == S_OK, "DeleteFile returned %x, expected S_OK\n", hr);
+
+    ok(CreateDirectoryW(bsrc, NULL), "can't create %s\n", wine_dbgstr_w(bsrc));
+    hr = IFileSystem3_CopyFile(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == CTL_E_FILENOTFOUND, "CopyFile returned %x, expected CTL_E_FILENOTFOUND\n", hr);
+
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == CTL_E_FILEALREADYEXISTS, "CopyFolder returned %x, expected CTL_E_FILEALREADYEXISTS\n", hr);
+
+    hr = IFileSystem3_DeleteFile(fs3, bdst, VARIANT_TRUE);
+    ok(hr == S_OK, "DeleteFile returned %x, expected S_OK\n", hr);
+
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == S_OK, "CopyFolder returned %x, expected S_OK\n", hr);
+
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == S_OK, "CopyFolder returned %x, expected S_OK\n", hr);
+    create_path(tmp, s1, tmp);
+    ok(GetFileAttributesW(tmp) == INVALID_FILE_ATTRIBUTES,
+            "%s file exists\n", wine_dbgstr_w(tmp));
+
+    create_path(filesystem3_dir, d, tmp);
+    create_path(tmp, empty, tmp);
+    SysFreeString(bdst);
+    bdst = SysAllocString(tmp);
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == S_OK, "CopyFolder returned %x, expected S_OK\n", hr);
+    create_path(tmp, s1, tmp);
+    ok(GetFileAttributesW(tmp) != INVALID_FILE_ATTRIBUTES,
+            "%s directory doesn't exist\n", wine_dbgstr_w(tmp));
+    ok(RemoveDirectoryW(tmp), "can't remove %s directory\n", wine_dbgstr_w(tmp));
+    create_path(filesystem3_dir, d, tmp);
+    SysFreeString(bdst);
+    bdst = SysAllocString(tmp);
+
+
+    create_path(filesystem3_dir, s, tmp);
+    SysFreeString(bsrc);
+    bsrc = SysAllocString(tmp);
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == S_OK, "CopyFolder returned %x, expected S_OK\n", hr);
+    create_path(filesystem3_dir, d, tmp);
+    create_path(tmp, s1, tmp);
+    ok(GetFileAttributesW(tmp) != INVALID_FILE_ATTRIBUTES,
+            "%s directory doesn't exist\n", wine_dbgstr_w(tmp));
+
+    hr = IFileSystem3_DeleteFolder(fs3, bdst, VARIANT_FALSE);
+    ok(hr == S_OK, "DeleteFolder returned %x, expected S_OK\n", hr);
+
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == CTL_E_PATHNOTFOUND, "CopyFolder returned %x, expected CTL_E_PATHNOTFOUND\n", hr);
+
+    create_path(filesystem3_dir, s1, tmp);
+    SysFreeString(bsrc);
+    bsrc = SysAllocString(tmp);
+    create_path(tmp, s1, tmp);
+    ok(create_file(tmp), "can't create %s file\n", wine_dbgstr_w(tmp));
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_FALSE);
+    ok(hr == S_OK, "CopyFolder returned %x, expected S_OK\n", hr);
+
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_FALSE);
+    ok(hr == CTL_E_FILEALREADYEXISTS, "CopyFolder returned %x, expected CTL_E_FILEALREADYEXISTS\n", hr);
+
+    hr = IFileSystem3_CopyFolder(fs3, bsrc, bdst, VARIANT_TRUE);
+    ok(hr == S_OK, "CopyFolder returned %x, expected S_OK\n", hr);
+    SysFreeString(bsrc);
+    SysFreeString(bdst);
+
+    bsrc = SysAllocString(filesystem3_dir);
+    hr = IFileSystem3_DeleteFolder(fs3, bsrc, VARIANT_FALSE);
+    ok(hr == S_OK, "DeleteFolder returned %x, expected S_OK\n", hr);
+    SysFreeString(bsrc);
+}
+
+static BSTR bstr_from_str(const char *str)
+{
+    int len = MultiByteToWideChar(CP_ACP, 0, str, -1, NULL, 0);
+    BSTR ret = SysAllocStringLen(NULL, len - 1);  /* NUL character added automatically */
+    MultiByteToWideChar(CP_ACP, 0, str, -1, ret, len);
+    return ret;
+}
+
+struct buildpath_test
+{
+    const char *path;
+    const char *name;
+    const char *result;
+};
+
+static struct buildpath_test buildpath_data[] =
+{
+    { "C:\\path", "..\\name.tmp", "C:\\path\\..\\name.tmp" },
+    { "C:\\path", "\\name.tmp", "C:\\path\\name.tmp" },
+    { "C:\\path", "name.tmp", "C:\\path\\name.tmp" },
+    { "C:\\path\\", "name.tmp", "C:\\path\\name.tmp" },
+    { "C:\\path", "\\\\name.tmp", "C:\\path\\\\name.tmp" },
+    { "C:\\path\\", "\\name.tmp", "C:\\path\\name.tmp" },
+    { "C:\\path\\", "\\\\name.tmp", "C:\\path\\\\name.tmp" },
+    { "C:\\path\\\\", "\\\\name.tmp", "C:\\path\\\\\\name.tmp" },
+    { "C:\\\\", "\\name.tmp", "C:\\\\name.tmp" },
+    { "C:", "name.tmp", "C:name.tmp" },
+    { "C:", "\\\\name.tmp", "C:\\\\name.tmp" },
+    { NULL }
+};
+
+static void test_BuildPath(void)
+{
+    struct buildpath_test *ptr = buildpath_data;
+    BSTR ret, path;
+    HRESULT hr;
+    int i = 0;
+
+    hr = IFileSystem3_BuildPath(fs3, NULL, NULL, NULL);
+    ok(hr == E_POINTER, "got 0x%08x\n", hr);
+
+    ret = (BSTR)0xdeadbeef;
+    hr = IFileSystem3_BuildPath(fs3, NULL, NULL, &ret);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(*ret == 0, "got %p\n", ret);
+    SysFreeString(ret);
+
+    ret = (BSTR)0xdeadbeef;
+    path = bstr_from_str("path");
+    hr = IFileSystem3_BuildPath(fs3, path, NULL, &ret);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(!lstrcmpW(ret, path), "got %s\n", wine_dbgstr_w(ret));
+    SysFreeString(ret);
+    SysFreeString(path);
+
+    ret = (BSTR)0xdeadbeef;
+    path = bstr_from_str("path");
+    hr = IFileSystem3_BuildPath(fs3, NULL, path, &ret);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(!lstrcmpW(ret, path), "got %s\n", wine_dbgstr_w(ret));
+    SysFreeString(ret);
+    SysFreeString(path);
+
+    while (ptr->path)
+    {
+        BSTR name, result;
+
+        ret = NULL;
+        path = bstr_from_str(ptr->path);
+        name = bstr_from_str(ptr->name);
+        result = bstr_from_str(ptr->result);
+        hr = IFileSystem3_BuildPath(fs3, path, name, &ret);
+        ok(hr == S_OK, "%d: got 0x%08x\n", i, hr);
+        if (hr == S_OK)
+        {
+            ok(!lstrcmpW(ret, result), "%d: got wrong path %s, expected %s\n", i, wine_dbgstr_w(ret),
+                wine_dbgstr_w(result));
+            SysFreeString(ret);
+        }
+        SysFreeString(path);
+        SysFreeString(name);
+        SysFreeString(result);
+
+        i++;
+        ptr++;
+    }
+}
+
 START_TEST(filesystem)
 {
     HRESULT hr;
@@ -271,6 +756,13 @@ START_TEST(filesystem)
     test_createfolder();
     test_textstream();
     test_GetFileVersion();
+    test_GetParentFolderName();
+    test_GetFileName();
+    test_GetBaseName();
+    test_GetAbsolutePathName();
+    test_GetFile();
+    test_CopyFolder();
+    test_BuildPath();
 
     IFileSystem3_Release(fs3);
 

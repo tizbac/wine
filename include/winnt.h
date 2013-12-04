@@ -649,6 +649,7 @@ typedef DWORD FLONG;
 #define PROCESSOR_ARCHITECTURE_MSIL     8
 #define PROCESSOR_ARCHITECTURE_AMD64    9
 #define PROCESSOR_ARCHITECTURE_IA32_ON_WIN64    10
+#define PROCESSOR_ARCHITECTURE_NEUTRAL          11
 #define PROCESSOR_ARCHITECTURE_UNKNOWN	0xFFFF
 
 /* dwProcessorType */
@@ -742,6 +743,7 @@ typedef struct _MEMORY_BASIC_INFORMATION
 #define MAXBYTE       0xff
 #define MAXWORD       0xffff
 #define MAXDWORD      0xffffffff
+#define MAXLONGLONG   (((LONGLONG)0x7fffffff << 32) | 0xffffffff)
 
 #define UNICODE_STRING_MAX_CHARS 32767
 
@@ -864,6 +866,11 @@ typedef enum _HEAP_INFORMATION_CLASS {
 #define PF_SECOND_LEVEL_ADDRESS_TRANSLATION     20
 #define PF_VIRT_FIRMWARE_ENABLED                21
 #define PF_RDWRFSGSBASE_AVAILABLE               22
+#define PF_FASTFAIL_AVAILABLE                   23
+#define PF_ARM_DIVIDE_INSTRUCTION_AVAILABLE     24
+#define PF_ARM_64BIT_LOADSTORE_ATOMIC           25
+#define PF_ARM_EXTERNAL_CACHE_AVAILABLE         26
+#define PF_ARM_FMAC_INSTRUCTIONS_AVAILABLE      27
 
 
 /* Execution state flags */
@@ -2460,6 +2467,7 @@ typedef struct _IMAGE_VXD_HEADER {
 #define	IMAGE_FILE_MACHINE_ARM		0x01c0
 #define	IMAGE_FILE_MACHINE_THUMB	0x01c2
 #define	IMAGE_FILE_MACHINE_ARMNT	0x01c4
+#define	IMAGE_FILE_MACHINE_ARM64	0xaa64
 #define	IMAGE_FILE_MACHINE_AM33		0x01d3
 #define	IMAGE_FILE_MACHINE_POWERPC	0x01f0
 #define	IMAGE_FILE_MACHINE_POWERPCFP	0x01f1
@@ -2475,9 +2483,6 @@ typedef struct _IMAGE_VXD_HEADER {
 #define	IMAGE_FILE_MACHINE_AMD64	0x8664
 #define	IMAGE_FILE_MACHINE_M32R		0x9041
 #define	IMAGE_FILE_MACHINE_CEE		0xc0ee
-
-/* Wine extension */
-#define	IMAGE_FILE_MACHINE_ARM64	0x01c5
 
 #define	IMAGE_SIZEOF_FILE_HEADER		20
 #define IMAGE_SIZEOF_ROM_OPTIONAL_HEADER	56
@@ -3051,6 +3056,28 @@ typedef struct _IMAGE_RELOCATION
 #include <poppack.h>
 
 #define IMAGE_SIZEOF_RELOCATION 10
+
+typedef struct _IMAGE_DELAYLOAD_DESCRIPTOR
+{
+    union
+    {
+        DWORD AllAttributes;
+        struct
+        {
+            DWORD RvaBased:1;
+            DWORD ReservedAttributes:31;
+        } DUMMYSTRUCTNAME;
+    } Attributes;
+
+    DWORD DllNameRVA;
+    DWORD ModuleHandleRVA;
+    DWORD ImportAddressTableRVA;
+    DWORD ImportNameTableRVA;
+    DWORD BoundImportAddressTableRVA;
+    DWORD UnloadInformationTableRVA;
+    DWORD TimeDateStamp;
+} IMAGE_DELAYLOAD_DESCRIPTOR, *PIMAGE_DELAYLOAD_DESCRIPTOR;
+typedef const IMAGE_DELAYLOAD_DESCRIPTOR *PCIMAGE_DELAYLOAD_DESCRIPTOR;
 
 /* generic relocation types */
 #define IMAGE_REL_BASED_ABSOLUTE 		0
@@ -3769,35 +3796,129 @@ typedef struct _ACL_SIZE_INFORMATION
 /*
  * Privilege Names
  */
-#define SE_CREATE_TOKEN_NAME		TEXT("SeCreateTokenPrivilege")
-#define SE_ASSIGNPRIMARYTOKEN_NAME	TEXT("SeAssignPrimaryTokenPrivilege")
-#define SE_LOCK_MEMORY_NAME		TEXT("SeLockMemoryPrivilege")
-#define SE_INCREASE_QUOTA_NAME		TEXT("SeIncreaseQuotaPrivilege")
-#define SE_UNSOLICITED_INPUT_NAME	TEXT("SeUnsolicitedInputPrivilege")
-#define SE_MACHINE_ACCOUNT_NAME 	TEXT("SeMachineAccountPrivilege")
-#define SE_TCB_NAME			TEXT("SeTcbPrivilege")
-#define SE_SECURITY_NAME		TEXT("SeSecurityPrivilege")
-#define SE_TAKE_OWNERSHIP_NAME		TEXT("SeTakeOwnershipPrivilege")
-#define SE_LOAD_DRIVER_NAME		TEXT("SeLoadDriverPrivilege")
-#define SE_SYSTEM_PROFILE_NAME		TEXT("SeSystemProfilePrivilege")
-#define SE_SYSTEMTIME_NAME		TEXT("SeSystemtimePrivilege")
-#define SE_PROF_SINGLE_PROCESS_NAME	TEXT("SeProfileSingleProcessPrivilege")
-#define SE_INC_BASE_PRIORITY_NAME	TEXT("SeIncreaseBasePriorityPrivilege")
-#define SE_CREATE_PAGEFILE_NAME 	TEXT("SeCreatePagefilePrivilege")
-#define SE_CREATE_PERMANENT_NAME	TEXT("SeCreatePermanentPrivilege")
-#define SE_BACKUP_NAME 			TEXT("SeBackupPrivilege")
-#define SE_RESTORE_NAME			TEXT("SeRestorePrivilege")
-#define SE_SHUTDOWN_NAME		TEXT("SeShutdownPrivilege")
-#define SE_DEBUG_NAME			TEXT("SeDebugPrivilege")
-#define SE_AUDIT_NAME			TEXT("SeAuditPrivilege")
-#define SE_SYSTEM_ENVIRONMENT_NAME	TEXT("SeSystemEnvironmentPrivilege")
-#define SE_CHANGE_NOTIFY_NAME		TEXT("SeChangeNotifyPrivilege")
-#define SE_REMOTE_SHUTDOWN_NAME		TEXT("SeRemoteShutdownPrivilege")
-#define SE_UNDOCK_NAME                  TEXT("SeUndockPrivilege")
-#define SE_ENABLE_DELEGATION_NAME       TEXT("SeEnableDelegationPrivilege")
-#define SE_MANAGE_VOLUME_NAME           TEXT("SeManageVolumePrivilege")
-#define SE_IMPERSONATE_NAME             TEXT("SeImpersonatePrivilege")
-#define SE_CREATE_GLOBAL_NAME           TEXT("SeCreateGlobalPrivilege")
+#ifdef UNICODE
+#if defined(_MSC_VER)
+#define SE_CREATE_TOKEN_NAME            L"SeCreateTokenPrivilege"
+#define SE_ASSIGNPRIMARYTOKEN_NAME      L"SeAssignPrimaryTokenPrivilege"
+#define SE_LOCK_MEMORY_NAME             L"SeLockMemoryPrivilege"
+#define SE_INCREASE_QUOTA_NAME          L"SeIncreaseQuotaPrivilege"
+#define SE_UNSOLICITED_INPUT_NAME       L"SeUnsolicitedInputPrivilege"
+#define SE_MACHINE_ACCOUNT_NAME         L"SeMachineAccountPrivilege"
+#define SE_TCB_NAME                     L"SeTcbPrivilege"
+#define SE_SECURITY_NAME                L"SeSecurityPrivilege"
+#define SE_TAKE_OWNERSHIP_NAME          L"SeTakeOwnershipPrivilege"
+#define SE_LOAD_DRIVER_NAME             L"SeLoadDriverPrivilege"
+#define SE_SYSTEM_PROFILE_NAME          L"SeSystemProfilePrivilege"
+#define SE_SYSTEMTIME_NAME              L"SeSystemtimePrivilege"
+#define SE_PROF_SINGLE_PROCESS_NAME     L"SeProfileSingleProcessPrivilege"
+#define SE_INC_BASE_PRIORITY_NAME       L"SeIncreaseBasePriorityPrivilege"
+#define SE_CREATE_PAGEFILE_NAME         L"SeCreatePagefilePrivilege"
+#define SE_CREATE_PERMANENT_NAME        L"SeCreatePermanentPrivilege"
+#define SE_BACKUP_NAME                  L"SeBackupPrivilege"
+#define SE_RESTORE_NAME                 L"SeRestorePrivilege"
+#define SE_SHUTDOWN_NAME                L"SeShutdownPrivilege"
+#define SE_DEBUG_NAME                   L"SeDebugPrivilege"
+#define SE_AUDIT_NAME                   L"SeAuditPrivilege"
+#define SE_SYSTEM_ENVIRONMENT_NAME      L"SeSystemEnvironmentPrivilege"
+#define SE_CHANGE_NOTIFY_NAME           L"SeChangeNotifyPrivilege"
+#define SE_REMOTE_SHUTDOWN_NAME         L"SeRemoteShutdownPrivilege"
+#define SE_UNDOCK_NAME                  L"SeUndockPrivilege"
+#define SE_ENABLE_DELEGATION_NAME       L"SeEnableDelegationPrivilege"
+#define SE_MANAGE_VOLUME_NAME           L"SeManageVolumePrivilege"
+#define SE_IMPERSONATE_NAME             L"SeImpersonatePrivilege"
+#define SE_CREATE_GLOBAL_NAME           L"SeCreateGlobalPrivilege"
+#elif defined(__GNUC__)
+#define SE_CREATE_TOKEN_NAME (const WCHAR []){ 'S','e','C','r','e','a','t','e','T','o','k','e','n','P','r','i','v','i','l','e','g','e',0 }
+#define SE_ASSIGNPRIMARYTOKEN_NAME (const WCHAR []){ 'S','e','A','s','s','i','g','n','P','r','i','m','a','r','y','T','o','k','e','n','P','r','i','v','i','l','e','g','e',0 }
+#define SE_LOCK_MEMORY_NAME (const WCHAR []){ 'S','e','L','o','c','k','M','e','m','o','r','y','P','r','i','v','i','l','e','g','e',0 }
+#define SE_INCREASE_QUOTA_NAME (const WCHAR []){ 'S','e','I','n','c','r','e','a','s','e','Q','u','o','t','a','P','r','i','v','i','l','e','g','e',0 }
+#define SE_UNSOLICITED_INPUT_NAME (const WCHAR []){ 'S','e','U','n','s','o','l','i','c','i','t','e','d','I','n','p','u','t','P','r','i','v','i','l','e','g','e',0 }
+#define SE_MACHINE_ACCOUNT_NAME (const WCHAR []){ 'S','e','M','a','c','h','i','n','e','A','c','c','o','u','n','t','P','r','i','v','i','l','e','g','e',0 }
+#define SE_TCB_NAME (const WCHAR []){ 'S','e','T','c','b','P','r','i','v','i','l','e','g','e',0 }
+#define SE_SECURITY_NAME (const WCHAR []){ 'S','e','S','e','c','u','r','i','t','y','P','r','i','v','i','l','e','g','e',0 }
+#define SE_TAKE_OWNERSHIP_NAME (const WCHAR []){ 'S','e','T','a','k','e','O','w','n','e','r','s','h','i','p','P','r','i','v','i','l','e','g','e',0 }
+#define SE_LOAD_DRIVER_NAME (const WCHAR []){ 'S','e','L','o','a','d','D','r','i','v','e','r','P','r','i','v','i','l','e','g','e',0 }
+#define SE_SYSTEM_PROFILE_NAME (const WCHAR []){ 'S','e','S','y','s','t','e','m','P','r','o','f','i','l','e','P','r','i','v','i','l','e','g','e',0 }
+#define SE_SYSTEMTIME_NAME (const WCHAR []){ 'S','e','S','y','s','t','e','m','t','i','m','e','P','r','i','v','i','l','e','g','e',0 }
+#define SE_PROF_SINGLE_PROCESS_NAME (const WCHAR []){ 'S','e','P','r','o','f','i','l','e','S','i','n','g','l','e','P','r','o','c','e','s','s','P','r','i','v','i','l','e','g','e',0 }
+#define SE_INC_BASE_PRIORITY_NAME (const WCHAR []){ 'S','e','I','n','c','r','e','a','s','e','B','a','s','e','P','r','i','o','r','i','t','y','P','r','i','v','i','l','e','g','e',0 }
+#define SE_CREATE_PAGEFILE_NAME (const WCHAR []){ 'S','e','C','r','e','a','t','e','P','a','g','e','f','i','l','e','P','r','i','v','i','l','e','g','e',0 }
+#define SE_CREATE_PERMANENT_NAME (const WCHAR []){ 'S','e','C','r','e','a','t','e','P','e','r','m','a','n','e','n','t','P','r','i','v','i','l','e','g','e',0 }
+#define SE_BACKUP_NAME (const WCHAR []){ 'S','e','B','a','c','k','u','p','P','r','i','v','i','l','e','g','e',0 }
+#define SE_RESTORE_NAME (const WCHAR []){ 'S','e','R','e','s','t','o','r','e','P','r','i','v','i','l','e','g','e',0 }
+#define SE_SHUTDOWN_NAME (const WCHAR []){ 'S','e','S','h','u','t','d','o','w','n','P','r','i','v','i','l','e','g','e',0 }
+#define SE_DEBUG_NAME (const WCHAR []){ 'S','e','D','e','b','u','g','P','r','i','v','i','l','e','g','e',0 }
+#define SE_AUDIT_NAME (const WCHAR []){ 'S','e','A','u','d','i','t','P','r','i','v','i','l','e','g','e',0 }
+#define SE_SYSTEM_ENVIRONMENT_NAME (const WCHAR []){ 'S','e','S','y','s','t','e','m','E','n','v','i','r','o','n','m','e','n','t','P','r','i','v','i','l','e','g','e',0 }
+#define SE_CHANGE_NOTIFY_NAME (const WCHAR []){ 'S','e','C','h','a','n','g','e','N','o','t','i','f','y','P','r','i','v','i','l','e','g','e',0 }
+#define SE_REMOTE_SHUTDOWN_NAME (const WCHAR []){ 'S','e','R','e','m','o','t','e','S','h','u','t','d','o','w','n','P','r','i','v','i','l','e','g','e',0 }
+#define SE_UNDOCK_NAME (const WCHAR []){ 'S','e','U','n','d','o','c','k','P','r','i','v','i','l','e','g','e',0 }
+#define SE_ENABLE_DELEGATION_NAME (const WCHAR []){ 'S','e','E','n','a','b','l','e','D','e','l','e','g','a','t','i','o','n','P','r','i','v','i','l','e','g','e',0 }
+#define SE_MANAGE_VOLUME_NAME (const WCHAR []){ 'S','e','M','a','n','a','g','e','V','o','l','u','m','e','P','r','i','v','i','l','e','g','e',0 }
+#define SE_IMPERSONATE_NAME (const WCHAR []){ 'S','e','I','m','p','e','r','s','o','n','a','t','e','P','r','i','v','i','l','e','g','e',0 }
+#define SE_CREATE_GLOBAL_NAME (const WCHAR []){ 'S','e','C','r','e','a','t','e','G','l','o','b','a','l','P','r','i','v','i','l','e','g','e',0 }
+#else /* _MSC_VER/__GNUC__ */
+static const WCHAR SE_CREATE_TOKEN_NAME[] = { 'S','e','C','r','e','a','t','e','T','o','k','e','n','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_ASSIGNPRIMARYTOKEN_NAME[] = { 'S','e','A','s','s','i','g','n','P','r','i','m','a','r','y','T','o','k','e','n','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_LOCK_MEMORY_NAME[] = { 'S','e','L','o','c','k','M','e','m','o','r','y','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_INCREASE_QUOTA_NAME[] = { 'S','e','I','n','c','r','e','a','s','e','Q','u','o','t','a','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_UNSOLICITED_INPUT_NAME[] = { 'S','e','U','n','s','o','l','i','c','i','t','e','d','I','n','p','u','t','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_MACHINE_ACCOUNT_NAME[] = { 'S','e','M','a','c','h','i','n','e','A','c','c','o','u','n','t','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_TCB_NAME[] = { 'S','e','T','c','b','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_SECURITY_NAME[] = { 'S','e','S','e','c','u','r','i','t','y','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_TAKE_OWNERSHIP_NAME[] = { 'S','e','T','a','k','e','O','w','n','e','r','s','h','i','p','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_LOAD_DRIVER_NAME[] = { 'S','e','L','o','a','d','D','r','i','v','e','r','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_SYSTEM_PROFILE_NAME[] = { 'S','e','S','y','s','t','e','m','P','r','o','f','i','l','e','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_SYSTEMTIME_NAME[] = { 'S','e','S','y','s','t','e','m','t','i','m','e','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_PROF_SINGLE_PROCESS_NAME[] = { 'S','e','P','r','o','f','i','l','e','S','i','n','g','l','e','P','r','o','c','e','s','s','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_INC_BASE_PRIORITY_NAME[] = { 'S','e','I','n','c','r','e','a','s','e','B','a','s','e','P','r','i','o','r','i','t','y','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_CREATE_PAGEFILE_NAME[] = { 'S','e','C','r','e','a','t','e','P','a','g','e','f','i','l','e','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_CREATE_PERMANENT_NAME[] = { 'S','e','C','r','e','a','t','e','P','e','r','m','a','n','e','n','t','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_BACKUP_NAME[] = { 'S','e','B','a','c','k','u','p','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_RESTORE_NAME[] = { 'S','e','R','e','s','t','o','r','e','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_SHUTDOWN_NAME[] = { 'S','e','S','h','u','t','d','o','w','n','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_DEBUG_NAME[] = { 'S','e','D','e','b','u','g','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_AUDIT_NAME[] = { 'S','e','A','u','d','i','t','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_SYSTEM_ENVIRONMENT_NAME[] = { 'S','e','S','y','s','t','e','m','E','n','v','i','r','o','n','m','e','n','t','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_CHANGE_NOTIFY_NAME[] = { 'S','e','C','h','a','n','g','e','N','o','t','i','f','y','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_REMOTE_SHUTDOWN_NAME[] = { 'S','e','R','e','m','o','t','e','S','h','u','t','d','o','w','n','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_UNDOCK_NAME[] = { 'S','e','U','n','d','o','c','k','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_ENABLE_DELEGATION_NAME[] = { 'S','e','E','n','a','b','l','e','D','e','l','e','g','a','t','i','o','n','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_MANAGE_VOLUME_NAME[] = { 'S','e','M','a','n','a','g','e','V','o','l','u','m','e','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_IMPERSONATE_NAME[] = { 'S','e','I','m','p','e','r','s','o','n','a','t','e','P','r','i','v','i','l','e','g','e',0 };
+static const WCHAR SE_CREATE_GLOBAL_NAME[] = { 'S','e','C','r','e','a','t','e','G','l','o','b','a','l','P','r','i','v','i','l','e','g','e',0 };
+#endif
+#else /* UNICODE */
+#define SE_CREATE_TOKEN_NAME            "SeCreateTokenPrivilege"
+#define SE_ASSIGNPRIMARYTOKEN_NAME      "SeAssignPrimaryTokenPrivilege"
+#define SE_LOCK_MEMORY_NAME             "SeLockMemoryPrivilege"
+#define SE_INCREASE_QUOTA_NAME          "SeIncreaseQuotaPrivilege"
+#define SE_UNSOLICITED_INPUT_NAME       "SeUnsolicitedInputPrivilege"
+#define SE_MACHINE_ACCOUNT_NAME         "SeMachineAccountPrivilege"
+#define SE_TCB_NAME                     "SeTcbPrivilege"
+#define SE_SECURITY_NAME                "SeSecurityPrivilege"
+#define SE_TAKE_OWNERSHIP_NAME          "SeTakeOwnershipPrivilege"
+#define SE_LOAD_DRIVER_NAME             "SeLoadDriverPrivilege"
+#define SE_SYSTEM_PROFILE_NAME          "SeSystemProfilePrivilege"
+#define SE_SYSTEMTIME_NAME              "SeSystemtimePrivilege"
+#define SE_PROF_SINGLE_PROCESS_NAME     "SeProfileSingleProcessPrivilege"
+#define SE_INC_BASE_PRIORITY_NAME       "SeIncreaseBasePriorityPrivilege"
+#define SE_CREATE_PAGEFILE_NAME         "SeCreatePagefilePrivilege"
+#define SE_CREATE_PERMANENT_NAME        "SeCreatePermanentPrivilege"
+#define SE_BACKUP_NAME                  "SeBackupPrivilege"
+#define SE_RESTORE_NAME                 "SeRestorePrivilege"
+#define SE_SHUTDOWN_NAME                "SeShutdownPrivilege"
+#define SE_DEBUG_NAME                   "SeDebugPrivilege"
+#define SE_AUDIT_NAME                   "SeAuditPrivilege"
+#define SE_SYSTEM_ENVIRONMENT_NAME      "SeSystemEnvironmentPrivilege"
+#define SE_CHANGE_NOTIFY_NAME           "SeChangeNotifyPrivilege"
+#define SE_REMOTE_SHUTDOWN_NAME         "SeRemoteShutdownPrivilege"
+#define SE_UNDOCK_NAME                  "SeUndockPrivilege"
+#define SE_ENABLE_DELEGATION_NAME       "SeEnableDelegationPrivilege"
+#define SE_MANAGE_VOLUME_NAME           "SeManageVolumePrivilege"
+#define SE_IMPERSONATE_NAME             "SeImpersonatePrivilege"
+#define SE_CREATE_GLOBAL_NAME           "SeCreateGlobalPrivilege"
+#endif
 
 #define SE_GROUP_MANDATORY          0x00000001
 #define SE_GROUP_ENABLED_BY_DEFAULT 0x00000002
@@ -5163,7 +5284,7 @@ typedef DWORD WINAPI RTL_RUN_ONCE_INIT_FN(PRTL_RUN_ONCE, PVOID, PVOID*);
 typedef RTL_RUN_ONCE_INIT_FN *PRTL_RUN_ONCE_INIT_FN;
 NTSYSAPI VOID WINAPI RtlRunOnceInitialize(PRTL_RUN_ONCE);
 NTSYSAPI DWORD WINAPI RtlRunOnceExecuteOnce(PRTL_RUN_ONCE,PRTL_RUN_ONCE_INIT_FN,PVOID,PVOID*);
-NTSYSAPI DWORD WINAPI RtlRunOnceBeginInitialize(PRTL_RUN_ONCE, DWORD, PBOOL, PVOID*);
+NTSYSAPI DWORD WINAPI RtlRunOnceBeginInitialize(PRTL_RUN_ONCE, DWORD, PVOID*);
 NTSYSAPI DWORD WINAPI RtlRunOnceComplete(PRTL_RUN_ONCE, DWORD, PVOID);
 
 #include <pshpack8.h>
@@ -5371,6 +5492,96 @@ typedef enum _JOBOBJECTINFOCLASS
     JobObjectJobSetInformation,
     MaxJobObjectInfoClass
 } JOBOBJECTINFOCLASS;
+
+typedef struct _JOBOBJECT_BASIC_ACCOUNTING_INFORMATION {
+    LARGE_INTEGER TotalUserTime;
+    LARGE_INTEGER TotalKernelTime;
+    LARGE_INTEGER ThisPeriodTotalUserTime;
+    LARGE_INTEGER ThisPeriodTotalKernelTime;
+    DWORD         TotalPageFaultCount;
+    DWORD         TotalProcesses;
+    DWORD         ActiveProcesses;
+    DWORD         TotalTerminatedProcesses;
+} JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, *PJOBOBJECT_BASIC_ACCOUNTING_INFORMATION;
+
+typedef struct _JOBOBJECT_BASIC_LIMIT_INFORMATION {
+    LARGE_INTEGER PerProcessUserTimeLimit;
+    LARGE_INTEGER PerJobUserTimeLimit;
+    DWORD         LimitFlags;
+    SIZE_T        MinimumWorkingSetSize;
+    SIZE_T        MaximumWorkingSetSize;
+    DWORD         ActiveProcessLimit;
+    ULONG_PTR     Affinity;
+    DWORD         PriorityClass;
+    DWORD         SchedulingClass;
+} JOBOBJECT_BASIC_LIMIT_INFORMATION, *PJOBOBJECT_BASIC_LIMIT_INFORMATION;
+
+typedef struct _JOBOBJECT_BASIC_PROCESS_ID_LIST {
+    DWORD     NumberOfAssignedProcesses;
+    DWORD     NumberOfProcessIdsInList;
+    ULONG_PTR ProcessIdList[1];
+} JOBOBJECT_BASIC_PROCESS_ID_LIST, *PJOBOBJECT_BASIC_PROCESS_ID_LIST;
+
+typedef struct _JOBOBJECT_BASIC_UI_RESTRICTIONS {
+    DWORD UIRestrictionsClass;
+} JOBOBJECT_BASIC_UI_RESTRICTIONS, *PJOBOBJECT_BASIC_UI_RESTRICTIONS;
+
+typedef struct _JOBOBJECT_SECURITY_LIMIT_INFORMATION {
+    DWORD             SecurityLimitFlags;
+    HANDLE            JobToken;
+    PTOKEN_GROUPS     SidsToDisable;
+    PTOKEN_PRIVILEGES PrivilegesToDelete;
+    PTOKEN_GROUPS     RestrictedSids;
+} JOBOBJECT_SECURITY_LIMIT_INFORMATION, *PJOBOBJECT_SECURITY_LIMIT_INFORMATION;
+
+typedef struct _JOBOBJECT_END_OF_JOB_TIME_INFORMATION {
+    DWORD EndOfJobTimeAction;
+} JOBOBJECT_END_OF_JOB_TIME_INFORMATION, PJOBOBJECT_END_OF_JOB_TIME_INFORMATION;
+
+typedef struct _JOBOBJECT_ASSOCIATE_COMPLETION_PORT {
+    PVOID  CompletionKey;
+    HANDLE CompletionPort;
+} JOBOBJECT_ASSOCIATE_COMPLETION_PORT, *PJOBOBJECT_ASSOCIATE_COMPLETION_PORT;
+
+#define JOB_OBJECT_MSG_END_OF_JOB_TIME              1
+#define JOB_OBJECT_MSG_END_OF_PROCESS_TIME          2
+#define JOB_OBJECT_MSG_ACTIVE_PROCESS_LIMIT         3
+#define JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO          4
+#define JOB_OBJECT_MSG_NEW_PROCESS                  6
+#define JOB_OBJECT_MSG_EXIT_PROCESS                 7
+#define JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS        8
+#define JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT         9
+#define JOB_OBJECT_MSG_JOB_MEMORY_LIMIT             10
+
+typedef struct JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION {
+    JOBOBJECT_BASIC_ACCOUNTING_INFORMATION BasicInfo;
+    IO_COUNTERS                            IoInfo;
+} JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION, *PJOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION;
+
+typedef struct _JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+    JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+    IO_COUNTERS                       IoInfo;
+    SIZE_T                            ProcessMemoryLimit;
+    SIZE_T                            JobMemoryLimit;
+    SIZE_T                            PeakProcessMemoryUsed;
+    SIZE_T                            PeakJobMemoryUsed;
+} JOBOBJECT_EXTENDED_LIMIT_INFORMATION, *PJOBOBJECT_EXTENDED_LIMIT_INFORMATION;
+
+#define JOB_OBJECT_LIMIT_WORKINGSET                 0x00000001
+#define JOB_OBJECT_LIMIT_PROCESS_TIME               0x00000002
+#define JOB_OBJECT_LIMIT_JOB_TIME                   0x00000004
+#define JOB_OBJECT_LIMIT_ACTIVE_PROCESS             0x00000008
+#define JOB_OBJECT_LIMIT_AFFINITY                   0x00000010
+#define JOB_OBJECT_LIMIT_PRIORITY_CLASS             0x00000020
+#define JOB_OBJECT_LIMIT_PRESERVE_JOB_TIME          0x00000040
+#define JOB_OBJECT_LIMIT_SCHEDULING_CLASS           0x00000080
+#define JOB_OBJECT_LIMIT_PROCESS_MEMORY             0x00000100
+#define JOB_OBJECT_LIMIT_JOB_MEMORY                 0x00000200
+#define JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION 0x00000400
+#define JOB_OBJECT_LIMIT_BREAKAWAY_OK               0x00000800
+#define JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK        0x00001000
+#define JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE          0x00002000
+#define JOB_OBJECT_LIMIT_SUBSET_AFFINITY            0x00004000
 
 typedef enum _LOGICAL_PROCESSOR_RELATIONSHIP
 {

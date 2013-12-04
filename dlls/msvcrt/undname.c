@@ -331,7 +331,7 @@ static const char* get_number(struct parsed_symbol* sym)
         if (*sym->current != '@') return NULL;
 
         ptr = und_alloc(sym, 17);
-        sprintf(ptr, "%s%d", sgn ? "-" : "", ret);
+        sprintf(ptr, "%s%u", sgn ? "-" : "", ret);
         sym->current++;
     }
     else return NULL;
@@ -406,7 +406,12 @@ static BOOL get_modifier(struct parsed_symbol *sym, const char **ret, const char
     *ptr_modif = NULL;
     if (*sym->current == 'E')
     {
-        *ptr_modif = "__ptr64";
+        if (!(sym->flags & UNDNAME_NO_MS_KEYWORDS))
+        {
+            *ptr_modif = "__ptr64";
+            if (sym->flags & UNDNAME_NO_LEADING_UNDERSCORES)
+                *ptr_modif = *ptr_modif + 2;
+        }
         sym->current++;
     }
     switch (*sym->current++)
@@ -429,7 +434,13 @@ static BOOL get_modified_type(struct datatype_t *ct, struct parsed_symbol* sym,
 
     if (*sym->current == 'E')
     {
-        ptr_modif = " __ptr64";
+        if (!(sym->flags & UNDNAME_NO_MS_KEYWORDS))
+        {
+            if (sym->flags & UNDNAME_NO_LEADING_UNDERSCORES)
+                ptr_modif = " ptr64";
+            else
+                ptr_modif = " __ptr64";
+        }
         sym->current++;
     }
 
@@ -539,8 +550,10 @@ static char* get_template_name(struct parsed_symbol* sym)
     struct array array_pmt;
 
     sym->names.start = sym->names.num;
-    if (!(name = get_literal_string(sym)))
+    if (!(name = get_literal_string(sym))) {
+        sym->names.start = start_mark;
         return FALSE;
+    }
     str_array_init(&array_pmt);
     args = get_args(sym, &array_pmt, FALSE, '<', '>');
     if (args != NULL)
@@ -1065,6 +1078,7 @@ static BOOL handle_method(struct parsed_symbol* sym, BOOL cast_op)
 {
     char                accmem;
     const char*         access = NULL;
+    int                 access_id = -1;
     const char*         member_type = NULL;
     struct datatype_t   ct_ret;
     const char*         call_conv;
@@ -1072,7 +1086,7 @@ static BOOL handle_method(struct parsed_symbol* sym, BOOL cast_op)
     const char*         exported;
     const char*         args_str = NULL;
     const char*         name = NULL;
-    BOOL                ret = FALSE;
+    BOOL                ret = FALSE, has_args = TRUE, has_ret = TRUE;
     unsigned            mark;
     struct array        array_pmt;
 
@@ -1103,50 +1117,104 @@ static BOOL handle_method(struct parsed_symbol* sym, BOOL cast_op)
      * 'X' public: thunk
      * 'Y'
      * 'Z'
+     * "$0" private: thunk vtordisp
+     * "$1" private: thunk vtordisp
+     * "$2" protected: thunk vtordisp
+     * "$3" protected: thunk vtordisp
+     * "$4" public: thunk vtordisp
+     * "$5" public: thunk vtordisp
+     * "$B" vcall thunk
+     * "$R" thunk vtordispex
      */
     accmem = *sym->current++;
-    if (accmem < 'A' || accmem > 'Z') goto done;
+    if (accmem == '$')
+    {
+        if (*sym->current >= '0' && *sym->current <= '5')
+            access_id = (*sym->current - '0') / 2;
+        else if (*sym->current == 'R')
+            access_id = (sym->current[1] - '0') / 2;
+        else if (*sym->current != 'B')
+            goto done;
+    }
+    else if (accmem >= 'A' && accmem <= 'Z')
+        access_id = (accmem - 'A') / 8;
+    else
+        goto done;
 
-    if (!(sym->flags & UNDNAME_NO_ACCESS_SPECIFIERS))
+    switch (access_id)
     {
-        switch ((accmem - 'A') / 8)
+    case 0: access = "private: "; break;
+    case 1: access = "protected: "; break;
+    case 2: access = "public: "; break;
+    }
+    if (accmem == '$' || (accmem - 'A') % 8 == 6 || (accmem - 'A') % 8 == 7)
+        access = str_printf(sym, "[thunk]:%s", access ? access : " ");
+
+    if (accmem == '$' && *sym->current != 'B')
+        member_type = "virtual ";
+    else if (accmem <= 'X')
+    {
+        switch ((accmem - 'A') % 8)
         {
-        case 0: access = "private: "; break;
-        case 1: access = "protected: "; break;
-        case 2: access = "public: "; break;
+        case 2: case 3: member_type = "static "; break;
+        case 4: case 5: case 6: case 7: member_type = "virtual "; break;
         }
     }
-    if (!(sym->flags & UNDNAME_NO_MEMBER_TYPE))
-    {
-        if (accmem <= 'X')
-        {
-            switch ((accmem - 'A') % 8)
-            {
-            case 2: case 3: member_type = "static "; break;
-            case 4: case 5: member_type = "virtual "; break;
-            case 6: case 7:
-                access = str_printf(sym, "[thunk]:%s", access);
-                member_type = "virtual ";
-                break;
-            }
-        }
-    }
+
+    if (sym->flags & UNDNAME_NO_ACCESS_SPECIFIERS)
+        access = NULL;
+    if (sym->flags & UNDNAME_NO_MEMBER_TYPE)
+        member_type = NULL;
 
     name = get_class_string(sym, 0);
 
-    if ((accmem - 'A') % 8 == 6 || (accmem - '8') % 8 == 7) /* a thunk */
+    if (accmem == '$' && *sym->current == 'B') /* vcall thunk */
+    {
+        const char *n;
+
+        sym->current++;
+        n = get_number(sym);
+
+        if(!n || *sym->current++ != 'A') goto done;
+        name = str_printf(sym, "%s{%s,{flat}}' }'", name, n);
+        has_args = FALSE;
+        has_ret = FALSE;
+    }
+    else if (accmem == '$' && *sym->current == 'R') /* vtordispex thunk */
+    {
+        const char *n1, *n2, *n3, *n4;
+
+        sym->current += 2;
+        n1 = get_number(sym);
+        n2 = get_number(sym);
+        n3 = get_number(sym);
+        n4 = get_number(sym);
+
+        if(!n1 || !n2 || !n3 || !n4) goto done;
+        name = str_printf(sym, "%s`vtordispex{%s,%s,%s,%s}' ", name, n1, n2, n3, n4);
+    }
+    else if (accmem == '$') /* vtordisp thunk */
+    {
+        const char *n1, *n2;
+
+        sym->current++;
+        n1 = get_number(sym);
+        n2 = get_number(sym);
+
+        if (!n1 || !n2) goto done;
+        name = str_printf(sym, "%s`vtordisp{%s,%s}' ", name, n1, n2);
+    }
+    else if ((accmem - 'A') % 8 == 6 || (accmem - 'A') % 8 == 7) /* a thunk */
         name = str_printf(sym, "%s`adjustor{%s}' ", name, get_number(sym));
 
-    if (accmem <= 'X')
+    if (has_args && (accmem == '$' ||
+                (accmem <= 'X' && (accmem - 'A') % 8 != 2 && (accmem - 'A') % 8 != 3)))
     {
-        if (((accmem - 'A') % 8) != 2 && ((accmem - 'A') % 8) != 3)
-        {
-            const char *ptr_modif;
-            /* Implicit 'this' pointer */
-            /* If there is an implicit this pointer, const modifier follows */
-            if (!get_modifier(sym, &modifier, &ptr_modif)) goto done;
-            if (modifier || ptr_modif) modifier = str_printf(sym, "%s %s", modifier, ptr_modif);
-        }
+        const char *ptr_modif;
+        /* Implicit 'this' pointer */
+        /* If there is an implicit this pointer, const modifier follows */
+        if (!get_modifier(sym, &modifier, &ptr_modif)) goto done;
+        if (modifier || ptr_modif) modifier = str_printf(sym, "%s %s", modifier, ptr_modif);
     }
 
     if (!get_calling_convention(*sym->current++, &call_conv, &exported,
@@ -1156,18 +1224,18 @@ static BOOL handle_method(struct parsed_symbol* sym, BOOL cast_op)
     str_array_init(&array_pmt);
 
     /* Return type, or @ if 'void' */
-    if (*sym->current == '@')
+    if (has_ret && *sym->current == '@')
     {
         ct_ret.left = "void";
         ct_ret.right = NULL;
         sym->current++;
     }
-    else
+    else if (has_ret)
     {
         if (!demangle_datatype(sym, &ct_ret, &array_pmt, FALSE))
             goto done;
     }
-    if (sym->flags & UNDNAME_NO_FUNCTION_RETURNS)
+    if (!has_ret || sym->flags & UNDNAME_NO_FUNCTION_RETURNS)
         ct_ret.left = ct_ret.right = NULL;
     if (cast_op)
     {
@@ -1176,38 +1244,22 @@ static BOOL handle_method(struct parsed_symbol* sym, BOOL cast_op)
     }
 
     mark = sym->stack.num;
-    if (!(args_str = get_args(sym, &array_pmt, TRUE, '(', ')'))) goto done;
+    if (has_args && !(args_str = get_args(sym, &array_pmt, TRUE, '(', ')'))) goto done;
     if (sym->flags & UNDNAME_NAME_ONLY) args_str = modifier = NULL;
+    if (sym->flags & UNDNAME_NO_THISTYPE) modifier = NULL;
     sym->stack.num = mark;
 
     /* Note: '()' after 'Z' means 'throws', but we don't care here
      * Yet!!! FIXME
      */
     sym->result = str_printf(sym, "%s%s%s%s%s%s%s%s%s%s%s",
-                             access, member_type, ct_ret.left, 
+                             access, member_type, ct_ret.left,
                              (ct_ret.left && !ct_ret.right) ? " " : NULL,
                              call_conv, call_conv ? " " : NULL, exported,
                              name, args_str, modifier, ct_ret.right);
     ret = TRUE;
 done:
     return ret;
-}
-
-/******************************************************************
- *		handle_template
- * Does the final parsing and handling for a name with templates
- */
-static BOOL handle_template(struct parsed_symbol* sym)
-{
-    const char* name;
-    const char* args;
-
-    assert(*sym->current == '$');
-    sym->current++;
-    if (!(name = get_literal_string(sym))) return FALSE;
-    if (!(args = get_args(sym, NULL, FALSE, '<', '>'))) return FALSE;
-    sym->result = str_printf(sym, "%s%s", name, args);
-    return TRUE;
 }
 
 /*******************************************************************
@@ -1443,10 +1495,8 @@ static BOOL symbol_demangle(struct parsed_symbol* sym)
     /* Function/Data type and access level */
     if (*sym->current >= '0' && *sym->current <= '9')
         ret = handle_data(sym);
-    else if (*sym->current >= 'A' && *sym->current <= 'Z')
+    else if ((*sym->current >= 'A' && *sym->current <= 'Z') || *sym->current == '$')
         ret = handle_method(sym, do_after == 3);
-    else if (*sym->current == '$')
-        ret = handle_template(sym);
     else ret = FALSE;
 done:
     if (ret) assert(sym->result);

@@ -111,8 +111,7 @@ static struct test_context *new_test_context(void)
     D3DPRESENT_PARAMETERS d3dpp = {0};
     struct test_context *test_context;
 
-    hwnd = CreateWindow("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL);
-    if (!hwnd)
+    if (!(hwnd = CreateWindowA("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL)))
     {
         skip("Couldn't create application window\n");
         goto error;
@@ -278,7 +277,7 @@ static void compare_mesh(const char *name, ID3DXMesh *d3dxmesh, struct mesh *mes
 
         /* specify offset and size to avoid potential overruns */
         hr = IDirect3DVertexBuffer9_Lock(vertex_buffer, 0, number_of_vertices * sizeof(D3DXVECTOR3) * 2,
-                                         (LPVOID *)&vertices, D3DLOCK_DISCARD);
+                (void **)&vertices, D3DLOCK_DISCARD);
         ok(hr == D3D_OK, "Test %s, result %x, expected 0 (D3D_OK)\n", name, hr);
 
         if (hr != D3D_OK)
@@ -339,7 +338,7 @@ static void compare_mesh(const char *name, ID3DXMesh *d3dxmesh, struct mesh *mes
 
         /* specify offset and size to avoid potential overruns */
         hr = IDirect3DIndexBuffer9_Lock(index_buffer, 0, number_of_faces * sizeof(WORD) * 3,
-                                        (LPVOID *)&faces, D3DLOCK_DISCARD);
+                (void **)&faces, D3DLOCK_DISCARD);
         ok(hr == D3D_OK, "Test %s, result %x, expected 0 (D3D_OK)\n", name, hr);
 
         if (hr != D3D_OK)
@@ -1166,8 +1165,7 @@ static void D3DXCreateMeshTest(void)
     hr = D3DXCreateMesh(1, 3, D3DXMESH_MANAGED, decl1, NULL, &d3dxmesh);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
-    wnd = CreateWindow("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL);
-    if (!wnd)
+    if (!(wnd = CreateWindowA("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL)))
     {
         skip("Couldn't create application window\n");
         return;
@@ -1373,8 +1371,7 @@ static void D3DXCreateMeshFVFTest(void)
     hr = D3DXCreateMeshFVF(1, 3, D3DXMESH_MANAGED, D3DFVF_XYZ | D3DFVF_NORMAL, NULL, &d3dxmesh);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
-    wnd = CreateWindow("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL);
-    if (!wnd)
+    if (!(wnd = CreateWindowA("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL)))
     {
         skip("Couldn't create application window\n");
         return;
@@ -1779,9 +1776,9 @@ static void check_generated_effects_(int line, const D3DXMATERIAL *materials, DW
     }
 }
 
-static LPSTR strdupA(LPCSTR p)
+static char *strdupA(const char *p)
 {
-    LPSTR ret;
+    char *ret;
     if (!p) return NULL;
     ret = HeapAlloc(GetProcessHeap(), 0, strlen(p) + 1);
     if (ret) strcpy(ret, p);
@@ -1798,9 +1795,10 @@ static CALLBACK HRESULT ID3DXAllocateHierarchyImpl_DestroyFrame(ID3DXAllocateHie
     return D3D_OK;
 }
 
-static CALLBACK HRESULT ID3DXAllocateHierarchyImpl_CreateFrame(ID3DXAllocateHierarchy *iface, LPCSTR name, LPD3DXFRAME *new_frame)
+static CALLBACK HRESULT ID3DXAllocateHierarchyImpl_CreateFrame(ID3DXAllocateHierarchy *iface,
+        const char *name, D3DXFRAME **new_frame)
 {
-    LPD3DXFRAME frame;
+    D3DXFRAME *frame;
 
     TRACECALLBACK("ID3DXAllocateHierarchyImpl_CreateFrame(%p, '%s', %p)\n", iface, name, new_frame);
     frame = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*frame));
@@ -2247,8 +2245,7 @@ static void D3DXLoadMeshTest(void)
     D3DXFRAME *frame_hier = NULL;
     D3DXMATRIX transform;
 
-    wnd = CreateWindow("static", "d3dx9_test", WS_POPUP, 0, 0, 1000, 1000, NULL, NULL, NULL, NULL);
-    if (!wnd)
+    if (!(wnd = CreateWindowA("static", "d3dx9_test", WS_POPUP, 0, 0, 1000, 1000, NULL, NULL, NULL, NULL)))
     {
         skip("Couldn't create application window\n");
         return;
@@ -2418,7 +2415,7 @@ static void D3DXCreateBoxTest(void)
 {
     HRESULT hr;
     HWND wnd;
-    WNDCLASS wc={0};
+    WNDCLASSA wc = {0};
     IDirect3D9* d3d;
     IDirect3DDevice9* device;
     D3DPRESENT_PARAMETERS d3dpp;
@@ -2436,14 +2433,14 @@ static void D3DXCreateBoxTest(void)
 
     wc.lpfnWndProc = DefWindowProcA;
     wc.lpszClassName = "d3dx9_test_wc";
-    if (!RegisterClass(&wc))
+    if (!RegisterClassA(&wc))
     {
         skip("RegisterClass failed\n");
         return;
     }
 
-    wnd = CreateWindow("d3dx9_test_wc", "d3dx9_test",
-                        WS_SYSMENU | WS_POPUP , 0, 0, 640, 480, 0, 0, 0, 0);
+    wnd = CreateWindowA("d3dx9_test_wc", "d3dx9_test", WS_SYSMENU | WS_POPUP,
+            0, 0, 640, 480, 0, 0, 0, 0);
     ok(wnd != NULL, "Expected to have a window, received NULL\n");
     if (!wnd)
     {
@@ -2743,14 +2740,12 @@ static void D3DXCreateSphereTest(void)
     hr = D3DXCreateSphere(NULL, 0.0f, 0, 1, NULL, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n",hr,D3DERR_INVALIDCALL);
 
-    wnd = CreateWindow("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL);
-    d3d = Direct3DCreate9(D3D_SDK_VERSION);
-    if (!wnd)
+    if (!(wnd = CreateWindowA("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL)))
     {
         skip("Couldn't create application window\n");
         return;
     }
-    if (!d3d)
+    if (!(d3d = Direct3DCreate9(D3D_SDK_VERSION)))
     {
         skip("Couldn't create IDirect3D9 object\n");
         DestroyWindow(wnd);
@@ -2987,14 +2982,12 @@ static void D3DXCreateCylinderTest(void)
     hr = D3DXCreateCylinder(NULL, 1.0f, 1.0f, 1.0f, 2, 1, &cylinder, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n",hr,D3DERR_INVALIDCALL);
 
-    wnd = CreateWindow("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL);
-    d3d = Direct3DCreate9(D3D_SDK_VERSION);
-    if (!wnd)
+    if (!(wnd = CreateWindowA("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL)))
     {
         skip("Couldn't create application window\n");
         return;
     }
-    if (!d3d)
+    if (!(d3d = Direct3DCreate9(D3D_SDK_VERSION)))
     {
         skip("Couldn't create IDirect3D9 object\n");
         DestroyWindow(wnd);
@@ -3398,7 +3391,8 @@ static HRESULT create_outline(struct glyphinfo *glyph, void *raw_outline, int da
     return S_OK;
 }
 
-static BOOL compute_text_mesh(struct mesh *mesh, HDC hdc, LPCSTR text, FLOAT deviation, FLOAT extrusion, FLOAT otmEMSquare)
+static BOOL compute_text_mesh(struct mesh *mesh, HDC hdc, const char *text,
+        float deviation, float extrusion, float otmEMSquare)
 {
     HRESULT hr = E_FAIL;
     DWORD nb_vertices, nb_faces;
@@ -3431,7 +3425,7 @@ static BOOL compute_text_mesh(struct mesh *mesh, HDC hdc, LPCSTR text, FLOAT dev
 
         glyphs[i].offset_x = offset_x;
 
-        datasize = GetGlyphOutline(hdc, text[i], GGO_NATIVE, &gm, 0, NULL, &identity);
+        datasize = GetGlyphOutlineA(hdc, text[i], GGO_NATIVE, &gm, 0, NULL, &identity);
         if (datasize < 0) {
             hr = E_FAIL;
             goto error;
@@ -3442,7 +3436,7 @@ static BOOL compute_text_mesh(struct mesh *mesh, HDC hdc, LPCSTR text, FLOAT dev
             hr = E_OUTOFMEMORY;
             goto error;
         }
-        datasize = GetGlyphOutline(hdc, text[i], GGO_NATIVE, &gm, datasize, raw_outline, &identity);
+        datasize = GetGlyphOutlineA(hdc, text[i], GGO_NATIVE, &gm, datasize, raw_outline, &identity);
 
         create_outline(&glyphs[i], raw_outline, datasize, deviation, otmEMSquare);
 
@@ -3685,7 +3679,7 @@ static void compare_text_outline_mesh(const char *name, ID3DXMesh *d3dxmesh, str
 
     /* specify offset and size to avoid potential overruns */
     hr = IDirect3DVertexBuffer9_Lock(vertex_buffer, 0, number_of_vertices * sizeof(D3DXVECTOR3) * 2,
-                                     (LPVOID *)&vertices, D3DLOCK_DISCARD);
+            (void **)&vertices, D3DLOCK_DISCARD);
     ok(hr == D3D_OK, "Test %s, result %x, expected 0 (D3D_OK)\n", name, hr);
     if (hr != D3D_OK)
     {
@@ -3693,7 +3687,7 @@ static void compare_text_outline_mesh(const char *name, ID3DXMesh *d3dxmesh, str
         goto error;
     }
     hr = IDirect3DIndexBuffer9_Lock(index_buffer, 0, number_of_faces * sizeof(WORD) * 3,
-                                    (LPVOID *)&faces, D3DLOCK_DISCARD);
+            (void **)&faces, D3DLOCK_DISCARD);
     ok(hr == D3D_OK, "Test %s, result %x, expected 0 (D3D_OK)\n", name, hr);
     if (hr != D3D_OK)
     {
@@ -3901,22 +3895,22 @@ error:
     if (vertex_buffer) IDirect3DVertexBuffer9_Release(vertex_buffer);
 }
 
-static void test_createtext(IDirect3DDevice9 *device, HDC hdc, LPCSTR text, FLOAT deviation, FLOAT extrusion)
+static void test_createtext(IDirect3DDevice9 *device, HDC hdc, const char *text, float deviation, float extrusion)
 {
     HRESULT hr;
     ID3DXMesh *d3dxmesh;
     struct mesh mesh;
     char name[256];
-    OUTLINETEXTMETRIC otm;
+    OUTLINETEXTMETRICA otm;
     GLYPHMETRICS gm;
     GLYPHMETRICSFLOAT *glyphmetrics_float = HeapAlloc(GetProcessHeap(), 0, sizeof(GLYPHMETRICSFLOAT) * strlen(text));
     int i;
-    LOGFONT lf;
+    LOGFONTA lf;
     HFONT font = NULL, oldfont = NULL;
 
     sprintf(name, "text ('%s', %f, %f)", text, deviation, extrusion);
 
-    hr = D3DXCreateText(device, hdc, text, deviation, extrusion, &d3dxmesh, NULL, glyphmetrics_float);
+    hr = D3DXCreateTextA(device, hdc, text, deviation, extrusion, &d3dxmesh, NULL, glyphmetrics_float);
     ok(hr == D3D_OK, "Got result %x, expected 0 (D3D_OK)\n", hr);
     if (hr != D3D_OK)
     {
@@ -3926,8 +3920,8 @@ static void test_createtext(IDirect3DDevice9 *device, HDC hdc, LPCSTR text, FLOA
 
     /* must select a modified font having lfHeight = otm.otmEMSquare before
      * calling GetGlyphOutline to get the expected values */
-    if (!GetObject(GetCurrentObject(hdc, OBJ_FONT), sizeof(lf), &lf) ||
-        !GetOutlineTextMetrics(hdc, sizeof(otm), &otm))
+    if (!GetObjectA(GetCurrentObject(hdc, OBJ_FONT), sizeof(lf), &lf)
+            || !GetOutlineTextMetricsA(hdc, sizeof(otm), &otm))
     {
         d3dxmesh->lpVtbl->Release(d3dxmesh);
         skip("Couldn't get text outline\n");
@@ -3935,8 +3929,8 @@ static void test_createtext(IDirect3DDevice9 *device, HDC hdc, LPCSTR text, FLOA
     }
     lf.lfHeight = otm.otmEMSquare;
     lf.lfWidth = 0;
-    font = CreateFontIndirect(&lf);
-    if (!font) {
+    if (!(font = CreateFontIndirectA(&lf)))
+    {
         d3dxmesh->lpVtbl->Release(d3dxmesh);
         skip("Couldn't create the modified font\n");
         return;
@@ -3983,18 +3977,16 @@ static void D3DXCreateTextTest(void)
     D3DPRESENT_PARAMETERS d3dpp;
     ID3DXMesh* d3dxmesh = NULL;
     HFONT hFont;
-    OUTLINETEXTMETRIC otm;
+    OUTLINETEXTMETRICA otm;
     int number_of_vertices;
     int number_of_faces;
 
-    wnd = CreateWindow("static", "d3dx9_test", WS_POPUP, 0, 0, 1000, 1000, NULL, NULL, NULL, NULL);
-    d3d = Direct3DCreate9(D3D_SDK_VERSION);
-    if (!wnd)
+    if (!(wnd = CreateWindowA("static", "d3dx9_test", WS_POPUP, 0, 0, 1000, 1000, NULL, NULL, NULL, NULL)))
     {
         skip("Couldn't create application window\n");
         return;
     }
-    if (!d3d)
+    if (!(d3d = Direct3DCreate9(D3D_SDK_VERSION)))
     {
         skip("Couldn't create IDirect3D9 object\n");
         DestroyWindow(wnd);
@@ -4015,13 +4007,12 @@ static void D3DXCreateTextTest(void)
 
     hdc = CreateCompatibleDC(NULL);
 
-    hFont = CreateFont(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-                       "Arial");
+    hFont = CreateFontA(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial");
     SelectObject(hdc, hFont);
-    GetOutlineTextMetrics(hdc, sizeof(otm), &otm);
+    GetOutlineTextMetricsA(hdc, sizeof(otm), &otm);
 
-    hr = D3DXCreateText(device, hdc, "wine", 0.001f, 0.4f, NULL, NULL, NULL);
+    hr = D3DXCreateTextA(device, hdc, "wine", 0.001f, 0.4f, NULL, NULL, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
     /* D3DXCreateTextA page faults from passing NULL text */
@@ -4029,32 +4020,32 @@ static void D3DXCreateTextTest(void)
     hr = D3DXCreateTextW(device, hdc, NULL, 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
-    hr = D3DXCreateText(device, hdc, "", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
+    hr = D3DXCreateTextA(device, hdc, "", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
-    hr = D3DXCreateText(device, hdc, " ", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
+    hr = D3DXCreateTextA(device, hdc, " ", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
-    hr = D3DXCreateText(NULL, hdc, "wine", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
+    hr = D3DXCreateTextA(NULL, hdc, "wine", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
-    hr = D3DXCreateText(device, NULL, "wine", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
+    hr = D3DXCreateTextA(device, NULL, "wine", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
-    hr = D3DXCreateText(device, hdc, "wine", -FLT_MIN, 0.4f, &d3dxmesh, NULL, NULL);
+    hr = D3DXCreateTextA(device, hdc, "wine", -FLT_MIN, 0.4f, &d3dxmesh, NULL, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
-    hr = D3DXCreateText(device, hdc, "wine", 0.001f, -FLT_MIN, &d3dxmesh, NULL, NULL);
+    hr = D3DXCreateTextA(device, hdc, "wine", 0.001f, -FLT_MIN, &d3dxmesh, NULL, NULL);
     ok(hr == D3DERR_INVALIDCALL, "Got result %x, expected %x (D3DERR_INVALIDCALL)\n", hr, D3DERR_INVALIDCALL);
 
     /* deviation = 0.0f treated as if deviation = 1.0f / otm.otmEMSquare */
-    hr = D3DXCreateText(device, hdc, "wine", 1.0f / otm.otmEMSquare, 0.4f, &d3dxmesh, NULL, NULL);
+    hr = D3DXCreateTextA(device, hdc, "wine", 1.0f / otm.otmEMSquare, 0.4f, &d3dxmesh, NULL, NULL);
     ok(hr == D3D_OK, "Got result %x, expected %x (D3D_OK)\n", hr, D3D_OK);
     number_of_vertices = d3dxmesh->lpVtbl->GetNumVertices(d3dxmesh);
     number_of_faces = d3dxmesh->lpVtbl->GetNumFaces(d3dxmesh);
     if (SUCCEEDED(hr) && d3dxmesh) d3dxmesh->lpVtbl->Release(d3dxmesh);
 
-    hr = D3DXCreateText(device, hdc, "wine", 0.0f, 0.4f, &d3dxmesh, NULL, NULL);
+    hr = D3DXCreateTextA(device, hdc, "wine", 0.0f, 0.4f, &d3dxmesh, NULL, NULL);
     ok(hr == D3D_OK, "Got result %x, expected %x (D3D_OK)\n", hr, D3D_OK);
     ok(number_of_vertices == d3dxmesh->lpVtbl->GetNumVertices(d3dxmesh),
        "Got %d vertices, expected %d\n",
@@ -4073,7 +4064,7 @@ static void D3DXCreateTextTest(void)
     trace("D3DXCreateText finish with deviation = FLT_MIN\n");
 #endif
 
-    hr = D3DXCreateText(device, hdc, "wine", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
+    hr = D3DXCreateTextA(device, hdc, "wine", 0.001f, 0.4f, &d3dxmesh, NULL, NULL);
     ok(hr == D3D_OK, "Got result %x, expected %x (D3D_OK)\n", hr, D3D_OK);
     if (SUCCEEDED(hr) && d3dxmesh) d3dxmesh->lpVtbl->Release(d3dxmesh);
 
@@ -4281,8 +4272,7 @@ static void D3DXGenerateAdjacencyTest(void)
         },
     };
 
-    wnd = CreateWindow("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL);
-    if (!wnd)
+    if (!(wnd = CreateWindowA("static", "d3dx9_test", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL)))
     {
         skip("Couldn't create application window\n");
         return;
@@ -4700,10 +4690,11 @@ static void test_create_skin_info(void)
 
     hr = D3DXCreateSkinInfoFVF(1, 0, 1, &skininfo);
     ok(hr == D3D_OK, "Expected D3D_OK, got %#x\n", hr);
-    if (skininfo) {
+    if (skininfo)
+    {
         DWORD dword_result;
-        FLOAT flt_result;
-        LPCSTR string_result;
+        float flt_result;
+        const char *string_result;
         D3DXMATRIX *transform;
         D3DXMATRIX identity_matrix;
 

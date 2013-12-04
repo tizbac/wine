@@ -303,8 +303,8 @@ static void test_setpixelformat(HDC winhdc)
         else ok(!res, "Unexpectedly set an alternate pixel format\n");
     }
 
-    hwnd = CreateWindow("static", "Title", WS_OVERLAPPEDWINDOW,
-                        10, 10, 200, 200, NULL, NULL, NULL, NULL);
+    hwnd = CreateWindowA("static", "Title", WS_OVERLAPPEDWINDOW, 10, 10, 200, 200, NULL, NULL,
+            NULL, NULL);
     ok(hwnd != NULL, "err: %d\n", GetLastError());
     if (hwnd)
     {
@@ -323,8 +323,8 @@ static void test_setpixelformat(HDC winhdc)
         DestroyWindow( hwnd );
     }
 
-    hwnd = CreateWindow("static", "Title", WS_OVERLAPPEDWINDOW,
-                        10, 10, 200, 200, NULL, NULL, NULL, NULL);
+    hwnd = CreateWindowA("static", "Title", WS_OVERLAPPEDWINDOW, 10, 10, 200, 200, NULL, NULL,
+            NULL, NULL);
     ok(hwnd != NULL, "err: %d\n", GetLastError());
     if (hwnd)
     {
@@ -343,7 +343,7 @@ static void test_setpixelformat(HDC winhdc)
 static void test_sharelists(HDC winhdc)
 {
     HGLRC hglrc1, hglrc2, hglrc3;
-    int res;
+    BOOL res;
 
     hglrc1 = wglCreateContext(winhdc);
     res = wglShareLists(0, 0);
@@ -451,7 +451,7 @@ static void test_colorbits(HDC hdc)
     int iAttribRet[sizeof(iAttribList)/sizeof(iAttribList[0])];
     const int iAttribs[] = { WGL_ALPHA_BITS_ARB, 1, 0 };
     unsigned int nFormats;
-    int res;
+    BOOL res;
     int iPixelFormat = 0;
 
     if (!pwglChoosePixelFormatARB)
@@ -486,7 +486,7 @@ static void test_gdi_dbuf(HDC hdc)
     int iAttribRet[sizeof(iAttribList)/sizeof(iAttribList[0])];
     unsigned int nFormats;
     int iPixelFormat;
-    int res;
+    BOOL res;
 
     if (!pwglGetPixelFormatAttribivARB)
     {
@@ -730,7 +730,8 @@ static void test_deletecontext(HWND hwnd, HDC hdc)
     struct wgl_thread_param thread_params;
     HGLRC hglrc = wglCreateContext(hdc);
     HANDLE thread_handle;
-    DWORD res, tid;
+    BOOL res;
+    DWORD tid;
 
     SetLastError(0xdeadbeef);
     res = wglDeleteContext(NULL);
@@ -755,7 +756,7 @@ static void test_deletecontext(HWND hwnd, HDC hdc)
      */
     thread_params.hglrc = hglrc;
     thread_params.hwnd  = hwnd;
-    thread_params.test_finished = CreateEvent(NULL, FALSE, FALSE, NULL);
+    thread_params.test_finished = CreateEventW(NULL, FALSE, FALSE, NULL);
     thread_handle = CreateThread(NULL, 0, wgl_thread, &thread_params, 0, &tid);
     ok(!!thread_handle, "Failed to create thread, last error %#x.\n", GetLastError());
     if(thread_handle)
@@ -1620,8 +1621,8 @@ START_TEST(opengl)
         0, 0, 0                /* layer masks */
     };
 
-    hwnd = CreateWindow("static", "Title", WS_OVERLAPPEDWINDOW,
-                        10, 10, 200, 200, NULL, NULL, NULL, NULL);
+    hwnd = CreateWindowA("static", "Title", WS_OVERLAPPEDWINDOW, 10, 10, 200, 200, NULL, NULL,
+            NULL, NULL);
     ok(hwnd != NULL, "err: %d\n", GetLastError());
     if (hwnd)
     {

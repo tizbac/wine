@@ -61,6 +61,7 @@ typedef enum {
     STYLEID_BORDER_TOP_WIDTH,
     STYLEID_BORDER_WIDTH,
     STYLEID_BOTTOM,
+    STYLEID_BOX_SIZING,
     STYLEID_CLEAR,
     STYLEID_CLIP,
     STYLEID_COLOR,
@@ -83,6 +84,7 @@ typedef enum {
     STYLEID_MARGIN_RIGHT,
     STYLEID_MARGIN_TOP,
     STYLEID_MIN_HEIGHT,
+    STYLEID_OUTLINE,
     STYLEID_OVERFLOW,
     STYLEID_OVERFLOW_X,
     STYLEID_OVERFLOW_Y,
@@ -101,6 +103,7 @@ typedef enum {
     STYLEID_TOP,
     STYLEID_VERTICAL_ALIGN,
     STYLEID_VISIBILITY,
+    STYLEID_WHITE_SPACE,
     STYLEID_WIDTH,
     STYLEID_WORD_SPACING,
     STYLEID_WORD_WRAP,
@@ -117,8 +120,12 @@ HRESULT set_nsstyle_attr(nsIDOMCSSStyleDeclaration*,styleid_t,LPCWSTR,DWORD) DEC
 HRESULT set_nsstyle_attr_var(nsIDOMCSSStyleDeclaration *nsstyle, styleid_t sid, VARIANT *value, DWORD flags) DECLSPEC_HIDDEN;
 HRESULT get_nsstyle_attr_var(nsIDOMCSSStyleDeclaration *nsstyle, styleid_t sid, VARIANT *p, DWORD flags) DECLSPEC_HIDDEN;
 
+HRESULT get_elem_style(HTMLElement*,styleid_t,BSTR*) DECLSPEC_HIDDEN;
+HRESULT set_elem_style(HTMLElement*,styleid_t,const WCHAR*) DECLSPEC_HIDDEN;
+
 #define ATTR_FIX_PX         0x0001
 #define ATTR_FIX_URL        0x0002
 #define ATTR_STR_TO_INT     0x0004
 #define ATTR_HEX_INT        0x0008
 #define ATTR_REMOVE_COMMA   0x0010
+#define ATTR_NO_NULL        0x0020

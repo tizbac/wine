@@ -1027,8 +1027,8 @@ static INT_PTR CALLBACK BrsFolderDlgProc( HWND hWnd, UINT msg, WPARAM wParam,
         break;
 
     case BFFM_SETOKTEXT: /* unicode only */
-        TRACE("Set OK text %s\n", debugstr_w((LPWSTR)wParam));
-        SetWindowTextW(GetDlgItem(hWnd, 1), (LPWSTR)wParam);
+        TRACE("Set OK text %s\n", debugstr_w((LPWSTR)lParam));
+        SetWindowTextW(GetDlgItem(hWnd, 1), (LPWSTR)lParam);
         break;
 
     case BFFM_SETSELECTIONA:
@@ -1110,11 +1110,16 @@ LPITEMIDLIST WINAPI SHBrowseForFolderW (LPBROWSEINFOW lpbi)
     DWORD r;
     HRESULT hr;
     const WCHAR * templateName;
+    INITCOMMONCONTROLSEX icex;
 
     info.hWnd = 0;
     info.pidlRet = NULL;
     info.lpBrowseInfo = lpbi;
     info.hwndTreeView = NULL;
+
+    icex.dwSize = sizeof( icex );
+    icex.dwICC = ICC_TREEVIEW_CLASSES;
+    InitCommonControlsEx( &icex );
 
     hr = OleInitialize(NULL);
 

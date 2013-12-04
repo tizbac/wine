@@ -104,6 +104,7 @@ static void (*pglCopyColorTable)(GLenum target, GLenum internalformat, GLint x, 
 static void (*pglCopyPixels)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum type);
 static void (*pglFlush)(void);
 static void (*pglFlushRenderAPPLE)(void);
+static const GLubyte *(*pglGetString)(GLenum name);
 static void (*pglReadPixels)(GLint x, GLint y, GLsizei width, GLsizei height,
                              GLenum format, GLenum type, void *pixels);
 static void (*pglViewport)(GLint x, GLint y, GLsizei width, GLsizei height);
@@ -617,6 +618,11 @@ static void enum_renderer_pixel_formats(renderer_properties renderer, CFMutableA
     {
         attribs[n++] = kCGLPFAAccelerated;
         attribs[n++] = kCGLPFANoRecovery;
+    }
+    else if (!allow_software_rendering)
+    {
+        TRACE("ignoring software renderer because AllowSoftwareRendering is off\n");
+        return;
     }
 
     n_stack[++n_stack_idx] = n;
@@ -1186,6 +1192,9 @@ static const pixel_format *get_pixel_format(int format, BOOL allow_nondisplayabl
 
 static BOOL init_gl_info(void)
 {
+    static char legacy_extensions[] = " WGL_EXT_extensions_string";
+    static const char legacy_ext_swap_control[] = " WGL_EXT_swap_control";
+
     CGDirectDisplayID display = CGMainDisplayID();
     CGOpenGLDisplayMask displayMask = CGDisplayIDToOpenGLDisplayMask(display);
     CGLPixelFormatAttribute attribs[] = {
@@ -1198,6 +1207,7 @@ static BOOL init_gl_info(void)
     CGLContextObj context;
     CGLContextObj old_context = CGLGetCurrentContext();
     const char *str;
+    size_t length;
 
     err = CGLChoosePixelFormat(attribs, &pix, &virtualScreens);
     if (err != kCGLNoError || !pix)
@@ -1226,8 +1236,14 @@ static BOOL init_gl_info(void)
     gl_info.glVersion = HeapAlloc(GetProcessHeap(), 0, strlen(str) + 1);
     strcpy(gl_info.glVersion, str);
     str = (const char*)opengl_funcs.gl.p_glGetString(GL_EXTENSIONS);
-    gl_info.glExtensions = HeapAlloc(GetProcessHeap(), 0, strlen(str) + 1);
+    length = strlen(str) + sizeof(legacy_extensions);
+    if (allow_vsync)
+        length += strlen(legacy_ext_swap_control);
+    gl_info.glExtensions = HeapAlloc(GetProcessHeap(), 0, length);
     strcpy(gl_info.glExtensions, str);
+    strcat(gl_info.glExtensions, legacy_extensions);
+    if (allow_vsync)
+        strcat(gl_info.glExtensions, legacy_ext_swap_control);
 
     opengl_funcs.gl.p_glGetIntegerv(GL_MAX_VIEWPORT_DIMS, gl_info.max_viewport_dims);
 
@@ -1512,6 +1528,26 @@ static void macdrv_glFlush(void)
         pglFlush();
         context->last_flush_time = now;
     }
+}
+
+
+/**********************************************************************
+ *              macdrv_glGetString
+ *
+ * Hook into glGetString in order to return some legacy WGL extensions
+ * that couldn't be advertised via the standard
+ * WGL_ARB_extensions_string mechanism. Some programs, especially
+ * older ones, expect to find certain older extensions, such as
+ * WGL_EXT_extensions_string itself, in the standard GL extensions
+ * string, and won't query any other WGL extensions unless they find
+ * that particular extension there.
+ */
+static const GLubyte *macdrv_glGetString(GLenum name)
+{
+    if (name == GL_EXTENSIONS && gl_info.glExtensions)
+        return (const GLubyte *)gl_info.glExtensions;
+    else
+        return pglGetString(name);
 }
 
 
@@ -2115,12 +2151,12 @@ static BOOL macdrv_wglDestroyPbufferARB(struct wgl_pbuffer *pbuffer)
  *
  * WGL_ARB_extensions_string: wglGetExtensionsStringARB
  */
-static const GLubyte *macdrv_wglGetExtensionsStringARB(HDC hdc)
+static const char *macdrv_wglGetExtensionsStringARB(HDC hdc)
 {
     /* FIXME: Since we're given an HDC, this should be device-specific.  I.e.
               this can be specific to the CGL renderer like we're supposed to do. */
     TRACE("returning \"%s\"\n", gl_info.wglExtensions);
-    return (const GLubyte*)gl_info.wglExtensions;
+    return gl_info.wglExtensions;
 }
 
 
@@ -2129,10 +2165,10 @@ static const GLubyte *macdrv_wglGetExtensionsStringARB(HDC hdc)
  *
  * WGL_EXT_extensions_string: wglGetExtensionsStringEXT
  */
-static const GLubyte *macdrv_wglGetExtensionsStringEXT(void)
+static const char *macdrv_wglGetExtensionsStringEXT(void)
 {
     TRACE("returning \"%s\"\n", gl_info.wglExtensions);
-    return (const GLubyte*)gl_info.wglExtensions;
+    return gl_info.wglExtensions;
 }
 
 
@@ -3017,12 +3053,12 @@ static void load_extensions(void)
 
 static BOOL init_opengl(void)
 {
-    static int init_done;
+    static BOOL init_done = FALSE;
     unsigned int i;
     char buffer[200];
 
     if (init_done) return (opengl_handle != NULL);
-    init_done = 1;
+    init_done = TRUE;
 
     TRACE("()\n");
 
@@ -3054,6 +3090,7 @@ static BOOL init_opengl(void)
 #define REDIRECT(func) \
     do { p##func = opengl_funcs.gl.p_##func; opengl_funcs.gl.p_##func = macdrv_##func; } while(0)
     REDIRECT(glCopyPixels);
+    REDIRECT(glGetString);
     REDIRECT(glReadPixels);
     REDIRECT(glViewport);
     if (skip_single_buffer_flushes)
@@ -3275,16 +3312,16 @@ static BOOL create_context(struct wgl_context *context, CGLContextObj share)
  */
 int macdrv_wglDescribePixelFormat(HDC hdc, int fmt, UINT size, PIXELFORMATDESCRIPTOR *descr)
 {
-    int ret = nb_formats;
     const pixel_format *pf;
     const struct color_mode *mode;
 
     TRACE("hdc %p fmt %d size %u descr %p\n", hdc, fmt, size, descr);
 
-    if (fmt <= 0 || fmt > ret) return ret;
+    if (!descr) return nb_displayable_formats;
     if (size < sizeof(*descr)) return 0;
 
-    pf = &pixel_formats[fmt - 1];
+    if (!(pf = get_pixel_format(fmt, FALSE)))
+        return 0;
 
     memset(descr, 0, sizeof(*descr));
     descr->nSize            = sizeof(*descr);
@@ -3331,7 +3368,9 @@ int macdrv_wglDescribePixelFormat(HDC hdc, int fmt, UINT size, PIXELFORMATDESCRI
     descr->cStencilBits     = pf->stencil_bits;
     descr->cAuxBuffers      = pf->aux_buffers;
     descr->iLayerType       = PFD_MAIN_PLANE;
-    return ret;
+
+    TRACE("%s\n", debugstr_pf(pf));
+    return nb_displayable_formats;
 }
 
 /***********************************************************************

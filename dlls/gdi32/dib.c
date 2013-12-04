@@ -128,6 +128,11 @@ static BOOL is_valid_dib_format( const BITMAPINFOHEADER *info, BOOL allow_compre
 
     if (!info->biPlanes) return FALSE;
 
+    /* check for size overflow */
+    if (!info->biBitCount) return FALSE;
+    if (UINT_MAX / info->biBitCount < info->biWidth) return FALSE;
+    if (UINT_MAX / get_dib_stride( info->biWidth, info->biBitCount ) < abs( info->biHeight )) return FALSE;
+
     switch (info->biBitCount)
     {
     case 1:
@@ -901,7 +906,7 @@ INT WINAPI SetDIBitsToDevice(HDC hdc, INT xDest, INT yDest, DWORD cx,
 /***********************************************************************
  *           SetDIBColorTable    (GDI32.@)
  */
-UINT WINAPI SetDIBColorTable( HDC hdc, UINT startpos, UINT entries, CONST RGBQUAD *colors )
+UINT WINAPI SetDIBColorTable( HDC hdc, UINT startpos, UINT entries, const RGBQUAD *colors )
 {
     DC * dc;
     UINT result = 0;
@@ -1461,7 +1466,7 @@ HBITMAP WINAPI CreateDIBitmap( HDC hdc, const BITMAPINFOHEADER *header,
 /***********************************************************************
  *           CreateDIBSection    (GDI32.@)
  */
-HBITMAP WINAPI CreateDIBSection(HDC hdc, CONST BITMAPINFO *bmi, UINT usage,
+HBITMAP WINAPI CreateDIBSection(HDC hdc, const BITMAPINFO *bmi, UINT usage,
                                 VOID **bits, HANDLE section, DWORD offset)
 {
     char buffer[FIELD_OFFSET( BITMAPINFO, bmiColors[256] )];

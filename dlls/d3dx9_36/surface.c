@@ -231,7 +231,7 @@ static D3DFORMAT dds_luminance_to_d3dformat(const struct dds_pixel_format *pixel
             return D3DFMT_A8L8;
     }
 
-    WARN("Unknown luminance pixel format (bpp %#x, l %#x, a %#x)\n",
+    WARN("Unknown luminance pixel format (bpp %u, l %#x, a %#x)\n",
         pixel_format->bpp, pixel_format->rmask, pixel_format->amask);
     return D3DFMT_UNKNOWN;
 }
@@ -241,7 +241,7 @@ static D3DFORMAT dds_alpha_to_d3dformat(const struct dds_pixel_format *pixel_for
     if (pixel_format->bpp == 8 && pixel_format->amask == 0xff)
         return D3DFMT_A8;
 
-    WARN("Unknown Alpha pixel format (%#x, %#x)\n", pixel_format->bpp, pixel_format->rmask);
+    WARN("Unknown Alpha pixel format (%u, %#x)\n", pixel_format->bpp, pixel_format->rmask);
     return D3DFMT_UNKNOWN;
 }
 
@@ -252,7 +252,7 @@ static D3DFORMAT dds_bump_to_d3dformat(const struct dds_pixel_format *pixel_form
     if (pixel_format->bpp == 32 && pixel_format->rmask == 0x0000ffff && pixel_format->gmask == 0xffff0000)
         return D3DFMT_V16U16;
 
-    WARN("Unknown bump pixel format (%#x, %#x, %#x, %#x, %#x)\n", pixel_format->bpp,
+    WARN("Unknown bump pixel format (%u, %#x, %#x, %#x, %#x)\n", pixel_format->bpp,
         pixel_format->rmask, pixel_format->gmask, pixel_format->bmask, pixel_format->amask);
     return D3DFMT_UNKNOWN;
 }
@@ -270,7 +270,7 @@ static D3DFORMAT dds_pixel_format_to_d3dformat(const struct dds_pixel_format *pi
     if (pixel_format->flags & DDS_PF_BUMPDUDV)
         return dds_bump_to_d3dformat(pixel_format);
 
-    WARN("Unknown pixel format (flags %#x, fourcc %#x, bpp %#x, r %#x, g %#x, b %#x, a %#x)\n",
+    WARN("Unknown pixel format (flags %#x, fourcc %#x, bpp %u, r %#x, g %#x, b %#x, a %#x)\n",
         pixel_format->flags, pixel_format->fourcc, pixel_format->bpp,
         pixel_format->rmask, pixel_format->gmask, pixel_format->bmask, pixel_format->amask);
     return D3DFMT_UNKNOWN;
@@ -899,13 +899,13 @@ HRESULT WINAPI D3DXGetImageInfoFromFileInMemory(const void *data, UINT datasize,
  *            D3DERR_INVALIDCALL, if file is NULL
  *
  */
-HRESULT WINAPI D3DXGetImageInfoFromFileA(LPCSTR file, D3DXIMAGE_INFO *info)
+HRESULT WINAPI D3DXGetImageInfoFromFileA(const char *file, D3DXIMAGE_INFO *info)
 {
-    LPWSTR widename;
+    WCHAR *widename;
     HRESULT hr;
     int strlength;
 
-    TRACE("(%s, %p): relay\n", debugstr_a(file), info);
+    TRACE("file %s, info %p.\n", debugstr_a(file), info);
 
     if( !file ) return D3DERR_INVALIDCALL;
 
@@ -919,18 +919,19 @@ HRESULT WINAPI D3DXGetImageInfoFromFileA(LPCSTR file, D3DXIMAGE_INFO *info)
     return hr;
 }
 
-HRESULT WINAPI D3DXGetImageInfoFromFileW(LPCWSTR file, D3DXIMAGE_INFO *info)
+HRESULT WINAPI D3DXGetImageInfoFromFileW(const WCHAR *file, D3DXIMAGE_INFO *info)
 {
+    void *buffer;
     HRESULT hr;
     DWORD size;
-    LPVOID buffer;
 
-    TRACE("(%s, %p): relay\n", debugstr_w(file), info);
+    TRACE("file %s, info %p.\n", debugstr_w(file), info);
 
-    if( !file ) return D3DERR_INVALIDCALL;
+    if (!file)
+        return D3DERR_INVALIDCALL;
 
-    hr = map_view_of_file(file, &buffer, &size);
-    if(FAILED(hr)) return D3DXERR_INVALIDDATA;
+    if (FAILED(map_view_of_file(file, &buffer, &size)))
+        return D3DXERR_INVALIDDATA;
 
     hr = D3DXGetImageInfoFromFileInMemory(buffer, size, info);
     UnmapViewOfFile(buffer);
@@ -947,52 +948,42 @@ HRESULT WINAPI D3DXGetImageInfoFromFileW(LPCWSTR file, D3DXIMAGE_INFO *info)
  *                                 if we fail to load resource
  *
  */
-HRESULT WINAPI D3DXGetImageInfoFromResourceA(HMODULE module, LPCSTR resource, D3DXIMAGE_INFO *info)
+HRESULT WINAPI D3DXGetImageInfoFromResourceA(HMODULE module, const char *resource, D3DXIMAGE_INFO *info)
 {
     HRSRC resinfo;
+    void *buffer;
+    DWORD size;
 
-    TRACE("(%p, %s, %p)\n", module, debugstr_a(resource), info);
+    TRACE("module %p, resource %s, info %p.\n", module, debugstr_a(resource), info);
 
-    resinfo = FindResourceA(module, resource, (const char *)RT_RCDATA);
-    if (!resinfo) /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
-        resinfo = FindResourceA(module, resource, (const char *)RT_BITMAP);
+    if (!(resinfo = FindResourceA(module, resource, (const char *)RT_RCDATA))
+            /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
+            && !(resinfo = FindResourceA(module, resource, (const char *)RT_BITMAP)))
+        return D3DXERR_INVALIDDATA;
 
-    if (resinfo)
-    {
-        LPVOID buffer;
-        HRESULT hr;
-        DWORD size;
+    if (FAILED(load_resource_into_memory(module, resinfo, &buffer, &size)))
+        return D3DXERR_INVALIDDATA;
 
-        hr = load_resource_into_memory(module, resinfo, &buffer, &size);
-        if(FAILED(hr)) return D3DXERR_INVALIDDATA;
-        return D3DXGetImageInfoFromFileInMemory(buffer, size, info);
-    }
-
-    return D3DXERR_INVALIDDATA;
+    return D3DXGetImageInfoFromFileInMemory(buffer, size, info);
 }
 
-HRESULT WINAPI D3DXGetImageInfoFromResourceW(HMODULE module, LPCWSTR resource, D3DXIMAGE_INFO *info)
+HRESULT WINAPI D3DXGetImageInfoFromResourceW(HMODULE module, const WCHAR *resource, D3DXIMAGE_INFO *info)
 {
     HRSRC resinfo;
+    void *buffer;
+    DWORD size;
 
-    TRACE("(%p, %s, %p)\n", module, debugstr_w(resource), info);
+    TRACE("module %p, resource %s, info %p.\n", module, debugstr_w(resource), info);
 
-    resinfo = FindResourceW(module, resource, (const WCHAR *)RT_RCDATA);
-    if (!resinfo) /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
-        resinfo = FindResourceW(module, resource, (const WCHAR *)RT_BITMAP);
+    if (!(resinfo = FindResourceW(module, resource, (const WCHAR *)RT_RCDATA))
+            /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
+            && !(resinfo = FindResourceW(module, resource, (const WCHAR *)RT_BITMAP)))
+        return D3DXERR_INVALIDDATA;
 
-    if (resinfo)
-    {
-        LPVOID buffer;
-        HRESULT hr;
-        DWORD size;
+    if (FAILED(load_resource_into_memory(module, resinfo, &buffer, &size)))
+        return D3DXERR_INVALIDDATA;
 
-        hr = load_resource_into_memory(module, resinfo, &buffer, &size);
-        if(FAILED(hr)) return D3DXERR_INVALIDDATA;
-        return D3DXGetImageInfoFromFileInMemory(buffer, size, info);
-    }
-
-    return D3DXERR_INVALIDDATA;
+    return D3DXGetImageInfoFromFileInMemory(buffer, size, info);
 }
 
 /************************************************************
@@ -1197,7 +1188,7 @@ HRESULT WINAPI D3DXLoadSurfaceFromFileA(IDirect3DSurface9 *dst_surface,
         const PALETTEENTRY *dst_palette, const RECT *dst_rect, const char *src_file,
         const RECT *src_rect, DWORD filter, D3DCOLOR color_key, D3DXIMAGE_INFO *src_info)
 {
-    LPWSTR pWidename;
+    WCHAR *src_file_w;
     HRESULT hr;
     int strlength;
 
@@ -1210,12 +1201,12 @@ HRESULT WINAPI D3DXLoadSurfaceFromFileA(IDirect3DSurface9 *dst_surface,
         return D3DERR_INVALIDCALL;
 
     strlength = MultiByteToWideChar(CP_ACP, 0, src_file, -1, NULL, 0);
-    pWidename = HeapAlloc(GetProcessHeap(), 0, strlength * sizeof(*pWidename));
-    MultiByteToWideChar(CP_ACP, 0, src_file, -1, pWidename, strlength);
+    src_file_w = HeapAlloc(GetProcessHeap(), 0, strlength * sizeof(*src_file_w));
+    MultiByteToWideChar(CP_ACP, 0, src_file, -1, src_file_w, strlength);
 
     hr = D3DXLoadSurfaceFromFileW(dst_surface, dst_palette, dst_rect,
-            pWidename, src_rect, filter, color_key, src_info);
-    HeapFree(GetProcessHeap(), 0, pWidename);
+            src_file_w, src_rect, filter, color_key, src_info);
+    HeapFree(GetProcessHeap(), 0, src_file_w);
 
     return hr;
 }
@@ -1250,7 +1241,9 @@ HRESULT WINAPI D3DXLoadSurfaceFromResourceA(IDirect3DSurface9 *dst_surface,
         const PALETTEENTRY *dst_palette, const RECT *dst_rect, HMODULE src_module, const char *resource,
         const RECT *src_rect, DWORD filter, D3DCOLOR color_key, D3DXIMAGE_INFO *src_info)
 {
-    HRSRC hResInfo;
+    UINT data_size;
+    HRSRC resinfo;
+    void *data;
 
     TRACE("dst_surface %p, dst_palette %p, dst_rect %s, src_module %p, resource %s, "
             "src_rect %s, filter %#x, color_key 0x%08x, src_info %p.\n",
@@ -1260,30 +1253,25 @@ HRESULT WINAPI D3DXLoadSurfaceFromResourceA(IDirect3DSurface9 *dst_surface,
     if (!dst_surface)
         return D3DERR_INVALIDCALL;
 
-    hResInfo = FindResourceA(src_module, resource, (const char *)RT_RCDATA);
-    if (!hResInfo) /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
-        hResInfo = FindResourceA(src_module, resource, (const char *)RT_BITMAP);
+    if (!(resinfo = FindResourceA(src_module, resource, (const char *)RT_RCDATA))
+            /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
+            && !(resinfo = FindResourceA(src_module, resource, (const char *)RT_BITMAP)))
+        return D3DXERR_INVALIDDATA;
 
-    if (hResInfo)
-    {
-        UINT data_size;
-        void *data;
+    if (FAILED(load_resource_into_memory(src_module, resinfo, &data, &data_size)))
+        return D3DXERR_INVALIDDATA;
 
-        if (FAILED(load_resource_into_memory(src_module, hResInfo, &data, &data_size)))
-            return D3DXERR_INVALIDDATA;
-
-        return D3DXLoadSurfaceFromFileInMemory(dst_surface, dst_palette, dst_rect,
-                data, data_size, src_rect, filter, color_key, src_info);
-    }
-
-    return D3DXERR_INVALIDDATA;
+    return D3DXLoadSurfaceFromFileInMemory(dst_surface, dst_palette, dst_rect,
+            data, data_size, src_rect, filter, color_key, src_info);
 }
 
 HRESULT WINAPI D3DXLoadSurfaceFromResourceW(IDirect3DSurface9 *dst_surface,
         const PALETTEENTRY *dst_palette, const RECT *dst_rect, HMODULE src_module, const WCHAR *resource,
         const RECT *src_rect, DWORD filter, D3DCOLOR color_key, D3DXIMAGE_INFO *src_info)
 {
-    HRSRC hResInfo;
+    UINT data_size;
+    HRSRC resinfo;
+    void *data;
 
     TRACE("dst_surface %p, dst_palette %p, dst_rect %s, src_module %p, resource %s, "
             "src_rect %s, filter %#x, color_key 0x%08x, src_info %p.\n",
@@ -1293,23 +1281,16 @@ HRESULT WINAPI D3DXLoadSurfaceFromResourceW(IDirect3DSurface9 *dst_surface,
     if (!dst_surface)
         return D3DERR_INVALIDCALL;
 
-    hResInfo = FindResourceW(src_module, resource, (const WCHAR *)RT_RCDATA);
-    if (!hResInfo) /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
-        hResInfo = FindResourceW(src_module, resource, (const WCHAR *)RT_BITMAP);
+    if (!(resinfo = FindResourceW(src_module, resource, (const WCHAR *)RT_RCDATA))
+            /* Try loading the resource as bitmap data (which is in DIB format D3DXIFF_DIB) */
+            && !(resinfo = FindResourceW(src_module, resource, (const WCHAR *)RT_BITMAP)))
+        return D3DXERR_INVALIDDATA;
 
-    if (hResInfo)
-    {
-        UINT data_size;
-        void *data;
+    if (FAILED(load_resource_into_memory(src_module, resinfo, &data, &data_size)))
+        return D3DXERR_INVALIDDATA;
 
-        if (FAILED(load_resource_into_memory(src_module, hResInfo, &data, &data_size)))
-            return D3DXERR_INVALIDDATA;
-
-        return D3DXLoadSurfaceFromFileInMemory(dst_surface, dst_palette, dst_rect,
-                data, data_size, src_rect, filter, color_key, src_info);
-    }
-
-    return D3DXERR_INVALIDDATA;
+    return D3DXLoadSurfaceFromFileInMemory(dst_surface, dst_palette, dst_rect,
+            data, data_size, src_rect, filter, color_key, src_info);
 }
 
 
@@ -1353,7 +1334,7 @@ static void init_argb_conversion_info(const struct pixel_format_desc *srcformat,
     }
 }
 
-static DWORD dword_from_bytes(CONST BYTE *src, UINT bytes_per_pixel)
+static DWORD dword_from_bytes(const BYTE *src, UINT bytes_per_pixel)
 {
     DWORD ret = 0;
     static BOOL fixme_once;
@@ -1386,7 +1367,7 @@ static void dword_to_bytes(BYTE *dst, DWORD dword, UINT bytes_per_pixel)
  * Extracts the relevant components from the source color and
  * drops the less significant bits if they aren't used by the destination format.
  */
-static void get_relevant_argb_components(CONST struct argb_conversion_info *info, CONST DWORD col, DWORD *out)
+static void get_relevant_argb_components(const struct argb_conversion_info *info, DWORD col, DWORD *out)
 {
     UINT i = 0;
     for(;i < 4;i++)
@@ -1400,7 +1381,7 @@ static void get_relevant_argb_components(CONST struct argb_conversion_info *info
  * Recombines the output of get_relevant_argb_components and converts
  * it to the destination format.
  */
-static DWORD make_argb_color(CONST struct argb_conversion_info *info, CONST DWORD *in)
+static DWORD make_argb_color(const struct argb_conversion_info *info, const DWORD *in)
 {
     UINT i;
     DWORD val = 0;

@@ -58,7 +58,7 @@ BOOL HCR_MapTypeToValueW(LPCWSTR szExtension, LPWSTR szFileType, LONG len, BOOL 
 
         /* added because we do not want to have double dots */
         if (szExtension[0] == '.')
-          bPrependDot = 0;
+          bPrependDot = FALSE;
 
 	if (bPrependDot)
 	  szTemp[0] = '.';
@@ -92,7 +92,7 @@ BOOL HCR_MapTypeToValueA(LPCSTR szExtension, LPSTR szFileType, LONG len, BOOL bP
 
         /* added because we do not want to have double dots */
         if (szExtension[0] == '.')
-          bPrependDot = 0;
+          bPrependDot = FALSE;
 
 	if (bPrependDot)
 	  szTemp[0] = '.';
@@ -424,10 +424,10 @@ BOOL HCR_GetFolderAttributes(LPCITEMIDLIST pidlFolder, LPDWORD pdwAttributes)
     TRACE("(pidlFolder=%p, pdwAttributes=%p)\n", pidlFolder, pdwAttributes);
        
     if (!_ILIsPidlSimple(pidlFolder)) { 
-        static int firstHit = 1;
+        static BOOL firstHit = TRUE;
         if (firstHit) {
             ERR("should be called for simple PIDL's only!\n");
-            firstHit = 0;
+            firstHit = FALSE;
         }
         return FALSE;
     }

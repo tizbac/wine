@@ -54,7 +54,7 @@ static void test_signalandwait(void)
     DWORD r;
     HANDLE event[2], semaphore[2], file;
 
-    kernel32 = GetModuleHandle("kernel32");
+    kernel32 = GetModuleHandleA("kernel32.dll");
     pSignalObjectAndWait = (void*) GetProcAddress(kernel32, "SignalObjectAndWait");
 
     if (!pSignalObjectAndWait)
@@ -69,8 +69,8 @@ static void test_signalandwait(void)
     }
     ok( r == WAIT_FAILED, "should fail\n");
 
-    event[0] = CreateEvent(NULL, 0, 0, NULL);
-    event[1] = CreateEvent(NULL, 1, 1, NULL);
+    event[0] = CreateEventW(NULL, 0, 0, NULL);
+    event[1] = CreateEventW(NULL, 1, 1, NULL);
 
     ok( event[0] && event[1], "failed to create event flags\n");
 
@@ -105,8 +105,8 @@ static void test_signalandwait(void)
     CloseHandle(event[1]);
 
     /* semaphores */
-    semaphore[0] = CreateSemaphore( NULL, 0, 1, NULL );
-    semaphore[1] = CreateSemaphore( NULL, 1, 1, NULL );
+    semaphore[0] = CreateSemaphoreW( NULL, 0, 1, NULL );
+    semaphore[1] = CreateSemaphoreW( NULL, 1, 1, NULL );
     ok( semaphore[0] && semaphore[1], "failed to create semaphore\n");
 
     r = pSignalObjectAndWait(semaphore[0], semaphore[1], 0, FALSE);
@@ -125,7 +125,7 @@ static void test_signalandwait(void)
     CloseHandle(semaphore[1]);
 
     /* try a registry key */
-    file = CreateFile("x", GENERIC_READ|GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 
+    file = CreateFileA("x", GENERIC_READ|GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE, NULL);
     r = pSignalObjectAndWait(file, file, 0, FALSE);
     ok( r == WAIT_FAILED, "should fail\n");
@@ -143,23 +143,23 @@ static void test_mutex(void)
     DWORD failed = 0;
 
     SetLastError(0xdeadbeef);
-    hOpened = OpenMutex(0, FALSE, "WineTestMutex");
+    hOpened = OpenMutexA(0, FALSE, "WineTestMutex");
     ok(hOpened == NULL, "OpenMutex succeeded\n");
     ok(GetLastError() == ERROR_FILE_NOT_FOUND, "wrong error %u\n", GetLastError());
 
     SetLastError(0xdeadbeef);
-    hCreated = CreateMutex(NULL, FALSE, "WineTestMutex");
+    hCreated = CreateMutexA(NULL, FALSE, "WineTestMutex");
     ok(hCreated != NULL, "CreateMutex failed with error %d\n", GetLastError());
 
     SetLastError(0xdeadbeef);
-    hOpened = OpenMutex(0, FALSE, "WineTestMutex");
+    hOpened = OpenMutexA(0, FALSE, "WineTestMutex");
 todo_wine
     ok(hOpened == NULL, "OpenMutex succeeded\n");
 todo_wine
     ok(GetLastError() == ERROR_ACCESS_DENIED, "wrong error %u\n", GetLastError());
 
     SetLastError(0xdeadbeef);
-    hOpened = OpenMutex(GENERIC_EXECUTE, FALSE, "WineTestMutex");
+    hOpened = OpenMutexA(GENERIC_EXECUTE, FALSE, "WineTestMutex");
     ok(hOpened != NULL, "OpenMutex failed with error %d\n", GetLastError());
     wait_ret = WaitForSingleObject(hOpened, INFINITE);
     ok(wait_ret == WAIT_OBJECT_0, "WaitForSingleObject failed with error %d\n", GetLastError());
@@ -172,7 +172,7 @@ todo_wine
     }
 
     SetLastError(0xdeadbeef);
-    hOpened = OpenMutex(GENERIC_READ | GENERIC_WRITE, FALSE, "WineTestMutex");
+    hOpened = OpenMutexA(GENERIC_READ | GENERIC_WRITE, FALSE, "WineTestMutex");
     ok(hOpened != NULL, "OpenMutex failed with error %d\n", GetLastError());
     wait_ret = WaitForSingleObject(hOpened, INFINITE);
     ok(wait_ret == WAIT_FAILED, "WaitForSingleObject succeeded\n");
@@ -181,7 +181,7 @@ todo_wine
     for (i = 0; i < 32; i++)
     {
         SetLastError(0xdeadbeef);
-        hOpened = OpenMutex(0x1 << i, FALSE, "WineTestMutex");
+        hOpened = OpenMutexA(0x1 << i, FALSE, "WineTestMutex");
         if(hOpened != NULL)
         {
             SetLastError(0xdeadbeef);
@@ -211,23 +211,23 @@ todo_wine
     /* test case sensitivity */
 
     SetLastError(0xdeadbeef);
-    hOpened = OpenMutex(READ_CONTROL, FALSE, "WINETESTMUTEX");
+    hOpened = OpenMutexA(READ_CONTROL, FALSE, "WINETESTMUTEX");
     ok(!hOpened, "OpenMutex succeeded\n");
     ok(GetLastError() == ERROR_FILE_NOT_FOUND, "wrong error %u\n", GetLastError());
 
     SetLastError(0xdeadbeef);
-    hOpened = OpenMutex(READ_CONTROL, FALSE, "winetestmutex");
+    hOpened = OpenMutexA(READ_CONTROL, FALSE, "winetestmutex");
     ok(!hOpened, "OpenMutex succeeded\n");
     ok(GetLastError() == ERROR_FILE_NOT_FOUND, "wrong error %u\n", GetLastError());
 
     SetLastError(0xdeadbeef);
-    hOpened = CreateMutex(NULL, FALSE, "WineTestMutex");
+    hOpened = CreateMutexA(NULL, FALSE, "WineTestMutex");
     ok(hOpened != NULL, "CreateMutex failed with error %d\n", GetLastError());
     ok(GetLastError() == ERROR_ALREADY_EXISTS, "wrong error %u\n", GetLastError());
     CloseHandle(hOpened);
 
     SetLastError(0xdeadbeef);
-    hOpened = CreateMutex(NULL, FALSE, "WINETESTMUTEX");
+    hOpened = CreateMutexA(NULL, FALSE, "WINETESTMUTEX");
     ok(hOpened != NULL, "CreateMutex failed with error %d\n", GetLastError());
     ok(GetLastError() == 0, "wrong error %u\n", GetLastError());
     CloseHandle(hOpened);
@@ -244,8 +244,9 @@ static void test_slist(void)
     } item1, item2, item3, *pitem;
 
     SLIST_HEADER slist_header;
-    PSLIST_ENTRY entry;
+    PSLIST_ENTRY entry, next;
     USHORT size;
+    int i;
 
     VOID (WINAPI *pInitializeSListHead)(PSLIST_HEADER);
     USHORT (WINAPI *pQueryDepthSList)(PSLIST_HEADER);
@@ -254,7 +255,7 @@ static void test_slist(void)
     PSLIST_ENTRY (WINAPI *pInterlockedPushEntrySList)(PSLIST_HEADER,PSLIST_ENTRY);
     HMODULE kernel32;
 
-    kernel32 = GetModuleHandle("KERNEL32.DLL");
+    kernel32 = GetModuleHandleA("KERNEL32.DLL");
     pInitializeSListHead = (void*) GetProcAddress(kernel32, "InitializeSListHead");
     pQueryDepthSList = (void*) GetProcAddress(kernel32, "QueryDepthSList");
     pInterlockedFlushSList = (void*) GetProcAddress(kernel32, "InterlockedFlushSList");
@@ -323,6 +324,21 @@ static void test_slist(void)
     }
     ok(((struct item*)entry)->value == 2, "item 2 not in front of list\n");
     ok(((struct item*)entry->Next)->value == 1, "item 1 not at the back of list\n");
+
+    for (i = 0; i < 65536; i++)
+    {
+        entry = HeapAlloc(GetProcessHeap(), 0, sizeof(*entry));
+        pInterlockedPushEntrySList(&slist_header, entry);
+    }
+
+    entry = pInterlockedFlushSList(&slist_header);
+    ok(entry != NULL, "not flushed\n");
+    while (entry)
+    {
+        next = entry->Next;
+        HeapFree(GetProcessHeap(), 0, entry);
+        entry = next;
+    }
 }
 
 static void test_event(void)
@@ -536,7 +552,7 @@ static void test_iocp_callback(void)
         return;
     }
 
-    sem = CreateSemaphore(NULL, 0, 1, NULL);
+    sem = CreateSemaphoreW(NULL, 0, 1, NULL);
     ok(sem != INVALID_HANDLE_VALUE, "Creating a semaphore failed\n");
 
     ret = GetTempPathA(MAX_PATH, temp_path);
@@ -813,9 +829,9 @@ static void test_timer_queue(void)
     ok(n5 == 1, "Timer callback 5 expected 1 got %d\n", n5);
 
     /* Test synchronous deletion of the timer/queue with event trigger. */
-    e = CreateEvent(NULL, TRUE, FALSE, NULL);
-    et1 = CreateEvent(NULL, TRUE, FALSE, NULL);
-    et2 = CreateEvent(NULL, TRUE, FALSE, NULL);
+    e = CreateEventW(NULL, TRUE, FALSE, NULL);
+    et1 = CreateEventW(NULL, TRUE, FALSE, NULL);
+    et2 = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!e || !et1 || !et2)
     {
         skip("Failed to create timer queue descruction event\n");
@@ -1123,7 +1139,7 @@ static void test_WaitForMultipleObjects(void)
      * we can wait on that many */
     for (i=0; i<MAXIMUM_WAIT_OBJECTS; i++)
     {
-        maxevents[i] = CreateEvent(NULL, i==0, TRUE, NULL);
+        maxevents[i] = CreateEventW(NULL, i==0, TRUE, NULL);
         ok( maxevents[i] != 0, "should create enough events\n");
     }
 
@@ -1164,7 +1180,7 @@ static void test_initonce(void)
 
     if (!pInitOnceInitialize || !pInitOnceExecuteOnce)
     {
-        skip("one-time initialization API not supported\n");
+        win_skip("one-time initialization API not supported\n");
         return;
     }
 
@@ -1177,7 +1193,7 @@ static void test_initonce(void)
     g_initcallback_ret = TRUE;
     g_initctxt = NULL;
     ret = pInitOnceExecuteOnce(&initonce, initonce_callback, (void*)0xdeadbeef, &g_initctxt);
-    ok(ret, "got wrong ret value %d\n", ret);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
     ok(initonce.Ptr == (void*)0x2, "got %p\n", initonce.Ptr);
     ok(g_initctxt == NULL, "got %p\n", g_initctxt);
     ok(g_initcallback_called, "got %d\n", g_initcallback_called);
@@ -1186,7 +1202,7 @@ static void test_initonce(void)
     g_initctxt = NULL;
     g_initcallback_called = FALSE;
     ret = pInitOnceExecuteOnce(&initonce, initonce_callback, (void*)0xdeadbeef, &g_initctxt);
-    ok(ret, "got wrong ret value %d\n", ret);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
     ok(initonce.Ptr == (void*)0x2, "got %p\n", initonce.Ptr);
     ok(g_initctxt == NULL, "got %p\n", g_initctxt);
     ok(!g_initcallback_called, "got %d\n", g_initcallback_called);
@@ -1196,7 +1212,7 @@ static void test_initonce(void)
     /* 2 lower order bits should never be used, you'll get a crash in result */
     g_initctxt = (void*)0xFFFFFFF0;
     ret = pInitOnceExecuteOnce(&initonce, initonce_callback, (void*)0xdeadbeef, &g_initctxt);
-    ok(ret, "got wrong ret value %d\n", ret);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
     ok(initonce.Ptr == (void*)0xFFFFFFF2, "got %p\n", initonce.Ptr);
     ok(g_initctxt == (void*)0xFFFFFFF0, "got %p\n", g_initctxt);
     ok(g_initcallback_called, "got %d\n", g_initcallback_called);
@@ -1206,18 +1222,19 @@ static void test_initonce(void)
     g_initcallback_called = FALSE;
     g_initctxt = NULL;
     pInitOnceInitialize(&initonce);
+    SetLastError( 0xdeadbeef );
     ret = pInitOnceExecuteOnce(&initonce, initonce_callback, (void*)0xdeadbeef, &g_initctxt);
-    ok(!ret, "got wrong ret value %d\n", ret);
+    ok(!ret && GetLastError() == 0xdeadbeef, "got wrong ret value %d err %u\n", ret, GetLastError());
     ok(initonce.Ptr == NULL, "got %p\n", initonce.Ptr);
     ok(g_initctxt == NULL, "got %p\n", g_initctxt);
     ok(g_initcallback_called, "got %d\n", g_initcallback_called);
 
-    /* blocking initialzation without a callback */
+    /* blocking initialization without a callback */
     pInitOnceInitialize(&initonce);
     g_initctxt = NULL;
     pending = FALSE;
     ret = pInitOnceBeginInitialize(&initonce, 0, &pending, &g_initctxt);
-    ok(ret, "got wrong ret value %d\n", ret);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
     ok(pending, "got %d\n", pending);
     ok(initonce.Ptr == (void*)1, "got %p\n", initonce.Ptr);
     ok(g_initctxt == NULL, "got %p\n", g_initctxt);
@@ -1225,22 +1242,166 @@ static void test_initonce(void)
 
     g_initctxt = NULL;
     pending = 0xf;
+    SetLastError( 0xdeadbeef );
     ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY, &pending, &g_initctxt);
-    ok(!ret, "got wrong ret value %d\n", ret);
+    ok(!ret && GetLastError() == ERROR_GEN_FAILURE, "wrong ret %d err %u\n", ret, GetLastError());
     ok(pending == 0xf, "got %d\n", pending);
     ok(initonce.Ptr == (void*)1, "got %p\n", initonce.Ptr);
     ok(g_initctxt == NULL, "got %p\n", g_initctxt);
 
     g_initctxt = (void*)0xdeadbee0;
+    SetLastError( 0xdeadbeef );
     ret = pInitOnceComplete(&initonce, INIT_ONCE_INIT_FAILED, g_initctxt);
-    ok(!ret, "got wrong ret value %d\n", ret);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
     ok(initonce.Ptr == (void*)1, "got %p\n", initonce.Ptr);
 
     /* once failed already */
     g_initctxt = (void*)0xdeadbee0;
     ret = pInitOnceComplete(&initonce, 0, g_initctxt);
-    ok(ret, "got wrong ret value %d\n", ret);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
     ok(initonce.Ptr == (void*)0xdeadbee2, "got %p\n", initonce.Ptr);
+
+    pInitOnceInitialize(&initonce);
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_INIT_FAILED, NULL);
+    ok(!ret && GetLastError() == ERROR_GEN_FAILURE, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == NULL, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_INIT_FAILED | INIT_ONCE_ASYNC, NULL);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == NULL, "got %p\n", initonce.Ptr);
+
+    ret = pInitOnceBeginInitialize(&initonce, 0, &pending, &g_initctxt);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(pending, "got %d\n", pending);
+    ok(initonce.Ptr == (void*)1, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_ASYNC, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_INIT_FAILED | INIT_ONCE_ASYNC, NULL);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == (void*)1, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceComplete(&initonce, 0, (void *)0xdeadbeef);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == (void*)1, "got %p\n", initonce.Ptr);
+
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_INIT_FAILED, NULL);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == NULL, "got %p\n", initonce.Ptr);
+
+    pInitOnceInitialize(&initonce);
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_ASYNC, &pending, &g_initctxt);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(pending, "got %d\n", pending);
+    ok(initonce.Ptr == (void*)3, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, 0, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_ASYNC, &pending, &g_initctxt);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(pending, "got %d\n", pending);
+    ok(initonce.Ptr == (void*)3, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_INIT_FAILED, NULL);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == (void*)3, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_INIT_FAILED | INIT_ONCE_ASYNC, NULL);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == (void*)3, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_ASYNC, (void *)0xdeadbeef);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == (void*)3, "got %p\n", initonce.Ptr);
+
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_ASYNC, (void *)0xdeadbee0);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == (void*)0xdeadbee2, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_INIT_FAILED | INIT_ONCE_ASYNC, NULL);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == (void*)0xdeadbee2, "got %p\n", initonce.Ptr);
+
+    pInitOnceInitialize(&initonce);
+    ret = pInitOnceBeginInitialize(&initonce, 0, &pending, &g_initctxt);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(pending, "got %d\n", pending);
+    ok(initonce.Ptr == (void*)1, "got %p\n", initonce.Ptr);
+
+    /* test INIT_ONCE_CHECK_ONLY */
+
+    pInitOnceInitialize(&initonce);
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_GEN_FAILURE, "wrong ret %d err %u\n", ret, GetLastError());
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY|INIT_ONCE_ASYNC, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+
+    ret = pInitOnceBeginInitialize(&initonce, 0, &pending, &g_initctxt);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(pending, "got %d\n", pending);
+    ok(initonce.Ptr == (void*)1, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_GEN_FAILURE, "wrong ret %d err %u\n", ret, GetLastError());
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY|INIT_ONCE_ASYNC, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+
+    ret = pInitOnceComplete(&initonce, 0, (void *)0xdeadbee0);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == (void*)0xdeadbee2, "got %p\n", initonce.Ptr);
+
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY, &pending, &g_initctxt);
+    ok(ret, "got wrong ret value %d err %u\n", ret, GetLastError());
+    ok(!pending, "got %d\n", pending);
+    ok(initonce.Ptr == (void*)0xdeadbee2, "got %p\n", initonce.Ptr);
+    ok(g_initctxt == (void*)0xdeadbee0, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY|INIT_ONCE_ASYNC, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+
+    pInitOnceInitialize(&initonce);
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_ASYNC, &pending, &g_initctxt);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(pending, "got %d\n", pending);
+    ok(initonce.Ptr == (void*)3, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_GEN_FAILURE, "wrong ret %d err %u\n", ret, GetLastError());
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY|INIT_ONCE_ASYNC, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
+
+    ret = pInitOnceComplete(&initonce, INIT_ONCE_ASYNC, (void *)0xdeadbee0);
+    ok(ret, "wrong ret %d err %u\n", ret, GetLastError());
+    ok(initonce.Ptr == (void*)0xdeadbee2, "got %p\n", initonce.Ptr);
+
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY, &pending, &g_initctxt);
+    ok(ret, "got wrong ret value %d err %u\n", ret, GetLastError());
+    ok(!pending, "got %d\n", pending);
+    ok(initonce.Ptr == (void*)0xdeadbee2, "got %p\n", initonce.Ptr);
+    ok(g_initctxt == (void*)0xdeadbee0, "got %p\n", initonce.Ptr);
+
+    SetLastError( 0xdeadbeef );
+    ret = pInitOnceBeginInitialize(&initonce, INIT_ONCE_CHECK_ONLY|INIT_ONCE_ASYNC, &pending, &g_initctxt);
+    ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER, "wrong ret %d err %u\n", ret, GetLastError());
 }
 
 static CONDITION_VARIABLE buffernotempty = CONDITION_VARIABLE_INIT;
@@ -1508,7 +1669,7 @@ static void test_condvars_base(void) {
 
 START_TEST(sync)
 {
-    HMODULE hdll = GetModuleHandle("kernel32");
+    HMODULE hdll = GetModuleHandleA("kernel32.dll");
     pChangeTimerQueueTimer = (void*)GetProcAddress(hdll, "ChangeTimerQueueTimer");
     pCreateTimerQueue = (void*)GetProcAddress(hdll, "CreateTimerQueue");
     pCreateTimerQueueTimer = (void*)GetProcAddress(hdll, "CreateTimerQueueTimer");

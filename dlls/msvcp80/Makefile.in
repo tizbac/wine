@@ -2,8 +2,17 @@ MODULE    = msvcp80.dll
 IMPORTS   = msvcrt
 MODCFLAGS = @BUILTINFLAG@
 EXTRAINCL = -I$(top_srcdir)/include/msvcrt
+EXTRADEFS = -D_MSVCP_VER=80
+PARENTSRC = ../msvcp90
 
 C_SRCS = \
-	msvcp80.c
+	exception.c \
+	ios.c \
+	locale.c \
+	math.c \
+	memory.c \
+	misc.c \
+	msvcp_main.c \
+	string.c
 
 @MAKE_DLL_RULES@

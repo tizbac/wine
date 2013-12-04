@@ -122,13 +122,9 @@ static BOOL UnlockRealIMC(HIMC hIMC)
         return FALSE;
 }
 
-static void IME_RegisterClasses(void)
+static BOOL WINAPI register_classes( INIT_ONCE *once, void *param, void **context )
 {
-    static int done;
     WNDCLASSW wndClass;
-
-    if (done) return;
-    done = 1;
 
     ZeroMemory(&wndClass, sizeof(WNDCLASSW));
     wndClass.style = CS_GLOBALCLASS | CS_IME | CS_HREDRAW | CS_VREDRAW;
@@ -151,6 +147,7 @@ static void IME_RegisterClasses(void)
     WM_MSIME_RECONVERT = RegisterWindowMessageA("MSIMEReconvert");
     WM_MSIME_QUERYPOSITION = RegisterWindowMessageA("MSIMEQueryPosition");
     WM_MSIME_DOCUMENTFEED = RegisterWindowMessageA("MSIMEDocumentFeed");
+    return TRUE;
 }
 
 static HIMCC ImeCreateBlankCompStr(void)
@@ -561,8 +558,10 @@ static void IME_AddToSelected(HIMC hIMC)
 BOOL WINAPI ImeInquire(LPIMEINFO lpIMEInfo, LPWSTR lpszUIClass,
                        LPCWSTR lpszOption)
 {
+    static INIT_ONCE init_once = INIT_ONCE_STATIC_INIT;
+
     TRACE("\n");
-    IME_RegisterClasses();
+    InitOnceExecuteOnce( &init_once, register_classes, NULL, NULL );
     lpIMEInfo->dwPrivateDataSize = sizeof (IMEPRIVATE);
     lpIMEInfo->fdwProperty = IME_PROP_UNICODE | IME_PROP_AT_CARET;
     lpIMEInfo->fdwConversionCaps = IME_CMODE_NATIVE;
@@ -610,8 +609,7 @@ LRESULT WINAPI ImeEscape(HIMC hIMC, UINT uSubFunc, LPVOID lpData)
     return 0;
 }
 
-BOOL WINAPI ImeProcessKey(HIMC hIMC, UINT vKey, LPARAM lKeyData,
-                             CONST LPBYTE lpbKeyState)
+BOOL WINAPI ImeProcessKey(HIMC hIMC, UINT vKey, LPARAM lKeyData, const LPBYTE lpbKeyState)
 {
     /* See the comment at the head of this file */
     TRACE("We do no processing via this route\n");
@@ -661,9 +659,8 @@ BOOL WINAPI ImeSetActiveContext(HIMC hIMC,BOOL fFlag)
     return TRUE;
 }
 
-UINT WINAPI ImeToAsciiEx (UINT uVKey, UINT uScanCode,
-                          CONST LPBYTE lpbKeyState, LPDWORD lpdwTransKey,
-                          UINT fuState, HIMC hIMC)
+UINT WINAPI ImeToAsciiEx (UINT uVKey, UINT uScanCode, const LPBYTE lpbKeyState,
+                          LPDWORD lpdwTransKey, UINT fuState, HIMC hIMC)
 {
     /* See the comment at the head of this file */
     TRACE("We do no processing via this route\n");

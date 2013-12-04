@@ -446,11 +446,11 @@ static void test_filemodeT(void)
     FILE* f;
     size_t bytesWritten;
     size_t bytesRead;
-    WIN32_FIND_DATA findData;
+    WIN32_FIND_DATAA findData;
     HANDLE h;
 
-    GetTempPath (MAX_PATH, temppath);
-    GetTempFileName (temppath, "", 0, tempfile);
+    GetTempPathA(MAX_PATH, temppath);
+    GetTempFileNameA(temppath, "", 0, tempfile);
 
     f = fopen(tempfile, "w+bDT");
     bytesWritten = fwrite(DATA, 1, sizeof(DATA), f);
@@ -461,7 +461,7 @@ static void test_filemodeT(void)
     ok (bytesRead == bytesWritten && bytesRead == sizeof(DATA),
         "fopen file mode 'T' wrongly interpreted as 't'\n" );
 
-    h = FindFirstFile(tempfile, &findData);
+    h = FindFirstFileA(tempfile, &findData);
 
     ok (h == INVALID_HANDLE_VALUE, "file wasn't deleted when closed.\n" );
 
@@ -711,7 +711,7 @@ static void test_fgetwc( void )
   ok(l==BUFSIZ-2, "ftell expected %d got %d\n", BUFSIZ-2, l);
   fgetws(wtextW,LLEN,tempfh);
   l=ftell(tempfh);
-  ok(l==BUFSIZ-2+strlen(mytext), "ftell expected %d got %d\n", BUFSIZ-2+lstrlen(mytext), l);
+  ok(l==BUFSIZ-2+strlen(mytext), "ftell expected %d got %d\n", BUFSIZ-2+lstrlenA(mytext), l);
   mytextW = AtoW (mytext);
   aptr = mytextW;
   wptr = wtextW;
@@ -810,8 +810,8 @@ static void test_fgetwc_locale(const char* text, const char* locale, int codepag
         return;
     }
 
-    GetTempPath(MAX_PATH, temppath);
-    GetTempFileName(temppath, "", 0, tempfile);
+    GetTempPathA(MAX_PATH, temppath);
+    GetTempFileNameA(temppath, "", 0, tempfile);
 
     tempfh = fopen(tempfile, "wb");
     ok(tempfh != NULL, "can't open tempfile\n");
@@ -874,8 +874,8 @@ static void test_fgetwc_unicode(void)
     int ret, i;
     wint_t ch;
 
-    GetTempPath(MAX_PATH, temppath);
-    GetTempFileName(temppath, "", 0, tempfile);
+    GetTempPathA(MAX_PATH, temppath);
+    GetTempFileNameA(temppath, "", 0, tempfile);
 
     if (!p_fopen_s)
     {
@@ -930,8 +930,8 @@ static void test_fputwc(void)
     char buf[1024];
     int ret;
 
-    GetTempPath (MAX_PATH, temppath);
-    GetTempFileName (temppath, "", 0, tempfile);
+    GetTempPathA(MAX_PATH, temppath);
+    GetTempFileNameA(temppath, "", 0, tempfile);
 
     f = fopen(tempfile, "w");
     ret = fputwc('a', f);
@@ -1323,7 +1323,7 @@ static void test_file_inherit_child_no(const char* fd_s)
        "Wrong write result in child process on %d (%s)\n", fd, strerror(errno));
 }
 
-static void create_io_inherit_block( STARTUPINFO *startup, unsigned int count, const HANDLE *handles )
+static void create_io_inherit_block( STARTUPINFOA *startup, unsigned int count, const HANDLE *handles )
 {
     static BYTE block[1024];
     BYTE *wxflag_ptr;
@@ -1353,7 +1353,7 @@ static const char *read_file( HANDLE file )
     return buffer;
 }
 
-static void test_stdout_handle( STARTUPINFO *startup, char *cmdline, HANDLE hstdout, BOOL expect_stdout,
+static void test_stdout_handle( STARTUPINFOA *startup, char *cmdline, HANDLE hstdout, BOOL expect_stdout,
                                 const char *descr )
 {
     const char *data;
@@ -1393,7 +1393,7 @@ static void test_stdout_handle( STARTUPINFO *startup, char *cmdline, HANDLE hstd
     }
 
     CloseHandle( hErrorFile );
-    DeleteFile( "fdopen.err" );
+    DeleteFileA( "fdopen.err" );
 }
 
 static void test_file_inherit( const char* selfname )
@@ -1402,7 +1402,7 @@ static void test_file_inherit( const char* selfname )
     const char*		arg_v[5];
     char 		buffer[16];
     char cmdline[MAX_PATH];
-    STARTUPINFO startup;
+    STARTUPINFOA startup;
     SECURITY_ATTRIBUTES sa;
     HANDLE handles[3];
 
@@ -1440,7 +1440,7 @@ static void test_file_inherit( const char* selfname )
     sprintf(cmdline, "%s file inherit 1", selfname);
 
     /* init an empty Reserved2, which should not be recognized as inherit-block */
-    ZeroMemory(&startup, sizeof(STARTUPINFO));
+    ZeroMemory(&startup, sizeof(startup));
     startup.cb = sizeof(startup);
     create_io_inherit_block( &startup, 0, NULL );
     test_stdout_handle( &startup, cmdline, 0, FALSE, "empty block" );
@@ -1453,7 +1453,7 @@ static void test_file_inherit( const char* selfname )
     create_io_inherit_block( &startup, 3, handles );
     test_stdout_handle( &startup, cmdline, handles[1], TRUE, "valid block" );
     CloseHandle( handles[1] );
-    DeleteFile("fdopen.tst");
+    DeleteFileA("fdopen.tst");
 
     /* test inherit block starting with unsigned zero */
     handles[1] = CreateFileA( "fdopen.tst", GENERIC_READ|GENERIC_WRITE,
@@ -1462,7 +1462,7 @@ static void test_file_inherit( const char* selfname )
     *(unsigned int *)startup.lpReserved2 = 0;
     test_stdout_handle( &startup, cmdline, handles[1], FALSE, "zero count block" );
     CloseHandle( handles[1] );
-    DeleteFile("fdopen.tst");
+    DeleteFileA("fdopen.tst");
 
     /* test inherit block with smaller size */
     handles[1] = CreateFileA( "fdopen.tst", GENERIC_READ|GENERIC_WRITE,
@@ -1471,7 +1471,7 @@ static void test_file_inherit( const char* selfname )
     startup.cbReserved2 -= 3;
     test_stdout_handle( &startup, cmdline, handles[1], TRUE, "small size block" );
     CloseHandle( handles[1] );
-    DeleteFile("fdopen.tst");
+    DeleteFileA("fdopen.tst");
 
     /* test inherit block with even smaller size */
     handles[1] = CreateFileA( "fdopen.tst", GENERIC_READ|GENERIC_WRITE,
@@ -1480,7 +1480,7 @@ static void test_file_inherit( const char* selfname )
     startup.cbReserved2 = sizeof(unsigned int) + sizeof(HANDLE) + sizeof(char);
     test_stdout_handle( &startup, cmdline, handles[1], FALSE, "smaller size block" );
     CloseHandle( handles[1] );
-    DeleteFile("fdopen.tst");
+    DeleteFileA("fdopen.tst");
 
     /* test inherit block with larger size */
     handles[1] = CreateFileA( "fdopen.tst", GENERIC_READ|GENERIC_WRITE,
@@ -1489,7 +1489,7 @@ static void test_file_inherit( const char* selfname )
     startup.cbReserved2 += 7;
     test_stdout_handle( &startup, cmdline, handles[1], TRUE, "large size block" );
     CloseHandle( handles[1] );
-    DeleteFile("fdopen.tst");
+    DeleteFileA("fdopen.tst");
 }
 
 static void test_tmpnam( void )
@@ -1907,6 +1907,16 @@ static void test_stat(void)
     }
     else
         skip("mkdir failed with errno %d\n", errno);
+
+    errno = 0xdeadbeef;
+    ret = stat("c:", &buf);
+    ok(ret == -1, "stat returned %d\n", ret);
+    ok(errno == ENOENT, "errno = %d\n", errno);
+
+    ret = stat("c:/", &buf);
+    ok(!ret, "stat returned %d\n", ret);
+    ok(buf.st_dev == 2, "st_dev = %d\n", buf.st_dev);
+    ok(buf.st_rdev == 2, "st_rdev = %d\n", buf.st_rdev);
 }
 
 static const char* pipe_string="Hello world";
@@ -2032,8 +2042,8 @@ static void test_pipes(const char* selfname)
         ok(0, "pipe failed with errno %d\n", errno);
         return;
     }
-    r = write(pipes[1], "\r\n\rab", 5);
-    ok(r == 5, "write returned %d, errno = %d\n", r, errno);
+    r = write(pipes[1], "\r\n\rab\r\n", 7);
+    ok(r == 7, "write returned %d, errno = %d\n", r, errno);
     setmode(pipes[0], O_TEXT);
     r = read(pipes[0], buf, 1);
     ok(r == 1, "read returned %d, expected 1\n", r);
@@ -2044,9 +2054,10 @@ static void test_pipes(const char* selfname)
     r = read(pipes[0], buf, 1);
     ok(r == 1, "read returned %d, expected 1\n", r);
     ok(buf[0] == 'a', "buf[0] = %x, expected 'a'\n", buf[0]);
-    r = read(pipes[0], buf, 1);
-    ok(r == 1, "read returned %d, expected 1\n", r);
+    r = read(pipes[0], buf, 2);
+    ok(r == 2, "read returned %d, expected 1\n", r);
     ok(buf[0] == 'b', "buf[0] = %x, expected 'b'\n", buf[0]);
+    ok(buf[1] == '\n', "buf[1] = %x, expected '\\n'\n", buf[1]);
 
     if (p_fopen_s)
     {
@@ -2130,6 +2141,26 @@ static void test_stdin(void)
     ok(h != NULL, "h == NULL\n");
 }
 
+static void test_mktemp(void)
+{
+    char buf[16];
+
+    strcpy(buf, "a");
+    ok(!_mktemp(buf), "_mktemp(\"a\") != NULL\n");
+
+    strcpy(buf, "testXXXXX");
+    ok(!_mktemp(buf), "_mktemp(\"testXXXXX\") != NULL\n");
+
+    strcpy(buf, "testXXXXXX");
+    ok(_mktemp(buf) != NULL, "_mktemp(\"testXXXXXX\") == NULL\n");
+
+    strcpy(buf, "testXXXXXXa");
+    ok(!_mktemp(buf), "_mktemp(\"testXXXXXXa\") != NULL\n");
+
+    strcpy(buf, "**XXXXXX");
+    ok(_mktemp(buf) != NULL, "_mktemp(\"**XXXXXX\") == NULL\n");
+}
+
 START_TEST(file)
 {
     int arg_c;
@@ -2193,6 +2224,7 @@ START_TEST(file)
     test_setmaxstdio();
     test_pipes(arg_v[0]);
     test_stdin();
+    test_mktemp();
 
     /* Wait for the (_P_NOWAIT) spawned processes to finish to make sure the report
      * file contains lines in the correct order

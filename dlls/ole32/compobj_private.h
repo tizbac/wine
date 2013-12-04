@@ -173,10 +173,9 @@ struct oletls
 
 
 /* Global Interface Table Functions */
-
-extern void* StdGlobalInterfaceTable_Construct(void) DECLSPEC_HIDDEN;
+extern IGlobalInterfaceTable *get_std_git(void) DECLSPEC_HIDDEN;
+extern void release_std_git(void) DECLSPEC_HIDDEN;
 extern HRESULT StdGlobalInterfaceTable_GetFactory(LPVOID *ppv) DECLSPEC_HIDDEN;
-extern void* StdGlobalInterfaceTableInstance DECLSPEC_HIDDEN;
 
 HRESULT COM_OpenKeyForCLSID(REFCLSID clsid, LPCWSTR keyname, REGSAM access, HKEY *key) DECLSPEC_HIDDEN;
 HRESULT COM_OpenKeyForAppIdFromCLSID(REFCLSID clsid, REGSAM access, HKEY *subkey) DECLSPEC_HIDDEN;
@@ -315,6 +314,8 @@ extern UINT ole_private_data_clipboard_format DECLSPEC_HIDDEN;
 
 extern LSTATUS create_classes_key(HKEY, const WCHAR *, REGSAM, HKEY *) DECLSPEC_HIDDEN;
 extern LSTATUS open_classes_key(HKEY, const WCHAR *, REGSAM, HKEY *) DECLSPEC_HIDDEN;
+
+extern BOOL actctx_get_miscstatus(const CLSID*, DWORD, DWORD*) DECLSPEC_HIDDEN;
 
 static inline void *heap_alloc(size_t len)
 {

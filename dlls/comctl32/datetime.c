@@ -72,7 +72,7 @@ typedef struct
     RECT checkbox;  /* checkbox allowing the control to be enabled/disabled */
     RECT calbutton; /* button that toggles the dropdown of the monthcal control */
     BOOL bCalDepressed; /* TRUE = cal button is depressed */
-    int  bDropdownEnabled;
+    BOOL bDropdownEnabled;
     int  select;
     WCHAR charsEntered[4];
     int nCharsEntered;
@@ -831,8 +831,8 @@ DATETIME_HitTest (const DATETIME_INFO *infoPtr, POINT pt)
     return DTHT_NONE;
 }
 
-/* Returns index of a closest date field from given counting to left
-   or -1 if there's no such fields at left */
+/* Returns index of the nearest preceding date field from given,
+   or -1 if none was found */
 static int DATETIME_GetPrevDateField(const DATETIME_INFO *infoPtr, int i)
 {
     for(--i; i >= 0; i--)

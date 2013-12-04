@@ -218,6 +218,8 @@ static struct object *create_file( struct fd *root, const char *nameptr, data_si
             owner = token_get_user( current->process->token );
         mode = sd_to_mode( sd, owner );
     }
+    else if (options & FILE_DIRECTORY_FILE)
+        mode = (attrs & FILE_ATTRIBUTE_READONLY) ? 0555 : 0777;
     else
         mode = (attrs & FILE_ATTRIBUTE_READONLY) ? 0444 : 0666;
 
@@ -459,7 +461,7 @@ static mode_t file_access_to_mode( unsigned int access )
 
     access = generic_file_map_access( access );
     if (access & FILE_READ_DATA)  mode |= 4;
-    if (access & FILE_WRITE_DATA) mode |= 2;
+    if (access & (FILE_WRITE_DATA|FILE_APPEND_DATA)) mode |= 2;
     if (access & FILE_EXECUTE)    mode |= 1;
     return mode;
 }

@@ -136,7 +136,7 @@ FileMonikerImpl_Release(IMoniker* iface)
 
     ref = InterlockedDecrement(&This->ref);
 
-    /* destroy the object if there's no more reference on it */
+    /* destroy the object if there are no more references to it */
     if (ref == 0) FileMonikerImpl_Destroy(This);
 
     return ref;
@@ -939,7 +939,7 @@ FileMonikerImpl_CommonPrefixWith(IMoniker* iface,IMoniker* pmkOther,IMoniker** p
     IBindCtx *pbind;
     DWORD mkSys;
     ULONG nb1,nb2,i,sameIdx;
-    BOOL machimeNameCase=FALSE;
+    BOOL machineNameCase = FALSE;
 
     if (ppmkPrefix==NULL)
         return E_POINTER;
@@ -997,20 +997,20 @@ FileMonikerImpl_CommonPrefixWith(IMoniker* iface,IMoniker* pmkOther,IMoniker** p
 
         if (sameIdx > 1 && *stringTable1[0]=='\\' && *stringTable2[1]=='\\'){
 
-            machimeNameCase=TRUE;
+            machineNameCase = TRUE;
 
             for(i=2;i<sameIdx;i++)
 
                 if( (*stringTable1[i]=='\\') && (i+1 < sameIdx) && (*stringTable1[i+1]=='\\') ){
-                    machimeNameCase=FALSE;
+                    machineNameCase = FALSE;
                     break;
             }
         }
 
-        if (machimeNameCase && *stringTable1[sameIdx-1]=='\\')
+        if (machineNameCase && *stringTable1[sameIdx-1]=='\\')
             sameIdx--;
 
-        if (machimeNameCase && (sameIdx<=3) && (nb1 > 3 || nb2 > 3) )
+        if (machineNameCase && (sameIdx<=3) && (nb1 > 3 || nb2 > 3) )
             ret = MK_E_NOPREFIX;
         else
         {
@@ -1360,7 +1360,7 @@ static HRESULT FileMonikerImpl_Construct(FileMonikerImpl* This, LPCOLESTR lpszPa
     LPOLESTR *tabStr=0;
     static const WCHAR twoPoint[]={'.','.',0};
     static const WCHAR bkSlash[]={'\\',0};
-    BYTE addBkSlash;
+    BOOL addBkSlash;
 
     TRACE("(%p,%s)\n",This,debugstr_w(lpszPathName));
 
@@ -1381,14 +1381,14 @@ static HRESULT FileMonikerImpl_Construct(FileMonikerImpl* This, LPCOLESTR lpszPa
 
     if (nb > 0 ){
 
-        addBkSlash=1;
+        addBkSlash = TRUE;
         if (lstrcmpW(tabStr[0],twoPoint)!=0)
-            addBkSlash=0;
+            addBkSlash = FALSE;
         else
             for(i=0;i<nb;i++){
 
                 if ( (lstrcmpW(tabStr[i],twoPoint)!=0) && (lstrcmpW(tabStr[i],bkSlash)!=0) ){
-                    addBkSlash=0;
+                    addBkSlash = FALSE;
                     break;
                 }
                 else
@@ -1396,13 +1396,13 @@ static HRESULT FileMonikerImpl_Construct(FileMonikerImpl* This, LPCOLESTR lpszPa
                     if (lstrcmpW(tabStr[i],bkSlash)==0 && i<nb-1 && lstrcmpW(tabStr[i+1],bkSlash)==0){
                         *tabStr[i]=0;
                         sizeStr--;
-                        addBkSlash=0;
+                        addBkSlash = FALSE;
                         break;
                     }
             }
 
         if (lstrcmpW(tabStr[nb-1],bkSlash)==0)
-            addBkSlash=0;
+            addBkSlash = FALSE;
 
         This->filePathName=HeapReAlloc(GetProcessHeap(),0,This->filePathName,(sizeStr+1)*sizeof(WCHAR));
 

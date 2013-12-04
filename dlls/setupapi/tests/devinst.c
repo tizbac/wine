@@ -52,8 +52,8 @@ static BOOL     (WINAPI *pSetupDiGetDeviceInstanceIdA)(HDEVINFO, PSP_DEVINFO_DAT
 static BOOL     (WINAPI *pSetupDiGetDeviceInterfaceDetailA)(HDEVINFO, PSP_DEVICE_INTERFACE_DATA, PSP_DEVICE_INTERFACE_DETAIL_DATA_A, DWORD, PDWORD, PSP_DEVINFO_DATA);
 static BOOL     (WINAPI *pSetupDiGetDeviceInterfaceDetailW)(HDEVINFO, PSP_DEVICE_INTERFACE_DATA, PSP_DEVICE_INTERFACE_DETAIL_DATA_W, DWORD, PDWORD, PSP_DEVINFO_DATA);
 static BOOL     (WINAPI *pSetupDiRegisterDeviceInfo)(HDEVINFO, PSP_DEVINFO_DATA, DWORD, PSP_DETSIG_CMPPROC, PVOID, PSP_DEVINFO_DATA);
-static HDEVINFO (WINAPI *pSetupDiGetClassDevsA)(CONST GUID *, LPCSTR, HWND, DWORD);
-static HDEVINFO (WINAPI *pSetupDiGetClassDevsW)(CONST GUID *, LPCWSTR, HWND, DWORD);
+static HDEVINFO (WINAPI *pSetupDiGetClassDevsA)(const GUID *, LPCSTR, HWND, DWORD);
+static HDEVINFO (WINAPI *pSetupDiGetClassDevsW)(const GUID *, LPCWSTR, HWND, DWORD);
 static BOOL     (WINAPI *pSetupDiSetDeviceRegistryPropertyA)(HDEVINFO, PSP_DEVINFO_DATA, DWORD, const BYTE *, DWORD);
 static BOOL     (WINAPI *pSetupDiSetDeviceRegistryPropertyW)(HDEVINFO, PSP_DEVINFO_DATA, DWORD, const BYTE *, DWORD);
 static BOOL     (WINAPI *pSetupDiGetDeviceRegistryPropertyA)(HDEVINFO, PSP_DEVINFO_DATA, DWORD, PDWORD, PBYTE, DWORD, PDWORD);
@@ -241,7 +241,7 @@ static void clean_devclass_key(void)
      * the keys under the DeviceClasses key after a SetupDiDestroyDeviceInfoList.
      */
     RegOpenKeyW(HKEY_LOCAL_MACHINE, devclass, &key);
-    RegQueryInfoKey(key, NULL, NULL, NULL, &subkeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    RegQueryInfoKeyW(key, NULL, NULL, NULL, &subkeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     if (subkeys > 0)
     {
         trace("We are most likely on Windows 2000\n");
@@ -342,8 +342,8 @@ static void test_SetupDiOpenClassRegKeyExA(void)
 static void create_inf_file(LPCSTR filename)
 {
     DWORD dwNumberOfBytesWritten;
-    HANDLE hf = CreateFile(filename, GENERIC_WRITE, 0, NULL,
-                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE hf = CreateFileA(filename, GENERIC_WRITE, 0, NULL,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
     static const char data[] =
         "[Version]\n"
@@ -410,7 +410,7 @@ static void testInstallClass(void)
     ok(!RegDeleteKeyW(HKEY_LOCAL_MACHINE, classKey),
      "Couldn't delete classkey\n");
 
-    DeleteFile(tmpfile);
+    DeleteFileA(tmpfile);
 }
 
 static void testCreateDeviceInfo(void)
@@ -533,7 +533,7 @@ static void testCreateDeviceInfo(void)
         DWORD subkeys;
 
         /* Check if we have subkeys */
-        RegQueryInfoKey(key, NULL, NULL, NULL, &subkeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+        RegQueryInfoKeyA(key, NULL, NULL, NULL, &subkeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
         if (subkeys > 0)
         {
             int i;

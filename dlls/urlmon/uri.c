@@ -1618,7 +1618,7 @@ static BOOL parse_ipv6address(const WCHAR **ptr, parse_data *data, DWORD flags) 
                 /* An IPv6 address can have no more than 8 h16 components. */
                 if(ip.h16_count >= 8) {
                     *ptr = start;
-                    TRACE("(%p %p %x): Not a IPv6 address, to many h16 components.\n",
+                    TRACE("(%p %p %x): Not a IPv6 address, too many h16 components.\n",
                         ptr, data, flags);
                     return FALSE;
                 }
@@ -1904,7 +1904,7 @@ static BOOL parse_path_hierarchical(const WCHAR **ptr, parse_data *data, DWORD f
     return TRUE;
 }
 
-/* Parses the path of an opaque URI (much less strict then the parser
+/* Parses the path of an opaque URI (much less strict than the parser
  * for a hierarchical URI).
  *
  * NOTE:
@@ -4279,16 +4279,16 @@ static HRESULT WINAPI Uri_GetPropertyBSTR(IUri *iface, Uri_PROPERTY uriProp, BST
         return E_POINTER;
 
     if(uriProp > Uri_PROPERTY_STRING_LAST) {
-        /* Windows allocates an empty BSTR for invalid Uri_PROPERTY's. */
-        *pbstrProperty = SysAllocStringLen(NULL, 0);
-        if(!(*pbstrProperty))
-            return E_OUTOFMEMORY;
-
         /* It only returns S_FALSE for the ZONE property... */
-        if(uriProp == Uri_PROPERTY_ZONE)
+        if(uriProp == Uri_PROPERTY_ZONE) {
+            *pbstrProperty = SysAllocStringLen(NULL, 0);
+            if(!(*pbstrProperty))
+                return E_OUTOFMEMORY;
             return S_FALSE;
-        else
-            return S_OK;
+        }
+
+        *pbstrProperty = NULL;
+        return E_INVALIDARG;
     }
 
     /* Don't have support for flags yet. */

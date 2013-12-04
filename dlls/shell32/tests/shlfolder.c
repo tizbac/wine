@@ -72,6 +72,8 @@ static HRESULT (WINAPI *pSHGetItemFromObject)(IUnknown*,REFIID,void**);
 static BOOL (WINAPI *pIsWow64Process)(HANDLE, PBOOL);
 static UINT (WINAPI *pGetSystemWow64DirectoryW)(LPWSTR, UINT);
 static HRESULT (WINAPI *pSHCreateDefaultContextMenu)(const DEFCONTEXTMENU*,REFIID,void**);
+static HRESULT (WINAPI *pSHCreateShellFolderView)(const SFV_CREATE *pcsfv, IShellView **ppsv);
+static HRESULT (WINAPI *pSHCreateShellFolderViewEx)(LPCSFV psvcbi, IShellView **ppv);
 
 static const char *debugstr_guid(REFIID riid)
 {
@@ -140,6 +142,8 @@ static void init_function_pointers(void)
     MAKEFUNC(SHGetIDListFromObject);
     MAKEFUNC(SHGetItemFromObject);
     MAKEFUNC(SHCreateDefaultContextMenu);
+    MAKEFUNC(SHCreateShellFolderView);
+    MAKEFUNC(SHCreateShellFolderViewEx);
 #undef MAKEFUNC
 
 #define MAKEFUNC_ORD(f, ord) (p##f = (void*)GetProcAddress(hmod, (LPSTR)(ord)))
@@ -228,10 +232,13 @@ static void test_ParseDisplayName(void)
     /* Tests crash on W2K and below (SHCreateShellItem available as of XP) */
     if (pSHCreateShellItem)
     {
-        /* null name and pidl */
-        hr = IShellFolder_ParseDisplayName(IDesktopFolder,
-            NULL, NULL, NULL, NULL, NULL, 0);
-        ok(hr == E_INVALIDARG, "returned %08x, expected E_INVALIDARG\n", hr);
+        if (0)
+        {
+            /* null name and pidl, also crashes on Windows 8 */
+            hr = IShellFolder_ParseDisplayName(IDesktopFolder, NULL, NULL,
+                                               NULL, NULL, NULL, 0);
+            ok(hr == E_INVALIDARG, "returned %08x, expected E_INVALIDARG\n", hr);
+        }
 
         /* null name */
         newPIDL = (ITEMIDLIST*)0xdeadbeef;
@@ -2059,7 +2066,7 @@ static void test_SHGetFolderPathAndSubDirA(void)
         "expected %s to start with %s\n", testpath, appdata);
     ok(!lstrcmpA(&testpath[1 + strlen(appdata)], winetemp),
         "expected %s to end with %s\n", testpath, winetemp);
-    dwret = GetFileAttributes(testpath);
+    dwret = GetFileAttributesA(testpath);
     ok(FILE_ATTRIBUTE_DIRECTORY | dwret, "expected %x to contain FILE_ATTRIBUTE_DIRECTORY\n", dwret);
 
     /* cleanup */
@@ -3001,13 +3008,14 @@ static inline IUnknownImpl *impl_from_IUnknown(IUnknown *iface)
 static HRESULT WINAPI unk_fnQueryInterface(IUnknown *iunk, REFIID riid, void** punk)
 {
     IUnknownImpl *This = impl_from_IUnknown(iunk);
-    UINT i, found;
-    for(i = found = 0; This->ifaces[i].id != NULL; i++)
+    UINT i;
+    BOOL found = FALSE;
+    for(i = 0; This->ifaces[i].id != NULL; i++)
     {
         if(IsEqualIID(This->ifaces[i].id, riid))
         {
             This->ifaces[i].count++;
-            found = 1;
+            found = TRUE;
             break;
         }
     }
@@ -3917,11 +3925,12 @@ static void test_GetUIObject(void)
             ok(hr == S_OK, "Got 0x%08x\n", hr);
             if(SUCCEEDED(hr))
             {
+                const int baseItem = 0x40;
                 HMENU hmenu = CreatePopupMenu();
                 INT max_id, max_id_check;
                 UINT count, i;
                 const int id_upper_limit = 32767;
-                hr = IContextMenu_QueryContextMenu(pcm, hmenu, 0, 0, id_upper_limit, CMF_NORMAL);
+                hr = IContextMenu_QueryContextMenu(pcm, hmenu, 0, baseItem, id_upper_limit, CMF_NORMAL);
                 ok(SUCCEEDED(hr), "Got 0x%08x\n", hr);
                 max_id = HRESULT_CODE(hr) - 1; /* returns max_id + 1 */
                 ok(max_id <= id_upper_limit, "Got %d\n", max_id);
@@ -3933,9 +3942,12 @@ static void test_GetUIObject(void)
                 {
                     MENUITEMINFOA mii;
                     INT res;
+                    char buf[255], buf2[255];
                     ZeroMemory(&mii, sizeof(MENUITEMINFOA));
                     mii.cbSize = sizeof(MENUITEMINFOA);
-                    mii.fMask = MIIM_ID | MIIM_FTYPE;
+                    mii.fMask = MIIM_ID | MIIM_FTYPE | MIIM_STRING;
+                    mii.dwTypeData = buf2;
+                    mii.cch = sizeof(buf2);
 
                     SetLastError(0);
                     res = GetMenuItemInfoA(hmenu, i, TRUE, &mii);
@@ -3944,8 +3956,17 @@ static void test_GetUIObject(void)
                     ok( (mii.wID <= id_upper_limit) || (mii.fType & MFT_SEPARATOR),
                         "Got non-separator ID out of range: %d (type: %x)\n", mii.wID, mii.fType);
                     if(!(mii.fType & MFT_SEPARATOR))
+                    {
                         max_id_check = (mii.wID>max_id_check)?mii.wID:max_id_check;
+                        hr = IContextMenu_GetCommandString(pcm, mii.wID - baseItem, GCS_VERBA, 0, buf, sizeof(buf));
+                        ok(SUCCEEDED(hr) || hr == E_NOTIMPL, "for id 0x%x got 0x%08x (menustr: %s)\n", mii.wID - baseItem, hr, mii.dwTypeData);
+                        if (SUCCEEDED(hr))
+                            trace("for id 0x%x got string %s (menu string: %s)\n", mii.wID - baseItem, buf, mii.dwTypeData);
+                        else if (hr == E_NOTIMPL)
+                            trace("for id 0x%x got E_NOTIMPL (menu string: %s)\n", mii.wID - baseItem, mii.dwTypeData);
+                    }
                 }
+                max_id_check -= baseItem;
                 ok((max_id_check == max_id) ||
                    (max_id_check == max_id-1 /* Win 7 */),
                    "Not equal (or near equal), got %d and %d\n", max_id_check, max_id);
@@ -4399,7 +4420,7 @@ static LRESULT CALLBACK testwindow_wndproc(HWND hwnd, UINT msg, WPARAM wparam, L
             ok(0, "Didn't expect a WM_USER_NOTIFY message (event: %x)\n", signal);
         return 0;
     }
-    return DefWindowProc(hwnd, msg, wparam, lparam);
+    return DefWindowProcA(hwnd, msg, wparam, lparam);
 }
 
 static void register_testwindow_class(void)
@@ -4596,6 +4617,123 @@ static void test_SHCreateDefaultContextMenu(void)
     Cleanup();
 }
 
+static void test_SHCreateShellFolderView(void)
+{
+    HRESULT hr;
+    IShellView *psv;
+    SFV_CREATE sfvc;
+    IShellFolder *desktop;
+    ULONG refCount;
+
+    if (!pSHCreateShellFolderView)
+    {
+        win_skip("SHCreateShellFolderView missing.\n");
+        return;
+    }
+
+    hr = SHGetDesktopFolder(&desktop);
+    ok(hr == S_OK, "got (0x%08x)\n", hr);
+
+    if (0)
+    {
+        /* crash on win7 */
+        pSHCreateShellFolderView(NULL, NULL);
+    }
+
+    psv = (void *)0xdeadbeef;
+    hr = pSHCreateShellFolderView(NULL, &psv);
+    ok(hr == E_INVALIDARG, "Got 0x%08x\n", hr);
+    ok(psv == NULL, "psv = %p\n", psv);
+
+    memset(&sfvc, 0, sizeof(sfvc));
+    psv = (void *)0xdeadbeef;
+    hr = pSHCreateShellFolderView(&sfvc, &psv);
+    ok(hr == E_INVALIDARG, "Got 0x%08x\n", hr);
+    ok(psv == NULL, "psv = %p\n", psv);
+
+    memset(&sfvc, 0, sizeof(sfvc));
+    sfvc.cbSize = sizeof(sfvc) - 1;
+    psv = (void *)0xdeadbeef;
+    hr = pSHCreateShellFolderView(&sfvc, &psv);
+    ok(hr == E_INVALIDARG, "Got 0x%08x\n", hr);
+    ok(psv == NULL, "psv = %p\n", psv);
+
+    memset(&sfvc, 0, sizeof(sfvc));
+    sfvc.cbSize = sizeof(sfvc) + 1;
+    psv = (void *)0xdeadbeef;
+    hr = pSHCreateShellFolderView(&sfvc, &psv);
+    ok(hr == E_INVALIDARG, "Got 0x%08x\n", hr);
+    ok(psv == NULL, "psv = %p\n", psv);
+
+    memset(&sfvc, 0, sizeof(sfvc));
+    sfvc.cbSize = sizeof(sfvc);
+    sfvc.pshf = desktop;
+    psv = NULL;
+    hr = pSHCreateShellFolderView(&sfvc, &psv);
+    ok(hr == S_OK, "Got 0x%08x\n", hr);
+    ok(psv != NULL, "psv = %p\n", psv);
+    if (psv)
+    {
+        refCount = IShellView_Release(psv);
+        ok(refCount == 0, "refCount = %u\n", refCount);
+    }
+
+    IShellFolder_Release(desktop);
+}
+
+static void test_SHCreateShellFolderViewEx(void)
+{
+    HRESULT hr;
+    IShellView *psv;
+    CSFV csfv;
+    IShellFolder *desktop;
+    ULONG refCount;
+
+    if (!pSHCreateShellFolderViewEx)
+    {
+        win_skip("SHCreateShellFolderViewEx missing.\n");
+        return;
+    }
+
+    hr = SHGetDesktopFolder(&desktop);
+    ok(hr == S_OK, "got (0x%08x)\n", hr);
+
+    if (0)
+    {
+        /* crash on win7 */
+        pSHCreateShellFolderViewEx(NULL, NULL);
+        pSHCreateShellFolderViewEx(NULL, &psv);
+        pSHCreateShellFolderViewEx(&csfv, NULL);
+    }
+
+    memset(&csfv, 0, sizeof(csfv));
+    csfv.pshf = desktop;
+    psv = NULL;
+    hr = pSHCreateShellFolderViewEx(&csfv, &psv);
+    ok(hr == S_OK, "Got 0x%08x\n", hr);
+    ok(psv != NULL, "psv = %p\n", psv);
+    if (psv)
+    {
+        refCount = IShellView_Release(psv);
+        ok(refCount == 0, "refCount = %u\n", refCount);
+    }
+
+    memset(&csfv, 0, sizeof(csfv));
+    csfv.cbSize = sizeof(csfv);
+    csfv.pshf = desktop;
+    psv = NULL;
+    hr = pSHCreateShellFolderViewEx(&csfv, &psv);
+    ok(hr == S_OK, "Got 0x%08x\n", hr);
+    ok(psv != NULL, "psv = %p\n", psv);
+    if (psv)
+    {
+        refCount = IShellView_Release(psv);
+        ok(refCount == 0, "refCount = %u\n", refCount);
+    }
+
+    IShellFolder_Release(desktop);
+}
+
 START_TEST(shlfolder)
 {
     init_function_pointers();
@@ -4632,6 +4770,8 @@ START_TEST(shlfolder)
     test_ShellItemBindToHandler();
     test_ShellItemGetAttributes();
     test_SHCreateDefaultContextMenu();
+    test_SHCreateShellFolderView();
+    test_SHCreateShellFolderViewEx();
 
     OleUninitialize();
 }

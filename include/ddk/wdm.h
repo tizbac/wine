@@ -267,6 +267,7 @@ typedef struct _WAIT_CONTEXT_BLOCK {
 #define IRP_MN_QUERY_BUS_INFORMATION        0x15
 #define IRP_MN_DEVICE_USAGE_NOTIFICATION    0x16
 #define IRP_MN_SURPRISE_REMOVAL             0x17
+#define IRP_MN_QUERY_LEGACY_BUS_INFORMATION 0x18
 
 #define IRP_QUOTA_CHARGED               0x01
 #define IRP_ALLOCATED_MUST_SUCCEED      0x02
@@ -318,6 +319,12 @@ typedef struct _DEVICE_OBJECT {
   PVOID  Reserved;
 } DEVICE_OBJECT;
 typedef struct _DEVICE_OBJECT *PDEVICE_OBJECT;
+
+typedef struct _DEVICE_RELATIONS {
+  ULONG Count;
+  PDEVICE_OBJECT Objects[1];
+} DEVICE_RELATIONS;
+typedef struct _DEVICE_RELATIONS *PDEVICE_RELATIONS;
 
 typedef struct _DRIVER_EXTENSION {
   struct _DRIVER_OBJECT  *DriverObject;
@@ -584,6 +591,14 @@ typedef struct _DEVICE_CAPABILITIES {
   ULONG  D2Latency;
   ULONG  D3Latency;
 } DEVICE_CAPABILITIES, *PDEVICE_CAPABILITIES;
+
+typedef struct _DEVICE_INTERFACE_CHANGE_NOTIFICATION {
+  USHORT Version;
+  USHORT Size;
+  GUID Event;
+  GUID InterfaceClassGuid;
+  PUNICODE_STRING SymbolicLinkName;
+} DEVICE_INTERFACE_CHANGE_NOTIFICATION, *PDEVICE_INTERFACE_CHANGE_NOTIFICATION;
 
 typedef enum _INTERFACE_TYPE {
   InterfaceTypeUndefined = -1,
@@ -884,7 +899,7 @@ typedef struct _IO_STACK_LOCATION {
       DEVICE_RELATION_TYPE  Type;
     } QueryDeviceRelations;
     struct {
-      CONST GUID  *InterfaceType;
+      const GUID  *InterfaceType;
       USHORT  Size;
       USHORT  Version;
       PINTERFACE  Interface;
@@ -1194,7 +1209,7 @@ void      WINAPI IoDeleteDriver(DRIVER_OBJECT*);
 NTSTATUS  WINAPI IoDeleteSymbolicLink(UNICODE_STRING*);
 void      WINAPI IoFreeIrp(IRP*);
 PEPROCESS WINAPI IoGetCurrentProcess(void);
-NTSTATUS  WINAPI IoGetDeviceInterfaces(CONST GUID*,PDEVICE_OBJECT,ULONG,PWSTR*);
+NTSTATUS  WINAPI IoGetDeviceInterfaces(const GUID*,PDEVICE_OBJECT,ULONG,PWSTR*);
 NTSTATUS  WINAPI IoGetDeviceObjectPointer(UNICODE_STRING*,ACCESS_MASK,PFILE_OBJECT*,PDEVICE_OBJECT*);
 NTSTATUS  WINAPI IoGetDeviceProperty(PDEVICE_OBJECT,DEVICE_REGISTRY_PROPERTY,ULONG,PVOID,PULONG);
 PVOID     WINAPI IoGetDriverObjectExtension(PDRIVER_OBJECT,PVOID);

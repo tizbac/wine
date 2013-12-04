@@ -106,6 +106,7 @@ typedef struct event_target_t event_target_t;
     XDIID(DispHTMLSelectElement) \
     XDIID(DispHTMLStyle) \
     XDIID(DispHTMLStyleElement) \
+    XDIID(DispHTMLStyleSheet) \
     XDIID(DispHTMLStyleSheetsCollection) \
     XDIID(DispHTMLTable) \
     XDIID(DispHTMLTableCell) \
@@ -178,6 +179,7 @@ typedef struct event_target_t event_target_t;
     XIID(IHTMLStyle5) \
     XIID(IHTMLStyle6) \
     XIID(IHTMLStyleElement) \
+    XIID(IHTMLStyleSheet) \
     XIID(IHTMLStyleSheetsCollection) \
     XIID(IHTMLTable) \
     XIID(IHTMLTable2) \
@@ -383,7 +385,10 @@ struct HTMLOuterWindow {
     nsIDOMWindow *nswindow;
     HTMLOuterWindow *parent;
     HTMLFrameBase *frame_element;
+
     READYSTATE readystate;
+    BOOL readystate_locked;
+    unsigned readystate_pending;
 
     HTMLInnerWindow *pending_window;
     IMoniker *mon;
@@ -830,6 +835,7 @@ void get_editor_controller(NSContainer*) DECLSPEC_HIDDEN;
 nsresult get_nsinterface(nsISupports*,REFIID,void**) DECLSPEC_HIDDEN;
 nsIWritableVariant *create_nsvariant(void) DECLSPEC_HIDDEN;
 nsresult create_nsfile(const PRUnichar*,nsIFile**) DECLSPEC_HIDDEN;
+char *get_nscategory_entry(const char*,const char*) DECLSPEC_HIDDEN;
 
 HRESULT create_pending_window(HTMLOuterWindow*,nsChannelBSC*) DECLSPEC_HIDDEN;
 HRESULT start_binding(HTMLInnerWindow*,BSCallback*,IBindCtx*) DECLSPEC_HIDDEN;
@@ -962,6 +968,7 @@ void do_ns_command(HTMLDocument*,const char*,nsICommandParams*) DECLSPEC_HIDDEN;
 
 void update_doc(HTMLDocument*,DWORD) DECLSPEC_HIDDEN;
 void update_title(HTMLDocumentObj*) DECLSPEC_HIDDEN;
+void set_document_navigation(HTMLDocumentObj*,BOOL) DECLSPEC_HIDDEN;
 
 HRESULT do_query_service(IUnknown*,REFGUID,REFIID,void**) DECLSPEC_HIDDEN;
 

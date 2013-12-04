@@ -135,7 +135,7 @@ static void *user_space_limit;
 static void *working_set_limit;
 static void *address_space_start = (void *)0x10000;
 #endif  /* __i386__ */
-static const int is_win64 = (sizeof(void *) > sizeof(int));
+static const BOOL is_win64 = (sizeof(void *) > sizeof(int));
 
 #define ROUND_ADDR(addr,mask) \
    ((void *)((UINT_PTR)(addr) & ~(UINT_PTR)(mask)))
@@ -151,8 +151,8 @@ static const int is_win64 = (sizeof(void *) > sizeof(int));
 static HANDLE virtual_heap;
 static void *preload_reserve_start;
 static void *preload_reserve_end;
-static int use_locks;
-static int force_exec_prot;  /* whether to force PROT_EXEC on all PROT_READ mmaps */
+static BOOL use_locks;
+static BOOL force_exec_prot;  /* whether to force PROT_EXEC on all PROT_READ mmaps */
 
 
 /***********************************************************************
@@ -410,7 +410,7 @@ static void remove_reserved_area( void *addr, size_t size )
  *
  * Check if an address range goes beyond a given limit.
  */
-static inline int is_beyond_limit( const void *addr, size_t size, const void *limit )
+static inline BOOL is_beyond_limit( const void *addr, size_t size, const void *limit )
 {
     return (addr >= limit || (const char *)addr + size > (const char *)limit);
 }
@@ -1032,67 +1032,6 @@ static NTSTATUS allocate_dos_memory( struct file_view **view, unsigned int vprot
 
 
 /***********************************************************************
- *           check_architecture
- *
- * Check the architecture of a PE binary.
- */
-static NTSTATUS check_architecture( const IMAGE_NT_HEADERS *nt )
-{
-    static const char *arch;
-
-#ifdef __i386__
-    if (nt->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) return STATUS_SUCCESS;
-    if (nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64)
-    {
-        if (nt->FileHeader.Characteristics & IMAGE_FILE_DLL)  /* don't warn for a 64-bit exe */
-            WARN( "loading amd64 dll in 32-bit mode will fail\n" );
-        return STATUS_INVALID_IMAGE_FORMAT;
-    }
-#elif defined(__x86_64__)
-    if (nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) return STATUS_SUCCESS;
-    if (nt->FileHeader.Machine == IMAGE_FILE_MACHINE_I386)
-    {
-        if (nt->FileHeader.Characteristics & IMAGE_FILE_DLL)  /* don't warn for a 32-bit exe */
-            WARN( "loading 32-bit dll in 64-bit mode will fail\n" );
-        return STATUS_INVALID_IMAGE_FORMAT;
-    }
-#elif defined(__arm__) && !defined(__ARMEB__)
-    if (nt->FileHeader.Machine == IMAGE_FILE_MACHINE_ARM ||
-        nt->FileHeader.Machine == IMAGE_FILE_MACHINE_THUMB)
-        return STATUS_SUCCESS;
-    if (nt->FileHeader.Machine == IMAGE_FILE_MACHINE_ARMNT)
-    {
-        SYSTEM_CPU_INFORMATION sci;
-        if (SUCCEEDED(NtQuerySystemInformation( SystemCpuInformation, &sci, sizeof(sci), NULL )) &&
-            sci.Architecture == PROCESSOR_ARCHITECTURE_ARM && sci.Level >= 7)
-            return STATUS_SUCCESS;
-    }
-#endif
-
-    switch (nt->FileHeader.Machine)
-    {
-        case IMAGE_FILE_MACHINE_UNKNOWN: arch = "Unknown"; break;
-        case IMAGE_FILE_MACHINE_I860:    arch = "I860"; break;
-        case IMAGE_FILE_MACHINE_I386:    arch = "I386"; break;
-        case IMAGE_FILE_MACHINE_R3000:   arch = "R3000"; break;
-        case IMAGE_FILE_MACHINE_R4000:   arch = "R4000"; break;
-        case IMAGE_FILE_MACHINE_R10000:  arch = "R10000"; break;
-        case IMAGE_FILE_MACHINE_ALPHA:   arch = "Alpha"; break;
-        case IMAGE_FILE_MACHINE_POWERPC: arch = "PowerPC"; break;
-        case IMAGE_FILE_MACHINE_IA64:    arch = "IA-64"; break;
-        case IMAGE_FILE_MACHINE_ALPHA64: arch = "Alpha-64"; break;
-        case IMAGE_FILE_MACHINE_AMD64:   arch = "AMD-64"; break;
-        case IMAGE_FILE_MACHINE_ARM:     arch = "ARM"; break;
-        case IMAGE_FILE_MACHINE_ARMNT:   arch = "ARMNT"; break;
-        case IMAGE_FILE_MACHINE_THUMB:   arch = "ARM Thumb"; break;
-        default: arch = wine_dbg_sprintf( "Unknown-%04x", nt->FileHeader.Machine ); break;
-    }
-    ERR( "Trying to load PE image for unsupported architecture %s\n", arch );
-    return STATUS_INVALID_IMAGE_FORMAT;
-}
-
-
-/***********************************************************************
  *           stat_mapping_file
  *
  * Stat the underlying file for a memory view.
@@ -1178,8 +1117,6 @@ static NTSTATUS map_image( HANDLE hmapping, int fd, char *base, SIZE_T total_siz
 
     imports = nt->OptionalHeader.DataDirectory + IMAGE_DIRECTORY_ENTRY_IMPORT;
     if (!imports->Size || !imports->VirtualAddress) imports = NULL;
-
-    if (check_architecture( nt )) goto error;
 
     /* check for non page-aligned binary */
 
@@ -1452,7 +1389,7 @@ void virtual_init(void)
  */
 void virtual_init_threading(void)
 {
-    use_locks = 1;
+    use_locks = TRUE;
 }
 
 
@@ -1893,7 +1830,7 @@ NTSTATUS WINAPI NtAllocateVirtualMemory( HANDLE process, PVOID *ret, ULONG zero_
         call.virtual_alloc.zero_bits = zero_bits;
         call.virtual_alloc.op_type   = type;
         call.virtual_alloc.prot      = protect;
-        status = NTDLL_queue_process_apc( process, &call, &result );
+        status = server_queue_process_apc( process, &call, &result );
         if (status != STATUS_SUCCESS) return status;
 
         if (result.virtual_alloc.status == STATUS_SUCCESS)
@@ -1974,6 +1911,7 @@ NTSTATUS WINAPI NtAllocateVirtualMemory( HANDLE process, PVOID *ret, ULONG zero_
     else  /* commit the pages */
     {
         if (!(view = VIRTUAL_FindView( base, size ))) status = STATUS_NOT_MAPPED_VIEW;
+        else if (view->mapping && (view->protect & VPROT_COMMITTED)) status = STATUS_ALREADY_COMMITTED;
         else if (!VIRTUAL_SetProt( view, base, size, vprot )) status = STATUS_ACCESS_DENIED;
         else if (view->mapping && !(view->protect & VPROT_COMMITTED))
         {
@@ -2025,7 +1963,7 @@ NTSTATUS WINAPI NtFreeVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_T *si
         call.virtual_free.addr      = wine_server_client_ptr( addr );
         call.virtual_free.size      = size;
         call.virtual_free.op_type   = type;
-        status = NTDLL_queue_process_apc( process, &call, &result );
+        status = server_queue_process_apc( process, &call, &result );
         if (status != STATUS_SUCCESS) return status;
 
         if (result.virtual_free.status == STATUS_SUCCESS)
@@ -2139,7 +2077,7 @@ NTSTATUS WINAPI NtProtectVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_T 
         call.virtual_protect.addr = wine_server_client_ptr( addr );
         call.virtual_protect.size = size;
         call.virtual_protect.prot = new_prot;
-        status = NTDLL_queue_process_apc( process, &call, &result );
+        status = server_queue_process_apc( process, &call, &result );
         if (status != STATUS_SUCCESS) return status;
 
         if (result.virtual_protect.status == STATUS_SUCCESS)
@@ -2275,7 +2213,7 @@ NTSTATUS WINAPI NtQueryVirtualMemory( HANDLE process, LPCVOID addr,
 
         call.virtual_query.type = APC_VIRTUAL_QUERY;
         call.virtual_query.addr = wine_server_client_ptr( addr );
-        status = NTDLL_queue_process_apc( process, &call, &result );
+        status = server_queue_process_apc( process, &call, &result );
         if (status != STATUS_SUCCESS) return status;
 
         if (result.virtual_query.status == STATUS_SUCCESS)
@@ -2398,7 +2336,7 @@ NTSTATUS WINAPI NtLockVirtualMemory( HANDLE process, PVOID *addr, SIZE_T *size, 
         call.virtual_lock.type = APC_VIRTUAL_LOCK;
         call.virtual_lock.addr = wine_server_client_ptr( *addr );
         call.virtual_lock.size = *size;
-        status = NTDLL_queue_process_apc( process, &call, &result );
+        status = server_queue_process_apc( process, &call, &result );
         if (status != STATUS_SUCCESS) return status;
 
         if (result.virtual_lock.status == STATUS_SUCCESS)
@@ -2435,7 +2373,7 @@ NTSTATUS WINAPI NtUnlockVirtualMemory( HANDLE process, PVOID *addr, SIZE_T *size
         call.virtual_unlock.type = APC_VIRTUAL_UNLOCK;
         call.virtual_unlock.addr = wine_server_client_ptr( *addr );
         call.virtual_unlock.size = *size;
-        status = NTDLL_queue_process_apc( process, &call, &result );
+        status = server_queue_process_apc( process, &call, &result );
         if (status != STATUS_SUCCESS) return status;
 
         if (result.virtual_unlock.status == STATUS_SUCCESS)
@@ -2600,7 +2538,7 @@ NTSTATUS WINAPI NtMapViewOfSection( HANDLE handle, HANDLE process, PVOID *addr_p
         call.map_view.zero_bits   = zero_bits;
         call.map_view.alloc_type  = alloc_type;
         call.map_view.prot        = protect;
-        res = NTDLL_queue_process_apc( process, &call, &result );
+        res = server_queue_process_apc( process, &call, &result );
         if (res != STATUS_SUCCESS) return res;
 
         if ((NTSTATUS)result.map_view.status >= 0)
@@ -2741,7 +2679,7 @@ NTSTATUS WINAPI NtUnmapViewOfSection( HANDLE process, PVOID addr )
 
         call.unmap_view.type = APC_UNMAP_VIEW;
         call.unmap_view.addr = wine_server_client_ptr( addr );
-        status = NTDLL_queue_process_apc( process, &call, &result );
+        status = server_queue_process_apc( process, &call, &result );
         if (status == STATUS_SUCCESS) status = result.unmap_view.status;
         return status;
     }
@@ -2779,7 +2717,7 @@ NTSTATUS WINAPI NtFlushVirtualMemory( HANDLE process, LPCVOID *addr_ptr,
         call.virtual_flush.type = APC_VIRTUAL_FLUSH;
         call.virtual_flush.addr = wine_server_client_ptr( addr );
         call.virtual_flush.size = *size_ptr;
-        status = NTDLL_queue_process_apc( process, &call, &result );
+        status = server_queue_process_apc( process, &call, &result );
         if (status != STATUS_SUCCESS) return status;
 
         if (result.virtual_flush.status == STATUS_SUCCESS)
@@ -2962,10 +2900,10 @@ NTSTATUS WINAPI NtAreMappedFilesTheSame(PVOID addr1, PVOID addr2)
         status = STATUS_INVALID_ADDRESS;
     else if ((view1->protect & VPROT_VALLOC) || (view2->protect & VPROT_VALLOC))
         status = STATUS_CONFLICTING_ADDRESSES;
-    else if (!(view1->protect & VPROT_IMAGE) || !(view2->protect & VPROT_IMAGE))
-        status = STATUS_NOT_SAME_DEVICE;
     else if (view1 == view2)
         status = STATUS_SUCCESS;
+    else if (!(view1->protect & VPROT_IMAGE) || !(view2->protect & VPROT_IMAGE))
+        status = STATUS_NOT_SAME_DEVICE;
     else if (!stat_mapping_file( view1, &st1 ) && !stat_mapping_file( view2, &st2 ) &&
              st1.st_dev == st2.st_dev && st1.st_ino == st2.st_ino)
         status = STATUS_SUCCESS;

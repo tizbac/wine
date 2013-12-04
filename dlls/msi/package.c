@@ -341,7 +341,7 @@ static void free_package_structures( MSIPACKAGE *package )
     remove_tracked_tempfiles(package);
 
     /* cleanup control event subscriptions */
-    ControlEvent_CleanupSubscriptions( package );
+    msi_event_cleanup_all_subscriptions( package );
 }
 
 static void MSI_FreePackage( MSIOBJECTHDR *arg)
@@ -1077,6 +1077,7 @@ static UINT msi_load_summary_properties( MSIPACKAGE *package )
     if (rc != ERROR_SUCCESS)
     {
         WARN("Unable to query rev number: %d\n", rc);
+        msi_free( package_code );
         goto done;
     }
 
@@ -1937,7 +1938,7 @@ INT MSI_ProcessMessage( MSIPACKAGE *package, INSTALLMESSAGE eMessageType, MSIREC
         MSI_RecordSetStringW(uirow, 1, deformated);
         msi_free(deformated);
 
-        ControlEvent_FireSubscribedEvent(package, szActionData, uirow);
+        msi_event_fire( package, szActionData, uirow );
         msiobj_release(&uirow->hdr);
 
         if (package->action_progress_increment)
@@ -1945,7 +1946,7 @@ INT MSI_ProcessMessage( MSIPACKAGE *package, INSTALLMESSAGE eMessageType, MSIREC
             uirow = MSI_CreateRecord(2);
             MSI_RecordSetInteger(uirow, 1, 2);
             MSI_RecordSetInteger(uirow, 2, package->action_progress_increment);
-            ControlEvent_FireSubscribedEvent(package, szSetProgress, uirow);
+            msi_event_fire( package, szSetProgress, uirow );
             msiobj_release(&uirow->hdr);
         }
         break;
@@ -1956,13 +1957,13 @@ INT MSI_ProcessMessage( MSIPACKAGE *package, INSTALLMESSAGE eMessageType, MSIREC
         MSI_RecordSetStringW(uirow, 1, deformated);
         msi_free(deformated);
 
-        ControlEvent_FireSubscribedEvent(package, szActionText, uirow);
+        msi_event_fire( package, szActionText, uirow );
 
         msiobj_release(&uirow->hdr);
         break;
 
     case INSTALLMESSAGE_PROGRESS:
-        ControlEvent_FireSubscribedEvent(package, szSetProgress, record);
+        msi_event_fire( package, szSetProgress, record );
         break;
     }
 

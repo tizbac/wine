@@ -17,6 +17,7 @@
  */
 
 #include <stdarg.h>
+#include <assert.h>
 
 #define COBJMACROS
 
@@ -621,20 +622,48 @@ static HRESULT WINAPI HTMLEventObj_get_reason(IHTMLEventObj *iface, LONG *p)
 static HRESULT WINAPI HTMLEventObj_get_x(IHTMLEventObj *iface, LONG *p)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
+    LONG x = 0;
 
-    FIXME("(%p)->(%p)\n", This, p);
+    TRACE("(%p)->(%p)\n", This, p);
 
-    *p = -1;
+    if(This->nsevent) {
+        nsIDOMUIEvent *ui_event;
+        nsresult nsres;
+
+        nsres = nsIDOMEvent_QueryInterface(This->nsevent, &IID_nsIDOMUIEvent, (void**)&ui_event);
+        if(NS_SUCCEEDED(nsres)) {
+            /* NOTE: pageX is not exactly right here. */
+            nsres = nsIDOMUIEvent_GetPageX(ui_event, &x);
+            assert(nsres == NS_OK);
+            nsIDOMUIEvent_Release(ui_event);
+        }
+    }
+
+    *p = x;
     return S_OK;
 }
 
 static HRESULT WINAPI HTMLEventObj_get_y(IHTMLEventObj *iface, LONG *p)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
+    LONG y = 0;
 
-    FIXME("(%p)->(%p)\n", This, p);
+    TRACE("(%p)->(%p)\n", This, p);
 
-    *p = -1;
+    if(This->nsevent) {
+        nsIDOMUIEvent *ui_event;
+        nsresult nsres;
+
+        nsres = nsIDOMEvent_QueryInterface(This->nsevent, &IID_nsIDOMUIEvent, (void**)&ui_event);
+        if(NS_SUCCEEDED(nsres)) {
+            /* NOTE: pageY is not exactly right here. */
+            nsres = nsIDOMUIEvent_GetPageY(ui_event, &y);
+            assert(nsres == NS_OK);
+            nsIDOMUIEvent_Release(ui_event);
+        }
+    }
+
+    *p = y;
     return S_OK;
 }
 
@@ -1481,11 +1510,11 @@ HRESULT detach_event(event_target_t *event_target, HTMLDocument *doc, BSTR name,
     return S_OK;
 }
 
-void bind_elem_event(HTMLDocumentNode *doc, HTMLElement *elem, const WCHAR *event, IDispatch *disp)
+void bind_node_event(HTMLDocumentNode *doc, event_target_t **event_target, HTMLDOMNode *node, const WCHAR *event, IDispatch *disp)
 {
     eventid_t eid;
 
-    TRACE("(%p %p %s %p)\n", doc, elem, debugstr_w(event), disp);
+    TRACE("(%p %p %p %s %p)\n", doc, event_target, node, debugstr_w(event), disp);
 
     eid = attr_to_eid(event);
     if(eid == EVENTID_LAST) {
@@ -1493,7 +1522,7 @@ void bind_elem_event(HTMLDocumentNode *doc, HTMLElement *elem, const WCHAR *even
         return;
     }
 
-    set_event_handler_disp(&elem->node.event_target, elem->node.nsnode, doc, eid, disp);
+    set_event_handler_disp(event_target, node ? node->nsnode : NULL, doc, eid, disp);
 }
 
 void update_cp_events(HTMLInnerWindow *window, event_target_t **event_target_ptr, cp_static_data_t *cp, nsIDOMNode *nsnode)

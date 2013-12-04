@@ -30,6 +30,7 @@
 #include <objbase.h>
 #include <richedit.h>
 #include <initguid.h>
+#include <imm.h>
 #include <textserv.h>
 #include <wine/test.h>
 #include <oleauto.h>
@@ -720,7 +721,7 @@ static void test_TxGetNaturalSize(void) {
 
     /* Variables with the text metric information */
     INT charwidth_caps_text[26];
-    TEXTMETRIC tmInfo_text;
+    TEXTMETRICA tmInfo_text;
 
     if (!init_texthost())
         return;
@@ -730,9 +731,9 @@ static void test_TxGetNaturalSize(void) {
 
     /* Populate the metric strucs */
     SetMapMode(hdcDraw,MM_TEXT);
-    GetTextMetrics(hdcDraw, &tmInfo_text);
+    GetTextMetricsA(hdcDraw, &tmInfo_text);
     SetLastError(0xdeadbeef);
-    ret = GetCharWidth32(hdcDraw,'A','Z',charwidth_caps_text);
+    ret = GetCharWidth32A(hdcDraw,'A','Z',charwidth_caps_text);
     if (!ret && GetLastError() == ERROR_CALL_NOT_IMPLEMENTED) {
         win_skip("GetCharWidth32 is not available\n");
         goto cleanup;
@@ -882,7 +883,7 @@ START_TEST( txtsrv )
 
     /* Must explicitly LoadLibrary(). The test has no references to functions in
      * RICHED20.DLL, so the linker doesn't actually link to it. */
-    hmoduleRichEdit = LoadLibrary("RICHED20.DLL");
+    hmoduleRichEdit = LoadLibraryA("riched20.dll");
     ok(hmoduleRichEdit != NULL, "error: %d\n", (int) GetLastError());
 
     pIID_ITextServices = (IID*)GetProcAddress(hmoduleRichEdit, "IID_ITextServices");

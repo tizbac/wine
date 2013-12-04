@@ -50,6 +50,11 @@ int capture_displays_for_fullscreen = 0;
 BOOL skip_single_buffer_flushes = FALSE;
 BOOL allow_vsync = TRUE;
 BOOL allow_set_gamma = TRUE;
+int left_option_is_alt = 0;
+int right_option_is_alt = 0;
+BOOL allow_software_rendering = FALSE;
+BOOL disable_window_decorations = FALSE;
+HMODULE macdrv_module = 0;
 
 
 /**************************************************************************
@@ -83,20 +88,6 @@ const char* debugstr_cf(CFTypeRef t)
     }
     if (s != t) CFRelease(s);
     return ret;
-}
-
-
-/***********************************************************************
- *              set_app_icon
- */
-static void set_app_icon(void)
-{
-    CFArrayRef images = create_app_icon_images();
-    if (images)
-    {
-        macdrv_set_application_icon(images);
-        CFRelease(images);
-    }
 }
 
 
@@ -168,6 +159,18 @@ static void setup_options(void)
     if (!get_config_key(hkey, appkey, "AllowSetGamma", buffer, sizeof(buffer)))
         allow_set_gamma = IS_OPTION_TRUE(buffer[0]);
 
+    if (!get_config_key(hkey, appkey, "LeftOptionIsAlt", buffer, sizeof(buffer)))
+        left_option_is_alt = IS_OPTION_TRUE(buffer[0]);
+    if (!get_config_key(hkey, appkey, "RightOptionIsAlt", buffer, sizeof(buffer)))
+        right_option_is_alt = IS_OPTION_TRUE(buffer[0]);
+
+    if (!get_config_key(hkey, appkey, "AllowSoftwareRendering", buffer, sizeof(buffer)))
+        allow_software_rendering = IS_OPTION_TRUE(buffer[0]);
+
+    /* Value name chosen to match what's used in the X11 driver. */
+    if (!get_config_key(hkey, appkey, "Decorated", buffer, sizeof(buffer)))
+        disable_window_decorations = !IS_OPTION_TRUE(buffer[0]);
+
     if (appkey) RegCloseKey(appkey);
     if (hkey) RegCloseKey(hkey);
 }
@@ -176,7 +179,7 @@ static void setup_options(void)
 /***********************************************************************
  *              process_attach
  */
-static BOOL process_attach( HINSTANCE instance )
+static BOOL process_attach(void)
 {
     SessionAttributeBits attributes;
     OSStatus status;
@@ -196,9 +199,7 @@ static BOOL process_attach( HINSTANCE instance )
         return FALSE;
     }
 
-    set_app_icon();
     macdrv_clipboard_process_attach();
-    IME_RegisterClasses( instance );
 
     return TRUE;
 }
@@ -217,6 +218,8 @@ static void thread_detach(void)
         if (data->keyboard_layout_uchr)
             CFRelease(data->keyboard_layout_uchr);
         HeapFree(GetProcessHeap(), 0, data);
+        /* clear data in case we get re-entered from user32 before the thread is truly dead */
+        TlsSetValue(thread_data_tls_index, NULL);
     }
 }
 
@@ -257,6 +260,7 @@ static void set_queue_display_fd(int fd)
 struct macdrv_thread_data *macdrv_init_thread_data(void)
 {
     struct macdrv_thread_data *data = macdrv_thread_data();
+    TISInputSourceRef input_source;
 
     if (data) return data;
 
@@ -272,7 +276,9 @@ struct macdrv_thread_data *macdrv_init_thread_data(void)
         ExitProcess(1);
     }
 
-    data->keyboard_layout_uchr = macdrv_copy_keyboard_layout(&data->keyboard_type, &data->iso_keyboard);
+    macdrv_get_input_source_info(&data->keyboard_layout_uchr, &data->keyboard_type, &data->iso_keyboard, &input_source);
+    data->active_keyboard_layout = macdrv_get_hkl_from_source(input_source);
+    CFRelease(input_source);
     macdrv_compute_keyboard_layout(data);
 
     set_queue_display_fd(macdrv_get_event_queue_fd(data->queue));
@@ -292,7 +298,8 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID reserved)
     switch(reason)
     {
     case DLL_PROCESS_ATTACH:
-        ret = process_attach( hinst );
+        macdrv_module = hinst;
+        ret = process_attach();
         break;
     case DLL_THREAD_DETACH:
         thread_detach();

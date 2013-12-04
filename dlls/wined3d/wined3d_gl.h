@@ -84,6 +84,7 @@ enum wined3d_gl_extension
     ARB_TEXTURE_ENV_DOT3,
     ARB_TEXTURE_FLOAT,
     ARB_TEXTURE_MIRRORED_REPEAT,
+    ARB_TEXTURE_MIRROR_CLAMP_TO_EDGE,
     ARB_TEXTURE_NON_POWER_OF_TWO,
     ARB_TEXTURE_RECTANGLE,
     ARB_TEXTURE_RG,
@@ -113,7 +114,6 @@ enum wined3d_gl_extension
     EXT_GPU_PROGRAM_PARAMETERS,
     EXT_GPU_SHADER4,
     EXT_PACKED_DEPTH_STENCIL,
-    EXT_PALETTED_TEXTURE,
     EXT_POINT_PARAMETERS,
     EXT_PROVOKING_VERTEX,
     EXT_SECONDARY_COLOR,
@@ -127,6 +127,7 @@ enum wined3d_gl_extension
     EXT_TEXTURE_ENV_DOT3,
     EXT_TEXTURE_FILTER_ANISOTROPIC,
     EXT_TEXTURE_LOD_BIAS,
+    EXT_TEXTURE_MIRROR_CLAMP,
     EXT_TEXTURE_SRGB,
     EXT_TEXTURE_SRGB_DECODE,
     EXT_VERTEX_ARRAY_BGRA,
@@ -487,8 +488,6 @@ enum wined3d_gl_extension
     USE_GL_FUNC(glVertexAttribI4uivEXT) \
     USE_GL_FUNC(glVertexAttribI4usvEXT) \
     USE_GL_FUNC(glVertexAttribIPointerEXT) \
-    /* GL_EXT_paletted_texture */ \
-    USE_GL_FUNC(glColorTableEXT) \
     /* GL_EXT_point_parameters */ \
     USE_GL_FUNC(glPointParameterfEXT) \
     USE_GL_FUNC(glPointParameterfvEXT) \

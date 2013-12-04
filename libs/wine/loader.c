@@ -53,6 +53,10 @@
 extern char **environ;
 #endif
 
+#ifdef __ANDROID__
+#include <jni.h>
+#endif
+
 #define NONAMELESSUNION
 #define NONAMELESSSTRUCT
 #include "windef.h"
@@ -90,19 +94,20 @@ static load_dll_callback_t load_dll_callback;
 
 static const char *build_dir;
 static const char *default_dlldir;
+static const char *dll_prefix;
 static const char **dll_paths;
 static unsigned int nb_dll_paths;
 static int dll_path_maxlen;
 
 extern void mmap_init(void);
-extern const char *get_dlldir( const char **default_dlldir );
+extern const char *get_dlldir( const char **default_dlldir, const char **dll_prefix );
 
 /* build the dll load path from the WINEDLLPATH variable */
 static void build_dll_path(void)
 {
     int len, count = 0;
     char *p, *path = getenv( "WINEDLLPATH" );
-    const char *dlldir = get_dlldir( &default_dlldir );
+    const char *dlldir = get_dlldir( &default_dlldir, &dll_prefix );
 
     if (path)
     {
@@ -152,6 +157,7 @@ static void build_dll_path(void)
         if (len > dll_path_maxlen) dll_path_maxlen = len;
         dll_paths[nb_dll_paths++] = default_dlldir;
     }
+    dll_path_maxlen += strlen( dll_prefix ) - 1;
 }
 
 /* check if the library is the correct architecture */
@@ -237,11 +243,11 @@ static char *next_dll_path( struct dll_path_context *context )
         /* fall through */
     default:
         index -= 2;
-        if (index < nb_dll_paths)
-            return prepend( context->name, dll_paths[index], strlen( dll_paths[index] ));
-        break;
+        if (index >= nb_dll_paths) return NULL;
+        path = prepend( path + 1, dll_prefix, strlen( dll_prefix ));
+        path = prepend( path, dll_paths[index], strlen( dll_paths[index] ));
+        return path;
     }
-    return NULL;
 }
 
 
@@ -801,6 +807,105 @@ static void apple_main_thread( void (*init_func)(void) )
 #endif
 
 
+#ifdef __ANDROID__
+
+#ifndef WINE_JAVA_CLASS
+#define WINE_JAVA_CLASS "org/winehq/wine/WineActivity"
+#endif
+
+static JavaVM *java_vm;
+static jobject java_object;
+
+/* return the Java VM that was used for JNI initialisation */
+JavaVM *wine_get_java_vm(void)
+{
+    return java_vm;
+}
+
+/* return the Java object that called the wine_init method */
+jobject wine_get_java_object(void)
+{
+    return java_object;
+}
+
+/* main Wine initialisation */
+static jstring wine_init_jni( JNIEnv *env, jobject obj, jobjectArray cmdline, jobjectArray environment )
+{
+    char **argv;
+    char *str;
+    char error[1024];
+    int i, argc, length;
+
+    /* get the command line array */
+
+    argc = (*env)->GetArrayLength( env, cmdline );
+    for (i = length = 0; i < argc; i++)
+    {
+        jobject str_obj = (*env)->GetObjectArrayElement( env, cmdline, i );
+        length += (*env)->GetStringUTFLength( env, str_obj ) + 1;
+    }
+
+    argv = malloc( (argc + 1) * sizeof(*argv) + length );
+    str = (char *)(argv + argc + 1);
+    for (i = 0; i < argc; i++)
+    {
+        jobject str_obj = (*env)->GetObjectArrayElement( env, cmdline, i );
+        length = (*env)->GetStringUTFLength( env, str_obj );
+        (*env)->GetStringUTFRegion( env, str_obj, 0, length, str );
+        argv[i] = str;
+        str[length] = 0;
+        str += length + 1;
+    }
+    argv[argc] = NULL;
+
+    /* set the environment variables */
+
+    if (environment)
+    {
+        int count = (*env)->GetArrayLength( env, environment );
+        for (i = 0; i < count - 1; i += 2)
+        {
+            jobject var_obj = (*env)->GetObjectArrayElement( env, environment, i );
+            jobject val_obj = (*env)->GetObjectArrayElement( env, environment, i + 1 );
+            const char *var = (*env)->GetStringUTFChars( env, var_obj, NULL );
+
+            if (val_obj)
+            {
+                const char *val = (*env)->GetStringUTFChars( env, val_obj, NULL );
+                setenv( var, val, 1 );
+                (*env)->ReleaseStringUTFChars( env, val_obj, val );
+            }
+            else unsetenv( var );
+
+            (*env)->ReleaseStringUTFChars( env, var_obj, var );
+        }
+    }
+
+    java_object = (*env)->NewGlobalRef( env, obj );
+
+    wine_init( argc, argv, error, sizeof(error) );
+    return (*env)->NewStringUTF( env, error );
+}
+
+jint JNI_OnLoad( JavaVM *vm, void *reserved )
+{
+    static const JNINativeMethod method =
+    {
+        "wine_init", "([Ljava/lang/String;[Ljava/lang/String;)Ljava/lang/String;", wine_init_jni
+    };
+
+    JNIEnv *env;
+    jclass class;
+
+    java_vm = vm;
+    if ((*vm)->AttachCurrentThread( vm, &env, NULL ) != JNI_OK) return JNI_ERR;
+    if (!(class = (*env)->FindClass( env, WINE_JAVA_CLASS ))) return JNI_ERR;
+    (*env)->RegisterNatives( env, class, &method, 1 );
+    return JNI_VERSION_1_6;
+}
+
+#endif  /* __ANDROID__ */
+
 /***********************************************************************
  *           wine_init
  *
@@ -880,10 +985,13 @@ void *wine_dlopen( const char *filename, int flag, char *error, size_t errorsize
     {
         if (pread( fd, magic, 2, 0 ) == 2 && magic[0] == 'M' && magic[1] == 'Z')
         {
-            static const char msg[] = "MZ format";
-            size_t len = min( errorsize, sizeof(msg) );
-            memcpy( error, msg, len );
-            error[len - 1] = 0;
+            if (error && errorsize)
+            {
+                static const char msg[] = "MZ format";
+                size_t len = min( errorsize, sizeof(msg) );
+                memcpy( error, msg, len );
+                error[len - 1] = 0;
+            }
             close( fd );
             return NULL;
         }
@@ -900,6 +1008,23 @@ void *wine_dlopen( const char *filename, int flag, char *error, size_t errorsize
         ret = dlopen( path, flag | RTLD_FIRST );
     }
     else
+#elif defined(__ANDROID__)
+    if (!strchr( filename, '/' ) && nb_dll_paths)
+    {
+        unsigned int i;
+        char *buffer = malloc( dll_path_maxlen + strlen(filename) + 2 );
+
+        buffer[dll_path_maxlen] = '/';
+        strcpy( buffer + dll_path_maxlen + 1, filename );
+        for (i = 0; i < nb_dll_paths; i++)
+        {
+            char *path = prepend( buffer + dll_path_maxlen, dll_paths[i], strlen(dll_paths[i]) );
+            ret = dlopen( path, flag | RTLD_FIRST );
+            if (ret) break;
+        }
+        free( buffer );
+        if (ret) return ret;
+    }
 #endif
     ret = dlopen( filename, flag | RTLD_FIRST );
     s = dlerror();

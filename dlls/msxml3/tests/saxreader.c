@@ -35,6 +35,8 @@
 
 #include "wine/test.h"
 
+static const WCHAR emptyW[] = {0};
+
 #define EXPECT_HR(hr,hr_exp) \
     ok(hr == hr_exp, "got 0x%08x, expected 0x%08x\n", hr, hr_exp)
 
@@ -99,7 +101,7 @@ static void free_bstrs(void)
     alloced_bstrs_count = 0;
 }
 
-static void test_saxstr(const char *file, unsigned line, BSTR str, const char *expected, int todo, int *failcount)
+static void test_saxstr(const char *file, unsigned line, BSTR str, const char *expected, BOOL todo, int *failcount)
 {
     int len, lenexp, cmp;
     WCHAR buf[1024];
@@ -321,7 +323,7 @@ static const char *get_event_name(CH event)
 }
 
 static void compare_attributes(const struct call_entry *actual, const struct call_entry *expected, const char *context,
-    int todo, const char *file, int line, int *failcount)
+    BOOL todo, const char *file, int line, int *failcount)
 {
     int i, lenexp = 0;
 
@@ -357,7 +359,7 @@ static void compare_attributes(const struct call_entry *actual, const struct cal
 }
 
 static void ok_sequence_(struct call_sequence **seq, int sequence_index,
-    const struct call_entry *expected, const char *context, int todo,
+    const struct call_entry *expected, const char *context, BOOL todo,
     const char *file, int line)
 {
     struct call_sequence *call_seq = seq[sequence_index];
@@ -886,10 +888,10 @@ static struct call_entry xmlspaceattr_test_alternate[] = {
 /* attribute value normalization test */
 static const char attribute_normalize[] =
     "<?xml version=\"1.0\" ?>\n"
-    "<a attr1=\" \r \n \tattr_value &#65; \t \r \n\r\n \n\"/>\n";
+    "<a attr1=\" \r \n \tattr_value &#65; &#38; &amp;\t \r \n\r\n \n\"/>\n";
 
 static struct attribute_entry attribute_norm_attrs[] = {
-    { "", "attr1", "attr1", "      attr_value A         " },
+    { "", "attr1", "attr1", "      attr_value A & &        " },
     { NULL }
 };
 
@@ -1551,8 +1553,8 @@ static HRESULT WINAPI isaxattributes_getValue(ISAXAttributes* iface, int index,
 {
     static const WCHAR attrvaluesW[][10] = {{'a','1','j','u','n','k',0},
                                             {'a','2','j','u','n','k',0},
-                                            {'<','&','"','>',0}};
-    static const int attrvalueslen[] = {2, 2, 4};
+                                            {'<','&','"','>','\'',0}};
+    static const int attrvalueslen[] = {2, 2, 5};
 
     ok(index >= 0 && index <= 2, "invalid index received %d\n", index);
 
@@ -2890,7 +2892,6 @@ static void test_mxwriter_default_properties(const struct mxwriter_props_t *tabl
 static void test_mxwriter_properties(void)
 {
     static const WCHAR utf16W[] = {'U','T','F','-','1','6',0};
-    static const WCHAR emptyW[] = {0};
     static const WCHAR testW[] = {'t','e','s','t',0};
     ISAXContentHandler *content;
     IMXWriter *writer;
@@ -3041,7 +3042,6 @@ static void test_mxwriter_properties(void)
 
 static void test_mxwriter_flush(void)
 {
-    static const WCHAR emptyW[] = {0};
     ISAXContentHandler *content;
     IMXWriter *writer;
     LARGE_INTEGER pos;
@@ -3331,9 +3331,9 @@ struct writer_startendelement_t {
     ISAXAttributes *attr;
 };
 
-static const char startelement_xml[] = "<uri:local a:attr1=\"a1\" attr2=\"a2\" attr3=\"&lt;&amp;&quot;&gt;\">";
-static const char startendelement_xml[] = "<uri:local a:attr1=\"a1\" attr2=\"a2\" attr3=\"&lt;&amp;&quot;&gt;\"/>";
-static const char startendelement_noescape_xml[] = "<uri:local a:attr1=\"a1\" attr2=\"a2\" attr3=\"<&\">\"/>";
+static const char startelement_xml[] = "<uri:local a:attr1=\"a1\" attr2=\"a2\" attr3=\"&lt;&amp;&quot;&gt;\'\">";
+static const char startendelement_xml[] = "<uri:local a:attr1=\"a1\" attr2=\"a2\" attr3=\"&lt;&amp;&quot;&gt;\'\"/>";
+static const char startendelement_noescape_xml[] = "<uri:local a:attr1=\"a1\" attr2=\"a2\" attr3=\"<&\">\'\"/>";
 
 static const struct writer_startendelement_t writer_startendelement[] = {
     /* 0 */
@@ -3497,15 +3497,17 @@ static void test_mxwriter_startendelement_batch(const struct writer_startendelem
 
         if (table->type & StartElement)
         {
-            hr = ISAXContentHandler_startElement(content, _bstr_(table->uri), lstrlen(table->uri),
-                _bstr_(table->local_name), lstrlen(table->local_name), _bstr_(table->qname), lstrlen(table->qname), table->attr);
+            hr = ISAXContentHandler_startElement(content, _bstr_(table->uri), table->uri ? strlen(table->uri) : 0,
+                _bstr_(table->local_name), table->local_name ? strlen(table->local_name) : 0, _bstr_(table->qname),
+                table->qname ? strlen(table->qname) : 0, table->attr);
             ok(hr == table->hr, "test %d: got 0x%08x, expected 0x%08x\n", i, hr, table->hr);
         }
 
         if (table->type & EndElement)
         {
-            hr = ISAXContentHandler_endElement(content, _bstr_(table->uri), lstrlen(table->uri),
-                _bstr_(table->local_name), lstrlen(table->local_name), _bstr_(table->qname), lstrlen(table->qname));
+            hr = ISAXContentHandler_endElement(content, _bstr_(table->uri), table->uri ? strlen(table->uri) : 0,
+                _bstr_(table->local_name), table->local_name ? strlen(table->local_name) : 0, _bstr_(table->qname),
+                table->qname ? strlen(table->qname) : 0);
             ok(hr == table->hr, "test %d: got 0x%08x, expected 0x%08x\n", i, hr, table->hr);
         }
 
@@ -3712,7 +3714,8 @@ static void test_mxwriter_startendelement(void)
     ok(!lstrcmpW(_bstr_("<abc>"), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
     VariantClear(&dest);
 
-    ISAXContentHandler_endDocument(content);
+    hr = ISAXContentHandler_endDocument(content);
+    EXPECT_HR(hr, S_OK);
     IMXWriter_flush(writer);
 
     hr = ISAXContentHandler_endElement(content, _bstr_(""), 0, _bstr_(""), 0, _bstr_("abdcdef"), 3);
@@ -3750,10 +3753,10 @@ struct writer_characters_t {
 };
 
 static const struct writer_characters_t writer_characters[] = {
-    { &CLSID_MXXMLWriter,   "< > & \"", "&lt; &gt; &amp; \"" },
-    { &CLSID_MXXMLWriter30, "< > & \"", "&lt; &gt; &amp; \"" },
-    { &CLSID_MXXMLWriter40, "< > & \"", "&lt; &gt; &amp; \"" },
-    { &CLSID_MXXMLWriter60, "< > & \"", "&lt; &gt; &amp; \"" },
+    { &CLSID_MXXMLWriter,   "< > & \" \'", "&lt; &gt; &amp; \" \'" },
+    { &CLSID_MXXMLWriter30, "< > & \" \'", "&lt; &gt; &amp; \" \'" },
+    { &CLSID_MXXMLWriter40, "< > & \" \'", "&lt; &gt; &amp; \" \'" },
+    { &CLSID_MXXMLWriter60, "< > & \" \'", "&lt; &gt; &amp; \" \'" },
     { NULL }
 };
 
@@ -4738,6 +4741,28 @@ static void test_mxwriter_dtd(void)
     ok(!lstrcmpW(_bstr_("<!ENTITY name \"value\">\r\n"), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
     VariantClear(&dest);
 
+    /* external entities */
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_put_output(writer, dest);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    hr = ISAXDeclHandler_externalEntityDecl(decl, NULL, 0, NULL, 0, NULL, 0);
+    ok(hr == E_INVALIDARG, "got 0x%08x\n", hr);
+
+    hr = ISAXDeclHandler_externalEntityDecl(decl, _bstr_("name"), -1, NULL, 0, NULL, 0);
+    ok(hr == E_INVALIDARG, "got 0x%08x\n", hr);
+
+    hr = ISAXDeclHandler_externalEntityDecl(decl, _bstr_("name"), strlen("name"), _bstr_("pubid"), strlen("pubid"),
+        _bstr_("sysid"), strlen("sysid"));
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    ok(!lstrcmpW(_bstr_("<!ENTITY name PUBLIC \"pubid\" \"sysid\">\r\n"), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
     ISAXContentHandler_Release(content);
     ISAXLexicalHandler_Release(lexical);
     ISAXDeclHandler_Release(decl);
@@ -5244,6 +5269,63 @@ static void test_mxattr_localname(void)
     }
 }
 
+static void test_mxwriter_indent(void)
+{
+    ISAXContentHandler *content;
+    IMXWriter *writer;
+    VARIANT dest;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_MXXMLWriter, NULL, CLSCTX_INPROC_SERVER, &IID_IMXWriter, (void**)&writer);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    hr = IMXWriter_put_indent(writer, VARIANT_TRUE);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = IMXWriter_QueryInterface(writer, &IID_ISAXContentHandler, (void**)&content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startElement(content, emptyW, 0, emptyW, 0, _bstr_("a"), -1, NULL);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_characters(content, _bstr_(""), 0);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startElement(content, emptyW, 0, emptyW, 0, _bstr_("b"), -1, NULL);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startElement(content, emptyW, 0, emptyW, 0, _bstr_("c"), -1, NULL);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endElement(content, emptyW, 0, emptyW, 0, _bstr_("c"), -1);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endElement(content, emptyW, 0, emptyW, 0, _bstr_("b"), -1);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endElement(content, emptyW, 0, emptyW, 0, _bstr_("a"), -1);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endDocument(content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    ok(!lstrcmpW(_bstr_("<?xml version=\"1.0\" encoding=\"UTF-16\" standalone=\"no\"?>\r\n<a><b>\r\n\t\t<c/>\r\n\t</b>\r\n</a>"), V_BSTR(&dest)),
+        "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    ISAXContentHandler_Release(content);
+    IMXWriter_Release(writer);
+
+    free_bstrs();
+}
+
 START_TEST(saxreader)
 {
     ISAXXMLReader *reader;
@@ -5291,6 +5373,7 @@ START_TEST(saxreader)
         test_mxwriter_stream();
         test_mxwriter_encoding();
         test_mxwriter_dispex();
+        test_mxwriter_indent();
     }
     else
         win_skip("MXXMLWriter not supported\n");

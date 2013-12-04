@@ -1122,12 +1122,12 @@ GpStatus WINGDIPAPI GdipBitmapLockBits(GpBitmap* bitmap, GDIPCONST GpRect* rect,
 
     if (flags & ImageLockModeRead)
     {
-        static int fixme=0;
+        static BOOL fixme = FALSE;
 
         if (!fixme && (PIXELFORMATBPP(bitmap->format) * act_rect.X) % 8 != 0)
         {
             FIXME("Cannot copy rows that don't start at a whole byte.\n");
-            fixme = 1;
+            fixme = TRUE;
         }
 
         stat = convert_pixels(act_rect.Width, act_rect.Height,
@@ -1169,7 +1169,7 @@ GpStatus WINGDIPAPI GdipBitmapUnlockBits(GpBitmap* bitmap,
     BitmapData* lockeddata)
 {
     GpStatus stat;
-    static int fixme=0;
+    static BOOL fixme = FALSE;
 
     TRACE("(%p,%p)\n", bitmap, lockeddata);
 
@@ -1199,7 +1199,7 @@ GpStatus WINGDIPAPI GdipBitmapUnlockBits(GpBitmap* bitmap,
     if (!fixme && (PIXELFORMATBPP(bitmap->format) * bitmap->lockx) % 8 != 0)
     {
         FIXME("Cannot copy rows that don't start at a whole byte.\n");
-        fixme = 1;
+        fixme = TRUE;
     }
 
     stat = convert_pixels(lockeddata->Width, lockeddata->Height,
@@ -1224,9 +1224,6 @@ GpStatus WINGDIPAPI GdipBitmapUnlockBits(GpBitmap* bitmap,
 GpStatus WINGDIPAPI GdipCloneBitmapArea(REAL x, REAL y, REAL width, REAL height,
     PixelFormat format, GpBitmap* srcBitmap, GpBitmap** dstBitmap)
 {
-    BitmapData lockeddata_src, lockeddata_dst;
-    int i;
-    UINT row_size;
     Rect area;
     GpStatus stat;
 
@@ -1248,39 +1245,19 @@ GpStatus WINGDIPAPI GdipCloneBitmapArea(REAL x, REAL y, REAL width, REAL height,
     area.Width = gdip_round(width);
     area.Height = gdip_round(height);
 
-    stat = GdipBitmapLockBits(srcBitmap, &area, ImageLockModeRead, format,
-        &lockeddata_src);
-    if (stat != Ok) return stat;
-
-    stat = GdipCreateBitmapFromScan0(lockeddata_src.Width, lockeddata_src.Height,
-        0, lockeddata_src.PixelFormat, NULL, dstBitmap);
+    stat = GdipCreateBitmapFromScan0(area.Width, area.Height, 0, format, NULL, dstBitmap);
     if (stat == Ok)
     {
-        stat = GdipBitmapLockBits(*dstBitmap, NULL, ImageLockModeWrite,
-            lockeddata_src.PixelFormat, &lockeddata_dst);
-
-        if (stat == Ok)
-        {
-            /* copy the image data */
-            row_size = (lockeddata_src.Width * PIXELFORMATBPP(lockeddata_src.PixelFormat) +7)/8;
-            for (i=0; i<lockeddata_src.Height; i++)
-                memcpy((BYTE*)lockeddata_dst.Scan0+lockeddata_dst.Stride*i,
-                       (BYTE*)lockeddata_src.Scan0+lockeddata_src.Stride*i,
-                       row_size);
-
-            GdipBitmapUnlockBits(*dstBitmap, &lockeddata_dst);
-        }
-
+        stat = convert_pixels(area.Width, area.Height, (*dstBitmap)->stride, (*dstBitmap)->bits, (*dstBitmap)->format,
+                              srcBitmap->stride,
+                              srcBitmap->bits + srcBitmap->stride * area.Y + PIXELFORMATBPP(srcBitmap->format) * area.X / 8,
+                              srcBitmap->format, srcBitmap->image.palette);
         if (stat != Ok)
             GdipDisposeImage((GpImage*)*dstBitmap);
     }
 
-    GdipBitmapUnlockBits(srcBitmap, &lockeddata_src);
-
     if (stat != Ok)
-    {
         *dstBitmap = NULL;
-    }
 
     return stat;
 }
@@ -1335,47 +1312,10 @@ GpStatus WINGDIPAPI GdipCloneImage(GpImage *image, GpImage **cloneImage)
     }
     else if (image->type == ImageTypeBitmap)
     {
-        GpBitmap *bitmap = (GpBitmap*)image;
-        BitmapData lockeddata_src, lockeddata_dst;
-        int i;
-        UINT row_size;
+        GpBitmap *bitmap = (GpBitmap *)image;
 
-        stat = GdipBitmapLockBits(bitmap, NULL, ImageLockModeRead, bitmap->format,
-            &lockeddata_src);
-        if (stat != Ok) return stat;
-
-        stat = GdipCreateBitmapFromScan0(lockeddata_src.Width, lockeddata_src.Height,
-            0, lockeddata_src.PixelFormat, NULL, (GpBitmap**)cloneImage);
-        if (stat == Ok)
-        {
-            stat = GdipBitmapLockBits((GpBitmap*)*cloneImage, NULL, ImageLockModeWrite,
-                lockeddata_src.PixelFormat, &lockeddata_dst);
-
-            if (stat == Ok)
-            {
-                /* copy the image data */
-                row_size = (lockeddata_src.Width * PIXELFORMATBPP(lockeddata_src.PixelFormat) +7)/8;
-                for (i=0; i<lockeddata_src.Height; i++)
-                    memcpy((BYTE*)lockeddata_dst.Scan0+lockeddata_dst.Stride*i,
-                           (BYTE*)lockeddata_src.Scan0+lockeddata_src.Stride*i,
-                           row_size);
-
-                GdipBitmapUnlockBits((GpBitmap*)*cloneImage, &lockeddata_dst);
-            }
-
-            if (stat != Ok)
-                GdipDisposeImage(*cloneImage);
-        }
-
-        GdipBitmapUnlockBits(bitmap, &lockeddata_src);
-
-        if (stat != Ok)
-        {
-            *cloneImage = NULL;
-        }
-        else memcpy(&(*cloneImage)->format, &image->format, sizeof(GUID));
-
-        return stat;
+        return GdipCloneBitmapAreaI(0, 0, bitmap->width, bitmap->height,
+                                    bitmap->format, bitmap, (GpBitmap **)cloneImage);
     }
     else if (image->type == ImageTypeMetafile && ((GpMetafile*)image)->hemf)
     {
@@ -4002,6 +3942,7 @@ static GpStatus encode_image_WIC(GpImage *image, IStream* stream,
     HRESULT hr;
     UINT width, height;
     PixelFormat gdipformat=0;
+    const WICPixelFormatGUID *desired_wicformat;
     WICPixelFormatGUID wicformat;
     GpRect rc;
     BitmapData lockeddata;
@@ -4054,18 +3995,38 @@ static GpStatus encode_image_WIC(GpImage *image, IStream* stream,
             {
                 if (pixel_formats[i].gdip_format == bitmap->format)
                 {
-                    memcpy(&wicformat, pixel_formats[i].wic_format, sizeof(GUID));
+                    desired_wicformat = pixel_formats[i].wic_format;
                     gdipformat = bitmap->format;
                     break;
                 }
             }
             if (!gdipformat)
             {
-                memcpy(&wicformat, &GUID_WICPixelFormat32bppBGRA, sizeof(GUID));
+                desired_wicformat = &GUID_WICPixelFormat32bppBGRA;
                 gdipformat = PixelFormat32bppARGB;
             }
 
+            memcpy(&wicformat, desired_wicformat, sizeof(GUID));
             hr = IWICBitmapFrameEncode_SetPixelFormat(frameencode, &wicformat);
+        }
+
+        if (SUCCEEDED(hr) && !IsEqualGUID(desired_wicformat, &wicformat))
+        {
+            /* Encoder doesn't support this bitmap's format. */
+            gdipformat = 0;
+            for (i=0; pixel_formats[i].wic_format; i++)
+            {
+                if (IsEqualGUID(&wicformat, pixel_formats[i].wic_format))
+                {
+                    gdipformat = pixel_formats[i].gdip_format;
+                    break;
+                }
+            }
+            if (!gdipformat)
+            {
+                ERR("Cannot support encoder format %s\n", debugstr_guid(&wicformat));
+                hr = E_FAIL;
+            }
         }
 
         if (SUCCEEDED(hr))

@@ -30,23 +30,24 @@
 
 static HMODULE d3d9_handle = 0;
 
-static BOOL (WINAPI *pEnumDisplaySettingsExA)(LPCSTR, DWORD, DEVMODEA *, DWORD);
-static LONG (WINAPI *pChangeDisplaySettingsExA)(LPCSTR, LPDEVMODE, HWND, DWORD, LPVOID);
+static BOOL (WINAPI *pEnumDisplaySettingsExA)(const char *device_name,
+        DWORD mode_idx, DEVMODEA *mode, DWORD flags);
+static LONG (WINAPI *pChangeDisplaySettingsExA)(const char *device_name,
+        DEVMODEA *mode, HWND window, DWORD flags, void *param);
 
 static IDirect3D9 * (WINAPI *pDirect3DCreate9)(UINT SDKVersion);
 static HRESULT (WINAPI *pDirect3DCreate9Ex)(UINT SDKVersion, IDirect3D9Ex **d3d9ex);
 
 static HWND create_window(void)
 {
-    WNDCLASS wc = {0};
-    HWND ret;
-    wc.lpfnWndProc = DefWindowProc;
-    wc.lpszClassName = "d3d9_test_wc";
-    RegisterClass(&wc);
+    WNDCLASSA wc = {0};
 
-    ret = CreateWindow("d3d9_test_wc", "d3d9_test",
-                        WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION , 0, 0, 640, 480, 0, 0, 0, 0);
-    return ret;
+    wc.lpfnWndProc = DefWindowProcA;
+    wc.lpszClassName = "d3d9_test_wc";
+    RegisterClassA(&wc);
+
+    return CreateWindowA("d3d9_test_wc", "d3d9_test", WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION,
+            0, 0, 640, 480, 0, 0, 0, 0);
 }
 
 static IDirect3DDevice9Ex *create_device(HWND device_window, HWND focus_window, BOOL windowed)
@@ -120,6 +121,8 @@ static void test_qi_base_to_ex(void)
     IDirect3D9Ex *d3d9ex = (void *) 0xdeadbeef;
     IDirect3DDevice9 *device;
     IDirect3DDevice9Ex *deviceEx = (void *) 0xdeadbeef;
+    IDirect3DSwapChain9 *swapchain = NULL;
+    IDirect3DSwapChain9Ex *swapchainEx = (void *)0xdeadbeef;
     HRESULT hr;
     HWND window = create_window();
     D3DPRESENT_PARAMETERS present_parameters;
@@ -158,6 +161,22 @@ static void test_qi_base_to_ex(void)
     ok(deviceEx == NULL, "QueryInterface returned interface %p, expected NULL\n", deviceEx);
     if(deviceEx) IDirect3DDevice9Ex_Release(deviceEx);
 
+    /* Get the implicit swapchain */
+    hr = IDirect3DDevice9_GetSwapChain(device, 0, &swapchain);
+    ok(SUCCEEDED(hr), "Failed to get the implicit swapchain (%08x).\n", hr);
+    if (SUCCEEDED(hr))
+    {
+        hr = IDirect3DSwapChain9_QueryInterface(swapchain, &IID_IDirect3DSwapChain9Ex, (void **)&swapchainEx);
+        ok(hr == E_NOINTERFACE,
+                "IDirect3DSwapChain9::QueryInterface for IID_IDirect3DSwapChain9Ex returned %08x, expected E_NOINTERFACE.\n",
+                hr);
+        ok(swapchainEx == NULL, "QueryInterface returned interface %p, expected NULL.\n", swapchainEx);
+        if (swapchainEx)
+            IDirect3DSwapChain9Ex_Release(swapchainEx);
+    }
+    if (swapchain)
+        IDirect3DSwapChain9_Release(swapchain);
+
     IDirect3DDevice9_Release(device);
 
 out:
@@ -171,6 +190,8 @@ static void test_qi_ex_to_base(void)
     IDirect3D9Ex *d3d9ex;
     IDirect3DDevice9 *device;
     IDirect3DDevice9Ex *deviceEx = (void *) 0xdeadbeef;
+    IDirect3DSwapChain9 *swapchain = NULL;
+    IDirect3DSwapChain9Ex *swapchainEx = (void *)0xdeadbeef;
     HRESULT hr;
     HWND window = create_window();
     D3DPRESENT_PARAMETERS present_parameters;
@@ -240,6 +261,24 @@ static void test_qi_ex_to_base(void)
     ok(ref == 2, "IDirect3DDevice9 refcount is %d, expected 2\n", ref);
     ref = getref((IUnknown *) deviceEx);
     ok(ref == 2, "IDirect3DDevice9Ex refcount is %d, expected 2\n", ref);
+
+    /* Get the implicit swapchain */
+    hr = IDirect3DDevice9_GetSwapChain(device, 0, &swapchain);
+    ok(SUCCEEDED(hr), "Failed to get the implicit swapchain (%08x).\n", hr);
+    if (SUCCEEDED(hr))
+    {
+        hr = IDirect3DSwapChain9_QueryInterface(swapchain, &IID_IDirect3DSwapChain9Ex, (void **)&swapchainEx);
+        ok(hr == D3D_OK,
+                "IDirect3DSwapChain9::QueryInterface for IID_IDirect3DSwapChain9Ex returned %08x, expected D3D_OK.\n",
+                hr);
+        ok(swapchainEx != NULL && swapchainEx != (void *)0xdeadbeef,
+                "QueryInterface returned interface %p, expected != NULL && != 0xdeadbeef.\n", swapchainEx);
+        if (swapchainEx)
+            IDirect3DSwapChain9Ex_Release(swapchainEx);
+    }
+    if (swapchain)
+        IDirect3DSwapChain9_Release(swapchain);
+
     if(deviceEx) IDirect3DDevice9Ex_Release(deviceEx);
     IDirect3DDevice9_Release(device);
 
@@ -280,6 +319,96 @@ static void test_get_adapter_luid(void)
     trace("adapter luid: %08x:%08x.\n", luid.HighPart, luid.LowPart);
 
     IDirect3D9Ex_Release(d3d9ex);
+}
+
+static void test_swapchain_get_displaymode_ex(void)
+{
+    IDirect3DSwapChain9 *swapchain = NULL;
+    IDirect3DSwapChain9Ex *swapchainEx = NULL;
+    IDirect3DDevice9Ex *device;
+    D3DDISPLAYMODE mode;
+    D3DDISPLAYMODEEX mode_ex;
+    D3DDISPLAYROTATION rotation;
+    HWND window;
+    HRESULT hr;
+
+    window = CreateWindowA("static", "d3d9_test", WS_OVERLAPPEDWINDOW,
+            0, 0, 640, 480, 0, 0, 0, 0);
+    if (!(device = create_device(window, window, TRUE)))
+    {
+        skip("Failed to create a D3D device, skipping swapchain GetDisplayModeEx tests.\n");
+        goto out;
+    }
+
+    /* Get the implicit swapchain */
+    hr = IDirect3DDevice9Ex_GetSwapChain(device, 0, &swapchain);
+    if (FAILED(hr))
+    {
+        skip("Failed to get the implicit swapchain, skipping swapchain GetDisplayModeEx tests.\n");
+        goto out;
+    }
+
+    hr = IDirect3DSwapChain9_QueryInterface(swapchain, &IID_IDirect3DSwapChain9Ex, (void **)&swapchainEx);
+    IDirect3DSwapChain9_Release(swapchain);
+    if (FAILED(hr))
+    {
+        skip("Failed to QI for IID_IDirect3DSwapChain9Ex, skipping swapchain GetDisplayModeEx tests.\n");
+        goto out;
+    }
+
+    /* invalid size */
+    memset(&mode_ex, 0, sizeof(mode_ex));
+    hr = IDirect3DSwapChain9Ex_GetDisplayModeEx(swapchainEx, &mode_ex, &rotation);
+    ok(hr == D3DERR_INVALIDCALL, "GetDisplayModeEx returned %#x instead of D3DERR_INVALIDCALL.\n", hr);
+
+    mode_ex.Size = sizeof(D3DDISPLAYMODEEX);
+    rotation = (D3DDISPLAYROTATION)0xdeadbeef;
+    /* valid count and valid size */
+    hr = IDirect3DSwapChain9Ex_GetDisplayModeEx(swapchainEx, &mode_ex, &rotation);
+    ok(SUCCEEDED(hr), "GetDisplayModeEx failed, hr %#x.\n", hr);
+
+    /* compare what GetDisplayMode returns with what GetDisplayModeEx returns */
+    hr = IDirect3DSwapChain9Ex_GetDisplayMode(swapchainEx, &mode);
+    ok(SUCCEEDED(hr), "GetDisplayMode failed, hr %#x.\n", hr);
+
+    ok(mode_ex.Size == sizeof(D3DDISPLAYMODEEX), "Size is %d.\n", mode_ex.Size);
+    ok(mode_ex.Width == mode.Width, "Width is %d instead of %d.\n", mode_ex.Width, mode.Width);
+    ok(mode_ex.Height == mode.Height, "Height is %d instead of %d.\n", mode_ex.Height, mode.Height);
+    ok(mode_ex.RefreshRate == mode.RefreshRate, "RefreshRate is %d instead of %d.\n",
+            mode_ex.RefreshRate, mode.RefreshRate);
+    ok(mode_ex.Format == mode.Format, "Format is %x instead of %x.\n", mode_ex.Format, mode.Format);
+    /* Don't know yet how to test for ScanLineOrdering, just testing that it
+     * is set to a value by GetDisplayModeEx(). */
+    ok(mode_ex.ScanLineOrdering != 0, "ScanLineOrdering returned 0.\n");
+    /* Don't know how to compare the rotation in this case, test that it is set */
+    ok(rotation != (D3DDISPLAYROTATION)0xdeadbeef, "rotation is %d, expected != 0xdeadbeef.\n", rotation);
+
+    trace("GetDisplayModeEx returned Width = %d, Height = %d, RefreshRate = %d, Format = %x, ScanLineOrdering = %x, rotation = %d.\n",
+          mode_ex.Width, mode_ex.Height, mode_ex.RefreshRate, mode_ex.Format, mode_ex.ScanLineOrdering, rotation);
+
+    /* test GetDisplayModeEx with null pointer for D3DDISPLAYROTATION */
+    memset(&mode_ex, 0, sizeof(mode_ex));
+    mode_ex.Size = sizeof(D3DDISPLAYMODEEX);
+
+    hr = IDirect3DSwapChain9Ex_GetDisplayModeEx(swapchainEx, &mode_ex, NULL);
+    ok(SUCCEEDED(hr), "GetDisplayModeEx failed, hr %#x.\n", hr);
+
+    ok(mode_ex.Size == sizeof(D3DDISPLAYMODEEX), "Size is %d.\n", mode_ex.Size);
+    ok(mode_ex.Width == mode.Width, "Width is %d instead of %d.\n", mode_ex.Width, mode.Width);
+    ok(mode_ex.Height == mode.Height, "Height is %d instead of %d.\n", mode_ex.Height, mode.Height);
+    ok(mode_ex.RefreshRate == mode.RefreshRate, "RefreshRate is %d instead of %d.\n",
+            mode_ex.RefreshRate, mode.RefreshRate);
+    ok(mode_ex.Format == mode.Format, "Format is %x instead of %x.\n", mode_ex.Format, mode.Format);
+    /* Don't know yet how to test for ScanLineOrdering, just testing that it
+     * is set to a value by GetDisplayModeEx(). */
+    ok(mode_ex.ScanLineOrdering != 0, "ScanLineOrdering returned 0.\n");
+
+    IDirect3DSwapChain9Ex_Release(swapchainEx);
+
+out:
+    if (device)
+        IDirect3DDevice9Ex_Release(device);
+    DestroyWindow(window);
 }
 
 static void test_get_adapter_displaymode_ex(void)
@@ -861,12 +990,9 @@ static void test_reset_resources(void)
     hr = IDirect3DDevice9_GetDeviceCaps(device, &caps);
     ok(SUCCEEDED(hr), "Failed to get device caps, hr %#x.\n", hr);
 
-    hr = IDirect3DDevice9_CreateTexture(device, 128, 128, 1, D3DUSAGE_DEPTHSTENCIL,
-            D3DFMT_D24S8, D3DPOOL_DEFAULT, &texture, NULL);
-    ok(SUCCEEDED(hr), "Failed to create depth/stencil texture, hr %#x.\n", hr);
-    hr = IDirect3DTexture9_GetSurfaceLevel(texture, 0, &surface);
-    ok(SUCCEEDED(hr), "Failed to get surface, hr %#x.\n", hr);
-    IDirect3DTexture9_Release(texture);
+    hr = IDirect3DDevice9_CreateDepthStencilSurface(device, 128, 128, D3DFMT_D24S8,
+            D3DMULTISAMPLE_NONE, 0, TRUE, &surface, NULL);
+    ok(SUCCEEDED(hr), "Failed to create depth/stencil surface, hr %#x.\n", hr);
     hr = IDirect3DDevice9_SetDepthStencilSurface(device, surface);
     ok(SUCCEEDED(hr), "Failed to set depth/stencil surface, hr %#x.\n", hr);
     IDirect3DSurface9_Release(surface);
@@ -978,6 +1104,7 @@ START_TEST(d3d9ex)
 
     test_qi_base_to_ex();
     test_qi_ex_to_base();
+    test_swapchain_get_displaymode_ex();
     test_get_adapter_luid();
     test_get_adapter_displaymode_ex();
     test_texture_sysmem_create();

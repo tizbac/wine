@@ -28,7 +28,6 @@
 #include <winhttp.h>
 #include <wincrypt.h>
 #include <winreg.h>
-#include <winsock.h>
 #include "initguid.h"
 #include <httprequest.h>
 
@@ -350,7 +349,7 @@ static void test_SendRequest (void)
     ret = WinHttpReadData(request, buffer, sizeof(buffer) - 1, &bytes_rw);
     ok(ret == TRUE, "WinHttpReadData failed: %u.\n", GetLastError());
 
-    ok(bytes_rw == strlen(test_post), "Read %u bytes instead of %d.\n", bytes_rw, lstrlen(test_post));
+    ok(bytes_rw == strlen(test_post), "Read %u bytes instead of %d.\n", bytes_rw, lstrlenA(test_post));
     ok(strncmp(buffer, test_post, bytes_rw) == 0, "Data read did not match, got '%s'.\n", buffer);
 
     ret = WinHttpCloseHandle(request);
@@ -1801,6 +1800,8 @@ struct server_info
     int port;
 };
 
+#define BIG_BUFFER_LEN 0x2250
+
 static DWORD CALLBACK server_thread(LPVOID param)
 {
     struct server_info *si = param;
@@ -1858,6 +1859,13 @@ static DWORD CALLBACK server_thread(LPVOID param)
             else
                 send(c, noauthmsg, sizeof noauthmsg - 1, 0);
         }
+        if (strstr(buffer, "/big"))
+        {
+            char msg[BIG_BUFFER_LEN];
+            memset(msg, 'm', sizeof(msg));
+            send(c, okmsg, sizeof(okmsg) - 1, 0);
+            send(c, msg, sizeof(msg), 0);
+        }
         if (strstr(buffer, "/no_headers"))
         {
             send(c, page1, sizeof page1 - 1, 0);
@@ -1881,7 +1889,7 @@ static void test_basic_request(int port, const WCHAR *verb, const WCHAR *path)
 {
     HINTERNET ses, con, req;
     char buffer[0x100];
-    DWORD count, status, size, supported, first, target;
+    DWORD count, status, size, error, supported, first, target;
     BOOL ret;
 
     ses = WinHttpOpen(test_useragent, 0, NULL, NULL, 0);
@@ -1904,12 +1912,15 @@ static void test_basic_request(int port, const WCHAR *verb, const WCHAR *path)
     ok(ret, "failed to query status code %u\n", GetLastError());
     ok(status == 200, "request failed unexpectedly %u\n", status);
 
-    supported = first = target = 0xffff;
+    supported = first = target = 0xdeadbeef;
+    SetLastError(0xdeadbeef);
     ret = WinHttpQueryAuthSchemes(req, &supported, &first, &target);
+    error = GetLastError();
     ok(!ret, "unexpected success\n");
-    ok(supported == 0xffff, "got %x\n", supported);
-    ok(first == 0xffff, "got %x\n", first);
-    ok(target == 0xffff, "got %x\n", target);
+    todo_wine ok(error == ERROR_INVALID_OPERATION, "expected ERROR_INVALID_OPERATION, got %u\n", error);
+    ok(supported == 0xdeadbeef, "got %x\n", supported);
+    ok(first == 0xdeadbeef, "got %x\n", first);
+    ok(target == 0xdeadbeef, "got %x\n", target);
 
     count = 0;
     memset(buffer, 0, sizeof(buffer));
@@ -1941,12 +1952,54 @@ static void test_basic_authentication(int port)
     req = WinHttpOpenRequest(con, NULL, authW, NULL, NULL, NULL, 0);
     ok(req != NULL, "failed to open a request %u\n", GetLastError());
 
-    supported = first = target = 0xffff;
+    SetLastError(0xdeadbeef);
+    ret = WinHttpQueryAuthSchemes(NULL, NULL, NULL, NULL);
+    error = GetLastError();
+    ok(!ret, "expected failure\n");
+    ok(error == ERROR_INVALID_HANDLE, "expected ERROR_INVALID_HANDLE, got %u\n", error);
+
+    SetLastError(0xdeadbeef);
+    ret = WinHttpQueryAuthSchemes(req, NULL, NULL, NULL);
+    error = GetLastError();
+    ok(!ret, "expected failure\n");
+    ok(error == ERROR_INVALID_PARAMETER || error == ERROR_INVALID_OPERATION, "got %u\n", error);
+
+    supported = 0xdeadbeef;
+    SetLastError(0xdeadbeef);
+    ret = WinHttpQueryAuthSchemes(req, &supported, NULL, NULL);
+    error = GetLastError();
+    ok(!ret, "expected failure\n");
+    ok(error == ERROR_INVALID_PARAMETER || error == ERROR_INVALID_OPERATION, "got %u\n", error);
+    ok(supported == 0xdeadbeef, "got %x\n", supported);
+
+    supported = first = 0xdeadbeef;
+    SetLastError(0xdeadbeef);
+    ret = WinHttpQueryAuthSchemes(req, &supported, &first, NULL);
+    error = GetLastError();
+    ok(!ret, "expected failure\n");
+    ok(error == ERROR_INVALID_PARAMETER || error == ERROR_INVALID_OPERATION, "got %u\n", error);
+    ok(supported == 0xdeadbeef, "got %x\n", supported);
+    ok(first == 0xdeadbeef, "got %x\n", first);
+
+    supported = first = target = 0xdeadbeef;
+    SetLastError(0xdeadbeef);
     ret = WinHttpQueryAuthSchemes(req, &supported, &first, &target);
-    ok(!ret, "unexpected success\n");
-    ok(supported == 0xffff, "got %x\n", supported);
-    ok(first == 0xffff, "got %x\n", first);
-    ok(target == 0xffff, "got %x\n", target);
+    error = GetLastError();
+    ok(!ret, "expected failure\n");
+    todo_wine ok(error == ERROR_INVALID_OPERATION, "expected ERROR_INVALID_OPERATION, got %u\n", error);
+    ok(supported == 0xdeadbeef, "got %x\n", supported);
+    ok(first == 0xdeadbeef, "got %x\n", first);
+    ok(target == 0xdeadbeef, "got %x\n", target);
+
+    supported = first = target = 0xdeadbeef;
+    SetLastError(0xdeadbeef);
+    ret = WinHttpQueryAuthSchemes(NULL, &supported, &first, &target);
+    error = GetLastError();
+    ok(!ret, "expected failure\n");
+    ok(error == ERROR_INVALID_HANDLE, "expected ERROR_INVALID_HANDLE, got %u\n", error);
+    ok(supported == 0xdeadbeef, "got %x\n", supported);
+    ok(first == 0xdeadbeef, "got %x\n", first);
+    ok(target == 0xdeadbeef, "got %x\n", target);
 
     ret = WinHttpSendRequest(req, NULL, 0, NULL, 0, 0, 0);
     ok(ret, "failed to send request %u\n", GetLastError());
@@ -1958,6 +2011,34 @@ static void test_basic_authentication(int port)
     ret = WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER, NULL, &status, &size, NULL);
     ok(ret, "failed to query status code %u\n", GetLastError());
     ok(status == 401, "request failed unexpectedly %u\n", status);
+
+    supported = first = target = 0xdeadbeef;
+    ret = WinHttpQueryAuthSchemes(req, &supported, &first, &target);
+    ok(ret, "failed to query authentication schemes %u\n", GetLastError());
+    ok(supported == WINHTTP_AUTH_SCHEME_BASIC, "got %x\n", supported);
+    ok(first == WINHTTP_AUTH_SCHEME_BASIC, "got %x\n", first);
+    ok(target == WINHTTP_AUTH_TARGET_SERVER, "got %x\n", target);
+
+    ret = WinHttpSetCredentials(req, WINHTTP_AUTH_TARGET_SERVER, WINHTTP_AUTH_SCHEME_NTLM, NULL, NULL, NULL);
+    ok(ret, "failed to set credentials %u\n", GetLastError());
+
+    ret = WinHttpSetCredentials(req, WINHTTP_AUTH_TARGET_SERVER, WINHTTP_AUTH_SCHEME_PASSPORT, NULL, NULL, NULL);
+    ok(ret, "failed to set credentials %u\n", GetLastError());
+
+    ret = WinHttpSetCredentials(req, WINHTTP_AUTH_TARGET_SERVER, WINHTTP_AUTH_SCHEME_NEGOTIATE, NULL, NULL, NULL);
+    ok(ret, "failed to set credentials %u\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    ret = WinHttpSetCredentials(req, WINHTTP_AUTH_TARGET_SERVER, WINHTTP_AUTH_SCHEME_DIGEST, NULL, NULL, NULL);
+    error = GetLastError();
+    ok(!ret, "expected failure\n");
+    ok(error == ERROR_INVALID_PARAMETER, "expected ERROR_INVALID_PARAMETER, got %u\n", error);
+
+    SetLastError(0xdeadbeef);
+    ret = WinHttpSetCredentials(req, WINHTTP_AUTH_TARGET_SERVER, WINHTTP_AUTH_SCHEME_BASIC, NULL, NULL, NULL);
+    error = GetLastError();
+    ok(!ret, "expected failure\n");
+    ok(error == ERROR_INVALID_PARAMETER, "expected ERROR_INVALID_PARAMETER, got %u\n", error);
 
     SetLastError(0xdeadbeef);
     ret = WinHttpSetCredentials(req, WINHTTP_AUTH_TARGET_SERVER, WINHTTP_AUTH_SCHEME_BASIC, userW, NULL, NULL);
@@ -2055,6 +2136,55 @@ static void test_bad_header( int port )
     WinHttpCloseHandle( req );
     WinHttpCloseHandle( con );
     WinHttpCloseHandle( ses );
+}
+
+static void test_multiple_reads(int port)
+{
+    static const WCHAR bigW[] = {'b','i','g',0};
+    HINTERNET ses, con, req;
+    DWORD total_len = 0;
+    BOOL ret;
+
+    ses = WinHttpOpen(test_useragent, 0, NULL, NULL, 0);
+    ok(ses != NULL, "failed to open session %u\n", GetLastError());
+
+    con = WinHttpConnect(ses, localhostW, port, 0);
+    ok(con != NULL, "failed to open a connection %u\n", GetLastError());
+
+    req = WinHttpOpenRequest(con, NULL, bigW, NULL, NULL, NULL, 0);
+    ok(req != NULL, "failed to open a request %u\n", GetLastError());
+
+    ret = WinHttpSendRequest(req, NULL, 0, NULL, 0, 0, 0);
+    ok(ret, "failed to send request %u\n", GetLastError());
+
+    ret = WinHttpReceiveResponse(req, NULL);
+    ok(ret == TRUE, "expected success\n");
+
+    for (;;)
+    {
+        DWORD len = 0xdeadbeef;
+        ret = WinHttpQueryDataAvailable( req, &len );
+        ok( ret, "WinHttpQueryDataAvailable failed with error %u\n", GetLastError() );
+        if (ret) ok( len != 0xdeadbeef, "WinHttpQueryDataAvailable return wrong length\n" );
+        if (len)
+        {
+            DWORD bytes_read;
+            char *buf = HeapAlloc( GetProcessHeap(), 0, len + 1 );
+
+            ret = WinHttpReadData( req, buf, len, &bytes_read );
+            ok( len == bytes_read, "only got %u of %u available\n", bytes_read, len );
+
+            HeapFree( GetProcessHeap(), 0, buf );
+            if (!bytes_read) break;
+            total_len += bytes_read;
+        }
+        if (!len) break;
+    }
+    ok(total_len == BIG_BUFFER_LEN, "got wrong length: 0x%x\n", total_len);
+
+    WinHttpCloseHandle(req);
+    WinHttpCloseHandle(con);
+    WinHttpCloseHandle(ses);
 }
 
 static void test_connection_info( int port )
@@ -2686,7 +2816,7 @@ if (0) /* crashes on some win2k systems */
     if (!ret)
     {
         ok( error == ERROR_WINHTTP_AUTODETECTION_FAILED, "got %u\n", error );
-        ok( url == (WCHAR *)0xdeadbeef, "got %p\n", url );
+        ok( !url || broken(url == (WCHAR *)0xdeadbeef), "got %p\n", url );
     }
     else
     {
@@ -2701,7 +2831,7 @@ if (0) /* crashes on some win2k systems */
     if (!ret)
     {
         ok( error == ERROR_WINHTTP_AUTODETECTION_FAILED, "got %u\n", error );
-        ok( url == (WCHAR *)0xdeadbeef, "got %p\n", url );
+        ok( !url || broken(url == (WCHAR *)0xdeadbeef), "got %p\n", url );
     }
     else
     {
@@ -2950,7 +3080,7 @@ START_TEST (winhttp)
     test_WinHttpGetProxyForUrl();
     test_chunked_read();
 
-    si.event = CreateEvent(NULL, 0, 0, NULL);
+    si.event = CreateEventW(NULL, 0, 0, NULL);
     si.port = 7532;
 
     thread = CreateThread(NULL, 0, server_thread, (LPVOID)&si, 0, NULL);
@@ -2966,6 +3096,7 @@ START_TEST (winhttp)
     test_no_headers(si.port);
     test_basic_authentication(si.port);
     test_bad_header(si.port);
+    test_multiple_reads(si.port);
 
     /* send the basic request again to shutdown the server thread */
     test_basic_request(si.port, NULL, quitW);

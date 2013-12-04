@@ -1,7 +1,5 @@
-DEFS      = -D__WINESRC__ $(EXTRADEFS)
-
 PROGRAMS = winedump$(EXEEXT)
-MANPAGE  = winedump.man
+MANPAGES = winedump.man.in
 
 C_SRCS = \
 	debug.c \
@@ -25,7 +23,7 @@ C_SRCS = \
 	symbol.c \
 	tlb.c
 
-INSTALLDIRS = $(DESTDIR)$(bindir) $(DESTDIR)$(mandir)/man$(prog_manext)
+INSTALLDIRS = $(DESTDIR)$(bindir)
 
 all: $(PROGRAMS)
 

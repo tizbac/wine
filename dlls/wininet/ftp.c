@@ -531,7 +531,7 @@ static BOOL FTP_FtpSetCurrentDirectoryW(ftp_session_t *lpwfs, LPCWSTR lpszDirect
 {
     INT nResCode;
     appinfo_t *hIC = NULL;
-    DWORD bSuccess = FALSE;
+    BOOL bSuccess = FALSE;
 
     TRACE("lpszDirectory(%s)\n", debugstr_w(lpszDirectory));
 
@@ -1046,7 +1046,7 @@ static BOOL FTP_FtpGetCurrentDirectoryW(ftp_session_t *lpwfs, LPWSTR lpszCurrent
 {
     INT nResCode;
     appinfo_t *hIC = NULL;
-    DWORD bSuccess = FALSE;
+    BOOL bSuccess = FALSE;
 
     /* Clear any error information */
     INTERNET_SetLastError(0);
@@ -1291,6 +1291,12 @@ static DWORD FTPFILE_QueryDataAvailable(object_header_t *hdr, DWORD *available, 
     return ERROR_SUCCESS;
 }
 
+static DWORD FTPFILE_LockRequestFile(object_header_t *hdr, req_file_t **ret)
+{
+    ftp_file_t *file = (ftp_file_t*)hdr;
+    FIXME("%p\n", file);
+    return ERROR_NOT_SUPPORTED;
+}
 
 static const object_vtbl_t FTPFILEVtbl = {
     FTPFILE_Destroy,
@@ -1301,7 +1307,8 @@ static const object_vtbl_t FTPFILEVtbl = {
     FTPFILE_ReadFileEx,
     FTPFILE_WriteFile,
     FTPFILE_QueryDataAvailable,
-    NULL
+    NULL,
+    FTPFILE_LockRequestFile
 };
 
 /***********************************************************************

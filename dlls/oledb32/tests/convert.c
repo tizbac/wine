@@ -2276,6 +2276,59 @@ static void test_converttor4(void)
     ok(dst == 10.0, "got %f\n", dst);
 }
 
+static void test_converttor8(void)
+{
+    HRESULT hr;
+    DOUBLE dst;
+    BYTE src[20];
+    DBSTATUS dst_status;
+    DBLENGTH dst_len;
+    VARIANT var;
+
+    dst = 1.0;
+    dst_len = 0x1234;
+    hr = IDataConvert_DataConvert(convert, DBTYPE_EMPTY, DBTYPE_R8, 0, &dst_len, src, &dst, sizeof(dst), 0, &dst_status, 0, 0, 0);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(dst_status == DBSTATUS_S_OK, "got %08x\n", dst_status);
+    ok(dst_len == sizeof(dst), "got %ld\n", dst_len);
+    ok(dst == 0.0, "got %f\n", dst);
+
+    dst = 1.0;
+    dst_len = 0x1234;
+    hr = IDataConvert_DataConvert(convert, DBTYPE_NULL, DBTYPE_R8, 0, &dst_len, src, &dst, sizeof(dst), 0, &dst_status, 0, 0, 0);
+    ok(hr == DB_E_UNSUPPORTEDCONVERSION, "got %08x\n", hr);
+    ok(dst_status == DBSTATUS_E_BADACCESSOR, "got %08x\n", dst_status);
+    ok(dst_len == 0x1234, "got %ld\n", dst_len);
+    ok(dst == 1.0, "got %f\n", dst);
+
+    dst = 1.0;
+    *(signed int*)src = 12345678;
+    dst_len = 0x1234;
+    hr = IDataConvert_DataConvert(convert, DBTYPE_I4, DBTYPE_R8, 0, &dst_len, src, &dst, sizeof(dst), 0, &dst_status, 0, 0, 0);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(dst_status == DBSTATUS_S_OK, "got %08x\n", dst_status);
+    ok(dst_len == sizeof(dst), "got %ld\n", dst_len);
+    ok(dst == 12345678.0, "got %f\n", dst);
+
+    dst = 1.0;
+    *(FLOAT *)src = 10.0;
+    dst_len = 0x1234;
+    hr = IDataConvert_DataConvert(convert, DBTYPE_R4, DBTYPE_R8, 0, &dst_len, src, &dst, sizeof(dst), 0, &dst_status, 0, 0, 0);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(dst_status == DBSTATUS_S_OK, "got %08x\n", dst_status);
+    ok(dst_len == sizeof(dst), "got %ld\n", dst_len);
+    ok(dst == 10.0, "got %f\n", dst);
+
+    dst_len = dst = 0x1234;
+    V_VT(&var) = VT_I2;
+    V_I2(&var) = 0x4321;
+    hr = IDataConvert_DataConvert(convert, DBTYPE_VARIANT, DBTYPE_R8, 0, &dst_len, &var, &dst, sizeof(dst), 0, &dst_status, 0, 0, 0);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(dst_status == DBSTATUS_S_OK, "got %08x\n", dst_status);
+    ok(dst_len == sizeof(dst), "got %ld\n", dst_len);
+    ok(dst == 0x4321, "got %f\n", dst);
+}
+
 static void test_converttocy(void)
 {
     HRESULT hr;
@@ -2613,6 +2666,7 @@ static void test_converttovar(void)
     CY cy, cy2;
     DATE date;
     INT i4;
+    signed short i2;
     LARGE_INTEGER i8;
     VARIANT_BOOL boolean = VARIANT_TRUE;
     FLOAT fvalue = 543.21f;
@@ -2689,6 +2743,17 @@ static void test_converttovar(void)
     ok(dst_len == sizeof(dst), "got %ld\n", dst_len);
     ok(V_VT(&dst) == VT_I4, "got %d\n", V_VT(&dst));
     ok(V_I4(&dst) == 123, "got %d\n", V_I4(&dst));
+
+    V_VT(&dst) = VT_EMPTY;
+    dst_len = 0;
+    dst_status = DBSTATUS_S_DEFAULT;
+    i2 = 123;
+    hr = IDataConvert_DataConvert(convert, DBTYPE_I2, DBTYPE_VARIANT, sizeof(i2), &dst_len, &i2, &dst, sizeof(dst), 0, &dst_status, 0, 0, 0);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(dst_status == DBSTATUS_S_OK, "got %08x\n", dst_status);
+    ok(dst_len == sizeof(dst), "got %ld\n", dst_len);
+    ok(V_VT(&dst) == VT_I2, "got %d\n", V_VT(&dst));
+    ok(V_I2(&dst) == 123, "got %d\n", V_I2(&dst));
 
     V_VT(&dst) = VT_EMPTY;
     dst_len = 0;
@@ -2862,6 +2927,7 @@ START_TEST(convert)
     test_converttoui1();
     test_converttoui4();
     test_converttor4();
+    test_converttor8();
     test_converttofiletime();
     test_converttocy();
     test_converttoui8();

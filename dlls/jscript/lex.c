@@ -33,8 +33,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(jscript);
 
-#define LONGLONG_MAX (((LONGLONG)0x7fffffff<<32)|0xffffffff)
-
 static const WCHAR breakW[] = {'b','r','e','a','k',0};
 static const WCHAR caseW[] = {'c','a','s','e',0};
 static const WCHAR catchW[] = {'c','a','t','c','h',0};
@@ -397,7 +395,7 @@ static int parse_double_literal(parser_ctx_t *ctx, LONG int_part, literal_t **li
     d = int_part;
     while(ctx->ptr < ctx->end && isdigitW(*ctx->ptr)) {
         hlp = d*10 + *(ctx->ptr++) - '0';
-        if(d>LONGLONG_MAX/10 || hlp<0) {
+        if(d>MAXLONGLONG/10 || hlp<0) {
             exp++;
             break;
         }
@@ -414,7 +412,7 @@ static int parse_double_literal(parser_ctx_t *ctx, LONG int_part, literal_t **li
 
         while(ctx->ptr < ctx->end && isdigitW(*ctx->ptr)) {
             hlp = d*10 + *(ctx->ptr++) - '0';
-            if(d>LONGLONG_MAX/10 || hlp<0)
+            if(d>MAXLONGLONG/10 || hlp<0)
                 break;
 
             d = hlp;
@@ -456,6 +454,11 @@ static int parse_double_literal(parser_ctx_t *ctx, LONG int_part, literal_t **li
         else exp += e;
     }
 
+    if(is_identifier_char(*ctx->ptr)) {
+        WARN("wrong char after zero\n");
+        return lex_error(ctx, JS_E_MISSING_SEMICOLON);
+    }
+
     *literal = new_double_literal(ctx, exp>=0 ? d*pow(10, exp) : d/pow(10, -exp));
     return tNumericLiteral;
 }
@@ -479,21 +482,42 @@ static int parse_numeric_literal(parser_ctx_t *ctx, literal_t **literal)
 
             if(ctx->ptr < ctx->end && is_identifier_char(*ctx->ptr)) {
                 WARN("unexpected identifier char\n");
-                return lex_error(ctx, E_FAIL);
+                return lex_error(ctx, JS_E_MISSING_SEMICOLON);
             }
 
             *literal = new_double_literal(ctx, l);
             return tNumericLiteral;
         }
 
-        if(is_identifier_char(*ctx->ptr)) {
-            WARN("wrong char after zero\n");
-            return lex_error(ctx, E_FAIL);
+        if(isdigitW(*ctx->ptr)) {
+            unsigned base = 8;
+            const WCHAR *ptr;
+            double val = 0;
+
+            for(ptr = ctx->ptr; ptr < ctx->end && isdigitW(*ptr); ptr++) {
+                if(*ptr > '7') {
+                    base = 10;
+                    break;
+                }
+            }
+
+            do {
+                val = val*base + *ctx->ptr-'0';
+            }while(++ctx->ptr < ctx->end && isdigitW(*ctx->ptr));
+
+            /* FIXME: Do we need it here? */
+            if(ctx->ptr < ctx->end && (is_identifier_char(*ctx->ptr) || *ctx->ptr == '.')) {
+                WARN("wrong char after octal literal: '%c'\n", *ctx->ptr);
+                return lex_error(ctx, JS_E_MISSING_SEMICOLON);
+            }
+
+            *literal = new_double_literal(ctx, val);
+            return tNumericLiteral;
         }
 
-        if(isdigitW(*ctx->ptr)) {
-            FIXME("octal literals not implemented\n");
-            return lex_error(ctx, E_NOTIMPL);
+        if(is_identifier_char(*ctx->ptr)) {
+            WARN("wrong char after zero\n");
+            return lex_error(ctx, JS_E_MISSING_SEMICOLON);
         }
     }
 

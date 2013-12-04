@@ -126,7 +126,7 @@ HRESULT WINAPI IControlPanel_Constructor(IUnknown* pUnkOuter, REFIID riid, LPVOI
     if (!sf)
 	return E_OUTOFMEMORY;
 
-    sf->ref = 0;
+    sf->ref = 1;
     sf->IShellFolder2_iface.lpVtbl = &vt_ShellFolder2;
     sf->IPersistFolder2_iface.lpVtbl = &vt_PersistFolder2;
     sf->IShellExecuteHookW_iface.lpVtbl = &vt_ShellExecuteHookW;
@@ -138,6 +138,7 @@ HRESULT WINAPI IControlPanel_Constructor(IUnknown* pUnkOuter, REFIID riid, LPVOI
         IShellFolder2_Release(&sf->IShellFolder2_iface);
 	return E_NOINTERFACE;
     }
+    IShellFolder2_Release(&sf->IShellFolder2_iface);
 
     TRACE("--(%p)\n", sf);
     return S_OK;
@@ -159,7 +160,7 @@ static HRESULT WINAPI ISF_ControlPanel_fnQueryInterface(IShellFolder2 *iface, RE
 
     if (IsEqualIID(riid, &IID_IUnknown) ||
 	IsEqualIID(riid, &IID_IShellFolder) || IsEqualIID(riid, &IID_IShellFolder2))
-	*ppvObject = This;
+	*ppvObject = &This->IShellFolder2_iface;
     else if (IsEqualIID(riid, &IID_IPersist) ||
 	       IsEqualIID(riid, &IID_IPersistFolder) || IsEqualIID(riid, &IID_IPersistFolder2))
         *ppvObject = &This->IPersistFolder2_iface;
@@ -617,7 +618,7 @@ static HRESULT WINAPI ISF_ControlPanel_fnGetUIObjectOf(IShellFolder2 *iface, HWN
 	} else if ((IsEqualIID(riid,&IID_IShellLinkW) || IsEqualIID(riid,&IID_IShellLinkA))
 				&& (cidl == 1)) {
 	    pidl = ILCombine(This->pidlRoot, apidl[0]);
-	    hr = IShellLink_ConstructFromFile(NULL, riid, pidl,(LPVOID*)&pObj);
+	    hr = IShellLink_ConstructFromFile(NULL, riid, pidl, &pObj);
 	    SHFree(pidl);
 	} else {
 	    hr = E_NOINTERFACE;

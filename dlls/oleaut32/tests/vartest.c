@@ -28,7 +28,7 @@
 
 #include "windef.h"
 #include "winbase.h"
-#include "winsock.h"
+#include "winsock2.h"
 #include "wine/test.h"
 #include "winuser.h"
 #include "wingdi.h"
@@ -116,7 +116,7 @@ static void init(void)
     if (bstr) memcpy(&sz12_false[2], bstr, SysStringByteLen(bstr) + sizeof(WCHAR));
     SysFreeString(bstr);
 
-    hOleaut32 = GetModuleHandle("oleaut32.dll");
+    hOleaut32 = GetModuleHandleA("oleaut32.dll");
     has_i8 = GetProcAddress(hOleaut32, "VarI8FromI1") != NULL;
     if (!has_i8)
         skip("No support for I8 and UI8 data types\n");
@@ -381,9 +381,9 @@ static const VARTYPE ExtraFlags[16] =
 };
 
 /* Determine if a vt is valid for VariantClear() */
-static int IsValidVariantClearVT(VARTYPE vt, VARTYPE extraFlags)
+static BOOL IsValidVariantClearVT(VARTYPE vt, VARTYPE extraFlags)
 {
-  int ret = 0;
+  BOOL ret = FALSE;
 
   /* Only the following flags/types are valid */
   if ((vt <= VT_LPWSTR || vt == VT_RECORD || vt == VT_CLSID) &&
@@ -392,10 +392,10 @@ static int IsValidVariantClearVT(VARTYPE vt, VARTYPE extraFlags)
       (!(extraFlags & (VT_BYREF|VT_ARRAY)) || vt > VT_NULL) &&
       (extraFlags == 0 || extraFlags == VT_BYREF || extraFlags == VT_ARRAY ||
        extraFlags == (VT_ARRAY|VT_BYREF)))
-    ret = 1; /* ok */
+    ret = TRUE; /* ok */
 
   if (!has_i8 && (vt == VT_I8 || vt == VT_UI8))
-    ret = 0; /* Old versions of oleaut32 */
+    ret = FALSE; /* Old versions of oleaut32 */
   return ret;
 }
 
@@ -681,15 +681,15 @@ static void test_VariantCopy(void)
 }
 
 /* Determine if a vt is valid for VariantCopyInd() */
-static int IsValidVariantCopyIndVT(VARTYPE vt, VARTYPE extraFlags)
+static BOOL IsValidVariantCopyIndVT(VARTYPE vt, VARTYPE extraFlags)
 {
-  int ret = 0;
+  BOOL ret = FALSE;
 
   if ((extraFlags & VT_ARRAY) ||
      (vt > VT_NULL && vt != (VARTYPE)15 && vt < VT_VOID &&
      !(extraFlags & (VT_VECTOR|VT_RESERVED))))
   {
-    ret = 1; /* ok */
+    ret = TRUE; /* ok */
   }
   return ret;
 }
@@ -1727,6 +1727,10 @@ static void test_SystemTimeToVariantTime(void)
   ST2DT(2,1,1980,0,0,0,0,TRUE,29222.0);
   ST2DT(0,1,1980,0,0,0,0,TRUE,29220.0);   /* Rolls back to 31 Dec 1899 */
   ST2DT(1,13,1980,0,0,0,0,FALSE,29587.0); /* Fails on invalid month */
+  ST2DT(32,1,1980,0,0,0,0,FALSE,0.0);     /* Fails on invalid day */
+  ST2DT(1,1,-1,0,0,0,0,FALSE,0.0);        /* Fails on invalid year */
+  ST2DT(1,1,10000,0,0,0,0,FALSE,0.0);     /* Fails on invalid year */
+  ST2DT(1,1,9999,0,0,0,0,TRUE,2958101.0); /* 9999 is last valid year */
   ST2DT(31,12,90,0,0,0,0,TRUE,33238.0);   /* 30 <= year < 100 is 1900+year */
   ST2DT(1,1,30,0,0,0,0,TRUE,10959.0);     /* 30 <= year < 100 is 1900+year */
   ST2DT(1,1,29,0,0,0,0,TRUE,47119.0);     /* 0 <= year < 30 is 2000+year */
@@ -2875,7 +2879,7 @@ static void test_VarFix(void)
 
         for (vt = 0; vt <= VT_BSTR_BLOB; vt++)
         {
-            HRESULT bFail = TRUE;
+            BOOL bFail = TRUE;
 
             SKIPTESTS(vt);
 
@@ -2990,7 +2994,7 @@ static void test_VarInt(void)
 
         for (vt = 0; vt <= VT_BSTR_BLOB; vt++)
         {
-            HRESULT bFail = TRUE;
+            BOOL bFail = TRUE;
 
             SKIPTESTS(vt);
 
@@ -3111,7 +3115,7 @@ static void test_VarNeg(void)
 
         for (vt = 0; vt <= VT_BSTR_BLOB; vt++)
         {
-            HRESULT bFail = TRUE;
+            BOOL bFail = TRUE;
 
             SKIPTESTS(vt);
 
@@ -5366,7 +5370,7 @@ static void test_VarCat(void)
     static const WCHAR sz12_date[] = {'1','2','9','/','3','0','/','1','9','8','0','\0'};
     static const WCHAR sz12_date_broken[] = {'1','2','9','/','3','0','/','8','0','\0'};
     static const WCHAR sz_empty[] = {'\0'};
-    TCHAR orig_date_format[128];
+    CHAR orig_date_format[128];
     VARTYPE leftvt, rightvt, resultvt;
     HRESULT hres;
     HRESULT expected_error_num;
@@ -5375,8 +5379,8 @@ static void test_VarCat(void)
 
     /* Set date format for testing */
     lcid = LOCALE_USER_DEFAULT;
-    GetLocaleInfo(lcid,LOCALE_SSHORTDATE,orig_date_format,128);
-    SetLocaleInfo(lcid,LOCALE_SSHORTDATE,"M/d/yyyy");
+    GetLocaleInfoA(lcid,LOCALE_SSHORTDATE,orig_date_format,128);
+    SetLocaleInfoA(lcid,LOCALE_SSHORTDATE,"M/d/yyyy");
 
     VariantInit(&left);
     VariantInit(&right);
@@ -5697,7 +5701,7 @@ static void test_VarCat(void)
            "VarCat: EMPTY concat with EMPTY did not return empty VT_BSTR\n");
 
     /* Restore original date format settings */
-    SetLocaleInfo(lcid,LOCALE_SSHORTDATE,orig_date_format);
+    SetLocaleInfoA(lcid,LOCALE_SSHORTDATE,orig_date_format);
 
     VariantClear(&left);
     VariantClear(&right);

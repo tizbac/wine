@@ -2,6 +2,8 @@
  * based on Windows Sockets 1.1 specs
  *
  * Copyright (C) 1993,1994,1996,1997 John Brezak, Erik Bos, Alex Korobka.
+ * Copyright (C) 2001 Stefan Leichter
+ * Copyright (C) 2004 Hans Leidekker
  * Copyright (C) 2005 Marcus Meissner
  * Copyright (C) 2006-2008 Kai Blin
  *
@@ -143,6 +145,7 @@
 #include "ws2tcpip.h"
 #include "ws2spi.h"
 #include "wsipx.h"
+#include "wshisotp.h"
 #include "mstcpip.h"
 #include "af_irda.h"
 #include "winnt.h"
@@ -172,6 +175,31 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(winsock);
 WINE_DECLARE_DEBUG_CHANNEL(winediag);
+
+/* names of the protocols */
+static const WCHAR NameIpxW[]   = {'I', 'P', 'X', '\0'};
+static const WCHAR NameSpxW[]   = {'S', 'P', 'X', '\0'};
+static const WCHAR NameSpxIIW[] = {'S', 'P', 'X', ' ', 'I', 'I', '\0'};
+static const WCHAR NameTcpW[]   = {'T', 'C', 'P', '/', 'I', 'P', '\0'};
+static const WCHAR NameUdpW[]   = {'U', 'D', 'P', '/', 'I', 'P', '\0'};
+
+/* Taken from Win2k */
+static const GUID ProviderIdIP = { 0xe70f1aa0, 0xab8b, 0x11cf,
+                                   { 0x8c, 0xa3, 0x00, 0x80, 0x5f, 0x48, 0xa1, 0x92 } };
+static const GUID ProviderIdIPX = { 0x11058240, 0xbe47, 0x11cf,
+                                    { 0x95, 0xc8, 0x00, 0x80, 0x5f, 0x48, 0xa1, 0x92 } };
+static const GUID ProviderIdSPX = { 0x11058241, 0xbe47, 0x11cf,
+                                    { 0x95, 0xc8, 0x00, 0x80, 0x5f, 0x48, 0xa1, 0x92 } };
+
+static const INT valid_protocols[] =
+{
+    WS_IPPROTO_TCP,
+    WS_IPPROTO_UDP,
+    NSPROTO_IPX,
+    NSPROTO_SPX,
+    NSPROTO_SPXII,
+    0
+};
 
 #if defined(IP_UNICAST_IF) && defined(SO_ATTACH_FILTER)
 # define LINUX_BOUND_IF
@@ -367,6 +395,7 @@ static struct WS_hostent *WS_create_he(char *name, int aliases, int aliases_size
 static struct WS_hostent *WS_dup_he(const struct hostent* p_he);
 static struct WS_protoent *WS_dup_pe(const struct protoent* p_pe);
 static struct WS_servent *WS_dup_se(const struct servent* p_se);
+static int ws_protocol_info(SOCKET s, int unicode, WSAPROTOCOL_INFOW *buffer, int *size);
 
 int WSAIOCTL_GetInterfaceCount(void);
 int WSAIOCTL_GetInterfaceName(int intNumber, char *intName);
@@ -1241,6 +1270,14 @@ static inline BOOL supported_pf(int pf)
     }
 }
 
+static inline BOOL supported_protocol(int protocol)
+{
+    int i;
+    for (i = 0; i < sizeof(valid_protocols) / sizeof(valid_protocols[0]); i++)
+        if (protocol == valid_protocols[i])
+            return TRUE;
+    return FALSE;
+}
 
 /**********************************************************************/
 
@@ -1341,7 +1378,7 @@ static unsigned int ws_sockaddr_ws2u(const struct WS_sockaddr* wsaddr, int wsadd
     case WS_AF_UNSPEC: {
         /* Try to determine the needed space by the passed windows sockaddr space */
         switch (wsaddrlen) {
-        default: /* likely a ipv4 address */
+        default: /* likely an ipv4 address */
         case sizeof(struct WS_sockaddr_in):
             uaddrlen = sizeof(struct sockaddr_in);
             break;
@@ -1508,6 +1545,263 @@ static int ws_sockaddr_u2ws(const struct sockaddr* uaddr, struct WS_sockaddr* ws
         return -1;
     }
     return res;
+}
+
+static INT WS_DuplicateSocket(BOOL unicode, SOCKET s, DWORD dwProcessId, LPWSAPROTOCOL_INFOW lpProtocolInfo)
+{
+    HANDLE hProcess;
+    int size;
+    WSAPROTOCOL_INFOW infow;
+
+    TRACE("(unicode %d, socket %04lx, processid %x, buffer %p)\n",
+          unicode, s, dwProcessId, lpProtocolInfo);
+
+    if (!ws_protocol_info(s, unicode, &infow, &size))
+        return SOCKET_ERROR;
+
+    if (!(hProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, dwProcessId)))
+    {
+        SetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+
+    if (!lpProtocolInfo)
+    {
+        CloseHandle(hProcess);
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+
+    /* I don't know what the real Windoze does next, this is a hack */
+    /* ...we could duplicate and then use ConvertToGlobalHandle on the duplicate, then let
+     * the target use the global duplicate, or we could copy a reference to us to the structure
+     * and let the target duplicate it from us, but let's do it as simple as possible */
+    memcpy(lpProtocolInfo, &infow, size);
+    DuplicateHandle(GetCurrentProcess(), SOCKET2HANDLE(s),
+                    hProcess, (LPHANDLE)&lpProtocolInfo->dwServiceFlags3,
+                    0, FALSE, DUPLICATE_SAME_ACCESS);
+    CloseHandle(hProcess);
+    lpProtocolInfo->dwServiceFlags4 = 0xff00ff00; /* magic */
+    return 0;
+}
+
+/*****************************************************************************
+ *          WS_EnterSingleProtocolW [internal]
+ *
+ *    enters the protocol information of one given protocol into the given
+ *    buffer.
+ *
+ * RETURNS
+ *    TRUE if a protocol was entered into the buffer.
+ *
+ * BUGS
+ *    - only implemented for IPX, SPX, SPXII, TCP, UDP
+ *    - there is no check that the operating system supports the returned
+ *      protocols
+ */
+static BOOL WS_EnterSingleProtocolW( INT protocol, WSAPROTOCOL_INFOW* info )
+{
+    memset( info, 0, sizeof(WSAPROTOCOL_INFOW) );
+    info->iProtocol = protocol;
+
+    switch (protocol)
+    {
+    case WS_IPPROTO_TCP:
+        info->dwServiceFlags1 = XP1_IFS_HANDLES | XP1_EXPEDITED_DATA |
+                                XP1_GRACEFUL_CLOSE | XP1_GUARANTEED_ORDER |
+                                XP1_GUARANTEED_DELIVERY;
+        info->ProviderId = ProviderIdIP;
+        info->dwCatalogEntryId = 0x3e9;
+        info->dwProviderFlags = PFL_MATCHES_PROTOCOL_ZERO;
+        info->ProtocolChain.ChainLen = 1;
+        info->iVersion = 2;
+        info->iAddressFamily = WS_AF_INET;
+        info->iMaxSockAddr = 0x10;
+        info->iMinSockAddr = 0x10;
+        info->iSocketType = WS_SOCK_STREAM;
+        strcpyW( info->szProtocol, NameTcpW );
+        break;
+
+    case WS_IPPROTO_UDP:
+        info->dwServiceFlags1 = XP1_IFS_HANDLES | XP1_SUPPORT_BROADCAST |
+                                XP1_SUPPORT_MULTIPOINT | XP1_MESSAGE_ORIENTED |
+                                XP1_CONNECTIONLESS;
+        info->ProviderId = ProviderIdIP;
+        info->dwCatalogEntryId = 0x3ea;
+        info->dwProviderFlags = PFL_MATCHES_PROTOCOL_ZERO;
+        info->ProtocolChain.ChainLen = 1;
+        info->iVersion = 2;
+        info->iAddressFamily = WS_AF_INET;
+        info->iMaxSockAddr = 0x10;
+        info->iMinSockAddr = 0x10;
+        info->iSocketType = WS_SOCK_DGRAM;
+        info->dwMessageSize = 0xffbb;
+        strcpyW( info->szProtocol, NameUdpW );
+        break;
+
+    case NSPROTO_IPX:
+        info->dwServiceFlags1 = XP1_PARTIAL_MESSAGE | XP1_SUPPORT_BROADCAST |
+                                XP1_SUPPORT_MULTIPOINT | XP1_MESSAGE_ORIENTED |
+                                XP1_CONNECTIONLESS;
+        info->ProviderId = ProviderIdIPX;
+        info->dwCatalogEntryId = 0x406;
+        info->dwProviderFlags = PFL_MATCHES_PROTOCOL_ZERO;
+        info->ProtocolChain.ChainLen = 1;
+        info->iVersion = 2;
+        info->iAddressFamily = WS_AF_IPX;
+        info->iMaxSockAddr = 0x10;
+        info->iMinSockAddr = 0x0e;
+        info->iSocketType = WS_SOCK_DGRAM;
+        info->iProtocolMaxOffset = 0xff;
+        info->dwMessageSize = 0x240;
+        strcpyW( info->szProtocol, NameIpxW );
+        break;
+
+    case NSPROTO_SPX:
+        info->dwServiceFlags1 = XP1_IFS_HANDLES | XP1_PSEUDO_STREAM |
+                                XP1_MESSAGE_ORIENTED | XP1_GUARANTEED_ORDER |
+                                XP1_GUARANTEED_DELIVERY;
+        info->ProviderId = ProviderIdSPX;
+        info->dwCatalogEntryId = 0x407;
+        info->dwProviderFlags = PFL_MATCHES_PROTOCOL_ZERO;
+        info->ProtocolChain.ChainLen = 1;
+        info->iVersion = 2;
+        info->iAddressFamily = WS_AF_IPX;
+        info->iMaxSockAddr = 0x10;
+        info->iMinSockAddr = 0x0e;
+        info->iSocketType = WS_SOCK_SEQPACKET;
+        info->dwMessageSize = 0xffffffff;
+        strcpyW( info->szProtocol, NameSpxW );
+        break;
+
+    case NSPROTO_SPXII:
+        info->dwServiceFlags1 = XP1_IFS_HANDLES | XP1_GRACEFUL_CLOSE |
+                                XP1_PSEUDO_STREAM | XP1_MESSAGE_ORIENTED |
+                                XP1_GUARANTEED_ORDER | XP1_GUARANTEED_DELIVERY;
+        info->ProviderId = ProviderIdSPX;
+        info->dwCatalogEntryId = 0x409;
+        info->dwProviderFlags = PFL_MATCHES_PROTOCOL_ZERO;
+        info->ProtocolChain.ChainLen = 1;
+        info->iVersion = 2;
+        info->iAddressFamily = WS_AF_IPX;
+        info->iMaxSockAddr = 0x10;
+        info->iMinSockAddr = 0x0e;
+        info->iSocketType = WS_SOCK_SEQPACKET;
+        info->dwMessageSize = 0xffffffff;
+        strcpyW( info->szProtocol, NameSpxIIW );
+        break;
+
+    default:
+        FIXME("unknown Protocol <0x%08x>\n", protocol);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/*****************************************************************************
+ *          WS_EnterSingleProtocolA [internal]
+ *
+ *    see function WS_EnterSingleProtocolW
+ *
+ */
+static BOOL WS_EnterSingleProtocolA( INT protocol, WSAPROTOCOL_INFOA* info )
+{
+    WSAPROTOCOL_INFOW infow;
+    INT ret;
+    memset( info, 0, sizeof(WSAPROTOCOL_INFOA) );
+
+    ret = WS_EnterSingleProtocolW( protocol, &infow );
+    if (ret)
+    {
+        /* convert the structure from W to A */
+        memcpy( info, &infow, FIELD_OFFSET( WSAPROTOCOL_INFOA, szProtocol ) );
+        WideCharToMultiByte( CP_ACP, 0, infow.szProtocol, -1,
+                             info->szProtocol, WSAPROTOCOL_LEN+1, NULL, NULL );
+    }
+
+    return ret;
+}
+
+static INT WS_EnumProtocols( BOOL unicode, const INT *protocols, LPWSAPROTOCOL_INFOW buffer, LPDWORD len )
+{
+    INT i = 0, items = 0;
+    DWORD size = 0;
+    union _info
+    {
+      LPWSAPROTOCOL_INFOA a;
+      LPWSAPROTOCOL_INFOW w;
+    } info;
+    info.w = buffer;
+
+    if (!protocols) protocols = valid_protocols;
+
+    while (protocols[i])
+    {
+        if(supported_protocol(protocols[i++]))
+            items++;
+    }
+
+    size = items * (unicode ? sizeof(WSAPROTOCOL_INFOW) : sizeof(WSAPROTOCOL_INFOA));
+
+    TRACE("unicode %d, protocols %p, buffer %p, length %p %d, items %d, required %d\n",
+          unicode, protocols, buffer, len, len ? *len : 0, items, size);
+
+    if (*len < size || !buffer)
+    {
+        *len = size;
+        WSASetLastError(WSAENOBUFS);
+        return SOCKET_ERROR;
+    }
+
+    for (i = items = 0; protocols[i]; i++)
+    {
+        if (unicode)
+        {
+            if (WS_EnterSingleProtocolW( protocols[i], &info.w[items] ))
+                items++;
+        }
+        else
+        {
+            if (WS_EnterSingleProtocolA( protocols[i], &info.a[items] ))
+                items++;
+        }
+    }
+    return items;
+}
+
+static BOOL ws_protocol_info(SOCKET s, int unicode, WSAPROTOCOL_INFOW *buffer, int *size)
+{
+    NTSTATUS status;
+
+    *size = unicode ? sizeof(WSAPROTOCOL_INFOW) : sizeof(WSAPROTOCOL_INFOA);
+    memset(buffer, 0, *size);
+
+    SERVER_START_REQ( get_socket_info )
+    {
+        req->handle  = wine_server_obj_handle( SOCKET2HANDLE(s) );
+        status = wine_server_call( req );
+        if (!status)
+        {
+            buffer->iAddressFamily = convert_af_u2w(reply->family);
+            buffer->iSocketType = convert_socktype_u2w(reply->type);
+            buffer->iProtocol = convert_proto_u2w(reply->protocol);
+        }
+    }
+    SERVER_END_REQ;
+
+    if (status)
+    {
+        unsigned int err = NtStatusToWSAError( status );
+        SetLastError( err == WSAEBADF ? WSAENOTSOCK : err );
+        return FALSE;
+    }
+
+    if (unicode)
+        WS_EnterSingleProtocolW( buffer->iProtocol, buffer);
+    else
+        WS_EnterSingleProtocolA( buffer->iProtocol, (WSAPROTOCOL_INFOA *)buffer);
+
+    return TRUE;
 }
 
 /**************************************************************************
@@ -1953,8 +2247,7 @@ static int WS2_register_async_shutdown( SOCKET s, int type )
 /***********************************************************************
  *		accept		(WS2_32.1)
  */
-SOCKET WINAPI WS_accept(SOCKET s, struct WS_sockaddr *addr,
-                                 int *addrlen32)
+SOCKET WINAPI WS_accept(SOCKET s, struct WS_sockaddr *addr, int *addrlen32)
 {
     NTSTATUS status;
     SOCKET as;
@@ -1981,7 +2274,11 @@ SOCKET WINAPI WS_accept(SOCKET s, struct WS_sockaddr *addr,
         SERVER_END_REQ;
         if (!status)
         {
-            if (addr) WS_getpeername(as, addr, addrlen32);
+            if (addr && WS_getpeername(as, addr, addrlen32))
+            {
+                WS_closesocket(as);
+                return SOCKET_ERROR;
+            }
             return as;
         }
         if (is_blocking && status == STATUS_CANT_WAIT)
@@ -2022,6 +2319,13 @@ static BOOL WINAPI WS2_AcceptEx(SOCKET listener, SOCKET acceptor, PVOID dest, DW
     if (!overlapped)
     {
         SetLastError(WSA_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if ((local_addr_len < sizeof(struct sockaddr_in) + 16)
+       || (rem_addr_len < sizeof(struct sockaddr_in) + 16))
+    {
+        SetLastError(WSAEINVAL);
         return FALSE;
     }
 
@@ -2123,6 +2427,24 @@ static void WINAPI WS2_GetAcceptExSockaddrs(PVOID buffer, DWORD data_size, DWORD
 
     *remote_addr_len = *(int *) cbuf;
     *remote_addr = (struct WS_sockaddr *)(cbuf + sizeof(int));
+}
+
+/***********************************************************************
+ *     WSASendMsg
+ */
+int WINAPI WSASendMsg( SOCKET s, LPWSAMSG msg, DWORD dwFlags, LPDWORD lpNumberOfBytesSent,
+                       LPWSAOVERLAPPED lpOverlapped,
+                       LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine)
+{
+    if (!msg)
+    {
+        SetLastError( WSAEFAULT );
+        return SOCKET_ERROR;
+    }
+
+    return WS2_sendto( s, msg->lpBuffers, msg->dwBufferCount, lpNumberOfBytesSent,
+                       dwFlags, msg->name, msg->namelen,
+                       lpOverlapped, lpCompletionRoutine );
 }
 
 /***********************************************************************
@@ -2432,6 +2754,8 @@ static BOOL WINAPI WS2_ConnectEx(SOCKET s, const struct WS_sockaddr* name, int n
                           PVOID sendBuf, DWORD sendBufLen, LPDWORD sent, LPOVERLAPPED ov)
 {
     int fd, ret, status;
+    union generic_unix_sockaddr uaddr;
+    socklen_t uaddrlen = sizeof(uaddr);
 
     if (!ov)
     {
@@ -2449,7 +2773,17 @@ static BOOL WINAPI WS2_ConnectEx(SOCKET s, const struct WS_sockaddr* name, int n
     TRACE("socket %04lx, ptr %p %s, length %d, sendptr %p, len %d, ov %p\n",
           s, name, debugstr_sockaddr(name), namelen, sendBuf, sendBufLen, ov);
 
-    /* FIXME: technically the socket has to be bound */
+    if (getsockname(fd, &uaddr.addr, &uaddrlen) != 0)
+    {
+        SetLastError(wsaErrno());
+        return FALSE;
+    }
+    else if (!is_sockaddr_bound(&uaddr.addr, uaddrlen))
+    {
+        SetLastError(WSAEINVAL);
+        return FALSE;
+    }
+
     ret = do_connect(fd, name, namelen);
     if (ret == 0)
     {
@@ -2625,7 +2959,7 @@ INT WINAPI WS_getsockopt(SOCKET s, INT level,
     INT ret = 0;
 
     TRACE("socket: %04lx, level 0x%x, name 0x%x, ptr %p, len %d\n",
-          s, level, optname, optval, *optlen);
+          s, level, optname, optval, optlen ? *optlen : 0);
 
     switch(level)
     {
@@ -2635,7 +2969,6 @@ INT WINAPI WS_getsockopt(SOCKET s, INT level,
         {
         /* Handle common cases. The special cases are below, sorted
          * alphabetically */
-        case WS_SO_ACCEPTCONN:
         case WS_SO_BROADCAST:
         case WS_SO_DEBUG:
         case WS_SO_ERROR:
@@ -2644,7 +2977,6 @@ INT WINAPI WS_getsockopt(SOCKET s, INT level,
         case WS_SO_RCVBUF:
         case WS_SO_REUSEADDR:
         case WS_SO_SNDBUF:
-        case WS_SO_TYPE:
             if ( (fd = get_sock_fd( s, 0, NULL )) == -1)
                 return SOCKET_ERROR;
             convert_sockopt(&level, &optname);
@@ -2655,7 +2987,21 @@ INT WINAPI WS_getsockopt(SOCKET s, INT level,
             }
             release_sock_fd( s, fd );
             return ret;
-
+        case WS_SO_ACCEPTCONN:
+            if ( (fd = get_sock_fd( s, 0, NULL )) == -1)
+                return SOCKET_ERROR;
+            if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, optval, (socklen_t *)optlen) != 0 )
+            {
+                SetLastError((errno == EBADF) ? WSAENOTSOCK : wsaErrno());
+                ret = SOCKET_ERROR;
+            }
+            else
+            {
+                /* BSD returns != 0 while Windows return exact == 1 */
+                if (*(int *)optval) *(int *)optval = 1;
+            }
+            release_sock_fd( s, fd );
+            return ret;
         case WS_SO_DONTLINGER:
         {
             struct linger lingval;
@@ -2775,7 +3121,26 @@ INT WINAPI WS_getsockopt(SOCKET s, INT level,
             *optlen = sizeof(int);
             TRACE("getting global SO_OPENTYPE = 0x%x\n", *((int*)optval) );
             return 0;
+        case WS_SO_PROTOCOL_INFOA:
+        case WS_SO_PROTOCOL_INFOW:
+        {
+            int size;
+            WSAPROTOCOL_INFOW infow;
 
+            ret = ws_protocol_info(s, optname == WS_SO_PROTOCOL_INFOW, &infow, &size);
+            if (ret)
+            {
+                if (!optlen || !optval || *optlen < size)
+                {
+                    if(optlen) *optlen = size;
+                    ret = 0;
+                    SetLastError(WSAEFAULT);
+                }
+                else
+                    memcpy(optval, &infow, size);
+            }
+            return ret ? 0 : SOCKET_ERROR;
+        }
 #ifdef SO_RCVTIMEO
         case WS_SO_RCVTIMEO:
 #endif
@@ -2811,6 +3176,27 @@ INT WINAPI WS_getsockopt(SOCKET s, INT level,
             return ret;
         }
 #endif
+        case WS_SO_TYPE:
+        {
+            if (!optlen || *optlen < sizeof(int) || !optval)
+            {
+                SetLastError(WSAEFAULT);
+                return SOCKET_ERROR;
+            }
+            if ( (fd = get_sock_fd( s, 0, NULL )) == -1)
+                return SOCKET_ERROR;
+
+            if (getsockopt(fd, SOL_SOCKET, SO_TYPE, optval, (socklen_t *)optlen) != 0 )
+            {
+                SetLastError((errno == EBADF) ? WSAENOTSOCK : wsaErrno());
+                ret = SOCKET_ERROR;
+            }
+            else
+                (*(int *)optval) = convert_socktype_u2w(*(int *)optval);
+
+            release_sock_fd( s, fd );
+            return ret;
+        }
         default:
             TRACE("Unknown SOL_SOCKET optname: 0x%08x\n", optname);
             SetLastError(WSAENOPROTOOPT);
@@ -3540,7 +3926,8 @@ INT WINAPI WSAIoctl(SOCKET s, DWORD code, LPVOID in_buff, DWORD in_size, LPVOID 
         }
         else if ( IsEqualGUID(&wsasendmsg_guid, in_buff) )
         {
-            FIXME("SIO_GET_EXTENSION_FUNCTION_POINTER: unimplemented WSASendMsg\n");
+            *(LPFN_WSASENDMSG *)out_buff = WSASendMsg;
+            break;
         }
         else
             FIXME("SIO_GET_EXTENSION_FUNCTION_POINTER %s: stub\n", debugstr_guid(in_buff));
@@ -3695,23 +4082,36 @@ int WINAPI WS_ioctlsocket(SOCKET s, LONG cmd, WS_u_long *argp)
  */
 int WINAPI WS_listen(SOCKET s, int backlog)
 {
-    int fd = get_sock_fd( s, FILE_READ_DATA, NULL );
+    int fd = get_sock_fd( s, FILE_READ_DATA, NULL ), ret = SOCKET_ERROR;
 
     TRACE("socket %04lx, backlog %d\n", s, backlog);
     if (fd != -1)
     {
-	if (listen(fd, backlog) == 0)
-	{
-            release_sock_fd( s, fd );
-	    _enable_event(SOCKET2HANDLE(s), FD_ACCEPT,
-			  FD_WINE_LISTENING,
-			  FD_CONNECT|FD_WINE_CONNECTED);
-	    return 0;
-	}
-	SetLastError(wsaErrno());
+        union generic_unix_sockaddr uaddr;
+        socklen_t uaddrlen = sizeof(uaddr);
+
+        if (getsockname(fd, &uaddr.addr, &uaddrlen) != 0)
+        {
+            SetLastError(wsaErrno());
+        }
+        else if (!is_sockaddr_bound(&uaddr.addr, uaddrlen))
+        {
+            SetLastError(WSAEINVAL);
+        }
+        else if (listen(fd, backlog) == 0)
+        {
+            _enable_event(SOCKET2HANDLE(s), FD_ACCEPT,
+                          FD_WINE_LISTENING,
+                          FD_CONNECT|FD_WINE_CONNECTED);
+            ret = 0;
+        }
+        else
+            SetLastError(wsaErrno());
         release_sock_fd( s, fd );
     }
-    return SOCKET_ERROR;
+    else
+        SetLastError(WSAENOTSOCK);
+    return ret;
 }
 
 /***********************************************************************
@@ -4665,7 +5065,8 @@ static struct WS_hostent* WS_get_local_ips( char *hostname )
     for (n = 0; n < routes->dwNumEntries; n++)
     {
         IF_INDEX ifindex;
-        DWORD ifmetric, exists = FALSE;
+        DWORD ifmetric;
+        BOOL exists = FALSE;
 
         if (routes->table[n].u1.ForwardType != MIB_IPROUTE_TYPE_DIRECT)
             continue;
@@ -5000,6 +5401,7 @@ int WINAPI WS_getaddrinfo(LPCSTR nodename, LPCSTR servname, const struct WS_addr
     char *hostname = NULL;
     const char *node;
 
+    *res = NULL;
     if (!nodename && !servname) return WSAHOST_NOT_FOUND;
 
     if (!nodename)
@@ -5082,16 +5484,14 @@ int WINAPI WS_getaddrinfo(LPCSTR nodename, LPCSTR servname, const struct WS_addr
             xuai = xuai->ai_next;
         }
         freeaddrinfo(unixaires);
-    } else {
+    } else
         result = convert_eai_u2w(result);
-        *res = NULL;
-    }
+
     return result;
 
 outofmem:
     if (*res) WS_freeaddrinfo(*res);
     if (unixaires) freeaddrinfo(unixaires);
-    *res = NULL;
     return WSA_NOT_ENOUGH_MEMORY;
 #else
     FIXME("getaddrinfo() failed, not found during buildtime.\n");
@@ -5198,6 +5598,7 @@ int WINAPI GetAddrInfoW(LPCWSTR nodename, LPCWSTR servname, const ADDRINFOW *hin
     char *nodenameA = NULL, *servnameA = NULL;
     struct WS_addrinfo *resA, *hintsA = NULL;
 
+    *res = NULL;
     if (nodename)
     {
         len = WideCharToMultiByte(CP_ACP, 0, nodename, -1, NULL, 0, NULL, NULL);
@@ -5529,6 +5930,8 @@ SOCKET WINAPI WSASocketW(int af, int type, int protocol,
                          GROUP g, DWORD dwFlags)
 {
     SOCKET ret;
+    DWORD err;
+    int unixaf, unixtype;
 
    /*
       FIXME: The "advanced" parameters of WSASocketW (lpProtocolInfo,
@@ -5538,45 +5941,92 @@ SOCKET WINAPI WSASocketW(int af, int type, int protocol,
    TRACE("af=%d type=%d protocol=%d protocol_info=%p group=%d flags=0x%x\n",
          af, type, protocol, lpProtocolInfo, g, dwFlags );
 
+    if (!num_startup)
+    {
+        err = WSANOTINITIALISED;
+        goto done;
+    }
+
     /* hack for WSADuplicateSocket */
     if (lpProtocolInfo && lpProtocolInfo->dwServiceFlags4 == 0xff00ff00) {
-      ret = lpProtocolInfo->dwCatalogEntryId;
+      ret = lpProtocolInfo->dwServiceFlags3;
       TRACE("\tgot duplicate %04lx\n", ret);
       return ret;
     }
 
-    /* convert the socket family and type */
-    af = convert_af_w2u(af);
-    type = convert_socktype_w2u(type);
-
     if (lpProtocolInfo)
     {
-        if (af == FROM_PROTOCOL_INFO)
+        if (af == FROM_PROTOCOL_INFO || !af)
             af = lpProtocolInfo->iAddressFamily;
-        if (type == FROM_PROTOCOL_INFO)
+        if (type == FROM_PROTOCOL_INFO || !type)
             type = lpProtocolInfo->iSocketType;
-        if (protocol == FROM_PROTOCOL_INFO)
+        if (protocol == FROM_PROTOCOL_INFO || !protocol)
             protocol = lpProtocolInfo->iProtocol;
     }
 
-    if ( af == AF_UNSPEC)  /* did they not specify the address family? */
+    if (!type && (af || protocol))
     {
-        if ((protocol == IPPROTO_TCP && type == SOCK_STREAM) ||
-            (protocol == IPPROTO_UDP && type == SOCK_DGRAM))
+        WSAPROTOCOL_INFOW infow;
+
+        /* default to the first valid protocol */
+        if (!protocol)
+            protocol = valid_protocols[0];
+
+        if (WS_EnterSingleProtocolW(protocol, &infow))
         {
-            af = AF_INET;
+            type = infow.iSocketType;
+
+            /* after win2003 it's no longer possible to pass AF_UNSPEC
+               using the protocol info struct */
+            if (!lpProtocolInfo && af == WS_AF_UNSPEC)
+                af = infow.iAddressFamily;
         }
-        else
+    }
+
+    /* convert the socket family, type and protocol */
+    unixaf = convert_af_w2u(af);
+    unixtype = convert_socktype_w2u(type);
+    protocol = convert_proto_w2u(protocol);
+    if (unixaf == AF_UNSPEC) unixaf = -1;
+
+    /* filter invalid parameters */
+    if (protocol < 0)
+    {
+        /* the type could not be converted */
+        if (type && unixtype < 0)
         {
-            SetLastError(WSAEPROTOTYPE);
-            return INVALID_SOCKET;
+            err = WSAESOCKTNOSUPPORT;
+            goto done;
         }
+
+        err = WSAEPROTONOSUPPORT;
+        goto done;
+    }
+    if (unixaf < 0)
+    {
+        /* both family and protocol can't be invalid */
+        if (protocol <= 0)
+        {
+            err = WSAEINVAL;
+            goto done;
+        }
+
+        /* family could not be converted and neither socket type */
+        if (unixtype < 0 && af >= 0)
+        {
+
+            err = WSAESOCKTNOSUPPORT;
+            goto done;
+        }
+
+        err = WSAEAFNOSUPPORT;
+        goto done;
     }
 
     SERVER_START_REQ( create_socket )
     {
-        req->family     = af;
-        req->type       = type;
+        req->family     = unixaf;
+        req->type       = unixtype;
         req->protocol   = protocol;
         req->access     = GENERIC_READ|GENERIC_WRITE|SYNCHRONIZE;
         req->attributes = OBJ_INHERIT;
@@ -5591,16 +6041,26 @@ SOCKET WINAPI WSASocketW(int af, int type, int protocol,
         return ret;
     }
 
-    if (GetLastError() == WSAEACCES) /* raw socket denied */
+    err = GetLastError();
+    if (err == WSAEACCES) /* raw socket denied */
     {
         if (type == SOCK_RAW)
             ERR_(winediag)("Failed to create a socket of type SOCK_RAW, this requires special permissions.\n");
         else
             ERR_(winediag)("Failed to create socket, this requires special permissions.\n");
-        SetLastError(WSAESOCKTNOSUPPORT);
+    }
+    else
+    {
+        /* invalid combination of valid parameters, like SOCK_STREAM + IPPROTO_UDP */
+        if (err == WSAEINVAL)
+            err = WSAESOCKTNOSUPPORT;
+        else if (err == WSAEOPNOTSUPP)
+            err = WSAEPROTONOSUPPORT;
     }
 
-    WARN("\t\tfailed!\n");
+done:
+    WARN("\t\tfailed, error %d!\n", err);
+    SetLastError(err);
     return INVALID_SOCKET;
 }
 
@@ -6096,7 +6556,7 @@ SOCKET WINAPI WSAAccept( SOCKET s, struct WS_sockaddr *addr, LPINT addrlen,
                LPCONDITIONPROC lpfnCondition, DWORD_PTR dwCallbackData)
 {
 
-       int ret = 0, size = 0;
+       int ret = 0, size;
        WSABUF CallerId, CallerData, CalleeId, CalleeData;
        /*        QOS SQOS, GQOS; */
        GROUP g;
@@ -6106,25 +6566,30 @@ SOCKET WINAPI WSAAccept( SOCKET s, struct WS_sockaddr *addr, LPINT addrlen,
        TRACE("Socket %04lx, sockaddr %p, addrlen %p, fnCondition %p, dwCallbackData %ld\n",
                s, addr, addrlen, lpfnCondition, dwCallbackData);
 
-
-       size = sizeof(src_addr);
-       cs = WS_accept(s, &src_addr, &size);
-
+       cs = WS_accept(s, addr, addrlen);
        if (cs == SOCKET_ERROR) return SOCKET_ERROR;
-
        if (!lpfnCondition) return cs;
 
-       CallerId.buf = (char *)&src_addr;
-       CallerId.len = sizeof(src_addr);
-
+       if (addr && addrlen)
+       {
+           CallerId.buf = (char *)addr;
+           CallerId.len = *addrlen;
+       }
+       else
+       {
+           size = sizeof(src_addr);
+           WS_getpeername(cs, &src_addr, &size);
+           CallerId.buf = (char *)&src_addr;
+           CallerId.len = size;
+       }
        CallerData.buf = NULL;
        CallerData.len = 0;
 
+       size = sizeof(dst_addr);
        WS_getsockname(cs, &dst_addr, &size);
 
        CalleeId.buf = (char *)&dst_addr;
        CalleeId.len = sizeof(dst_addr);
-
 
        ret = (*lpfnCondition)(&CallerId, &CallerData, NULL, NULL,
                        &CalleeId, &CalleeData, &g, dwCallbackData);
@@ -6132,8 +6597,6 @@ SOCKET WINAPI WSAAccept( SOCKET s, struct WS_sockaddr *addr, LPINT addrlen,
        switch (ret)
        {
                case CF_ACCEPT:
-                       if (addr && addrlen)
-                           memcpy(addr, &src_addr, (*addrlen > size) ? size : *addrlen );
                        return cs;
                case CF_DEFER:
                        SERVER_START_REQ( set_socket_deferred )
@@ -6164,22 +6627,7 @@ SOCKET WINAPI WSAAccept( SOCKET s, struct WS_sockaddr *addr, LPINT addrlen,
  */
 int WINAPI WSADuplicateSocketA( SOCKET s, DWORD dwProcessId, LPWSAPROTOCOL_INFOA lpProtocolInfo )
 {
-   HANDLE hProcess;
-
-   TRACE("(%ld,%x,%p)\n", s, dwProcessId, lpProtocolInfo);
-   memset(lpProtocolInfo, 0, sizeof(*lpProtocolInfo));
-   /* FIXME: WS_getsockopt(s, WS_SOL_SOCKET, SO_PROTOCOL_INFO, lpProtocolInfo, sizeof(*lpProtocolInfo)); */
-   /* I don't know what the real Windoze does next, this is a hack */
-   /* ...we could duplicate and then use ConvertToGlobalHandle on the duplicate, then let
-    * the target use the global duplicate, or we could copy a reference to us to the structure
-    * and let the target duplicate it from us, but let's do it as simple as possible */
-   hProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, dwProcessId);
-   DuplicateHandle(GetCurrentProcess(), SOCKET2HANDLE(s),
-                   hProcess, (LPHANDLE)&lpProtocolInfo->dwCatalogEntryId,
-                   0, FALSE, DUPLICATE_SAME_ACCESS);
-   CloseHandle(hProcess);
-   lpProtocolInfo->dwServiceFlags4 = 0xff00ff00; /* magic */
-   return 0;
+    return WS_DuplicateSocket(FALSE, s, dwProcessId, (LPWSAPROTOCOL_INFOW) lpProtocolInfo);
 }
 
 /***********************************************************************
@@ -6187,18 +6635,7 @@ int WINAPI WSADuplicateSocketA( SOCKET s, DWORD dwProcessId, LPWSAPROTOCOL_INFOA
  */
 int WINAPI WSADuplicateSocketW( SOCKET s, DWORD dwProcessId, LPWSAPROTOCOL_INFOW lpProtocolInfo )
 {
-   HANDLE hProcess;
-
-   TRACE("(%ld,%x,%p)\n", s, dwProcessId, lpProtocolInfo);
-
-   memset(lpProtocolInfo, 0, sizeof(*lpProtocolInfo));
-   hProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, dwProcessId);
-   DuplicateHandle(GetCurrentProcess(), SOCKET2HANDLE(s),
-                   hProcess, (LPHANDLE)&lpProtocolInfo->dwCatalogEntryId,
-                   0, FALSE, DUPLICATE_SAME_ACCESS);
-   CloseHandle(hProcess);
-   lpProtocolInfo->dwServiceFlags4 = 0xff00ff00; /* magic */
-   return 0;
+    return WS_DuplicateSocket(TRUE, s, dwProcessId, lpProtocolInfo);
 }
 
 /***********************************************************************
@@ -6845,4 +7282,82 @@ INT WINAPI WSANSPIoctl( HANDLE hLookup, DWORD dwControlCode, LPVOID lpvInBuffer,
     lpvInBuffer, cbInBuffer, lpvOutBuffer, cbOutBuffer, lpcbBytesReturned, lpCompletion);
     WSASetLastError(WSA_NOT_ENOUGH_MEMORY);
     return SOCKET_ERROR;
+}
+
+/*****************************************************************************
+ *          WSAEnumProtocolsA       [WS2_32.@]
+ *
+ *    see function WSAEnumProtocolsW
+ */
+INT WINAPI WSAEnumProtocolsA( LPINT protocols, LPWSAPROTOCOL_INFOA buffer, LPDWORD len )
+{
+    return WS_EnumProtocols( FALSE, protocols, (LPWSAPROTOCOL_INFOW) buffer, len);
+}
+
+/*****************************************************************************
+ *          WSAEnumProtocolsW       [WS2_32.@]
+ *
+ * Retrieves information about specified set of active network protocols.
+ *
+ * PARAMS
+ *  protocols [I]   Pointer to null-terminated array of protocol id's. NULL
+ *                  retrieves information on all available protocols.
+ *  buffer    [I]   Pointer to a buffer to be filled with WSAPROTOCOL_INFO
+ *                  structures.
+ *  len       [I/O] Pointer to a variable specifying buffer size. On output
+ *                  the variable holds the number of bytes needed when the
+ *                  specified size is too small.
+ *
+ * RETURNS
+ *  Success: number of WSAPROTOCOL_INFO structures in buffer.
+ *  Failure: SOCKET_ERROR
+ *
+ * NOTES
+ *  NT4SP5 does not return SPX if protocols == NULL
+ *
+ * BUGS
+ *  - NT4SP5 returns in addition these list of NETBIOS protocols
+ *    (address family 17), each entry two times one for socket type 2 and 5
+ *
+ *    iProtocol   szProtocol
+ *    0x80000000  \Device\NwlnkNb
+ *    0xfffffffa  \Device\NetBT_CBENT7
+ *    0xfffffffb  \Device\Nbf_CBENT7
+ *    0xfffffffc  \Device\NetBT_NdisWan5
+ *    0xfffffffd  \Device\NetBT_El9202
+ *    0xfffffffe  \Device\Nbf_El9202
+ *    0xffffffff  \Device\Nbf_NdisWan4
+ *
+ *  - there is no check that the operating system supports the returned
+ *    protocols
+ */
+INT WINAPI WSAEnumProtocolsW( LPINT protocols, LPWSAPROTOCOL_INFOW buffer, LPDWORD len )
+{
+    return WS_EnumProtocols( TRUE, protocols, buffer, len);
+}
+
+/*****************************************************************************
+ *          WSCEnumProtocols        [WS2_32.@]
+ *
+ * PARAMS
+ *  protocols [I]   Null-terminated array of iProtocol values.
+ *  buffer    [O]   Buffer of WSAPROTOCOL_INFOW structures.
+ *  len       [I/O] Size of buffer on input/output.
+ *  errno     [O]   Error code.
+ *
+ * RETURNS
+ *  Success: number of protocols to be reported on.
+ *  Failure: SOCKET_ERROR. error is in errno.
+ *
+ * BUGS
+ *  Doesn't supply info on layered protocols.
+ *
+ */
+INT WINAPI WSCEnumProtocols( LPINT protocols, LPWSAPROTOCOL_INFOW buffer, LPDWORD len, LPINT err )
+{
+    INT ret = WSAEnumProtocolsW( protocols, buffer, len );
+
+    if (ret == SOCKET_ERROR) *err = WSAENOBUFS;
+
+    return ret;
 }

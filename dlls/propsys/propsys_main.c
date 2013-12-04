@@ -159,6 +159,12 @@ HRESULT WINAPI PSGetPropertyDescription(REFPROPERTYKEY propkey, REFIID riid, voi
     return E_NOTIMPL;
 }
 
+HRESULT WINAPI PSGetPropertyDescriptionListFromString(LPCWSTR proplist, REFIID riid, void **ppv)
+{
+    FIXME("%s, %p, %p\n", debugstr_w(proplist), riid, ppv);
+    return E_NOTIMPL;
+}
+
 HRESULT WINAPI PSRefreshPropertySchema(void)
 {
     FIXME("\n");
@@ -315,7 +321,7 @@ static BOOL string_to_guid(LPCWSTR s, LPGUID id)
 
 HRESULT WINAPI PSPropertyKeyFromString(LPCWSTR pszString, PROPERTYKEY *pkey)
 {
-    int has_minus = 0, has_comma = 0;
+    BOOL has_minus = FALSE, has_comma = FALSE;
 
     TRACE("(%s, %p)\n", debugstr_w(pszString), pkey);
 
@@ -341,7 +347,7 @@ HRESULT WINAPI PSPropertyKeyFromString(LPCWSTR pszString, PROPERTYKEY *pkey)
             if (has_comma)
                 return S_OK;
             else
-                has_comma = 1;
+                has_comma = TRUE;
         }
         pszString++;
     }
@@ -357,7 +363,7 @@ HRESULT WINAPI PSPropertyKeyFromString(LPCWSTR pszString, PROPERTYKEY *pkey)
     {
         if (*pszString == '-')
         {
-            has_minus = 1;
+            has_minus = TRUE;
             pszString++;
         }
     }
@@ -372,7 +378,7 @@ HRESULT WINAPI PSPropertyKeyFromString(LPCWSTR pszString, PROPERTYKEY *pkey)
 
         if (*pszString == '-')
         {
-            has_minus = 1;
+            has_minus = TRUE;
             pszString++;
         }
 

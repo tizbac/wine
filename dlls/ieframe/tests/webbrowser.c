@@ -2052,7 +2052,7 @@ static void test_ie_funcs(IWebBrowser2 *wb)
     IDispatch *disp;
     VARIANT_BOOL b;
     int i;
-    LONG hwnd;
+    SHANDLE_PTR hwnd;
     HRESULT hres;
     BSTR sName;
 
@@ -2061,7 +2061,7 @@ static void test_ie_funcs(IWebBrowser2 *wb)
     hwnd = 0xdeadbeef;
     hres = IWebBrowser2_get_HWND(wb, &hwnd);
     ok(hres == E_FAIL, "get_HWND failed: %08x, expected E_FAIL\n", hres);
-    ok(hwnd == 0, "unexpected hwnd %x\n", hwnd);
+    ok(hwnd == 0, "unexpected hwnd %p\n", (PVOID)hwnd);
 
     /* MenuBar */
 
@@ -2742,7 +2742,7 @@ static void test_download(DWORD flags)
     test_ready_state((flags & (DWL_FROM_PUT_HREF|DWL_FROM_GOBACK|DWL_FROM_GOFORWARD|DWL_REFRESH))
                      ? READYSTATE_COMPLETE : READYSTATE_LOADING);
 
-    if((is_http && !(flags & (DWL_FROM_GOBACK|DWL_FROM_GOFORWARD|DWL_REFRESH))) || (flags & DWL_EXPECT_BEFORE_NAVIGATE))
+    if(flags & (DWL_EXPECT_BEFORE_NAVIGATE|(is_http ? DWL_FROM_PUT_HREF : 0)))
         SET_EXPECT(Invoke_PROPERTYCHANGE);
 
     if(flags & DWL_EXPECT_BEFORE_NAVIGATE) {
@@ -2779,12 +2779,12 @@ static void test_download(DWORD flags)
     SET_EXPECT(Exec_UPDATECOMMANDS);
     SET_EXPECT(QueryStatus_STOP);
 
-    while(!*b && GetMessage(&msg, NULL, 0, 0)) {
+    while(!*b && GetMessageW(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
-    if((is_http && !(flags & (DWL_FROM_GOBACK|DWL_FROM_GOFORWARD|DWL_REFRESH))) || (flags & DWL_EXPECT_BEFORE_NAVIGATE))
+    if(flags & (DWL_EXPECT_BEFORE_NAVIGATE|(is_http ? DWL_FROM_PUT_HREF : 0)))
         todo_wine CHECK_CALLED(Invoke_PROPERTYCHANGE);
 
     if(flags & DWL_EXPECT_BEFORE_NAVIGATE) {
@@ -2824,9 +2824,9 @@ static void test_download(DWORD flags)
 
     test_ready_state(READYSTATE_COMPLETE);
 
-    while(!called_Exec_UPDATECOMMANDS && GetMessage(&msg, NULL, 0, 0)) {
+    while(!called_Exec_UPDATECOMMANDS && GetMessageA(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        DispatchMessageA(&msg);
     }
 
     todo_wine CHECK_CALLED(Invoke_PROGRESSCHANGE);
@@ -2914,6 +2914,8 @@ static void test_put_href(IWebBrowser2 *unk, const char *url)
     BSTR str;
     HRESULT hres;
 
+    trace("put_href(%s)...\n", url);
+
     doc = get_document(unk);
 
     location = NULL;
@@ -2922,6 +2924,8 @@ static void test_put_href(IWebBrowser2 *unk, const char *url)
     ok(hres == S_OK, "get_location failed: %08x\n", hres);
     ok(location != NULL, "location == NULL\n");
 
+    is_http = !memcmp(url, "http:", 5);
+
     SET_EXPECT(TranslateUrl);
     SET_EXPECT(Invoke_BEFORENAVIGATE2);
     if(!is_http)
@@ -2929,7 +2933,6 @@ static void test_put_href(IWebBrowser2 *unk, const char *url)
 
     dwl_flags = DWL_FROM_PUT_HREF;
 
-    is_http = !memcmp(url, "http:", 5);
     str = a2bstr(current_url = url);
     is_first_load = FALSE;
     hres = IHTMLLocation_put_href(location, str);
@@ -3423,7 +3426,7 @@ static void test_WebBrowser(BOOL do_download, BOOL do_close)
             test_Refresh(webbrowser);
 
             trace("put_href http URL...\n");
-            test_put_href(webbrowser, "http://www.winehq.org/");
+            test_put_href(webbrowser, "http://test.winehq.org/tests/winehq_snapshot/");
             test_download(DWL_FROM_PUT_HREF|DWL_HTTP);
 
             trace("GoBack...\n");
@@ -3431,7 +3434,7 @@ static void test_WebBrowser(BOOL do_download, BOOL do_close)
             test_download(DWL_FROM_GOBACK|DWL_HTTP);
 
             trace("GoForward...\n");
-            test_go_forward(webbrowser, "http://www.winehq.org/");
+            test_go_forward(webbrowser, "http://test.winehq.org/tests/winehq_snapshot/");
             test_download(DWL_FROM_GOFORWARD|DWL_HTTP);
         }
 
@@ -3562,10 +3565,10 @@ static BOOL is_ie_hardened(void)
     DWORD ie_harden, type, size;
 
     ie_harden = 0;
-    if(RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\ZoneMap",
+    if(RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\ZoneMap",
                     0, KEY_QUERY_VALUE, &zone_map) == ERROR_SUCCESS) {
         size = sizeof(DWORD);
-        if (RegQueryValueEx(zone_map, "IEHarden", NULL, &type, (LPBYTE) &ie_harden, &size) != ERROR_SUCCESS ||
+        if (RegQueryValueExA(zone_map, "IEHarden", NULL, &type, (LPBYTE) &ie_harden, &size) != ERROR_SUCCESS ||
             type != REG_DWORD) {
             ie_harden = 0;
         }

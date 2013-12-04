@@ -44,23 +44,18 @@
 #define MAX_INTERFACE_PHYSADDR    8
 #define MAX_INTERFACE_DESCRIPTION 256
 
-DWORD getNumInterfaces(void) DECLSPEC_HIDDEN;
-DWORD getNumNonLoopbackInterfaces(void) DECLSPEC_HIDDEN;
 BOOL isIfIndexLoopback(ULONG idx) DECLSPEC_HIDDEN;
 
-/* A table of interface indexes, see get*InterfaceTable(). */
+/* A table of interface indexes, see get_interface_indices(). */
 typedef struct _InterfaceIndexTable {
   DWORD numIndexes;
   IF_INDEX indexes[1];
 } InterfaceIndexTable;
 
-/* Returns a table with all known interface indexes, or NULL if one could not
- * be allocated.  HeapFree() the returned table.
+/* Returns the count of all interface indexes and optionally a ptr to an interface table.
+ * HeapFree() the returned table.  Will optionally ignore loopback devices.
  */
-InterfaceIndexTable *getInterfaceIndexTable(void) DECLSPEC_HIDDEN;
-
-/* Like getInterfaceIndexTable, but filters out loopback interfaces. */
-InterfaceIndexTable *getNonLoopbackInterfaceIndexTable(void) DECLSPEC_HIDDEN;
+DWORD get_interface_indices( BOOL skip_loopback, InterfaceIndexTable **table ) DECLSPEC_HIDDEN;
 
 /* ByName/ByIndex versions of various getter functions. */
 
@@ -111,7 +106,8 @@ DWORD getIPAddrTable(PMIB_IPADDRTABLE *ppIpAddrTable, HANDLE heap, DWORD flags) 
 /* Returns the IPv6 addresses for a particular interface index.
  * Returns NO_ERROR on success, something else on failure.
  */
-ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_addrs) DECLSPEC_HIDDEN;
+ULONG v6addressesFromIndex(IF_INDEX index, SOCKET_ADDRESS **addrs, ULONG *num_addrs,
+ SOCKET_ADDRESS **masks) DECLSPEC_HIDDEN;
 
 /* Converts the network-order bytes in addr to a printable string.  Returns
  * string.

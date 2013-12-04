@@ -32,6 +32,7 @@
     BOOL fullscreen;
     BOOL pendingMinimize;
     WineWindow* latentParentWindow;
+    NSMutableArray* latentChildWindows;
 
     void* hwnd;
     WineEventQueue* queue;
@@ -54,9 +55,17 @@
     void* imeData;
     BOOL commandDone;
 
-    BOOL causing_becomeKeyWindow;
-    BOOL ignore_windowMiniaturize;
+    NSSize savedContentMinSize;
+    NSSize savedContentMaxSize;
+
+    BOOL enteringFullScreen;
+    BOOL exitingFullScreen;
+    NSRect nonFullscreenFrame;
+    NSTimeInterval enteredFullScreenTime;
+
     BOOL ignore_windowDeminiaturize;
+    BOOL ignore_windowResize;
+    BOOL fakingClose;
 }
 
 @property (retain, readonly, nonatomic) WineEventQueue* queue;
@@ -64,10 +73,14 @@
 @property (readonly, nonatomic) BOOL noActivate;
 @property (readonly, nonatomic) BOOL floating;
 @property (readonly, getter=isFullscreen, nonatomic) BOOL fullscreen;
+@property (readonly, getter=isFakingClose, nonatomic) BOOL fakingClose;
 
     - (NSInteger) minimumLevelForActive:(BOOL)active;
     - (void) updateFullscreen;
 
     - (void) postKeyEvent:(NSEvent *)theEvent;
+    - (void) postBroughtForwardEvent;
+
+    - (WineWindow*) ancestorWineWindow;
 
 @end

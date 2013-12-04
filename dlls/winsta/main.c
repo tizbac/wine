@@ -60,6 +60,22 @@ BOOLEAN WINAPI WinStationQueryInformationW( HANDLE server, ULONG logon_id, WINST
     return FALSE;
 }
 
+BOOLEAN WINAPI WinStationRegisterConsoleNotification( HANDLE server, HWND hwnd, ULONG flags )
+{
+    FIXME( "%p %p 0x%x\n", server, hwnd, flags );
+    SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
+    return FALSE;
+}
+
+BOOLEAN WINAPI WinStationGetAllProcesses( HANDLE server, ULONG level,
+                                          ULONG *process_count, void *info )
+{
+    FIXME( "%p %u %p %p\n", server, level, process_count, info );
+    *process_count = 0;
+    SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
+    return FALSE;
+}
+
 BOOL WINAPI WinStationGetProcessSid( PVOID a, HANDLE server, DWORD process_id, PFILETIME process_start_time,
                                      PBYTE process_user_sid, PDWORD sid_size)
 {

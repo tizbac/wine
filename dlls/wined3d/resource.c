@@ -4,6 +4,7 @@
  * Copyright 2004 Christian Costa
  * Copyright 2005 Oliver Stieber
  * Copyright 2009-2010 Henri Verbeet for CodeWeavers
+ * Copyright 2006-2008, 2013 Stefan Dösinger for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -52,11 +53,9 @@ static DWORD resource_access_from_pool(enum wined3d_pool pool)
         case WINED3D_POOL_MANAGED:
             return WINED3D_RESOURCE_ACCESS_GPU | WINED3D_RESOURCE_ACCESS_CPU;
 
+        case WINED3D_POOL_SCRATCH:
         case WINED3D_POOL_SYSTEM_MEM:
             return WINED3D_RESOURCE_ACCESS_CPU;
-
-        case WINED3D_POOL_SCRATCH:
-            return WINED3D_RESOURCE_ACCESS_SCRATCH;
 
         default:
             FIXME("Unhandled pool %#x.\n", pool);
@@ -71,7 +70,8 @@ static void resource_check_usage(DWORD usage)
             | WINED3DUSAGE_DYNAMIC
             | WINED3DUSAGE_AUTOGENMIPMAP
             | WINED3DUSAGE_STATICDECL
-            | WINED3DUSAGE_OVERLAY;
+            | WINED3DUSAGE_OVERLAY
+            | WINED3DUSAGE_TEXTURE;
 
     if (usage & ~handled)
         FIXME("Unhandled usage flags %#x.\n", usage & ~handled);
@@ -85,6 +85,17 @@ HRESULT resource_init(struct wined3d_resource *resource, struct wined3d_device *
         const struct wined3d_resource_ops *resource_ops)
 {
     const struct wined3d *d3d = device->wined3d;
+
+    resource_check_usage(usage);
+    if (pool != WINED3D_POOL_SCRATCH)
+    {
+        if ((usage & WINED3DUSAGE_RENDERTARGET) && !(format->flags & WINED3DFMT_FLAG_RENDERTARGET))
+            return WINED3DERR_INVALIDCALL;
+        if ((usage & WINED3DUSAGE_DEPTHSTENCIL) && !(format->flags & (WINED3DFMT_FLAG_DEPTH | WINED3DFMT_FLAG_STENCIL)))
+            return WINED3DERR_INVALIDCALL;
+        if ((usage & WINED3DUSAGE_TEXTURE) && !(format->flags & WINED3DFMT_FLAG_TEXTURE))
+            return WINED3DERR_INVALIDCALL;
+    }
 
     resource->ref = 1;
     resource->device = device;
@@ -107,23 +118,19 @@ HRESULT resource_init(struct wined3d_resource *resource, struct wined3d_device *
     resource->resource_ops = resource_ops;
     list_init(&resource->privateData);
 
-    resource_check_usage(usage);
-
     if (size)
     {
-        resource->heapMemory = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size + RESOURCE_ALIGNMENT);
-        if (!resource->heapMemory)
+        if (!wined3d_resource_allocate_sysmem(resource))
         {
-            ERR("Out of memory!\n");
-            return WINED3DERR_OUTOFVIDEOMEMORY;
+            ERR("Failed to allocate system memory.\n");
+            return E_OUTOFMEMORY;
         }
     }
     else
     {
-        resource->heapMemory = NULL;
+        resource->heap_memory = NULL;
     }
-    resource->allocatedMemory = (BYTE *)(((ULONG_PTR)resource->heapMemory
-            + (RESOURCE_ALIGNMENT - 1)) & ~(RESOURCE_ALIGNMENT - 1));
+    resource->allocatedMemory = resource->heap_memory;
 
     /* Check that we have enough video ram left */
     if (pool == WINED3D_POOL_DEFAULT && d3d->flags & WINED3D_VIDMEM_ACCOUNTING)
@@ -131,7 +138,7 @@ HRESULT resource_init(struct wined3d_resource *resource, struct wined3d_device *
         if (size > wined3d_device_get_available_texture_mem(device))
         {
             ERR("Out of adapter memory\n");
-            HeapFree(GetProcessHeap(), 0, resource->heapMemory);
+            wined3d_resource_free_sysmem(resource);
             return WINED3DERR_OUTOFVIDEOMEMORY;
         }
         adapter_adjust_memory(device->adapter, size);
@@ -165,9 +172,8 @@ void resource_cleanup(struct wined3d_resource *resource)
             ERR("Failed to free private data when destroying resource %p, hr = %#x.\n", resource, hr);
     }
 
-    HeapFree(GetProcessHeap(), 0, resource->heapMemory);
-    resource->allocatedMemory = 0;
-    resource->heapMemory = 0;
+    wined3d_resource_free_sysmem(resource);
+    resource->allocatedMemory = NULL;
 
     device_resource_released(resource->device, resource);
 }
@@ -334,4 +340,91 @@ void CDECL wined3d_resource_get_desc(const struct wined3d_resource *resource, st
     desc->height = resource->height;
     desc->depth = resource->depth;
     desc->size = resource->size;
+}
+
+BOOL wined3d_resource_allocate_sysmem(struct wined3d_resource *resource)
+{
+    void **p;
+    SIZE_T align = RESOURCE_ALIGNMENT - 1 + sizeof(*p);
+    void *mem;
+
+    if (!(mem = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, resource->size + align)))
+        return FALSE;
+
+    p = (void **)(((ULONG_PTR)mem + align) & ~(RESOURCE_ALIGNMENT - 1)) - 1;
+    *p = mem;
+
+    resource->heap_memory = ++p;
+
+    return TRUE;
+}
+
+void wined3d_resource_free_sysmem(struct wined3d_resource *resource)
+{
+    void **p = resource->heap_memory;
+
+    if (!p)
+        return;
+
+    HeapFree(GetProcessHeap(), 0, *(--p));
+    resource->heap_memory = NULL;
+}
+
+DWORD wined3d_resource_sanitize_map_flags(const struct wined3d_resource *resource, DWORD flags)
+{
+    /* Not all flags make sense together, but Windows never returns an error.
+     * Catch the cases that could cause issues. */
+    if (flags & WINED3D_MAP_READONLY)
+    {
+        if (flags & WINED3D_MAP_DISCARD)
+        {
+            WARN("WINED3D_MAP_READONLY combined with WINED3D_MAP_DISCARD, ignoring flags.\n");
+            return 0;
+        }
+        if (flags & WINED3D_MAP_NOOVERWRITE)
+        {
+            WARN("WINED3D_MAP_READONLY combined with WINED3D_MAP_NOOVERWRITE, ignoring flags.\n");
+            return 0;
+        }
+    }
+    else if ((flags & (WINED3D_MAP_DISCARD | WINED3D_MAP_NOOVERWRITE))
+            == (WINED3D_MAP_DISCARD | WINED3D_MAP_NOOVERWRITE))
+    {
+        WARN("WINED3D_MAP_DISCARD and WINED3D_MAP_NOOVERWRITE used together, ignoring.\n");
+        return 0;
+    }
+    else if (flags & (WINED3D_MAP_DISCARD | WINED3D_MAP_NOOVERWRITE)
+            && !(resource->usage & WINED3DUSAGE_DYNAMIC))
+    {
+        WARN("DISCARD or NOOVERWRITE map on non-dynamic buffer, ignoring.\n");
+        return 0;
+    }
+
+    return flags;
+}
+
+GLbitfield wined3d_resource_gl_map_flags(DWORD d3d_flags)
+{
+    GLbitfield ret = 0;
+
+    if (!(d3d_flags & WINED3D_MAP_READONLY))
+        ret |= GL_MAP_WRITE_BIT | GL_MAP_FLUSH_EXPLICIT_BIT;
+    if (!(d3d_flags & (WINED3D_MAP_DISCARD | WINED3D_MAP_NOOVERWRITE)))
+        ret |= GL_MAP_READ_BIT;
+
+    if (d3d_flags & WINED3D_MAP_DISCARD)
+        ret |= GL_MAP_INVALIDATE_BUFFER_BIT;
+    if (d3d_flags & WINED3D_MAP_NOOVERWRITE)
+        ret |= GL_MAP_UNSYNCHRONIZED_BIT;
+
+    return ret;
+}
+
+GLenum wined3d_resource_gl_legacy_map_flags(DWORD d3d_flags)
+{
+    if (d3d_flags & WINED3D_MAP_READONLY)
+        return GL_READ_ONLY_ARB;
+    if (d3d_flags & (WINED3D_MAP_DISCARD | WINED3D_MAP_NOOVERWRITE))
+        return GL_WRITE_ONLY_ARB;
+    return GL_READ_WRITE_ARB;
 }

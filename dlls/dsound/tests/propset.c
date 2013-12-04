@@ -23,6 +23,7 @@
 #include <windows.h>
 
 #include "wine/test.h"
+#include "mmsystem.h"
 #include "dsound.h"
 #include "dsconf.h"
 
@@ -705,7 +706,7 @@ EXIT:
         ok(ref==0,"IDirectSound_Release() has %d references, should have 0\n",
            ref);
     }
-    return 1;
+    return TRUE;
 }
 
 static void propset_buffer_tests(void)
@@ -722,7 +723,7 @@ START_TEST(propset)
 
     CoInitialize(NULL);
 
-    hDsound = LoadLibrary("dsound.dll");
+    hDsound = LoadLibraryA("dsound.dll");
     if (hDsound)
     {
 

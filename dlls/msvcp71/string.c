@@ -162,7 +162,7 @@ char CDECL MSVCP_char_traits_char_to_char_type(const int *i)
 /* ?to_int_type@?$char_traits@D@std@@SAHAEBD@Z */
 int CDECL MSVCP_char_traits_char_to_int_type(const char *ch)
 {
-    return (int)*ch;
+    return (unsigned char)*ch;
 }
 
 /* ?eq_int_type@?$char_traits@D@std@@SA_NABH0@Z */
@@ -883,8 +883,8 @@ void __thiscall MSVCP_basic_string_char_reserve(basic_string_char *this, MSVCP_s
     if(len > size)
         return;
 
-    basic_string_char_grow(this, size, FALSE);
-    basic_string_char_eos(this, len);
+    if(basic_string_char_grow(this, size, TRUE))
+        basic_string_char_eos(this, len);
 }
 
 /* ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@XZ */
@@ -2618,8 +2618,8 @@ void __thiscall MSVCP_basic_string_wchar_reserve(basic_string_wchar *this, MSVCP
     if(len > size)
         return;
 
-    basic_string_wchar_grow(this, size, FALSE);
-    basic_string_wchar_eos(this, len);
+    if(basic_string_wchar_grow(this, size, TRUE))
+        basic_string_wchar_eos(this, len);
 }
 
 /* ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@XZ */

@@ -91,6 +91,9 @@ static const WCHAR attrBorderWidth[] =
     {'b','o','r','d','e','r','-','w','i','d','t','h',0};
 static const WCHAR attrBottom[] =
     {'b','o','t','t','o','m',0};
+/* FIXME: Use unprefixed version (requires Gecko changes). */
+static const WCHAR attrBoxSizing[] =
+    {'-','m','o','z','-','b','o','x','-','s','i','z','i','n','g',0};
 static const WCHAR attrClear[] =
     {'c','l','e','a','r',0};
 static const WCHAR attrClip[] =
@@ -135,6 +138,8 @@ static const WCHAR attrMarginTop[] =
     {'m','a','r','g','i','n','-','t','o','p',0};
 static const WCHAR attrMinHeight[] =
     {'m','i','n','-','h','e','i','g','h','t',0};
+static const WCHAR attrOutline[] =
+    {'o','u','t','l','i','n','e',0};
 static const WCHAR attrOverflow[] =
     {'o','v','e','r','f','l','o','w',0};
 static const WCHAR attrOverflowX[] =
@@ -171,6 +176,8 @@ static const WCHAR attrVerticalAlign[] =
     {'v','e','r','t','i','c','a','l','-','a','l','i','g','n',0};
 static const WCHAR attrVisibility[] =
     {'v','i','s','i','b','i','l','i','t','y',0};
+static const WCHAR attrWhiteSpace[] =
+    {'w','h','i','t','e','-','s','p','a','c','e',0};
 static const WCHAR attrWidth[] =
     {'w','i','d','t','h',0};
 static const WCHAR attrWordSpacing[] =
@@ -217,6 +224,7 @@ static const style_tbl_entry_t style_tbl[] = {
     {attrBorderTopWidth,       DISPID_IHTMLSTYLE_BORDERTOPWIDTH},
     {attrBorderWidth,          DISPID_IHTMLSTYLE_BORDERWIDTH},
     {attrBottom,               DISPID_IHTMLSTYLE2_BOTTOM},
+    {attrBoxSizing,            DISPID_IHTMLSTYLE6_BOXSIZING},
     {attrClear,                DISPID_IHTMLSTYLE_CLEAR},
     {attrClip,                 DISPID_IHTMLSTYLE_CLIP},
     {attrColor,                DISPID_IHTMLSTYLE_COLOR},
@@ -239,6 +247,7 @@ static const style_tbl_entry_t style_tbl[] = {
     {attrMarginRight,          DISPID_IHTMLSTYLE_MARGINRIGHT},
     {attrMarginTop,            DISPID_IHTMLSTYLE_MARGINTOP},
     {attrMinHeight,            DISPID_IHTMLSTYLE4_MINHEIGHT},
+    {attrOutline,              DISPID_IHTMLSTYLE6_OUTLINE},
     {attrOverflow,             DISPID_IHTMLSTYLE_OVERFLOW},
     {attrOverflowX,            DISPID_IHTMLSTYLE2_OVERFLOWX},
     {attrOverflowY,            DISPID_IHTMLSTYLE2_OVERFLOWY},
@@ -257,6 +266,7 @@ static const style_tbl_entry_t style_tbl[] = {
     {attrTop,                  DISPID_IHTMLSTYLE_TOP},
     {attrVerticalAlign,        DISPID_IHTMLSTYLE_VERTICALALIGN},
     {attrVisibility,           DISPID_IHTMLSTYLE_VISIBILITY},
+    {attrWhiteSpace,           DISPID_IHTMLSTYLE_WHITESPACE},
     {attrWidth,                DISPID_IHTMLSTYLE_WIDTH},
     {attrWordSpacing,          DISPID_IHTMLSTYLE_WORDSPACING},
     {attrWordWrap,             DISPID_IHTMLSTYLE3_WORDWRAP},
@@ -461,7 +471,7 @@ static HRESULT nsstyle_to_bstr(const WCHAR *val, DWORD flags, BSTR *p)
     DWORD len;
 
     if(!*val) {
-        *p = NULL;
+        *p = (flags & ATTR_NO_NULL) ? SysAllocStringLen(NULL, 0) : NULL;
         return S_OK;
     }
 
@@ -2214,15 +2224,19 @@ static HRESULT WINAPI HTMLStyle_get_listStyle(IHTMLStyle *iface, BSTR *p)
 static HRESULT WINAPI HTMLStyle_put_whiteSpace(IHTMLStyle *iface, BSTR v)
 {
     HTMLStyle *This = impl_from_IHTMLStyle(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_w(v));
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return set_nsstyle_attr(This->nsstyle, STYLEID_WHITE_SPACE, v, 0);
 }
 
 static HRESULT WINAPI HTMLStyle_get_whiteSpace(IHTMLStyle *iface, BSTR *p)
 {
     HTMLStyle *This = impl_from_IHTMLStyle(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return get_nsstyle_attr(This->nsstyle, STYLEID_WHITE_SPACE, p, 0);
 }
 
 static HRESULT WINAPI HTMLStyle_put_top(IHTMLStyle *iface, VARIANT v)
@@ -3101,11 +3115,9 @@ static dispex_static_data_t HTMLStyle_dispex = {
     HTMLStyle_iface_tids
 };
 
-HRESULT HTMLStyle_Create(HTMLElement *elem, HTMLStyle **ret)
+static HRESULT get_style_from_elem(HTMLElement *elem, nsIDOMCSSStyleDeclaration **ret)
 {
     nsIDOMElementCSSInlineStyle *nselemstyle;
-    nsIDOMCSSStyleDeclaration *nsstyle;
-    HTMLStyle *style;
     nsresult nsres;
 
     if(!elem->nselem) {
@@ -3117,12 +3129,25 @@ HRESULT HTMLStyle_Create(HTMLElement *elem, HTMLStyle **ret)
             (void**)&nselemstyle);
     assert(nsres == NS_OK);
 
-    nsres = nsIDOMElementCSSInlineStyle_GetStyle(nselemstyle, &nsstyle);
+    nsres = nsIDOMElementCSSInlineStyle_GetStyle(nselemstyle, ret);
     nsIDOMElementCSSInlineStyle_Release(nselemstyle);
     if(NS_FAILED(nsres)) {
         ERR("GetStyle failed: %08x\n", nsres);
         return E_FAIL;
     }
+
+    return S_OK;
+}
+
+HRESULT HTMLStyle_Create(HTMLElement *elem, HTMLStyle **ret)
+{
+    nsIDOMCSSStyleDeclaration *nsstyle;
+    HTMLStyle *style;
+    HRESULT hres;
+
+    hres = get_style_from_elem(elem, &nsstyle);
+    if(FAILED(hres))
+        return hres;
 
     style = heap_alloc_zero(sizeof(HTMLStyle));
     if(!style) {
@@ -3143,4 +3168,32 @@ HRESULT HTMLStyle_Create(HTMLElement *elem, HTMLStyle **ret)
 
     *ret = style;
     return S_OK;
+}
+
+HRESULT get_elem_style(HTMLElement *elem, styleid_t styleid, BSTR *ret)
+{
+    nsIDOMCSSStyleDeclaration *style;
+    HRESULT hres;
+
+    hres = get_style_from_elem(elem, &style);
+    if(FAILED(hres))
+        return hres;
+
+    hres = get_nsstyle_attr(style, styleid, ret, 0);
+    nsIDOMCSSStyleDeclaration_Release(style);
+    return hres;
+}
+
+HRESULT set_elem_style(HTMLElement *elem, styleid_t styleid, const WCHAR *val)
+{
+    nsIDOMCSSStyleDeclaration *style;
+    HRESULT hres;
+
+    hres = get_style_from_elem(elem, &style);
+    if(FAILED(hres))
+        return hres;
+
+    hres = set_nsstyle_attr(style, styleid, val, 0);
+    nsIDOMCSSStyleDeclaration_Release(style);
+    return hres;
 }

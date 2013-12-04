@@ -69,7 +69,7 @@ typedef struct tagTrackerWindowInfo
 
   BOOL       escPressed;
   HWND       curTargetHWND;	/* window the mouse is hovering over */
-  HWND       curDragTargetHWND; /* might be a ancestor of curTargetHWND */
+  HWND       curDragTargetHWND; /* might be an ancestor of curTargetHWND */
   IDropTarget* curDragTarget;
   POINTL     curMousePos;       /* current position of the mouse in screen coordinates */
   DWORD      dwKeyState;        /* current state of the shift and ctrl keys and the mouse buttons */
@@ -882,11 +882,6 @@ HRESULT WINAPI OleRegGetMiscStatus(
   LONG    result;
 
   /*
-   * Initialize the out parameter.
-   */
-  *pdwStatus = 0;
-
-  /*
    * Build the key name we're looking for
    */
   sprintfW( keyName, clsidfmtW,
@@ -895,6 +890,12 @@ HRESULT WINAPI OleRegGetMiscStatus(
             clsid->Data4[4], clsid->Data4[5], clsid->Data4[6], clsid->Data4[7] );
 
   TRACE("(%s, %d, %p)\n", debugstr_w(keyName), dwAspect, pdwStatus);
+
+  if (!pdwStatus) return E_INVALIDARG;
+
+  *pdwStatus = 0;
+
+  if (actctx_get_miscstatus(clsid, dwAspect, pdwStatus)) return S_OK;
 
   /*
    * Open the class id Key
@@ -910,7 +911,7 @@ HRESULT WINAPI OleRegGetMiscStatus(
   if (result != ERROR_SUCCESS)
   {
     RegCloseKey(clsidKey);
-    return REGDB_E_READREGDB;
+    return S_OK;
   }
 
   /*

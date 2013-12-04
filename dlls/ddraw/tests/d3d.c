@@ -67,7 +67,8 @@ typedef struct
     char callback_name_strings[MAX_ENUMERATION_COUNT][100];
 } D3D7ELifetimeTest;
 
-static HRESULT (WINAPI *pDirectDrawCreateEx)(LPGUID,LPVOID*,REFIID,LPUNKNOWN);
+static HRESULT (WINAPI *pDirectDrawCreateEx)(GUID *driver_guid,
+        void **ddraw, REFIID interface_iid, IUnknown *outer);
 
 static void init_function_pointers(void)
 {
@@ -510,7 +511,8 @@ static void LimitTest(void)
     IDirectDrawSurface7_Release(pTexture);
 }
 
-static HRESULT WINAPI enumDevicesCallback(GUID *Guid,LPSTR DeviceDescription,LPSTR DeviceName, D3DDEVICEDESC *hal, D3DDEVICEDESC *hel, VOID *ctx)
+static HRESULT WINAPI enumDevicesCallback(GUID *Guid, char *DeviceDescription,
+        char *DeviceName, D3DDEVICEDESC *hal, D3DDEVICEDESC *hel, void *ctx)
 {
     UINT ver = *((UINT *) ctx);
     if(IsEqualGUID(&IID_IDirect3DRGBDevice, Guid))
@@ -1136,7 +1138,7 @@ static void Direct3D1Test(void)
     struct v_out out[sizeof(testverts) / sizeof(testverts[0])];
     D3DHVERTEX outH[sizeof(testverts) / sizeof(testverts[0])];
     D3DTRANSFORMDATA transformdata;
-    DWORD i = FALSE;
+    DWORD i = 0;
 
     /* Interface consistency check. */
     hr = IDirect3DDevice_GetDirect3D(Direct3DDevice1, &Direct3D_alt);
@@ -3429,7 +3431,8 @@ static void BackBuffer3DAttachmentTest(void)
     HRESULT hr;
     IDirectDrawSurface *surface1, *surface2, *surface3, *surface4;
     DDSURFACEDESC ddsd;
-    HWND window = CreateWindow( "static", "ddraw_test", WS_OVERLAPPEDWINDOW, 100, 100, 160, 160, NULL, NULL, NULL, NULL );
+    HWND window = CreateWindowA("static", "ddraw_test", WS_OVERLAPPEDWINDOW,
+            100, 100, 160, 160, NULL, NULL, NULL, NULL);
 
     hr = IDirectDraw_SetCooperativeLevel(DirectDraw1, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
     ok(hr == DD_OK, "SetCooperativeLevel returned %08x\n", hr);

@@ -47,9 +47,6 @@ WINE_DECLARE_DEBUG_CHANNEL(winediag);
 #define WINED3D_GLSL_SAMPLE_LOD         0x4
 #define WINED3D_GLSL_SAMPLE_GRAD        0x8
 
-static const float srgb_const0[] = {0.41666f, 1.055f, 0.055f, 12.92f};  /* pow, mul_high, sub_high, mul_low */
-static const float srgb_const1[] = {0.0031308f, 0.0f, 0.0f, 0.0f};      /* cmp */
-
 struct glsl_dst_param
 {
     char reg_name[150];
@@ -84,6 +81,7 @@ struct constant_entry
 struct constant_heap
 {
     struct constant_entry *entries;
+    BOOL *contained;
     unsigned int *positions;
     unsigned int size;
 };
@@ -92,7 +90,6 @@ struct constant_heap
 struct shader_glsl_priv {
     struct wined3d_shader_buffer shader_buffer;
     struct wine_rb_tree program_lookup;
-    struct glsl_shader_prog_link *glsl_program;
     struct constant_heap vconst_heap;
     struct constant_heap pconst_heap;
     unsigned char *stack;
@@ -147,6 +144,7 @@ struct glsl_shader_prog_link
     struct glsl_gs_program gs;
     struct glsl_ps_program ps;
     GLhandleARB programId;
+    DWORD constant_update_mask;
     UINT constant_version;
 };
 
@@ -161,6 +159,11 @@ struct shader_glsl_ctx_priv {
     const struct vs_compile_args    *cur_vs_args;
     const struct ps_compile_args    *cur_ps_args;
     struct ps_np2fixup_info         *cur_np2fixup_info;
+};
+
+struct glsl_context_data
+{
+    struct glsl_shader_prog_link *glsl_program;
 };
 
 struct glsl_ps_compiled_shader
@@ -245,61 +248,14 @@ static const char *shader_glsl_get_prefix(enum wined3d_shader_type type)
     }
 }
 
-/* This should be equivalent to using the %.8e format specifier, but always
- * using '.' as decimal separator. This doesn't handle +/-INF or NAN, since
- * the GLSL parser wouldn't be able to handle those anyway. */
-static void shader_glsl_ftoa(float value, char *s)
-{
-    int x, frac, exponent;
-    const char *sign = "";
-    double d;
-
-    d = value;
-    if (copysignf(1.0f, value) < 0.0f)
-    {
-        d = -d;
-        sign = "-";
-    }
-
-    if (d == 0.0f)
-    {
-        x = 0;
-        frac = 0;
-        exponent = 0;
-    }
-    else
-    {
-        double t, diff;
-
-        exponent = floorf(log10f(d));
-        d /= pow(10.0, exponent);
-
-        x = d;
-        t = (d - x) * 100000000;
-        frac = t;
-        diff = t - frac;
-
-        if ((diff > 0.5) || (diff == 0.5 && (frac & 1)))
-        {
-            if (++frac >= 100000000)
-            {
-                frac = 0;
-                ++x;
-            }
-        }
-    }
-
-    sprintf(s, "%s%d.%08de%+03d", sign, x, frac, exponent);
-}
-
 static void shader_glsl_append_imm_vec4(struct wined3d_shader_buffer *buffer, const float *values)
 {
     char str[4][16];
 
-    shader_glsl_ftoa(values[0], str[0]);
-    shader_glsl_ftoa(values[1], str[1]);
-    shader_glsl_ftoa(values[2], str[2]);
-    shader_glsl_ftoa(values[3], str[3]);
+    wined3d_ftoa(values[0], str[0]);
+    wined3d_ftoa(values[1], str[1]);
+    wined3d_ftoa(values[2], str[2]);
+    wined3d_ftoa(values[3], str[3]);
     shader_addline(buffer, "vec4(%s, %s, %s, %s)", str[0], str[1], str[2], str[3]);
 }
 
@@ -506,6 +462,7 @@ static void shader_glsl_load_vsamplers(const struct wined3d_gl_info *gl_info,
 static inline void walk_constant_heap(const struct wined3d_gl_info *gl_info, const float *constants,
         const GLint *constant_locations, const struct constant_heap *heap, unsigned char *stack, DWORD version)
 {
+    unsigned int start = ~0U, end = 0;
     int stack_idx = 0;
     unsigned int heap_idx = 1;
     unsigned int idx;
@@ -513,7 +470,8 @@ static inline void walk_constant_heap(const struct wined3d_gl_info *gl_info, con
     if (heap->entries[heap_idx].version <= version) return;
 
     idx = heap->entries[heap_idx].idx;
-    if (constant_locations[idx] != -1) GL_EXTCALL(glUniform4fvARB(constant_locations[idx], 1, &constants[idx * 4]));
+    if (constant_locations[idx] != -1)
+        start = end = idx;
     stack[stack_idx] = HEAP_NODE_TRAVERSE_LEFT;
 
     while (stack_idx >= 0)
@@ -529,7 +487,12 @@ static inline void walk_constant_heap(const struct wined3d_gl_info *gl_info, con
                     heap_idx = left_idx;
                     idx = heap->entries[heap_idx].idx;
                     if (constant_locations[idx] != -1)
-                        GL_EXTCALL(glUniform4fvARB(constant_locations[idx], 1, &constants[idx * 4]));
+                    {
+                        if (start > idx)
+                            start = idx;
+                        if (end < idx)
+                            end = idx;
+                    }
 
                     stack[stack_idx++] = HEAP_NODE_TRAVERSE_RIGHT;
                     stack[stack_idx] = HEAP_NODE_TRAVERSE_LEFT;
@@ -545,7 +508,12 @@ static inline void walk_constant_heap(const struct wined3d_gl_info *gl_info, con
                     heap_idx = right_idx;
                     idx = heap->entries[heap_idx].idx;
                     if (constant_locations[idx] != -1)
-                        GL_EXTCALL(glUniform4fvARB(constant_locations[idx], 1, &constants[idx * 4]));
+                    {
+                        if (start > idx)
+                            start = idx;
+                        if (end < idx)
+                            end = idx;
+                    }
 
                     stack[stack_idx++] = HEAP_NODE_POP;
                     stack[stack_idx] = HEAP_NODE_TRAVERSE_LEFT;
@@ -559,6 +527,8 @@ static inline void walk_constant_heap(const struct wined3d_gl_info *gl_info, con
                 break;
         }
     }
+    if (start <= end)
+        GL_EXTCALL(glUniform4fvARB(constant_locations[start], end - start + 1, &constants[start * 4]));
     checkGLcall("walk_constant_heap()");
 }
 
@@ -752,63 +722,54 @@ static void reset_program_constant_version(struct wine_rb_entry *entry, void *co
 }
 
 /* Context activation is done by the caller (state handler). */
-static void shader_glsl_load_np2fixup_constants(void *shader_priv,
+static void shader_glsl_load_np2fixup_constants(const struct glsl_ps_program *ps,
         const struct wined3d_gl_info *gl_info, const struct wined3d_state *state)
 {
-    struct shader_glsl_priv *glsl_priv = shader_priv;
-    const struct glsl_shader_prog_link *prog = glsl_priv->glsl_program;
+    GLfloat np2fixup_constants[4 * MAX_FRAGMENT_SAMPLERS];
+    UINT fixup = ps->np2_fixup_info->active;
+    UINT i;
 
-    /* No GLSL program set - nothing to do. */
-    if (!prog) return;
-
-    /* NP2 texcoord fixup is (currently) only done for pixelshaders. */
-    if (!use_ps(state)) return;
-
-    if (prog->ps.np2_fixup_info && prog->ps.np2_fixup_location != -1)
+    for (i = 0; fixup; fixup >>= 1, ++i)
     {
-        UINT i;
-        UINT fixup = prog->ps.np2_fixup_info->active;
-        GLfloat np2fixup_constants[4 * MAX_FRAGMENT_SAMPLERS];
+        const struct wined3d_texture *tex = state->textures[i];
+        unsigned char idx = ps->np2_fixup_info->idx[i];
+        GLfloat *tex_dim = &np2fixup_constants[(idx >> 1) * 4];
 
-        for (i = 0; fixup; fixup >>= 1, ++i)
+        if (!tex)
         {
-            const struct wined3d_texture *tex = state->textures[i];
-            const unsigned char idx = prog->ps.np2_fixup_info->idx[i];
-            GLfloat *tex_dim = &np2fixup_constants[(idx >> 1) * 4];
-
-            if (!tex)
-            {
-                ERR("Nonexistent texture is flagged for NP2 texcoord fixup.\n");
-                continue;
-            }
-
-            if (idx % 2)
-            {
-                tex_dim[2] = tex->pow2_matrix[0];
-                tex_dim[3] = tex->pow2_matrix[5];
-            }
-            else
-            {
-                tex_dim[0] = tex->pow2_matrix[0];
-                tex_dim[1] = tex->pow2_matrix[5];
-            }
+            ERR("Nonexistent texture is flagged for NP2 texcoord fixup.\n");
+            continue;
         }
 
-        GL_EXTCALL(glUniform4fvARB(prog->ps.np2_fixup_location,
-                prog->ps.np2_fixup_info->num_consts, np2fixup_constants));
+        if (idx % 2)
+        {
+            tex_dim[2] = tex->pow2_matrix[0];
+            tex_dim[3] = tex->pow2_matrix[5];
+        }
+        else
+        {
+            tex_dim[0] = tex->pow2_matrix[0];
+            tex_dim[1] = tex->pow2_matrix[5];
+        }
     }
+
+    GL_EXTCALL(glUniform4fvARB(ps->np2_fixup_location, ps->np2_fixup_info->num_consts, np2fixup_constants));
 }
 
 /* Context activation is done by the caller (state handler). */
-static void shader_glsl_load_constants(void *shader_priv, const struct wined3d_context *context,
+static void shader_glsl_load_constants(void *shader_priv, struct wined3d_context *context,
         const struct wined3d_state *state)
 {
+    const struct glsl_context_data *ctx_data = context->shader_backend_data;
+    const struct wined3d_shader *vshader = state->shader[WINED3D_SHADER_TYPE_VERTEX];
+    const struct wined3d_shader *pshader = state->shader[WINED3D_SHADER_TYPE_PIXEL];
     const struct wined3d_gl_info *gl_info = context->gl_info;
     struct shader_glsl_priv *priv = shader_priv;
     float position_fixup[4];
+    DWORD update_mask = 0;
 
     GLhandleARB programId;
-    struct glsl_shader_prog_link *prog = priv->glsl_program;
+    struct glsl_shader_prog_link *prog = ctx_data->glsl_program;
     UINT constant_version;
     int i;
 
@@ -818,106 +779,89 @@ static void shader_glsl_load_constants(void *shader_priv, const struct wined3d_c
     }
     programId = prog->programId;
     constant_version = prog->constant_version;
+    update_mask = context->constant_update_mask & prog->constant_update_mask;
 
-    if (use_vs(state))
-    {
-        const struct wined3d_shader *vshader = state->vertex_shader;
-
-        /* Load DirectX 9 float constants/uniforms for vertex shader */
+    if (update_mask & WINED3D_SHADER_CONST_VS_F)
         shader_glsl_load_constantsF(vshader, gl_info, state->vs_consts_f,
                 prog->vs.uniform_f_locations, &priv->vconst_heap, priv->stack, constant_version);
 
-        /* Load DirectX 9 integer constants/uniforms for vertex shader */
+    if (update_mask & WINED3D_SHADER_CONST_VS_I)
         shader_glsl_load_constantsI(vshader, gl_info, prog->vs.uniform_i_locations, state->vs_consts_i,
                 vshader->reg_maps.integer_constants);
 
-        /* Load DirectX 9 boolean constants/uniforms for vertex shader */
+    if (update_mask & WINED3D_SHADER_CONST_VS_B)
         shader_glsl_load_constantsB(vshader, gl_info, programId, state->vs_consts_b,
                 vshader->reg_maps.boolean_constants);
 
-        /* Upload the position fixup params */
+    if (update_mask & WINED3D_SHADER_CONST_VS_POS_FIXUP)
+    {
         shader_get_position_fixup(context, state, position_fixup);
         GL_EXTCALL(glUniform4fvARB(prog->vs.pos_fixup_location, 1, position_fixup));
         checkGLcall("glUniform4fvARB");
     }
 
-    if (use_ps(state))
-    {
-        const struct wined3d_shader *pshader = state->pixel_shader;
-
-        /* Load DirectX 9 float constants/uniforms for pixel shader */
+    if (update_mask & WINED3D_SHADER_CONST_PS_F)
         shader_glsl_load_constantsF(pshader, gl_info, state->ps_consts_f,
                 prog->ps.uniform_f_locations, &priv->pconst_heap, priv->stack, constant_version);
 
-        /* Load DirectX 9 integer constants/uniforms for pixel shader */
+    if (update_mask & WINED3D_SHADER_CONST_PS_I)
         shader_glsl_load_constantsI(pshader, gl_info, prog->ps.uniform_i_locations, state->ps_consts_i,
                 pshader->reg_maps.integer_constants);
 
-        /* Load DirectX 9 boolean constants/uniforms for pixel shader */
+    if (update_mask & WINED3D_SHADER_CONST_PS_B)
         shader_glsl_load_constantsB(pshader, gl_info, programId, state->ps_consts_b,
                 pshader->reg_maps.boolean_constants);
 
-        /* Upload the environment bump map matrix if needed. The needsbumpmat
-         * member specifies the texture stage to load the matrix from. It
-         * can't be 0 for a valid texbem instruction. */
+    if (update_mask & WINED3D_SHADER_CONST_PS_BUMP_ENV)
+    {
         for (i = 0; i < MAX_TEXTURES; ++i)
         {
-            const float *data;
-
             if (prog->ps.bumpenv_mat_location[i] == -1)
                 continue;
 
-            data = (const float *)&state->texture_states[i][WINED3D_TSS_BUMPENV_MAT00];
-            GL_EXTCALL(glUniformMatrix2fvARB(prog->ps.bumpenv_mat_location[i], 1, 0, data));
-            checkGLcall("glUniformMatrix2fvARB");
+            GL_EXTCALL(glUniformMatrix2fvARB(prog->ps.bumpenv_mat_location[i], 1, 0,
+                    (const GLfloat *)&state->texture_states[i][WINED3D_TSS_BUMPENV_MAT00]));
 
-            /* texbeml needs the luminance scale and offset too. If texbeml
-             * is used, needsbumpmat is set too, so we can check that in the
-             * needsbumpmat check. */
             if (prog->ps.bumpenv_lum_scale_location[i] != -1)
             {
-                const GLfloat *scale = (const GLfloat *)&state->texture_states[i][WINED3D_TSS_BUMPENV_LSCALE];
-                const GLfloat *offset = (const GLfloat *)&state->texture_states[i][WINED3D_TSS_BUMPENV_LOFFSET];
-
-                GL_EXTCALL(glUniform1fvARB(prog->ps.bumpenv_lum_scale_location[i], 1, scale));
-                checkGLcall("glUniform1fvARB");
-                GL_EXTCALL(glUniform1fvARB(prog->ps.bumpenv_lum_offset_location[i], 1, offset));
-                checkGLcall("glUniform1fvARB");
+                GL_EXTCALL(glUniform1fvARB(prog->ps.bumpenv_lum_scale_location[i], 1,
+                        (const GLfloat *)&state->texture_states[i][WINED3D_TSS_BUMPENV_LSCALE]));
+                GL_EXTCALL(glUniform1fvARB(prog->ps.bumpenv_lum_offset_location[i], 1,
+                        (const GLfloat *)&state->texture_states[i][WINED3D_TSS_BUMPENV_LOFFSET]));
             }
         }
 
-        if (prog->ps.ycorrection_location != -1)
-        {
-            float correction_params[4];
-
-            if (context->render_offscreen)
-            {
-                correction_params[0] = 0.0f;
-                correction_params[1] = 1.0f;
-            } else {
-                /* position is window relative, not viewport relative */
-                correction_params[0] = (float) context->current_rt->resource.height;
-                correction_params[1] = -1.0f;
-            }
-            GL_EXTCALL(glUniform4fvARB(prog->ps.ycorrection_location, 1, correction_params));
-        }
+        checkGLcall("bump env uniforms");
     }
-    else if (priv->fragment_pipe == &glsl_fragment_pipe)
+
+    if (update_mask & WINED3D_SHADER_CONST_PS_Y_CORR)
+    {
+        float correction_params[4];
+
+        if (context->render_offscreen)
+        {
+            correction_params[0] = 0.0f;
+            correction_params[1] = 1.0f;
+        } else {
+            /* position is window relative, not viewport relative */
+            correction_params[0] = (float) context->current_rt->resource.height;
+            correction_params[1] = -1.0f;
+        }
+        GL_EXTCALL(glUniform4fvARB(prog->ps.ycorrection_location, 1, correction_params));
+    }
+
+    if (update_mask & WINED3D_SHADER_CONST_PS_NP2_FIXUP)
+        shader_glsl_load_np2fixup_constants(&prog->ps, gl_info, state);
+
+    if (update_mask & WINED3D_SHADER_CONST_FFP_PS)
     {
         float col[4];
 
-        for (i = 0; i < MAX_TEXTURES; ++i)
+        if (prog->ps.tex_factor_location != -1)
         {
-            GL_EXTCALL(glUniformMatrix2fvARB(prog->ps.bumpenv_mat_location[i], 1, 0,
-                        (const float *)&state->texture_states[i][WINED3D_TSS_BUMPENV_MAT00]));
-            GL_EXTCALL(glUniform1fARB(prog->ps.bumpenv_lum_scale_location[i],
-                        *(const float *)&state->texture_states[i][WINED3D_TSS_BUMPENV_LSCALE]));
-            GL_EXTCALL(glUniform1fARB(prog->ps.bumpenv_lum_offset_location[i],
-                        *(const float *)&state->texture_states[i][WINED3D_TSS_BUMPENV_LOFFSET]));
+            D3DCOLORTOGLFLOAT4(state->render_states[WINED3D_RS_TEXTUREFACTOR], col);
+            GL_EXTCALL(glUniform4fvARB(prog->ps.tex_factor_location, 1, col));
         }
-
-        D3DCOLORTOGLFLOAT4(state->render_states[WINED3D_RS_TEXTUREFACTOR], col);
-        GL_EXTCALL(glUniform4fARB(prog->ps.tex_factor_location, col[0], col[1], col[2], col[3]));
 
         if (state->render_states[WINED3D_RS_SPECULARENABLE])
             GL_EXTCALL(glUniform4fARB(prog->ps.specular_enable_location, 1.0f, 1.0f, 1.0f, 0.0f));
@@ -939,12 +883,21 @@ static void shader_glsl_load_constants(void *shader_priv, const struct wined3d_c
     }
 }
 
-static void update_heap_entry(const struct constant_heap *heap, unsigned int idx,
-        unsigned int heap_idx, DWORD new_version)
+static void update_heap_entry(struct constant_heap *heap, unsigned int idx, DWORD new_version)
 {
     struct constant_entry *entries = heap->entries;
     unsigned int *positions = heap->positions;
-    unsigned int parent_idx;
+    unsigned int heap_idx, parent_idx;
+
+    if (!heap->contained[idx])
+    {
+        heap_idx = heap->size++;
+        heap->contained[idx] = TRUE;
+    }
+    else
+    {
+        heap_idx = positions[idx];
+    }
 
     while (heap_idx > 1)
     {
@@ -970,10 +923,12 @@ static void shader_glsl_update_float_vertex_constants(struct wined3d_device *dev
 
     for (i = start; i < count + start; ++i)
     {
-        if (!device->stateBlock->changed.vertexShaderConstantsF[i])
-            update_heap_entry(heap, i, heap->size++, priv->next_constant_version);
-        else
-            update_heap_entry(heap, i, heap->positions[i], priv->next_constant_version);
+        update_heap_entry(heap, i, priv->next_constant_version);
+    }
+
+    for (i = 0; i < device->context_count; ++i)
+    {
+        device->contexts[i]->constant_update_mask |= WINED3D_SHADER_CONST_VS_F;
     }
 }
 
@@ -985,10 +940,12 @@ static void shader_glsl_update_float_pixel_constants(struct wined3d_device *devi
 
     for (i = start; i < count + start; ++i)
     {
-        if (!device->stateBlock->changed.pixelShaderConstantsF[i])
-            update_heap_entry(heap, i, heap->size++, priv->next_constant_version);
-        else
-            update_heap_entry(heap, i, heap->positions[i], priv->next_constant_version);
+        update_heap_entry(heap, i, priv->next_constant_version);
+    }
+
+    for (i = 0; i < device->context_count; ++i)
+    {
+        device->contexts[i]->constant_update_mask |= WINED3D_SHADER_CONST_PS_F;
     }
 }
 
@@ -1009,7 +966,7 @@ static void shader_generate_glsl_declarations(const struct wined3d_context *cont
         const struct wined3d_shader_reg_maps *reg_maps, const struct shader_glsl_ctx_priv *ctx_priv)
 {
     const struct wined3d_shader_version *version = &reg_maps->shader_version;
-    const struct wined3d_state *state = &shader->device->stateBlock->state;
+    const struct wined3d_state *state = &shader->device->state;
     const struct ps_compile_args *ps_args = ctx_priv->cur_ps_args;
     const struct wined3d_gl_info *gl_info = context->gl_info;
     const struct wined3d_fb_state *fb = &shader->device->fb;
@@ -1268,10 +1225,10 @@ static void shader_generate_glsl_declarations(const struct wined3d_context *cont
         if (ps_args->srgb_correction)
         {
             shader_addline(buffer, "const vec4 srgb_const0 = ");
-            shader_glsl_append_imm_vec4(buffer, srgb_const0);
+            shader_glsl_append_imm_vec4(buffer, wined3d_srgb_const0);
             shader_addline(buffer, ";\n");
             shader_addline(buffer, "const vec4 srgb_const1 = ");
-            shader_glsl_append_imm_vec4(buffer, srgb_const1);
+            shader_glsl_append_imm_vec4(buffer, wined3d_srgb_const1);
             shader_addline(buffer, ";\n");
         }
         if (reg_maps->vpos || reg_maps->usesdsy)
@@ -1654,7 +1611,7 @@ static void shader_glsl_get_register_name(const struct wined3d_shader_register *
                     switch (reg->data_type)
                     {
                         case WINED3D_DATA_FLOAT:
-                            shader_glsl_ftoa(*(const float *)reg->immconst_data, register_name);
+                            wined3d_ftoa(*(const float *)reg->immconst_data, register_name);
                             break;
                         case WINED3D_DATA_INT:
                             sprintf(register_name, "%#x", reg->immconst_data[0]);
@@ -1674,10 +1631,10 @@ static void shader_glsl_get_register_name(const struct wined3d_shader_register *
                     switch (reg->data_type)
                     {
                         case WINED3D_DATA_FLOAT:
-                            shader_glsl_ftoa(*(const float *)&reg->immconst_data[0], imm_str[0]);
-                            shader_glsl_ftoa(*(const float *)&reg->immconst_data[1], imm_str[1]);
-                            shader_glsl_ftoa(*(const float *)&reg->immconst_data[2], imm_str[2]);
-                            shader_glsl_ftoa(*(const float *)&reg->immconst_data[3], imm_str[3]);
+                            wined3d_ftoa(*(const float *)&reg->immconst_data[0], imm_str[0]);
+                            wined3d_ftoa(*(const float *)&reg->immconst_data[1], imm_str[1]);
+                            wined3d_ftoa(*(const float *)&reg->immconst_data[2], imm_str[2]);
+                            wined3d_ftoa(*(const float *)&reg->immconst_data[3], imm_str[3]);
                             sprintf(register_name, "vec4(%s, %s, %s, %s)",
                                     imm_str[0], imm_str[1], imm_str[2], imm_str[3]);
                             break;
@@ -4502,8 +4459,7 @@ static void shader_glsl_generate_fog_code(struct wined3d_shader_buffer *buffer, 
             return;
 
         case WINED3D_FFP_PS_FOG_LINEAR:
-            /* Fog = (gl_Fog.end - gl_FogFragCoord) / (gl_Fog.end - gl_Fog.start) */
-            shader_addline(buffer, "float Fog = (gl_Fog.end - gl_FogFragCoord) / (gl_Fog.end - gl_Fog.start);\n");
+            shader_addline(buffer, "float Fog = (gl_Fog.end - gl_FogFragCoord) * gl_Fog.scale;\n");
             break;
 
         case WINED3D_FFP_PS_FOG_EXP:
@@ -4779,7 +4735,7 @@ static GLhandleARB find_glsl_vshader(const struct wined3d_context *context,
 {
     UINT i;
     DWORD new_size;
-    DWORD use_map = shader->device->stream_info.use_map;
+    DWORD use_map = context->stream_info.use_map;
     struct glsl_vs_compiled_shader *gl_shaders, *new_array;
     struct glsl_shader_private *shader_data;
     GLhandleARB ret;
@@ -4934,7 +4890,7 @@ static void shader_glsl_ffp_vertex_lighting(struct wined3d_shader_buffer *buffer
                 if (!settings->normal)
                     break;
                 shader_addline(buffer, "dir = normalize(dir);\n");
-                shader_addline(buffer, "diffuse += (max(0.0, dot(dir, normal))"
+                shader_addline(buffer, "diffuse += (clamp(dot(dir, normal), 0.0, 1.0)"
                         " * gl_LightSource[%u].diffuse.xyz) / att;\n", i);
                 if (settings->localviewer)
                     shader_addline(buffer, "t = dot(normal, normalize(dir - normalize(ec_pos.xyz)));\n");
@@ -4959,7 +4915,7 @@ static void shader_glsl_ffp_vertex_lighting(struct wined3d_shader_buffer *buffer
                 shader_addline(buffer, "ambient += gl_LightSource[%u].ambient.xyz * att;\n", i);
                 if (!settings->normal)
                     break;
-                shader_addline(buffer, "diffuse += (max(0.0, dot(dir, normal))"
+                shader_addline(buffer, "diffuse += (clamp(dot(dir, normal), 0.0, 1.0)"
                         " * gl_LightSource[%u].diffuse.xyz) * att;\n", i);
                 if (settings->localviewer)
                     shader_addline(buffer, "t = dot(normal, normalize(dir - normalize(ec_pos.xyz)));\n");
@@ -4974,7 +4930,8 @@ static void shader_glsl_ffp_vertex_lighting(struct wined3d_shader_buffer *buffer
                 if (!settings->normal)
                     break;
                 shader_addline(buffer, "dir = normalize(gl_LightSource[%u].position.xyz);\n", i);
-                shader_addline(buffer, "diffuse += max(0.0, dot(dir, normal)) * gl_LightSource[%u].diffuse.xyz;\n", i);
+                shader_addline(buffer, "diffuse += clamp(dot(dir, normal), 0.0, 1.0)"
+                        " * gl_LightSource[%u].diffuse.xyz;\n", i);
                 shader_addline(buffer, "t = dot(normal, gl_LightSource[%u].halfVector.xyz);\n", i);
                 shader_addline(buffer, "if (t > 0.0) specular += pow(t, gl_FrontMaterial.shininess)"
                         " * gl_LightSource[%u].specular;\n", i);
@@ -5082,7 +5039,11 @@ static GLhandleARB shader_glsl_generate_ffp_vertex_shader(struct wined3d_shader_
             break;
 
         case WINED3D_FFP_VS_FOG_DEPTH:
-            shader_addline(buffer, "gl_FogFragCoord = ec_pos.z;\n");
+            if (settings->ortho_fog)
+                /* Need to undo the [0.0 - 1.0] -> [-1.0 - 1.0] transformation from D3D to GL coordinates. */
+                shader_addline(buffer, "gl_FogFragCoord = gl_Position.z * 0.5 + 0.5;\n");
+            else
+                shader_addline(buffer, "gl_FogFragCoord = ec_pos.z;\n");
             break;
 
         default:
@@ -5480,10 +5441,10 @@ static GLuint shader_glsl_generate_ffp_fragment_shader(struct wined3d_shader_buf
     if (settings->sRGB_write)
     {
         shader_addline(buffer, "const vec4 srgb_const0 = ");
-        shader_glsl_append_imm_vec4(buffer, srgb_const0);
+        shader_glsl_append_imm_vec4(buffer, wined3d_srgb_const0);
         shader_addline(buffer, ";\n");
         shader_addline(buffer, "const vec4 srgb_const1 = ");
-        shader_glsl_append_imm_vec4(buffer, srgb_const1);
+        shader_glsl_append_imm_vec4(buffer, wined3d_srgb_const1);
         shader_addline(buffer, ";\n");
     }
 
@@ -5497,7 +5458,7 @@ static GLuint shader_glsl_generate_ffp_fragment_shader(struct wined3d_shader_buf
     {
         const char *texture_function, *coord_mask;
         char tex_reg_name[8];
-        BOOL proj, clamp;
+        BOOL proj;
 
         if (!(tex_map & (1 << stage)))
             continue;
@@ -5516,12 +5477,6 @@ static GLuint shader_glsl_generate_ffp_fragment_shader(struct wined3d_shader_buf
             FIXME("Unexpected projection mode %d\n", settings->op[stage].projected);
             proj = TRUE;
         }
-
-        if (settings->op[stage].cop == WINED3D_TOP_BUMPENVMAP
-                || settings->op[stage].cop == WINED3D_TOP_BUMPENVMAP_LUMINANCE)
-            clamp = FALSE;
-        else
-            clamp = TRUE;
 
         switch (settings->op[stage].tex_type)
         {
@@ -5614,12 +5569,8 @@ static GLuint shader_glsl_generate_ffp_fragment_shader(struct wined3d_shader_buf
                 shader_addline(buffer, "ret = gl_TexCoord[%u] + ret.xyxy;\n", stage);
             }
 
-            if (clamp)
-                shader_addline(buffer, "tex%u = clamp(%s(ps_sampler%u, ret.%s), 0.0, 1.0);\n",
-                        stage, texture_function, stage, coord_mask);
-            else
-                shader_addline(buffer, "tex%u = %s(ps_sampler%u, ret.%s);\n",
-                        stage, texture_function, stage, coord_mask);
+            shader_addline(buffer, "tex%u = %s(ps_sampler%u, ret.%s);\n",
+                    stage, texture_function, stage, coord_mask);
 
             if (settings->op[stage - 1].cop == WINED3D_TOP_BUMPENVMAP_LUMINANCE)
                 shader_addline(buffer, "tex%u *= clamp(tex%u.z * bumpenv_lum_scale%u + bumpenv_lum_offset%u, 0.0, 1.0);\n",
@@ -5627,21 +5578,13 @@ static GLuint shader_glsl_generate_ffp_fragment_shader(struct wined3d_shader_buf
         }
         else if (settings->op[stage].projected == proj_count3)
         {
-            if (clamp)
-                shader_addline(buffer, "tex%u = clamp(%s(ps_sampler%u, gl_TexCoord[%u].xyz), 0.0, 1.0);\n",
-                        stage, texture_function, stage, stage);
-            else
-                shader_addline(buffer, "tex%u = %s(ps_sampler%u, gl_TexCoord[%u].xyz);\n",
-                        stage, texture_function, stage, stage);
+            shader_addline(buffer, "tex%u = %s(ps_sampler%u, gl_TexCoord[%u].xyz);\n",
+                    stage, texture_function, stage, stage);
         }
         else
         {
-            if (clamp)
-                shader_addline(buffer, "tex%u = clamp(%s(ps_sampler%u, gl_TexCoord[%u].%s), 0.0, 1.0);\n",
-                        stage, texture_function, stage, stage, coord_mask);
-            else
-                shader_addline(buffer, "tex%u = %s(ps_sampler%u, gl_TexCoord[%u].%s);\n",
-                        stage, texture_function, stage, stage, coord_mask);
+            shader_addline(buffer, "tex%u = %s(ps_sampler%u, gl_TexCoord[%u].%s);\n",
+                    stage, texture_function, stage, stage, coord_mask);
         }
 
         sprintf(tex_reg_name, "tex%u", stage);
@@ -5761,18 +5704,20 @@ static struct glsl_ffp_fragment_shader *shader_glsl_find_ffp_fragment_shader(str
 
 
 static void shader_glsl_init_vs_uniform_locations(const struct wined3d_gl_info *gl_info,
-        GLhandleARB program_id, struct glsl_vs_program *vs)
+        GLhandleARB program_id, struct glsl_vs_program *vs, unsigned int vs_c_count)
 {
     unsigned int i;
     char name[32];
 
     vs->uniform_f_locations = HeapAlloc(GetProcessHeap(), 0,
             sizeof(GLhandleARB) * gl_info->limits.glsl_vs_float_constants);
-    for (i = 0; i < gl_info->limits.glsl_vs_float_constants; ++i)
+    for (i = 0; i < vs_c_count; ++i)
     {
         snprintf(name, sizeof(name), "vs_c[%u]", i);
         vs->uniform_f_locations[i] = GL_EXTCALL(glGetUniformLocationARB(program_id, name));
     }
+    memset(&vs->uniform_f_locations[vs_c_count], 0xff,
+            (gl_info->limits.glsl_vs_float_constants - vs_c_count) * sizeof(GLhandleARB));
 
     for (i = 0; i < MAX_CONST_I; ++i)
     {
@@ -5784,18 +5729,20 @@ static void shader_glsl_init_vs_uniform_locations(const struct wined3d_gl_info *
 }
 
 static void shader_glsl_init_ps_uniform_locations(const struct wined3d_gl_info *gl_info,
-        GLhandleARB program_id, struct glsl_ps_program *ps)
+        GLhandleARB program_id, struct glsl_ps_program *ps, unsigned int ps_c_count)
 {
     unsigned int i;
     char name[32];
 
     ps->uniform_f_locations = HeapAlloc(GetProcessHeap(), 0,
             sizeof(GLhandleARB) * gl_info->limits.glsl_ps_float_constants);
-    for (i = 0; i < gl_info->limits.glsl_ps_float_constants; ++i)
+    for (i = 0; i < ps_c_count; ++i)
     {
         snprintf(name, sizeof(name), "ps_c[%u]", i);
         ps->uniform_f_locations[i] = GL_EXTCALL(glGetUniformLocationARB(program_id, name));
     }
+    memset(&ps->uniform_f_locations[ps_c_count], 0xff,
+            (gl_info->limits.glsl_ps_float_constants - ps_c_count) * sizeof(GLhandleARB));
 
     for (i = 0; i < MAX_CONST_I; ++i)
     {
@@ -5821,7 +5768,7 @@ static void shader_glsl_init_ps_uniform_locations(const struct wined3d_gl_info *
 
 /* Context activation is done by the caller. */
 static void set_glsl_shader_program(const struct wined3d_context *context, const struct wined3d_state *state,
-        struct shader_glsl_priv *priv)
+        struct shader_glsl_priv *priv, struct glsl_context_data *ctx_data)
 {
     const struct wined3d_gl_info *gl_info = context->gl_info;
     const struct ps_np2fixup_info *np2fixup_info = NULL;
@@ -5832,46 +5779,64 @@ static void set_glsl_shader_program(const struct wined3d_context *context, const
     GLhandleARB programId                  = 0;
     GLhandleARB reorder_shader_id          = 0;
     unsigned int i;
-    struct ps_compile_args ps_compile_args;
-    struct vs_compile_args vs_compile_args;
-    GLhandleARB vs_id, gs_id, ps_id;
+    GLhandleARB vs_id = 0;
+    GLhandleARB gs_id = 0;
+    GLhandleARB ps_id = 0;
     struct list *ps_list, *vs_list;
-    struct wined3d_device *device = context->swapchain->device;
 
-    if (use_vs(state))
+    if (!(context->shader_update_mask & (1 << WINED3D_SHADER_TYPE_VERTEX)))
     {
-        vshader = state->vertex_shader;
-        find_vs_compile_args(state, vshader, &vs_compile_args);
+        vs_id = ctx_data->glsl_program->vs.id;
+        vs_list = &ctx_data->glsl_program->vs.shader_entry;
+
+        if (use_vs(state))
+        {
+            vshader = state->shader[WINED3D_SHADER_TYPE_VERTEX];
+            gshader = state->shader[WINED3D_SHADER_TYPE_GEOMETRY];
+
+            if (!(context->shader_update_mask & (1 << WINED3D_SHADER_TYPE_GEOMETRY))
+                    && ctx_data->glsl_program->gs.id)
+                gs_id = ctx_data->glsl_program->gs.id;
+            else if (gshader)
+                gs_id = find_glsl_geometry_shader(context, &priv->shader_buffer, gshader);
+        }
+    }
+    else if (use_vs(state))
+    {
+        struct vs_compile_args vs_compile_args;
+        vshader = state->shader[WINED3D_SHADER_TYPE_VERTEX];
+
+        find_vs_compile_args(state, vshader, context->stream_info.swizzle_map, &vs_compile_args);
         vs_id = find_glsl_vshader(context, &priv->shader_buffer, vshader, &vs_compile_args);
         vs_list = &vshader->linked_programs;
 
-        if ((gshader = state->geometry_shader))
+        if ((gshader = state->shader[WINED3D_SHADER_TYPE_GEOMETRY]))
             gs_id = find_glsl_geometry_shader(context, &priv->shader_buffer, gshader);
-        else
-            gs_id = 0;
     }
     else if (priv->vertex_pipe == &glsl_vertex_pipe)
     {
         struct glsl_ffp_vertex_shader *ffp_shader;
         struct wined3d_ffp_vs_settings settings;
 
-        wined3d_ffp_get_vs_settings(state, &device->stream_info, &settings);
+        wined3d_ffp_get_vs_settings(state, &context->stream_info, &settings);
         ffp_shader = shader_glsl_find_ffp_vertex_shader(priv, gl_info, &settings);
         vs_id = ffp_shader->id;
         vs_list = &ffp_shader->linked_programs;
-
-        gs_id = 0;
-    }
-    else
-    {
-        vs_id = 0;
-        gs_id = 0;
     }
 
-    if (use_ps(state))
+    if (!(context->shader_update_mask & (1 << WINED3D_SHADER_TYPE_PIXEL)))
     {
-        pshader = state->pixel_shader;
-        find_ps_compile_args(state, pshader, &ps_compile_args);
+        ps_id = ctx_data->glsl_program->ps.id;
+        ps_list = &ctx_data->glsl_program->ps.shader_entry;
+
+        if (use_ps(state))
+            pshader = state->shader[WINED3D_SHADER_TYPE_PIXEL];
+    }
+    else if (use_ps(state))
+    {
+        struct ps_compile_args ps_compile_args;
+        pshader = state->shader[WINED3D_SHADER_TYPE_PIXEL];
+        find_ps_compile_args(state, pshader, context->stream_info.position_transformed, &ps_compile_args, gl_info);
         ps_id = find_glsl_pshader(context, &priv->shader_buffer,
                 pshader, &ps_compile_args, &np2fixup_info);
         ps_list = &pshader->linked_programs;
@@ -5886,14 +5851,10 @@ static void set_glsl_shader_program(const struct wined3d_context *context, const
         ps_id = ffp_shader->id;
         ps_list = &ffp_shader->linked_programs;
     }
-    else
-    {
-        ps_id = 0;
-    }
 
     if ((!vs_id && !gs_id && !ps_id) || (entry = get_glsl_program_entry(priv, vs_id, gs_id, ps_id)))
     {
-        priv->glsl_program = entry;
+        ctx_data->glsl_program = entry;
         return;
     }
 
@@ -5913,7 +5874,7 @@ static void set_glsl_shader_program(const struct wined3d_context *context, const
     add_glsl_program_entry(priv, entry);
 
     /* Set the current program */
-    priv->glsl_program = entry;
+    ctx_data->glsl_program = entry;
 
     /* Attach GLSL vshader */
     if (vs_id)
@@ -5994,8 +5955,10 @@ static void set_glsl_shader_program(const struct wined3d_context *context, const
     GL_EXTCALL(glLinkProgramARB(programId));
     shader_glsl_validate_link(gl_info, programId);
 
-    shader_glsl_init_vs_uniform_locations(gl_info, programId, &entry->vs);
-    shader_glsl_init_ps_uniform_locations(gl_info, programId, &entry->ps);
+    shader_glsl_init_vs_uniform_locations(gl_info, programId, &entry->vs,
+            vshader ? vshader->limits.constant_float : 0);
+    shader_glsl_init_ps_uniform_locations(gl_info, programId, &entry->ps,
+            pshader ? pshader->limits.constant_float : 0);
     checkGLcall("Find glsl program uniform locations");
 
     if (pshader && pshader->reg_maps.shader_version.major >= 3
@@ -6021,8 +5984,49 @@ static void set_glsl_shader_program(const struct wined3d_context *context, const
      * fixed function fragment processing setups. So once the program is linked these samplers
      * won't change.
      */
-    shader_glsl_load_vsamplers(gl_info, device->texUnitMap, programId);
-    shader_glsl_load_psamplers(gl_info, device->texUnitMap, programId);
+    shader_glsl_load_vsamplers(gl_info, context->tex_unit_map, programId);
+    shader_glsl_load_psamplers(gl_info, context->tex_unit_map, programId);
+
+    entry->constant_update_mask = 0;
+    if (vshader)
+    {
+        entry->constant_update_mask |= WINED3D_SHADER_CONST_VS_F;
+        if (vshader->reg_maps.integer_constants)
+            entry->constant_update_mask |= WINED3D_SHADER_CONST_VS_I;
+        if (vshader->reg_maps.boolean_constants)
+            entry->constant_update_mask |= WINED3D_SHADER_CONST_VS_B;
+        entry->constant_update_mask |= WINED3D_SHADER_CONST_VS_POS_FIXUP;
+    }
+
+    if (ps_id)
+    {
+        if (pshader)
+        {
+            entry->constant_update_mask |= WINED3D_SHADER_CONST_PS_F;
+            if (pshader->reg_maps.integer_constants)
+                entry->constant_update_mask |= WINED3D_SHADER_CONST_PS_I;
+            if (pshader->reg_maps.boolean_constants)
+                entry->constant_update_mask |= WINED3D_SHADER_CONST_PS_B;
+            if (entry->ps.ycorrection_location != -1)
+                entry->constant_update_mask |= WINED3D_SHADER_CONST_PS_Y_CORR;
+        }
+        else
+        {
+            entry->constant_update_mask |= WINED3D_SHADER_CONST_FFP_PS;
+        }
+
+        for (i = 0; i < MAX_TEXTURES; ++i)
+        {
+            if (entry->ps.bumpenv_mat_location[i] != -1)
+            {
+                entry->constant_update_mask |= WINED3D_SHADER_CONST_PS_BUMP_ENV;
+                break;
+            }
+        }
+
+        if (entry->ps.np2_fixup_location != -1)
+            entry->constant_update_mask |= WINED3D_SHADER_CONST_PS_NP2_FIXUP;
+    }
 }
 
 /* Context activation is done by the caller. */
@@ -6136,20 +6140,42 @@ static GLhandleARB create_glsl_blt_shader(const struct wined3d_gl_info *gl_info,
 }
 
 /* Context activation is done by the caller. */
-static void shader_glsl_select(void *shader_priv, const struct wined3d_context *context,
+static void shader_glsl_select(void *shader_priv, struct wined3d_context *context,
         const struct wined3d_state *state)
 {
+    struct glsl_context_data *ctx_data = context->shader_backend_data;
     const struct wined3d_gl_info *gl_info = context->gl_info;
     struct shader_glsl_priv *priv = shader_priv;
-    GLhandleARB program_id = 0;
+    GLhandleARB program_id = 0, prev_id = 0;
     GLenum old_vertex_color_clamp, current_vertex_color_clamp;
 
     priv->vertex_pipe->vp_enable(gl_info, !use_vs(state));
     priv->fragment_pipe->enable_extension(gl_info, !use_ps(state));
 
-    old_vertex_color_clamp = priv->glsl_program ? priv->glsl_program->vs.vertex_color_clamp : GL_FIXED_ONLY_ARB;
-    set_glsl_shader_program(context, state, priv);
-    current_vertex_color_clamp = priv->glsl_program ? priv->glsl_program->vs.vertex_color_clamp : GL_FIXED_ONLY_ARB;
+    if (ctx_data->glsl_program)
+    {
+        prev_id = ctx_data->glsl_program->programId;
+        old_vertex_color_clamp = ctx_data->glsl_program->vs.vertex_color_clamp;
+    }
+    else
+    {
+        prev_id = 0;
+        old_vertex_color_clamp = GL_FIXED_ONLY_ARB;
+    }
+
+    set_glsl_shader_program(context, state, priv, ctx_data);
+
+    if (ctx_data->glsl_program)
+    {
+        program_id = ctx_data->glsl_program->programId;
+        current_vertex_color_clamp = ctx_data->glsl_program->vs.vertex_color_clamp;
+    }
+    else
+    {
+        program_id = 0;
+        current_vertex_color_clamp = GL_FIXED_ONLY_ARB;
+    }
+
     if (old_vertex_color_clamp != current_vertex_color_clamp)
     {
         if (gl_info->supported[ARB_COLOR_BUFFER_FLOAT])
@@ -6163,27 +6189,36 @@ static void shader_glsl_select(void *shader_priv, const struct wined3d_context *
         }
     }
 
-    program_id = priv->glsl_program ? priv->glsl_program->programId : 0;
-    if (program_id) TRACE("Using GLSL program %u\n", program_id);
-    GL_EXTCALL(glUseProgramObjectARB(program_id));
-    checkGLcall("glUseProgramObjectARB");
+    TRACE("Using GLSL program %u.\n", program_id);
 
-    /* In case that NP2 texcoord fixup data is found for the selected program, trigger a reload of the
-     * constants. This has to be done because it can't be guaranteed that sampler() (from state.c) is
-     * called between selecting the shader and using it, which results in wrong fixup for some frames. */
-    if (priv->glsl_program && priv->glsl_program->ps.np2_fixup_info)
+    if (prev_id != program_id)
     {
-        shader_glsl_load_np2fixup_constants(priv, gl_info, state);
+        GL_EXTCALL(glUseProgramObjectARB(program_id));
+        checkGLcall("glUseProgramObjectARB");
+
+        if (program_id)
+            context->constant_update_mask |= ctx_data->glsl_program->constant_update_mask;
     }
 }
 
+/* "context" is not necessarily the currently active context. */
+static void shader_glsl_invalidate_current_program(struct wined3d_context *context)
+{
+    struct glsl_context_data *ctx_data = context->shader_backend_data;
+
+    ctx_data->glsl_program = NULL;
+    context->shader_update_mask = (1 << WINED3D_SHADER_TYPE_PIXEL)
+            | (1 << WINED3D_SHADER_TYPE_VERTEX)
+            | (1 << WINED3D_SHADER_TYPE_GEOMETRY);
+}
+
 /* Context activation is done by the caller. */
-static void shader_glsl_disable(void *shader_priv, const struct wined3d_context *context)
+static void shader_glsl_disable(void *shader_priv, struct wined3d_context *context)
 {
     const struct wined3d_gl_info *gl_info = context->gl_info;
     struct shader_glsl_priv *priv = shader_priv;
 
-    priv->glsl_program = NULL;
+    shader_glsl_invalidate_current_program(context);
     GL_EXTCALL(glUseProgramObjectARB(0));
     checkGLcall("glUseProgramObjectARB");
 
@@ -6229,14 +6264,31 @@ static void shader_glsl_select_depth_blt(void *shader_priv, const struct wined3d
 /* Context activation is done by the caller. */
 static void shader_glsl_deselect_depth_blt(void *shader_priv, const struct wined3d_gl_info *gl_info)
 {
-    struct shader_glsl_priv *priv = shader_priv;
+    const struct glsl_context_data *ctx_data = context_get_current()->shader_backend_data;
     GLhandleARB program_id;
 
-    program_id = priv->glsl_program ? priv->glsl_program->programId : 0;
+    program_id = ctx_data->glsl_program ? ctx_data->glsl_program->programId : 0;
     if (program_id) TRACE("Using GLSL program %u\n", program_id);
 
     GL_EXTCALL(glUseProgramObjectARB(program_id));
     checkGLcall("glUseProgramObjectARB");
+}
+
+static void shader_glsl_invalidate_contexts_program(struct wined3d_device *device,
+        const struct glsl_shader_prog_link *program)
+{
+    const struct glsl_context_data *ctx_data;
+    struct wined3d_context *context;
+    unsigned int i;
+
+    for (i = 0; i < device->context_count; ++i)
+    {
+        context = device->contexts[i];
+        ctx_data = context->shader_backend_data;
+
+        if (ctx_data->glsl_program == program)
+            shader_glsl_invalidate_current_program(context);
+    }
 }
 
 static void shader_glsl_destroy(struct wined3d_shader *shader)
@@ -6271,21 +6323,20 @@ static void shader_glsl_destroy(struct wined3d_shader *shader)
             {
                 struct glsl_ps_compiled_shader *gl_shaders = shader_data->gl_shaders.ps;
 
-                LIST_FOR_EACH_ENTRY_SAFE(entry, entry2, linked_programs,
-                        struct glsl_shader_prog_link, ps.shader_entry)
-                {
-                    delete_glsl_program_entry(priv, gl_info, entry);
-                }
-
                 for (i = 0; i < shader_data->num_gl_shaders; ++i)
                 {
                     TRACE("Deleting pixel shader %u.\n", gl_shaders[i].prgId);
-                    if (priv->glsl_program && priv->glsl_program->ps.id == gl_shaders[i].prgId)
-                        shader_glsl_disable(priv, context);
                     GL_EXTCALL(glDeleteObjectARB(gl_shaders[i].prgId));
                     checkGLcall("glDeleteObjectARB");
                 }
                 HeapFree(GetProcessHeap(), 0, shader_data->gl_shaders.ps);
+
+                LIST_FOR_EACH_ENTRY_SAFE(entry, entry2, linked_programs,
+                        struct glsl_shader_prog_link, ps.shader_entry)
+                {
+                    shader_glsl_invalidate_contexts_program(device, entry);
+                    delete_glsl_program_entry(priv, gl_info, entry);
+                }
 
                 break;
             }
@@ -6294,21 +6345,20 @@ static void shader_glsl_destroy(struct wined3d_shader *shader)
             {
                 struct glsl_vs_compiled_shader *gl_shaders = shader_data->gl_shaders.vs;
 
-                LIST_FOR_EACH_ENTRY_SAFE(entry, entry2, linked_programs,
-                        struct glsl_shader_prog_link, vs.shader_entry)
-                {
-                    delete_glsl_program_entry(priv, gl_info, entry);
-                }
-
                 for (i = 0; i < shader_data->num_gl_shaders; ++i)
                 {
                     TRACE("Deleting vertex shader %u.\n", gl_shaders[i].prgId);
-                    if (priv->glsl_program && priv->glsl_program->vs.id == gl_shaders[i].prgId)
-                        shader_glsl_disable(priv, context);
                     GL_EXTCALL(glDeleteObjectARB(gl_shaders[i].prgId));
                     checkGLcall("glDeleteObjectARB");
                 }
                 HeapFree(GetProcessHeap(), 0, shader_data->gl_shaders.vs);
+
+                LIST_FOR_EACH_ENTRY_SAFE(entry, entry2, linked_programs,
+                        struct glsl_shader_prog_link, vs.shader_entry)
+                {
+                    shader_glsl_invalidate_contexts_program(device, entry);
+                    delete_glsl_program_entry(priv, gl_info, entry);
+                }
 
                 break;
             }
@@ -6317,21 +6367,20 @@ static void shader_glsl_destroy(struct wined3d_shader *shader)
             {
                 struct glsl_gs_compiled_shader *gl_shaders = shader_data->gl_shaders.gs;
 
-                LIST_FOR_EACH_ENTRY_SAFE(entry, entry2, linked_programs,
-                        struct glsl_shader_prog_link, gs.shader_entry)
-                {
-                    delete_glsl_program_entry(priv, gl_info, entry);
-                }
-
                 for (i = 0; i < shader_data->num_gl_shaders; ++i)
                 {
                     TRACE("Deleting geometry shader %u.\n", gl_shaders[i].id);
-                    if (priv->glsl_program && priv->glsl_program->gs.id == gl_shaders[i].id)
-                        shader_glsl_disable(priv, context);
                     GL_EXTCALL(glDeleteObjectARB(gl_shaders[i].id));
                     checkGLcall("glDeleteObjectARB");
                 }
                 HeapFree(GetProcessHeap(), 0, shader_data->gl_shaders.gs);
+
+                LIST_FOR_EACH_ENTRY_SAFE(entry, entry2, linked_programs,
+                        struct glsl_shader_prog_link, gs.shader_entry)
+                {
+                    shader_glsl_invalidate_contexts_program(device, entry);
+                    delete_glsl_program_entry(priv, gl_info, entry);
+                }
 
                 break;
             }
@@ -6368,7 +6417,9 @@ static int glsl_program_key_compare(const void *key, const struct wine_rb_entry 
 
 static BOOL constant_heap_init(struct constant_heap *heap, unsigned int constant_count)
 {
-    SIZE_T size = (constant_count + 1) * sizeof(*heap->entries) + constant_count * sizeof(*heap->positions);
+    SIZE_T size = (constant_count + 1) * sizeof(*heap->entries)
+            + constant_count * sizeof(*heap->contained)
+            + constant_count * sizeof(*heap->positions);
     void *mem = HeapAlloc(GetProcessHeap(), 0, size);
 
     if (!mem)
@@ -6379,7 +6430,9 @@ static BOOL constant_heap_init(struct constant_heap *heap, unsigned int constant
 
     heap->entries = mem;
     heap->entries[1].version = 0;
-    heap->positions = (unsigned int *)(heap->entries + constant_count + 1);
+    heap->contained = (BOOL *)(heap->entries + constant_count + 1);
+    memset(heap->contained, 0, constant_count * sizeof(*heap->contained));
+    heap->positions = (unsigned int *)(heap->contained + constant_count);
     heap->size = 1;
 
     return TRUE;
@@ -6508,7 +6561,16 @@ static void shader_glsl_free(struct wined3d_device *device)
     device->shader_priv = NULL;
 }
 
-static void shader_glsl_context_destroyed(void *shader_priv, const struct wined3d_context *context) {}
+static BOOL shader_glsl_allocate_context_data(struct wined3d_context *context)
+{
+    return !!(context->shader_backend_data = HeapAlloc(GetProcessHeap(),
+            HEAP_ZERO_MEMORY, sizeof(struct glsl_context_data)));
+}
+
+static void shader_glsl_free_context_data(struct wined3d_context *context)
+{
+    HeapFree(GetProcessHeap(), 0, context->shader_backend_data);
+}
 
 static void shader_glsl_get_caps(const struct wined3d_gl_info *gl_info, struct shader_caps *caps)
 {
@@ -6722,11 +6784,11 @@ const struct wined3d_shader_backend_ops glsl_shader_backend =
     shader_glsl_update_float_vertex_constants,
     shader_glsl_update_float_pixel_constants,
     shader_glsl_load_constants,
-    shader_glsl_load_np2fixup_constants,
     shader_glsl_destroy,
     shader_glsl_alloc,
     shader_glsl_free,
-    shader_glsl_context_destroyed,
+    shader_glsl_allocate_context_data,
+    shader_glsl_free_context_data,
     shader_glsl_get_caps,
     shader_glsl_color_fixup_supported,
     shader_glsl_has_ffp_proj_control,
@@ -6745,7 +6807,7 @@ static void glsl_vertex_pipe_vp_get_caps(const struct wined3d_gl_info *gl_info, 
 {
     caps->xyzrhw = TRUE;
     caps->max_active_lights = gl_info->limits.lights;
-    caps->max_vertex_blend_matrices = 0;
+    caps->max_vertex_blend_matrices = 1;
     caps->max_vertex_blend_matrix_index = 0;
     caps->vertex_processing_caps = WINED3DVTXPCAPS_TEXGEN
             | WINED3DVTXPCAPS_MATERIALSOURCE7
@@ -6811,13 +6873,23 @@ static void glsl_vertex_pipe_vp_free(struct wined3d_device *device)
 static void glsl_vertex_pipe_shader(struct wined3d_context *context,
         const struct wined3d_state *state, DWORD state_id)
 {
-    context->select_shader = 1;
+    context->shader_update_mask |= 1 << WINED3D_SHADER_TYPE_VERTEX;
+}
+
+static void glsl_vertex_pipe_projection(struct wined3d_context *context,
+        const struct wined3d_state *state, DWORD state_id)
+{
+    /* Table fog behavior depends on the projection matrix. */
+    if (state->render_states[WINED3D_RS_FOGENABLE]
+            && state->render_states[WINED3D_RS_FOGTABLEMODE] != WINED3D_FOG_NONE)
+        context->shader_update_mask |= 1 << WINED3D_SHADER_TYPE_VERTEX;
+    transform_projection(context, state, state_id);
 }
 
 static const struct StateEntryTemplate glsl_vertex_pipe_vp_states[] =
 {
     {STATE_VDECL,                                                {STATE_VDECL,                                                vertexdeclaration      }, WINED3D_GL_EXT_NONE          },
-    {STATE_VSHADER,                                              {STATE_VDECL,                                                NULL                   }, WINED3D_GL_EXT_NONE          },
+    {STATE_SHADER(WINED3D_SHADER_TYPE_VERTEX),                   {STATE_VDECL,                                                NULL                   }, WINED3D_GL_EXT_NONE          },
     {STATE_MATERIAL,                                             {STATE_RENDER(WINED3D_RS_SPECULARENABLE),                    NULL                   }, WINED3D_GL_EXT_NONE          },
     {STATE_RENDER(WINED3D_RS_SPECULARENABLE),                    {STATE_RENDER(WINED3D_RS_SPECULARENABLE),                    state_specularenable   }, WINED3D_GL_EXT_NONE          },
     /* Clip planes */
@@ -6867,7 +6939,7 @@ static const struct StateEntryTemplate glsl_vertex_pipe_vp_states[] =
     {STATE_VIEWPORT,                                             {STATE_VIEWPORT,                                             viewport_vertexpart    }, WINED3D_GL_EXT_NONE          },
     /* Transform states */
     {STATE_TRANSFORM(WINED3D_TS_VIEW),                           {STATE_TRANSFORM(WINED3D_TS_VIEW),                           transform_view         }, WINED3D_GL_EXT_NONE          },
-    {STATE_TRANSFORM(WINED3D_TS_PROJECTION),                     {STATE_TRANSFORM(WINED3D_TS_PROJECTION),                     transform_projection   }, WINED3D_GL_EXT_NONE          },
+    {STATE_TRANSFORM(WINED3D_TS_PROJECTION),                     {STATE_TRANSFORM(WINED3D_TS_PROJECTION),                     glsl_vertex_pipe_projection}, WINED3D_GL_EXT_NONE      },
     {STATE_TRANSFORM(WINED3D_TS_TEXTURE0),                       {STATE_TEXTURESTAGE(0, WINED3D_TSS_TEXTURE_TRANSFORM_FLAGS), NULL                   }, WINED3D_GL_EXT_NONE          },
     {STATE_TRANSFORM(WINED3D_TS_TEXTURE1),                       {STATE_TEXTURESTAGE(1, WINED3D_TSS_TEXTURE_TRANSFORM_FLAGS), NULL                   }, WINED3D_GL_EXT_NONE          },
     {STATE_TRANSFORM(WINED3D_TS_TEXTURE2),                       {STATE_TEXTURESTAGE(2, WINED3D_TSS_TEXTURE_TRANSFORM_FLAGS), NULL                   }, WINED3D_GL_EXT_NONE          },
@@ -7074,8 +7146,7 @@ static void glsl_fragment_pipe_shader(struct wined3d_context *context,
 {
     context->last_was_pshader = use_ps(state);
 
-    context->select_shader = 1;
-    context->load_constants = 1;
+    context->shader_update_mask |= 1 << WINED3D_SHADER_TYPE_PIXEL;
 }
 
 static void glsl_fragment_pipe_fog(struct wined3d_context *context,
@@ -7086,8 +7157,7 @@ static void glsl_fragment_pipe_fog(struct wined3d_context *context,
     DWORD fogstart = state->render_states[WINED3D_RS_FOGSTART];
     DWORD fogend = state->render_states[WINED3D_RS_FOGEND];
 
-    context->select_shader = 1;
-    context->load_constants = 1;
+    context->shader_update_mask |= 1 << WINED3D_SHADER_TYPE_PIXEL;
 
     if (!state->render_states[WINED3D_RS_FOGENABLE])
         return;
@@ -7116,147 +7186,98 @@ static void glsl_fragment_pipe_fog(struct wined3d_context *context,
 static void glsl_fragment_pipe_tex_transform(struct wined3d_context *context,
         const struct wined3d_state *state, DWORD state_id)
 {
-    context->select_shader = 1;
-    context->load_constants = 1;
+    context->shader_update_mask |= 1 << WINED3D_SHADER_TYPE_PIXEL;
 }
 
 static void glsl_fragment_pipe_invalidate_constants(struct wined3d_context *context,
         const struct wined3d_state *state, DWORD state_id)
 {
-    context->load_constants = 1;
+    context->constant_update_mask |= WINED3D_SHADER_CONST_FFP_PS;
 }
 
 static const struct StateEntryTemplate glsl_fragment_pipe_state_template[] =
 {
     {STATE_RENDER(WINED3D_RS_TEXTUREFACTOR),                    {STATE_RENDER(WINED3D_RS_TEXTUREFACTOR),                     glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_COLOR_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_COLOR_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_COLOR_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_COLOR_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_ALPHA_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_ALPHA_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_ALPHA_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_ALPHA_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_RESULT_ARG),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_MAT00),          {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_MAT00),           glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_MAT01),          {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_MAT10),          {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_MAT11),          {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_LSCALE),         {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_LSCALE),          glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_LOFFSET),        {STATE_TEXTURESTAGE(0, WINED3D_TSS_BUMPENV_LSCALE),          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_COLOR_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_COLOR_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_COLOR_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_COLOR_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_ALPHA_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_ALPHA_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_ALPHA_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_ALPHA_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_RESULT_ARG),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_MAT00),          {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_MAT00),           glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_MAT01),          {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_MAT10),          {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_MAT11),          {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_LSCALE),         {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_LSCALE),          glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_LOFFSET),        {STATE_TEXTURESTAGE(1, WINED3D_TSS_BUMPENV_LSCALE),          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_COLOR_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_COLOR_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_COLOR_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_COLOR_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_ALPHA_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_ALPHA_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_ALPHA_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_ALPHA_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_RESULT_ARG),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_MAT00),          {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_MAT00),           glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_MAT01),          {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_MAT10),          {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_MAT11),          {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_LSCALE),         {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_LSCALE),          glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_LOFFSET),        {STATE_TEXTURESTAGE(2, WINED3D_TSS_BUMPENV_LSCALE),          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_COLOR_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_COLOR_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_COLOR_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_COLOR_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_ALPHA_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_ALPHA_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_ALPHA_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_ALPHA_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_RESULT_ARG),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_MAT00),          {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_MAT00),           glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_MAT01),          {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_MAT10),          {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_MAT11),          {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_LSCALE),         {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_LSCALE),          glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_LOFFSET),        {STATE_TEXTURESTAGE(3, WINED3D_TSS_BUMPENV_LSCALE),          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_COLOR_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_COLOR_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_COLOR_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_COLOR_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_ALPHA_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_ALPHA_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_ALPHA_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_ALPHA_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_RESULT_ARG),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_MAT00),          {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_MAT00),           glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_MAT01),          {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_MAT10),          {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_MAT11),          {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_LSCALE),         {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_LSCALE),          glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_LOFFSET),        {STATE_TEXTURESTAGE(4, WINED3D_TSS_BUMPENV_LSCALE),          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_COLOR_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_COLOR_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_COLOR_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_COLOR_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_ALPHA_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_ALPHA_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_ALPHA_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_ALPHA_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_RESULT_ARG),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_MAT00),          {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_MAT00),           glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_MAT01),          {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_MAT10),          {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_MAT11),          {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_LSCALE),         {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_LSCALE),          glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_LOFFSET),        {STATE_TEXTURESTAGE(5, WINED3D_TSS_BUMPENV_LSCALE),          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_COLOR_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_COLOR_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_COLOR_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_COLOR_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_ALPHA_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_ALPHA_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_ALPHA_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_ALPHA_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_RESULT_ARG),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_MAT00),          {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_MAT00),           glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_MAT01),          {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_MAT10),          {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_MAT11),          {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_LSCALE),         {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_LSCALE),          glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_LOFFSET),        {STATE_TEXTURESTAGE(6, WINED3D_TSS_BUMPENV_LSCALE),          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_COLOR_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_COLOR_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_COLOR_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_COLOR_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_ALPHA_OP),               {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_ALPHA_ARG1),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_ALPHA_ARG2),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_ALPHA_ARG0),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_RESULT_ARG),             {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_MAT00),          {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_MAT00),           glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_MAT01),          {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_MAT10),          {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_MAT11),          {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_MAT00),           NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_LSCALE),         {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_LSCALE),          glsl_fragment_pipe_invalidate_constants}, WINED3D_GL_EXT_NONE },
-    {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_LOFFSET),        {STATE_TEXTURESTAGE(7, WINED3D_TSS_BUMPENV_LSCALE),          NULL                                   }, WINED3D_GL_EXT_NONE },
-    {STATE_PIXELSHADER,                                         {STATE_PIXELSHADER,                                          glsl_fragment_pipe_shader              }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(0, WINED3D_TSS_COLOR_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(0, WINED3D_TSS_COLOR_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(0, WINED3D_TSS_COLOR_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(0, WINED3D_TSS_COLOR_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(0, WINED3D_TSS_ALPHA_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(0, WINED3D_TSS_ALPHA_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(0, WINED3D_TSS_ALPHA_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(0, WINED3D_TSS_ALPHA_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(0, WINED3D_TSS_RESULT_ARG),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(1, WINED3D_TSS_COLOR_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(1, WINED3D_TSS_COLOR_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(1, WINED3D_TSS_COLOR_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(1, WINED3D_TSS_COLOR_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(1, WINED3D_TSS_ALPHA_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(1, WINED3D_TSS_ALPHA_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(1, WINED3D_TSS_ALPHA_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(1, WINED3D_TSS_ALPHA_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(1, WINED3D_TSS_RESULT_ARG),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(2, WINED3D_TSS_COLOR_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(2, WINED3D_TSS_COLOR_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(2, WINED3D_TSS_COLOR_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(2, WINED3D_TSS_COLOR_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(2, WINED3D_TSS_ALPHA_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(2, WINED3D_TSS_ALPHA_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(2, WINED3D_TSS_ALPHA_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(2, WINED3D_TSS_ALPHA_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(2, WINED3D_TSS_RESULT_ARG),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(3, WINED3D_TSS_COLOR_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(3, WINED3D_TSS_COLOR_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(3, WINED3D_TSS_COLOR_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(3, WINED3D_TSS_COLOR_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(3, WINED3D_TSS_ALPHA_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(3, WINED3D_TSS_ALPHA_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(3, WINED3D_TSS_ALPHA_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(3, WINED3D_TSS_ALPHA_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(3, WINED3D_TSS_RESULT_ARG),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(4, WINED3D_TSS_COLOR_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(4, WINED3D_TSS_COLOR_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(4, WINED3D_TSS_COLOR_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(4, WINED3D_TSS_COLOR_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(4, WINED3D_TSS_ALPHA_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(4, WINED3D_TSS_ALPHA_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(4, WINED3D_TSS_ALPHA_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(4, WINED3D_TSS_ALPHA_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(4, WINED3D_TSS_RESULT_ARG),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(5, WINED3D_TSS_COLOR_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(5, WINED3D_TSS_COLOR_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(5, WINED3D_TSS_COLOR_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(5, WINED3D_TSS_COLOR_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(5, WINED3D_TSS_ALPHA_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(5, WINED3D_TSS_ALPHA_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(5, WINED3D_TSS_ALPHA_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(5, WINED3D_TSS_ALPHA_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(5, WINED3D_TSS_RESULT_ARG),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(6, WINED3D_TSS_COLOR_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(6, WINED3D_TSS_COLOR_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(6, WINED3D_TSS_COLOR_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(6, WINED3D_TSS_COLOR_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(6, WINED3D_TSS_ALPHA_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(6, WINED3D_TSS_ALPHA_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(6, WINED3D_TSS_ALPHA_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(6, WINED3D_TSS_ALPHA_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(6, WINED3D_TSS_RESULT_ARG),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(7, WINED3D_TSS_COLOR_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(7, WINED3D_TSS_COLOR_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(7, WINED3D_TSS_COLOR_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(7, WINED3D_TSS_COLOR_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(7, WINED3D_TSS_ALPHA_OP),               {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(7, WINED3D_TSS_ALPHA_ARG1),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(7, WINED3D_TSS_ALPHA_ARG2),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(7, WINED3D_TSS_ALPHA_ARG0),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_TEXTURESTAGE(7, WINED3D_TSS_RESULT_ARG),             {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                   {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    glsl_fragment_pipe_shader              }, WINED3D_GL_EXT_NONE },
     {STATE_RENDER(WINED3D_RS_FOGENABLE),                        {STATE_RENDER(WINED3D_RS_FOGENABLE),                         glsl_fragment_pipe_fog                 }, WINED3D_GL_EXT_NONE },
     {STATE_RENDER(WINED3D_RS_FOGTABLEMODE),                     {STATE_RENDER(WINED3D_RS_FOGENABLE),                         NULL                                   }, WINED3D_GL_EXT_NONE },
     {STATE_RENDER(WINED3D_RS_FOGVERTEXMODE),                    {STATE_RENDER(WINED3D_RS_FOGENABLE),                         NULL                                   }, WINED3D_GL_EXT_NONE },
     {STATE_RENDER(WINED3D_RS_FOGSTART),                         {STATE_RENDER(WINED3D_RS_FOGSTART),                          state_fogstartend                      }, WINED3D_GL_EXT_NONE },
     {STATE_RENDER(WINED3D_RS_FOGEND),                           {STATE_RENDER(WINED3D_RS_FOGSTART),                          NULL                                   }, WINED3D_GL_EXT_NONE },
     {STATE_RENDER(WINED3D_RS_SRGBWRITEENABLE),                  {STATE_RENDER(WINED3D_RS_SRGBWRITEENABLE),                   state_srgbwrite                        }, ARB_FRAMEBUFFER_SRGB},
-    {STATE_RENDER(WINED3D_RS_SRGBWRITEENABLE),                  {STATE_PIXELSHADER,                                          NULL                                   }, WINED3D_GL_EXT_NONE },
+    {STATE_RENDER(WINED3D_RS_SRGBWRITEENABLE),                  {STATE_SHADER(WINED3D_SHADER_TYPE_PIXEL),                    NULL                                   }, WINED3D_GL_EXT_NONE },
     {STATE_RENDER(WINED3D_RS_FOGCOLOR),                         {STATE_RENDER(WINED3D_RS_FOGCOLOR),                          state_fogcolor                         }, WINED3D_GL_EXT_NONE },
     {STATE_RENDER(WINED3D_RS_FOGDENSITY),                       {STATE_RENDER(WINED3D_RS_FOGDENSITY),                        state_fogdensity                       }, WINED3D_GL_EXT_NONE },
     {STATE_TEXTURESTAGE(0,WINED3D_TSS_TEXTURE_TRANSFORM_FLAGS), {STATE_TEXTURESTAGE(0, WINED3D_TSS_TEXTURE_TRANSFORM_FLAGS), glsl_fragment_pipe_tex_transform       }, WINED3D_GL_EXT_NONE },

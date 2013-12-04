@@ -59,7 +59,7 @@ static BOOL     (WINAPI *pSetStandardColorSpaceProfileW)(PCWSTR,DWORD,PWSTR);
 static BOOL     (WINAPI *pUninstallColorProfileA)(PCSTR,PCSTR,BOOL);
 static BOOL     (WINAPI *pUninstallColorProfileW)(PCWSTR,PCWSTR,BOOL);
 
-static BOOL     (WINAPI *pEnumDisplayDevicesA)(LPCSTR,DWORD,PDISPLAY_DEVICE,DWORD);
+static BOOL     (WINAPI *pEnumDisplayDevicesA)(LPCSTR,DWORD,PDISPLAY_DEVICEA,DWORD);
 
 #define GETFUNCPTR(func) p##func = (void *)GetProcAddress( hmscms, #func ); \
     if (!p##func) return FALSE;
@@ -254,17 +254,16 @@ static void test_GetColorProfileElement( char *standardprofile )
         ok( !ret, "GetColorProfileElement() succeeded (%d)\n", GetLastError() );
 
         size = 0;
-
         ret = pGetColorProfileElement( handle, tag, 0, &size, NULL, &ref );
-        ok( !ret && size > 0, "GetColorProfileElement() succeeded (%d)\n", GetLastError() );
-
-        size = sizeof(buffer);
+        ok( !ret, "GetColorProfileElement() succeeded\n" );
+        ok( size > 0, "wrong size\n" );
 
         /* Functional checks */
 
+        size = sizeof(buffer);
         ret = pGetColorProfileElement( handle, tag, 0, &size, buffer, &ref );
-        ok( ret && size > 0, "GetColorProfileElement() failed (%d)\n", GetLastError() );
-
+        ok( ret, "GetColorProfileElement() failed %u\n", GetLastError() );
+        ok( size > 0, "wrong size\n" );
         ok( !memcmp( buffer, expect, sizeof(expect) ), "Unexpected tag data\n" );
 
         pCloseColorProfile( handle );
@@ -1054,18 +1053,16 @@ static void test_SetColorProfileElement( char *testprofile )
         /* Functional checks */
 
         size = sizeof(data);
-
         ret = pSetColorProfileElement( handle, tag, 0, &size, data );
-        ok( ret, "SetColorProfileElement() failed (%d)\n", GetLastError() );
+        ok( ret, "SetColorProfileElement() failed %u\n", GetLastError() );
 
         size = sizeof(buffer);
-
         ret = pGetColorProfileElement( handle, tag, 0, &size, buffer, &ref );
-        ok( ret && size > 0, "GetColorProfileElement() failed (%d)\n", GetLastError() );
+        ok( ret, "GetColorProfileElement() failed %u\n", GetLastError() );
+        ok( size > 0, "wrong size\n" );
 
         ok( !memcmp( data, buffer, sizeof(data) ),
-            "Unexpected tag data, expected %s, got %s (%d)\n",
-            data, buffer, GetLastError() );
+            "Unexpected tag data, expected %s, got %s (%u)\n", data, buffer, GetLastError() );
 
         pCloseColorProfile( handle );
     }
@@ -1247,17 +1244,16 @@ static void test_AssociateColorProfileWithDeviceA( char *testprofile )
     BOOL ret;
     char profile[MAX_PATH], basename[MAX_PATH];
     DWORD error, size = sizeof(profile);
-    DISPLAY_DEVICE display;
+    DISPLAY_DEVICEA display, monitor;
     BOOL res;
-    DISPLAY_DEVICE monitor;
 
     if (testprofile && pEnumDisplayDevicesA)
     {
-        display.cb = sizeof( DISPLAY_DEVICE );
+        display.cb = sizeof( DISPLAY_DEVICEA );
         res = pEnumDisplayDevicesA( NULL, 0, &display, 0 );
         ok( res, "Can't get display info\n" );
 
-        monitor.cb = sizeof( DISPLAY_DEVICE );
+        monitor.cb = sizeof( DISPLAY_DEVICEA );
         res = pEnumDisplayDevicesA( display.DeviceName, 0, &monitor, 0 );
         if (res)
         {
@@ -1382,9 +1378,9 @@ START_TEST(profile)
     }
 
     /* If found, create a temporary copy for testing purposes */
-    if (standardprofile && GetTempPath( sizeof(path), path ))
+    if (standardprofile && GetTempPathA( sizeof(path), path ))
     {
-        if (GetTempFileName( path, "rgb", 0, file ))
+        if (GetTempFileNameA( path, "rgb", 0, file ))
         {
             if (CopyFileA( standardprofile, file, FALSE ))
             {

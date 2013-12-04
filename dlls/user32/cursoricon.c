@@ -972,7 +972,6 @@ done:
             list_add_head( &icon_cache, &info->entry );
         }
         release_icon_ptr( hObj, info );
-        USER_Driver->pCreateCursorIcon( hObj );
     }
     else
     {
@@ -1101,7 +1100,8 @@ static HCURSOR CURSORICON_CreateIconFromANI( const BYTE *bits, DWORD bits_size, 
     ani_header header = {0};
     BOOL use_seq = FALSE;
     HCURSOR cursor = 0;
-    UINT i, error = 0;
+    UINT i;
+    BOOL error = FALSE;
     HICON *frames;
 
     riff_chunk_t root_chunk = { bits_size, bits };
@@ -1609,7 +1609,6 @@ HICON WINAPI CopyIcon( HICON hIcon )
         release_icon_ptr( hNew, ptrNew );
     }
     release_icon_ptr( hIcon, ptrOld );
-    if (hNew) USER_Driver->pCreateCursorIcon( hNew );
     return hNew;
 }
 
@@ -2212,7 +2211,6 @@ HICON WINAPI CreateIconIndirect(PICONINFO iconinfo)
         }
 
         release_icon_ptr( hObj, info );
-        USER_Driver->pCreateCursorIcon( hObj );
     }
     return hObj;
 }

@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include <OpenGL/gl.h>
 #import "cocoa_opengl.h"
 
 #include "macdrv_cocoa.h"
@@ -30,7 +31,7 @@
 
 
 @implementation WineOpenGLContext
-@synthesize latentView, needsUpdate;
+@synthesize latentView, needsUpdate, shouldClearToBlack;
 
     - (void) dealloc
     {
@@ -61,6 +62,32 @@
 
         [self setView:[dummyWindow contentView]];
         [self clearDrawable];
+    }
+
+    - (void) clearToBlackIfNeeded
+    {
+        if (shouldClearToBlack)
+        {
+            NSOpenGLContext* origContext = [NSOpenGLContext currentContext];
+
+            [self makeCurrentContext];
+
+            glPushAttrib(GL_COLOR_BUFFER_BIT | GL_SCISSOR_BIT);
+            glDrawBuffer(GL_FRONT_AND_BACK);
+            glDisable(GL_SCISSOR_TEST);
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            glClearColor(0, 0, 0, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glPopAttrib();
+            glFlush();
+
+            if (origContext)
+                [origContext makeCurrentContext];
+            else
+                [NSOpenGLContext clearCurrentContext];
+
+            shouldClearToBlack = FALSE;
+        }
     }
 
 @end
@@ -123,15 +150,11 @@ void macdrv_make_context_current(macdrv_opengl_context c, macdrv_view v)
         context.needsUpdate = FALSE;
         if (view)
         {
-            __block BOOL windowHasDevice;
-
             macdrv_add_view_opengl_context(v, c);
 
-            OnMainThread(^{
-                windowHasDevice = [[view window] windowNumber] > 0;
-            });
-            if (windowHasDevice)
+            if (context.needsUpdate)
             {
+                context.needsUpdate = FALSE;
                 [context setView:view];
                 [context setLatentView:nil];
             }
@@ -139,6 +162,9 @@ void macdrv_make_context_current(macdrv_opengl_context c, macdrv_view v)
                 [context setLatentView:view];
 
             [context makeCurrentContext];
+
+            if ([context view])
+                [context clearToBlackIfNeeded];
         }
         else
         {
@@ -167,6 +193,8 @@ void macdrv_update_opengl_context(macdrv_opengl_context c)
         {
             [context setView:context.latentView];
             context.latentView = nil;
+
+            [context clearToBlackIfNeeded];
         }
         else
             [context update];

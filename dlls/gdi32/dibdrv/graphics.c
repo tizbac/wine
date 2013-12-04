@@ -694,13 +694,14 @@ static struct cached_glyph *cache_glyph_bitmap( HDC hdc, struct cached_font *fon
         if (ret != GDI_ERROR) break;
     }
     if (ret == GDI_ERROR) return NULL;
+    if (!ret) metrics.gmBlackBoxX = metrics.gmBlackBoxY = 0; /* empty glyph */
 
     bit_count = get_glyph_depth( font->aa_flags );
     stride = get_dib_stride( metrics.gmBlackBoxX, bit_count );
     size = metrics.gmBlackBoxY * stride;
     glyph = HeapAlloc( GetProcessHeap(), 0, FIELD_OFFSET( struct cached_glyph, bits[size] ));
     if (!glyph) return NULL;
-    if (!ret) goto done;  /* zero-size glyph */
+    if (!size) goto done;  /* empty glyph */
 
     if (bit_count == 8) pad = padding[ metrics.gmBlackBoxX % 4 ];
 
@@ -1284,6 +1285,15 @@ BOOL dibdrv_Rectangle( PHYSDEV dev, INT left, INT top, INT right, INT bottom )
     HRGN outline = 0;
 
     TRACE("(%p, %d, %d, %d, %d)\n", dev, left, top, right, bottom);
+
+    if (GetGraphicsMode( dev->hdc ) == GM_ADVANCED)
+    {
+        pts[0].x = pts[3].x = left;
+        pts[0].y = pts[1].y = top;
+        pts[1].x = pts[2].x = right;
+        pts[2].y = pts[3].y = bottom;
+        return dibdrv_Polygon( dev, pts, 4 );
+    }
 
     if (!get_pen_device_rect( pdev, &rect, left, top, right, bottom )) return TRUE;
 

@@ -47,7 +47,6 @@ extern HIMAGELIST	ShellBigIconList DECLSPEC_HIDDEN;
 
 /* Iconcache */
 #define INVALID_INDEX -1
-BOOL SIC_Initialize(void) DECLSPEC_HIDDEN;
 void SIC_Destroy(void) DECLSPEC_HIDDEN;
 BOOL PidlToSicIndex (IShellFolder * sh, LPCITEMIDLIST pidl, BOOL bBigIcon, UINT uFlags, int * pIndex) DECLSPEC_HIDDEN;
 INT SIC_GetIconIndex (LPCWSTR sSourceFile, INT dwSourceIndex, DWORD dwFlags ) DECLSPEC_HIDDEN;
@@ -86,7 +85,6 @@ HRESULT WINAPI IFSFolder_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID *
 HRESULT WINAPI IShellDispatch_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT WINAPI IShellItem_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT WINAPI IShellLink_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv) DECLSPEC_HIDDEN;
-HRESULT WINAPI IShellLink_ConstructFromFile(IUnknown * pUnkOuter, REFIID riid, LPCITEMIDLIST pidl, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT WINAPI ISF_Desktop_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT WINAPI ISF_MyComputer_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT WINAPI ISF_NetworkPlaces_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv) DECLSPEC_HIDDEN;
@@ -109,6 +107,7 @@ HRESULT WINAPI CPanel_ExtractIconW(LPITEMIDLIST pidl, LPCWSTR pszFile, UINT nIco
 HRESULT WINAPI IAutoComplete_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv) DECLSPEC_HIDDEN;
 HRESULT WINAPI ApplicationAssociationRegistration_Constructor(IUnknown *outer, REFIID riid, LPVOID *ppv) DECLSPEC_HIDDEN;
 
+HRESULT IShellLink_ConstructFromFile(IUnknown * pUnkOuter, REFIID riid, LPCITEMIDLIST pidl, IUnknown **ppv) DECLSPEC_HIDDEN;
 
 LPEXTRACTICONA	IExtractIconA_Constructor(LPCITEMIDLIST) DECLSPEC_HIDDEN;
 LPEXTRACTICONW	IExtractIconW_Constructor(LPCITEMIDLIST) DECLSPEC_HIDDEN;
@@ -231,5 +230,7 @@ BOOL AddToEnumList(IEnumIDListImpl *list, LPITEMIDLIST pidl) DECLSPEC_HIDDEN;
  * adds them to the already-created list.
  */
 BOOL CreateFolderEnumList(IEnumIDListImpl *list, LPCWSTR lpszPath, DWORD dwFlags) DECLSPEC_HIDDEN;
+
+void release_typelib(void) DECLSPEC_HIDDEN;
 
 #endif

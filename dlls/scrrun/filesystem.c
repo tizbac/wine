@@ -20,12 +20,14 @@
 
 #include "config.h"
 #include <stdarg.h>
+#include <limits.h>
 
 #include "windef.h"
 #include "winbase.h"
 #include "ole2.h"
 #include "olectl.h"
 #include "dispex.h"
+#include "ntsecapi.h"
 #include "scrrun.h"
 #include "scrrun_private.h"
 
@@ -37,6 +39,13 @@ WINE_DEFAULT_DEBUG_CHANNEL(scrrun);
 struct folder {
     IFolder IFolder_iface;
     LONG ref;
+};
+
+struct file {
+    IFile IFile_iface;
+    LONG ref;
+
+    WCHAR *path;
 };
 
 struct textstream {
@@ -56,17 +65,36 @@ static inline struct folder *impl_from_IFolder(IFolder *iface)
     return CONTAINING_RECORD(iface, struct folder, IFolder_iface);
 }
 
+static inline struct file *impl_from_IFile(IFile *iface)
+{
+    return CONTAINING_RECORD(iface, struct file, IFile_iface);
+}
+
 static inline struct textstream *impl_from_ITextStream(ITextStream *iface)
 {
     return CONTAINING_RECORD(iface, struct textstream, ITextStream_iface);
 }
 
-static int textstream_check_iomode(struct textstream *This, enum iotype type)
+static inline HRESULT create_error(DWORD err)
+{
+    switch(err) {
+    case ERROR_FILE_NOT_FOUND: return CTL_E_FILENOTFOUND;
+    case ERROR_PATH_NOT_FOUND: return CTL_E_PATHNOTFOUND;
+    case ERROR_ACCESS_DENIED: return CTL_E_PERMISSIONDENIED;
+    case ERROR_FILE_EXISTS: return CTL_E_FILEALREADYEXISTS;
+    case ERROR_ALREADY_EXISTS: return CTL_E_FILEALREADYEXISTS;
+    default:
+        FIXME("Unsupported error code: %d\n", err);
+        return E_FAIL;
+    }
+}
+
+static BOOL textstream_check_iomode(struct textstream *This, enum iotype type)
 {
     if (type == IORead)
         return This->mode == ForWriting || This->mode == ForAppending;
     else
-        return 1;
+        return TRUE;
 }
 
 static HRESULT WINAPI textstream_QueryInterface(ITextStream *iface, REFIID riid, void **obj)
@@ -601,6 +629,338 @@ static HRESULT create_folder(IFolder **folder)
     return S_OK;
 }
 
+static HRESULT WINAPI file_QueryInterface(IFile *iface, REFIID riid, void **obj)
+{
+    struct file *This = impl_from_IFile(iface);
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_guid(riid), obj);
+
+    if (IsEqualIID(riid, &IID_IFile) ||
+            IsEqualIID(riid, &IID_IDispatch) ||
+            IsEqualIID(riid, &IID_IUnknown))
+    {
+        *obj = iface;
+        IFile_AddRef(iface);
+        return S_OK;
+    }
+
+    *obj = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI file_AddRef(IFile *iface)
+{
+    struct file *This = impl_from_IFile(iface);
+    LONG ref = InterlockedIncrement(&This->ref);
+
+    TRACE("(%p) ref=%d\n", This, ref);
+
+    return ref;
+}
+
+static ULONG WINAPI file_Release(IFile *iface)
+{
+    struct file *This = impl_from_IFile(iface);
+    LONG ref = InterlockedDecrement(&This->ref);
+
+    TRACE("(%p) ref=%d\n", This, ref);
+
+    if(!ref)
+        heap_free(This->path);
+
+    return ref;
+}
+
+static HRESULT WINAPI file_GetTypeInfoCount(IFile *iface, UINT *pctinfo)
+{
+    struct file *This = impl_from_IFile(iface);
+
+    TRACE("(%p)->(%p)\n", This, pctinfo);
+
+    *pctinfo = 1;
+    return S_OK;
+}
+
+static HRESULT WINAPI file_GetTypeInfo(IFile *iface,
+        UINT iTInfo, LCID lcid, ITypeInfo **ppTInfo)
+{
+    struct file *This = impl_from_IFile(iface);
+
+    TRACE("(%p)->(%u %u %p)\n", This, iTInfo, lcid, ppTInfo);
+
+    return get_typeinfo(IFile_tid, ppTInfo);
+}
+
+static HRESULT WINAPI file_GetIDsOfNames(IFile *iface, REFIID riid,
+        LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId)
+{
+    struct file *This = impl_from_IFile(iface);
+    ITypeInfo *typeinfo;
+    HRESULT hr;
+
+    TRACE("(%p)->(%s %p %u %u %p)\n", This, debugstr_guid(riid),
+            rgszNames, cNames, lcid, rgDispId);
+
+    hr = get_typeinfo(IFile_tid, &typeinfo);
+    if(SUCCEEDED(hr)) {
+        hr = ITypeInfo_GetIDsOfNames(typeinfo, rgszNames, cNames, rgDispId);
+        ITypeInfo_Release(typeinfo);
+    }
+    return hr;
+}
+
+static HRESULT WINAPI file_Invoke(IFile *iface, DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
+{
+    struct file *This = impl_from_IFile(iface);
+    ITypeInfo *typeinfo;
+    HRESULT hr;
+
+    TRACE("(%p)->(%d %s %d %d %p %p %p %p)\n", This, dispIdMember, debugstr_guid(riid),
+            lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
+
+    hr = get_typeinfo(IFile_tid, &typeinfo);
+    if(SUCCEEDED(hr))
+    {
+        hr = ITypeInfo_Invoke(typeinfo, iface, dispIdMember, wFlags,
+                pDispParams, pVarResult, pExcepInfo, puArgErr);
+        ITypeInfo_Release(typeinfo);
+    }
+    return hr;
+}
+
+static HRESULT WINAPI file_get_Path(IFile *iface, BSTR *pbstrPath)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, pbstrPath);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_Name(IFile *iface, BSTR *pbstrName)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, pbstrName);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_put_Name(IFile *iface, BSTR pbstrName)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%s)\n", This, debugstr_w(pbstrName));
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_ShortPath(IFile *iface, BSTR *pbstrPath)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, pbstrPath);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_ShortName(IFile *iface, BSTR *pbstrName)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, pbstrName);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_Drive(IFile *iface, IDrive **ppdrive)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, ppdrive);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_ParentFolder(IFile *iface, IFolder **ppfolder)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, ppfolder);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_Attributes(IFile *iface, FileAttribute *pfa)
+{
+    struct file *This = impl_from_IFile(iface);
+    DWORD fa;
+
+    TRACE("(%p)->(%p)\n", This, pfa);
+
+    if(!pfa)
+        return E_POINTER;
+
+    fa = GetFileAttributesW(This->path);
+    if(fa == INVALID_FILE_ATTRIBUTES)
+        return create_error(GetLastError());
+
+    *pfa = fa & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN |
+            FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_ARCHIVE |
+            FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_COMPRESSED);
+    return S_OK;
+}
+
+static HRESULT WINAPI file_put_Attributes(IFile *iface, FileAttribute pfa)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%x)\n", This, pfa);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_DateCreated(IFile *iface, DATE *pdate)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, pdate);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_DateLastModified(IFile *iface, DATE *pdate)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, pdate);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_DateLastAccessed(IFile *iface, DATE *pdate)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, pdate);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_get_Size(IFile *iface, VARIANT *pvarSize)
+{
+    struct file *This = impl_from_IFile(iface);
+    WIN32_FIND_DATAW fd;
+    HANDLE f;
+
+    TRACE("(%p)->(%p)\n", This, pvarSize);
+
+    if(!pvarSize)
+        return E_POINTER;
+
+    f = FindFirstFileW(This->path, &fd);
+    if(f == INVALID_HANDLE_VALUE)
+        return create_error(GetLastError());
+    FindClose(f);
+
+    if(fd.nFileSizeHigh || fd.nFileSizeLow>INT_MAX) {
+        V_VT(pvarSize) = VT_R8;
+        V_R8(pvarSize) = ((ULONGLONG)fd.nFileSizeHigh<<32) + fd.nFileSizeLow;
+    }else {
+        V_VT(pvarSize) = VT_I4;
+        V_I4(pvarSize) = fd.nFileSizeLow;
+    }
+    return S_OK;
+}
+
+static HRESULT WINAPI file_get_Type(IFile *iface, BSTR *pbstrType)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%p)\n", This, pbstrType);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_Delete(IFile *iface, VARIANT_BOOL Force)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%x)\n", This, Force);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_Copy(IFile *iface, BSTR Destination, VARIANT_BOOL OverWriteFiles)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%s %x)\n", This, debugstr_w(Destination), OverWriteFiles);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_Move(IFile *iface, BSTR Destination)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%s)\n", This, debugstr_w(Destination));
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI file_OpenAsTextStream(IFile *iface, IOMode IOMode, Tristate Format, ITextStream **ppts)
+{
+    struct file *This = impl_from_IFile(iface);
+    FIXME("(%p)->(%x %x %p)\n", This, IOMode, Format, ppts);
+    return E_NOTIMPL;
+}
+
+static const IFileVtbl file_vtbl = {
+    file_QueryInterface,
+    file_AddRef,
+    file_Release,
+    file_GetTypeInfoCount,
+    file_GetTypeInfo,
+    file_GetIDsOfNames,
+    file_Invoke,
+    file_get_Path,
+    file_get_Name,
+    file_put_Name,
+    file_get_ShortPath,
+    file_get_ShortName,
+    file_get_Drive,
+    file_get_ParentFolder,
+    file_get_Attributes,
+    file_put_Attributes,
+    file_get_DateCreated,
+    file_get_DateLastModified,
+    file_get_DateLastAccessed,
+    file_get_Size,
+    file_get_Type,
+    file_Delete,
+    file_Copy,
+    file_Move,
+    file_OpenAsTextStream
+};
+
+static HRESULT create_file(BSTR path, IFile **file)
+{
+    struct file *f;
+    DWORD len, attrs;
+
+    *file = NULL;
+
+    f = heap_alloc(sizeof(struct file));
+    if(!f)
+        return E_OUTOFMEMORY;
+
+    f->IFile_iface.lpVtbl = &file_vtbl;
+    f->ref = 1;
+
+    len = GetFullPathNameW(path, 0, NULL, NULL);
+    if(!len) {
+        heap_free(f);
+        return E_FAIL;
+    }
+
+    f->path = heap_alloc(len*sizeof(WCHAR));
+    if(!f->path) {
+        heap_free(f);
+        return E_OUTOFMEMORY;
+    }
+
+    if(!GetFullPathNameW(path, len, f->path, NULL)) {
+        heap_free(f->path);
+        heap_free(f);
+        return E_FAIL;
+    }
+
+    if(path[len-1]=='/' || path[len-1]=='\\')
+        path[len-1] = 0;
+
+    attrs = GetFileAttributesW(f->path);
+    if(attrs==INVALID_FILE_ATTRIBUTES ||
+            (attrs&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_DEVICE))) {
+        heap_free(f->path);
+        heap_free(f);
+        return create_error(GetLastError());
+    }
+
+    *file = &f->IFile_iface;
+    return S_OK;
+}
+
 static HRESULT WINAPI filesys_QueryInterface(IFileSystem3 *iface, REFIID riid, void **ppvObject)
 {
     TRACE("%p %s %p\n", iface, debugstr_guid(riid), ppvObject);
@@ -713,11 +1073,62 @@ static HRESULT WINAPI filesys_get_Drives(IFileSystem3 *iface, IDriveCollection *
 }
 
 static HRESULT WINAPI filesys_BuildPath(IFileSystem3 *iface, BSTR Path,
-                                            BSTR Name, BSTR *pbstrResult)
+                                            BSTR Name, BSTR *Result)
 {
-    FIXME("%p %s %s %p\n", iface, debugstr_w(Path), debugstr_w(Name), pbstrResult);
+    BSTR ret;
 
-    return E_NOTIMPL;
+    TRACE("%p %s %s %p\n", iface, debugstr_w(Path), debugstr_w(Name), Result);
+
+    if (!Result) return E_POINTER;
+
+    if (Path && Name)
+    {
+        int path_len = SysStringLen(Path), name_len = SysStringLen(Name);
+
+        /* if both parts have backslashes strip one from Path */
+        if (Path[path_len-1] == '\\' && Name[0] == '\\')
+        {
+            path_len -= 1;
+
+            ret = SysAllocStringLen(NULL, path_len + name_len);
+            if (ret)
+            {
+                strcpyW(ret, Path);
+                ret[path_len] = 0;
+                strcatW(ret, Name);
+            }
+        }
+        else if (Path[path_len-1] != '\\' && Name[0] != '\\')
+        {
+            static const WCHAR bsW[] = {'\\',0};
+            ret = SysAllocStringLen(NULL, path_len + name_len + 1);
+            if (ret)
+            {
+                strcpyW(ret, Path);
+                if (Path[path_len-1] != ':')
+                    strcatW(ret, bsW);
+                strcatW(ret, Name);
+            }
+        }
+        else
+        {
+            ret = SysAllocStringLen(NULL, path_len + name_len);
+            if (ret)
+            {
+                strcpyW(ret, Path);
+                strcatW(ret, Name);
+            }
+        }
+    }
+    else if (Path || Name)
+        ret = SysAllocString(Path ? Path : Name);
+    else
+        ret = SysAllocStringLen(NULL, 0);
+
+    if (!ret) return E_OUTOFMEMORY;
+    *Result = ret;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI filesys_GetDriveName(IFileSystem3 *iface, BSTR Path,
@@ -728,28 +1139,126 @@ static HRESULT WINAPI filesys_GetDriveName(IFileSystem3 *iface, BSTR Path,
     return E_NOTIMPL;
 }
 
+static inline DWORD get_parent_folder_name(const WCHAR *path, DWORD len)
+{
+    int i;
+
+    if(!path)
+        return 0;
+
+    for(i=len-1; i>=0; i--)
+        if(path[i]!='/' && path[i]!='\\')
+            break;
+
+    for(; i>=0; i--)
+        if(path[i]=='/' || path[i]=='\\')
+            break;
+
+    for(; i>=0; i--)
+        if(path[i]!='/' && path[i]!='\\')
+            break;
+
+    if(i < 0)
+        return 0;
+
+    if(path[i]==':' && i==1)
+        i++;
+    return i+1;
+}
+
 static HRESULT WINAPI filesys_GetParentFolderName(IFileSystem3 *iface, BSTR Path,
                                             BSTR *pbstrResult)
 {
-    FIXME("%p %s %p\n", iface, debugstr_w(Path), pbstrResult);
+    DWORD len;
 
-    return E_NOTIMPL;
+    TRACE("%p %s %p\n", iface, debugstr_w(Path), pbstrResult);
+
+    if(!pbstrResult)
+        return E_POINTER;
+
+    len = get_parent_folder_name(Path, SysStringLen(Path));
+    if(!len) {
+        *pbstrResult = NULL;
+        return S_OK;
+    }
+
+    *pbstrResult = SysAllocStringLen(Path, len);
+    if(!*pbstrResult)
+        return E_OUTOFMEMORY;
+    return S_OK;
 }
 
 static HRESULT WINAPI filesys_GetFileName(IFileSystem3 *iface, BSTR Path,
                                             BSTR *pbstrResult)
 {
-    FIXME("%p %s %p\n", iface, debugstr_w(Path), pbstrResult);
+    int i, end;
 
-    return E_NOTIMPL;
+    TRACE("%p %s %p\n", iface, debugstr_w(Path), pbstrResult);
+
+    if(!pbstrResult)
+        return E_POINTER;
+
+    if(!Path) {
+        *pbstrResult = NULL;
+        return S_OK;
+    }
+
+    for(end=strlenW(Path)-1; end>=0; end--)
+        if(Path[end]!='/' && Path[end]!='\\')
+            break;
+
+    for(i=end; i>=0; i--)
+        if(Path[i]=='/' || Path[i]=='\\')
+            break;
+    i++;
+
+    if(i>end || (i==0 && end==1 && Path[1]==':')) {
+        *pbstrResult = NULL;
+        return S_OK;
+    }
+
+    *pbstrResult = SysAllocStringLen(Path+i, end-i+1);
+    if(!*pbstrResult)
+        return E_OUTOFMEMORY;
+    return S_OK;
 }
 
 static HRESULT WINAPI filesys_GetBaseName(IFileSystem3 *iface, BSTR Path,
                                             BSTR *pbstrResult)
 {
-    FIXME("%p %s %p\n", iface, debugstr_w(Path), pbstrResult);
+    int i, end;
 
-    return E_NOTIMPL;
+    TRACE("%p %s %p\n", iface, debugstr_w(Path), pbstrResult);
+
+    if(!pbstrResult)
+        return E_POINTER;
+
+    if(!Path) {
+        *pbstrResult = NULL;
+        return S_OK;
+    }
+
+    for(end=strlenW(Path)-1; end>=0; end--)
+        if(Path[end]!='/' && Path[end]!='\\')
+            break;
+
+    for(i=end; i>=0; i--) {
+        if(Path[i]=='.' && Path[end+1]!='.')
+            end = i-1;
+        if(Path[i]=='/' || Path[i]=='\\')
+            break;
+    }
+    i++;
+
+    if((i>end && Path[end+1]!='.') || (i==0 && end==1 && Path[1]==':')) {
+        *pbstrResult = NULL;
+        return S_OK;
+    }
+
+    *pbstrResult = SysAllocStringLen(Path+i, end-i+1);
+    if(!*pbstrResult)
+        return E_OUTOFMEMORY;
+    return S_OK;
 }
 
 static HRESULT WINAPI filesys_GetExtensionName(IFileSystem3 *iface, BSTR Path,
@@ -763,16 +1272,75 @@ static HRESULT WINAPI filesys_GetExtensionName(IFileSystem3 *iface, BSTR Path,
 static HRESULT WINAPI filesys_GetAbsolutePathName(IFileSystem3 *iface, BSTR Path,
                                             BSTR *pbstrResult)
 {
-    FIXME("%p %s %p\n", iface, debugstr_w(Path), pbstrResult);
+    static const WCHAR cur_path[] = {'.',0};
 
-    return E_NOTIMPL;
+    WCHAR buf[MAX_PATH], ch;
+    const WCHAR *path;
+    DWORD i, beg, len, exp_len;
+    WIN32_FIND_DATAW fdata;
+    HANDLE fh;
+
+    TRACE("%p %s %p\n", iface, debugstr_w(Path), pbstrResult);
+
+    if(!pbstrResult)
+        return E_POINTER;
+
+    if(!Path)
+        path = cur_path;
+    else
+        path = Path;
+
+    len = GetFullPathNameW(path, MAX_PATH, buf, NULL);
+    if(!len)
+        return E_FAIL;
+
+    buf[0] = toupperW(buf[0]);
+    if(len>3 && buf[len-1] == '\\')
+        buf[--len] = 0;
+
+    for(beg=3, i=3; i<=len; i++) {
+        if(buf[i]!='\\' && buf[i])
+            continue;
+
+        ch = buf[i];
+        buf[i] = 0;
+        fh = FindFirstFileW(buf, &fdata);
+        if(fh == INVALID_HANDLE_VALUE)
+            break;
+
+        exp_len = strlenW(fdata.cFileName);
+        if(exp_len == i-beg)
+            memcpy(buf+beg, fdata.cFileName, exp_len*sizeof(WCHAR));
+        FindClose(fh);
+        buf[i] = ch;
+        beg = i+1;
+    }
+
+    *pbstrResult = SysAllocString(buf);
+    if(!*pbstrResult)
+        return E_OUTOFMEMORY;
+    return S_OK;
 }
 
 static HRESULT WINAPI filesys_GetTempName(IFileSystem3 *iface, BSTR *pbstrResult)
 {
-    FIXME("%p %p\n", iface, pbstrResult);
+    static const WCHAR fmt[] = {'r','a','d','%','0','5','X','.','t','x','t',0};
 
-    return E_NOTIMPL;
+    DWORD random;
+
+    TRACE("%p %p\n", iface, pbstrResult);
+
+    if(!pbstrResult)
+        return E_POINTER;
+
+    *pbstrResult = SysAllocStringLen(NULL, 12);
+    if(!*pbstrResult)
+        return E_OUTOFMEMORY;
+
+    if(!RtlGenRandom(&random, sizeof(random)))
+        return E_FAIL;
+    sprintfW(*pbstrResult, fmt, random & 0xfffff);
+    return S_OK;
 }
 
 static HRESULT WINAPI filesys_DriveExists(IFileSystem3 *iface, BSTR DriveSpec,
@@ -819,9 +1387,14 @@ static HRESULT WINAPI filesys_GetDrive(IFileSystem3 *iface, BSTR DriveSpec,
 static HRESULT WINAPI filesys_GetFile(IFileSystem3 *iface, BSTR FilePath,
                                             IFile **ppfile)
 {
-    FIXME("%p %s %p\n", iface, debugstr_w(FilePath), ppfile);
+    TRACE("%p %s %p\n", iface, debugstr_w(FilePath), ppfile);
 
-    return E_NOTIMPL;
+    if(!ppfile)
+        return E_POINTER;
+    if(!FilePath)
+        return E_INVALIDARG;
+
+    return create_file(FilePath, ppfile);
 }
 
 static HRESULT WINAPI filesys_GetFolder(IFileSystem3 *iface, BSTR FolderPath,
@@ -841,20 +1414,137 @@ static HRESULT WINAPI filesys_GetSpecialFolder(IFileSystem3 *iface,
     return E_NOTIMPL;
 }
 
+static inline HRESULT delete_file(const WCHAR *file, DWORD file_len, VARIANT_BOOL force)
+{
+    WCHAR path[MAX_PATH];
+    DWORD len, name_len;
+    WIN32_FIND_DATAW ffd;
+    HANDLE f;
+
+    f = FindFirstFileW(file, &ffd);
+    if(f == INVALID_HANDLE_VALUE)
+        return create_error(GetLastError());
+
+    len = get_parent_folder_name(file, file_len);
+    if(len+1 >= MAX_PATH) {
+        FindClose(f);
+        return E_FAIL;
+    }
+    if(len) {
+        memcpy(path, file, len*sizeof(WCHAR));
+        path[len++] = '\\';
+    }
+
+    do {
+        if(ffd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_DEVICE))
+            continue;
+
+        name_len = strlenW(ffd.cFileName);
+        if(len+name_len+1 >= MAX_PATH) {
+            FindClose(f);
+            return E_FAIL;
+        }
+        memcpy(path+len, ffd.cFileName, (name_len+1)*sizeof(WCHAR));
+
+        TRACE("deleting %s\n", debugstr_w(path));
+
+        if(!DeleteFileW(path)) {
+            if(!force || !SetFileAttributesW(path, FILE_ATTRIBUTE_NORMAL)
+                    || !DeleteFileW(path)) {
+                FindClose(f);
+                return create_error(GetLastError());
+            }
+        }
+    } while(FindNextFileW(f, &ffd));
+    FindClose(f);
+
+    return S_OK;
+}
+
 static HRESULT WINAPI filesys_DeleteFile(IFileSystem3 *iface, BSTR FileSpec,
                                             VARIANT_BOOL Force)
 {
-    FIXME("%p %s %d\n", iface, debugstr_w(FileSpec), Force);
+    TRACE("%p %s %d\n", iface, debugstr_w(FileSpec), Force);
 
-    return E_NOTIMPL;
+    if(!FileSpec)
+        return E_POINTER;
+
+    return delete_file(FileSpec, SysStringLen(FileSpec), Force);
+}
+
+static HRESULT delete_folder(const WCHAR *folder, DWORD folder_len, VARIANT_BOOL force)
+{
+    WCHAR path[MAX_PATH];
+    DWORD len, name_len;
+    WIN32_FIND_DATAW ffd;
+    HANDLE f;
+    HRESULT hr;
+
+    f = FindFirstFileW(folder, &ffd);
+    if(f == INVALID_HANDLE_VALUE)
+        return create_error(GetLastError());
+
+    len = get_parent_folder_name(folder, folder_len);
+    if(len+1 >= MAX_PATH) {
+        FindClose(f);
+        return E_FAIL;
+    }
+    if(len) {
+        memcpy(path, folder, len*sizeof(WCHAR));
+        path[len++] = '\\';
+    }
+
+    do {
+        if(!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            continue;
+        if(ffd.cFileName[0]=='.' && (ffd.cFileName[1]==0 ||
+                    (ffd.cFileName[1]=='.' && ffd.cFileName[2]==0)))
+            continue;
+
+        name_len = strlenW(ffd.cFileName);
+        if(len+name_len+3 >= MAX_PATH) {
+            FindClose(f);
+            return E_FAIL;
+        }
+        memcpy(path+len, ffd.cFileName, name_len*sizeof(WCHAR));
+        path[len+name_len] = '\\';
+        path[len+name_len+1] = '*';
+        path[len+name_len+2] = 0;
+
+        hr = delete_file(path, len+name_len+2, force);
+        if(FAILED(hr)) {
+            FindClose(f);
+            return hr;
+        }
+
+        hr = delete_folder(path, len+name_len+2, force);
+        if(FAILED(hr)) {
+            FindClose(f);
+            return hr;
+        }
+
+        path[len+name_len] = 0;
+        TRACE("deleting %s\n", debugstr_w(path));
+
+        if(!RemoveDirectoryW(path)) {
+            FindClose(f);
+            return create_error(GetLastError());
+        }
+    } while(FindNextFileW(f, &ffd));
+    FindClose(f);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI filesys_DeleteFolder(IFileSystem3 *iface, BSTR FolderSpec,
                                             VARIANT_BOOL Force)
 {
-    FIXME("%p %s %d\n", iface, debugstr_w(FolderSpec), Force);
+    TRACE("%p %s %d\n", iface, debugstr_w(FolderSpec), Force);
 
-    return E_NOTIMPL;
+    if(!FolderSpec)
+        return E_POINTER;
+
+    return delete_folder(FolderSpec, SysStringLen(FolderSpec), Force);
 }
 
 static HRESULT WINAPI filesys_MoveFile(IFileSystem3 *iface, BSTR Source,
@@ -873,20 +1563,216 @@ static HRESULT WINAPI filesys_MoveFolder(IFileSystem3 *iface,BSTR Source,
     return E_NOTIMPL;
 }
 
+static inline HRESULT copy_file(const WCHAR *source, DWORD source_len,
+        const WCHAR *destination, DWORD destination_len, VARIANT_BOOL overwrite)
+{
+    DWORD attrs;
+    WCHAR src_path[MAX_PATH], dst_path[MAX_PATH];
+    DWORD src_len, dst_len, name_len;
+    WIN32_FIND_DATAW ffd;
+    HANDLE f;
+    HRESULT hr;
+
+    if(!source[0] || !destination[0])
+        return E_INVALIDARG;
+
+    attrs = GetFileAttributesW(destination);
+    if(attrs==INVALID_FILE_ATTRIBUTES || !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+        attrs = GetFileAttributesW(source);
+        if(attrs == INVALID_FILE_ATTRIBUTES)
+            return create_error(GetLastError());
+        else if(attrs & FILE_ATTRIBUTE_DIRECTORY)
+            return CTL_E_FILENOTFOUND;
+
+        if(!CopyFileW(source, destination, !overwrite))
+            return create_error(GetLastError());
+        return S_OK;
+    }
+
+    f = FindFirstFileW(source, &ffd);
+    if(f == INVALID_HANDLE_VALUE)
+        return CTL_E_FILENOTFOUND;
+
+    src_len = get_parent_folder_name(source, source_len);
+    if(src_len+1 >= MAX_PATH)
+        return E_FAIL;
+    if(src_len) {
+        memcpy(src_path, source, src_len*sizeof(WCHAR));
+        src_path[src_len++] = '\\';
+    }
+
+    dst_len = destination_len;
+    if(dst_len+1 >= MAX_PATH) {
+        FindClose(f);
+        return E_FAIL;
+    }
+    memcpy(dst_path, destination, dst_len*sizeof(WCHAR));
+    if(dst_path[dst_len-1]!= '\\' && dst_path[dst_len-1]!='/')
+        dst_path[dst_len++] = '\\';
+
+    hr = CTL_E_FILENOTFOUND;
+    do {
+        if(ffd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_DEVICE))
+            continue;
+
+        name_len = strlenW(ffd.cFileName);
+        if(src_len+name_len+1>=MAX_PATH || dst_len+name_len+1>=MAX_PATH) {
+            FindClose(f);
+            return E_FAIL;
+        }
+        memcpy(src_path+src_len, ffd.cFileName, (name_len+1)*sizeof(WCHAR));
+        memcpy(dst_path+dst_len, ffd.cFileName, (name_len+1)*sizeof(WCHAR));
+
+        TRACE("copying %s to %s\n", debugstr_w(src_path), debugstr_w(dst_path));
+
+        if(!CopyFileW(src_path, dst_path, !overwrite)) {
+            FindClose(f);
+            return create_error(GetLastError());
+        }else {
+            hr = S_OK;
+        }
+    } while(FindNextFileW(f, &ffd));
+    FindClose(f);
+
+    return hr;
+}
+
 static HRESULT WINAPI filesys_CopyFile(IFileSystem3 *iface, BSTR Source,
                                             BSTR Destination, VARIANT_BOOL OverWriteFiles)
 {
-    FIXME("%p %s %s %d\n", iface, debugstr_w(Source), debugstr_w(Destination), OverWriteFiles);
+    TRACE("%p %s %s %d\n", iface, debugstr_w(Source), debugstr_w(Destination), OverWriteFiles);
 
-    return E_NOTIMPL;
+    if(!Source || !Destination)
+        return E_POINTER;
+
+    return copy_file(Source, SysStringLen(Source), Destination,
+            SysStringLen(Destination), OverWriteFiles);
+}
+
+static HRESULT copy_folder(const WCHAR *source, DWORD source_len, const WCHAR *destination,
+        DWORD destination_len, VARIANT_BOOL overwrite)
+{
+    DWORD tmp, src_len, dst_len, name_len;
+    WCHAR src[MAX_PATH], dst[MAX_PATH];
+    WIN32_FIND_DATAW ffd;
+    HANDLE f;
+    HRESULT hr;
+    BOOL copied = FALSE;
+
+    if(!source[0] || !destination[0])
+        return E_INVALIDARG;
+
+    dst_len = destination_len;
+    if(dst_len+1 >= MAX_PATH)
+        return E_FAIL;
+    memcpy(dst, destination, (dst_len+1)*sizeof(WCHAR));
+
+    if(dst[dst_len-1]!='\\' && dst[dst_len-1]!='/' &&
+            (tmp = GetFileAttributesW(source))!=INVALID_FILE_ATTRIBUTES &&
+            tmp&FILE_ATTRIBUTE_DIRECTORY) {
+        if(!CreateDirectoryW(dst, NULL)) {
+            if(overwrite && GetLastError()==ERROR_ALREADY_EXISTS) {
+                tmp = GetFileAttributesW(dst);
+                if(tmp==INVALID_FILE_ATTRIBUTES || !(tmp&FILE_ATTRIBUTE_DIRECTORY))
+                    return CTL_E_FILEALREADYEXISTS;
+            }else {
+                return create_error(GetLastError());
+            }
+        }
+        copied = TRUE;
+
+        src_len = source_len;
+        if(src_len+2 >= MAX_PATH)
+            return E_FAIL;
+        memcpy(src, source, src_len*sizeof(WCHAR));
+        src[src_len++] = '\\';
+        src[src_len] = '*';
+        src[src_len+1] = 0;
+
+        hr = copy_file(src, src_len+1, dst, dst_len, overwrite);
+        if(FAILED(hr) && hr!=CTL_E_FILENOTFOUND)
+            return create_error(GetLastError());
+
+        f = FindFirstFileW(src, &ffd);
+    }else {
+        src_len = get_parent_folder_name(source, source_len);
+        if(src_len+2 >= MAX_PATH)
+            return E_FAIL;
+        memcpy(src, source, src_len*sizeof(WCHAR));
+        if(src_len)
+            src[src_len++] = '\\';
+
+        f = FindFirstFileW(source, &ffd);
+    }
+    if(f == INVALID_HANDLE_VALUE)
+        return CTL_E_PATHNOTFOUND;
+
+    dst[dst_len++] = '\\';
+    dst[dst_len] = 0;
+
+    do {
+        if(!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            continue;
+        if(ffd.cFileName[0]=='.' && (ffd.cFileName[1]==0 ||
+                    (ffd.cFileName[1]=='.' && ffd.cFileName[2]==0)))
+            continue;
+
+        name_len = strlenW(ffd.cFileName);
+        if(dst_len+name_len>=MAX_PATH || src_len+name_len+2>=MAX_PATH) {
+            FindClose(f);
+            return E_FAIL;
+        }
+        memcpy(dst+dst_len, ffd.cFileName, name_len*sizeof(WCHAR));
+        dst[dst_len+name_len] = 0;
+        memcpy(src+src_len, ffd.cFileName, name_len*sizeof(WCHAR));
+        src[src_len+name_len] = '\\';
+        src[src_len+name_len+1] = '*';
+        src[src_len+name_len+2] = 0;
+
+        TRACE("copying %s to %s\n", debugstr_w(src), debugstr_w(dst));
+
+        if(!CreateDirectoryW(dst, NULL)) {
+            if(overwrite && GetLastError()==ERROR_ALREADY_EXISTS) {
+                tmp = GetFileAttributesW(dst);
+                if(tmp==INVALID_FILE_ATTRIBUTES || !(tmp&FILE_ATTRIBUTE_DIRECTORY)) {
+                    FindClose(f);
+                    return CTL_E_FILEALREADYEXISTS;
+                }
+            }else {
+                FindClose(f);
+                return create_error(GetLastError());
+            }
+            return create_error(GetLastError());
+        }
+        copied = TRUE;
+
+        hr = copy_file(src, src_len+name_len+2, dst, dst_len+name_len, overwrite);
+        if(FAILED(hr) && hr!=CTL_E_FILENOTFOUND) {
+            FindClose(f);
+            return hr;
+        }
+
+        hr = copy_folder(src, src_len+name_len+2, dst, dst_len+name_len, overwrite);
+        if(FAILED(hr) && hr!=CTL_E_PATHNOTFOUND) {
+            FindClose(f);
+            return hr;
+        }
+    } while(FindNextFileW(f, &ffd));
+    FindClose(f);
+
+    return copied ? S_OK : CTL_E_PATHNOTFOUND;
 }
 
 static HRESULT WINAPI filesys_CopyFolder(IFileSystem3 *iface, BSTR Source,
                                             BSTR Destination, VARIANT_BOOL OverWriteFiles)
 {
-    FIXME("%p %s %s %d\n", iface, debugstr_w(Source), debugstr_w(Destination), OverWriteFiles);
+    TRACE("%p %s %s %d\n", iface, debugstr_w(Source), debugstr_w(Destination), OverWriteFiles);
 
-    return E_NOTIMPL;
+    if(!Source || !Destination)
+        return E_POINTER;
+
+    return copy_folder(Source, SysStringLen(Source), Destination,
+            SysStringLen(Destination), OverWriteFiles);
 }
 
 static HRESULT WINAPI filesys_CreateFolder(IFileSystem3 *iface, BSTR path,

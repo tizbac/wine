@@ -43,7 +43,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(winecfg);
 #include "winecfg.h"
 #include "resource.h"
 
-static const int is_win64 = (sizeof(void *) > sizeof(int));
+static const BOOL is_win64 = (sizeof(void *) > sizeof(int));
 
 HKEY config_key = NULL;
 HMENU hPopupMenus = 0;
@@ -749,18 +749,18 @@ void PRINTERROR(void)
         WINE_TRACE("error: '%s'\n", msg);
 }
 
-int initialize(HINSTANCE hInstance)
+BOOL initialize(HINSTANCE hInstance)
 {
     DWORD res = RegCreateKeyA(HKEY_CURRENT_USER, WINE_KEY_ROOT, &config_key);
 
     if (res != ERROR_SUCCESS) {
 	WINE_ERR("RegOpenKey failed on wine config key (%d)\n", res);
-	return 1;
+        return TRUE;
     }
 
     /* we could probably just have the list as static data  */
     settings = HeapAlloc(GetProcessHeap(), 0, sizeof(struct list));
     list_init(settings);
 
-    return 0;
+    return FALSE;
 }

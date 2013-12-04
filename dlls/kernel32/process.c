@@ -84,7 +84,7 @@ typedef struct
 static DWORD shutdown_flags = 0;
 static DWORD shutdown_priority = 0x280;
 static BOOL is_wow64;
-static const int is_win64 = (sizeof(void *) > sizeof(int));
+static const BOOL is_win64 = (sizeof(void *) > sizeof(int));
 
 HMODULE kernel32_handle = 0;
 SYSTEM_BASIC_INFORMATION system_info = { 0 };
@@ -116,7 +116,7 @@ extern void SHELL_LoadRegistry(void);
 /***********************************************************************
  *           contains_path
  */
-static inline int contains_path( LPCWSTR name )
+static inline BOOL contains_path( LPCWSTR name )
 {
     return ((*name && (name[1] == ':')) || strchrW(name, '/') || strchrW(name, '\\'));
 }
@@ -128,7 +128,7 @@ static inline int contains_path( LPCWSTR name )
  * Check if an environment variable needs to be handled specially when
  * passed through the Unix environment (i.e. prefixed with "WINE").
  */
-static inline int is_special_env_var( const char *var )
+static inline BOOL is_special_env_var( const char *var )
 {
     return (!strncmp( var, "PATH=", sizeof("PATH=")-1 ) ||
             !strncmp( var, "PWD=", sizeof("PWD=")-1 ) ||
@@ -208,6 +208,18 @@ static BOOL get_builtin_path( const WCHAR *libname, const WCHAR *ext, WCHAR *fil
     binary_info->flags = flags;
     binary_info->res_start = NULL;
     binary_info->res_end = NULL;
+    /* assume current arch */
+#if defined(__i386__) || defined(__x86_64__)
+    binary_info->arch = (flags & BINARY_FLAG_64BIT) ? IMAGE_FILE_MACHINE_AMD64 : IMAGE_FILE_MACHINE_I386;
+#elif defined(__powerpc__)
+    binary_info->arch = IMAGE_FILE_MACHINE_POWERPC;
+#elif defined(__arm__) && !defined(__ARMEB__)
+    binary_info->arch = IMAGE_FILE_MACHINE_ARMNT;
+#elif defined(__aarch64__)
+    binary_info->arch = IMAGE_FILE_MACHINE_ARM64;
+#else
+    binary_info->arch = IMAGE_FILE_MACHINE_UNKNOWN;
+#endif
     return TRUE;
 }
 
@@ -738,19 +750,20 @@ static BOOL build_command_line( WCHAR **argv )
     len = 0;
     for (arg = argv; *arg; arg++)
     {
-        int has_space,bcount;
+        BOOL has_space;
+        int bcount;
         WCHAR* a;
 
-        has_space=0;
+        has_space=FALSE;
         bcount=0;
         a=*arg;
-        if( !*a ) has_space=1;
+        if( !*a ) has_space=TRUE;
         while (*a!='\0') {
             if (*a=='\\') {
                 bcount++;
             } else {
                 if (*a==' ' || *a=='\t') {
-                    has_space=1;
+                    has_space=TRUE;
                 } else if (*a=='"') {
                     /* doubling of '\' preceding a '"',
                      * plus escaping of said '"'
@@ -774,20 +787,20 @@ static BOOL build_command_line( WCHAR **argv )
     rupp->CommandLine.MaximumLength = len * sizeof(WCHAR);
     for (arg = argv; *arg; arg++)
     {
-        int has_space,has_quote;
+        BOOL has_space,has_quote;
         WCHAR* a;
 
         /* Check for quotes and spaces in this argument */
-        has_space=has_quote=0;
+        has_space=has_quote=FALSE;
         a=*arg;
-        if( !*a ) has_space=1;
+        if( !*a ) has_space=TRUE;
         while (*a!='\0') {
             if (*a==' ' || *a=='\t') {
-                has_space=1;
+                has_space=TRUE;
                 if (has_quote)
                     break;
             } else if (*a=='"') {
-                has_quote=1;
+                has_quote=TRUE;
                 if (has_space)
                     break;
             }
@@ -1796,6 +1809,25 @@ static BOOL terminate_main_thread(void)
 #endif
 
 /***********************************************************************
+ *           get_process_cpu
+ */
+static int get_process_cpu( const WCHAR *filename, const struct binary_info *binary_info )
+{
+    switch (binary_info->arch)
+    {
+    case IMAGE_FILE_MACHINE_I386:    return CPU_x86;
+    case IMAGE_FILE_MACHINE_AMD64:   return CPU_x86_64;
+    case IMAGE_FILE_MACHINE_POWERPC: return CPU_POWERPC;
+    case IMAGE_FILE_MACHINE_ARM:
+    case IMAGE_FILE_MACHINE_THUMB:
+    case IMAGE_FILE_MACHINE_ARMNT:   return CPU_ARM;
+    case IMAGE_FILE_MACHINE_ARM64:   return CPU_ARM64;
+    }
+    ERR( "%s uses unsupported architecture (%04x)\n", debugstr_w(filename), binary_info->arch );
+    return -1;
+}
+
+/***********************************************************************
  *           exec_loader
  */
 static pid_t exec_loader( LPCWSTR cmd_line, unsigned int flags, int socketfd,
@@ -1896,7 +1928,9 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
                             LPPROCESS_INFORMATION info, LPCSTR unixdir,
                             const struct binary_info *binary_info, int exec_only )
 {
-    BOOL ret, success = FALSE;
+    static const char *cpu_names[] = { "x86", "x86_64", "PowerPC", "ARM", "ARM64" };
+    NTSTATUS status;
+    BOOL success = FALSE;
     HANDLE process_info;
     WCHAR *env_end;
     char *winedebug = NULL;
@@ -1904,11 +1938,10 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
     DWORD startup_info_size;
     int socketfd[2], stdin_fd = -1, stdout_fd = -1;
     pid_t pid;
-    int err;
+    int err, cpu;
 
-    if (!is_win64 && !is_wow64 && (binary_info->flags & BINARY_FLAG_64BIT))
+    if ((cpu = get_process_cpu( filename, binary_info )) == -1)
     {
-        ERR( "starting 64-bit process %s not supported in 32-bit wineprefix\n", debugstr_w(filename) );
         SetLastError( ERROR_BAD_EXE_FORMAT );
         return FALSE;
     }
@@ -1937,14 +1970,26 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
             req->create_flags   = flags;
             req->socket_fd      = socketfd[1];
             req->exe_file       = wine_server_obj_handle( hFile );
-            ret = !wine_server_call_err( req );
+            req->cpu            = cpu;
+            status = wine_server_call( req );
         }
         SERVER_END_REQ;
 
-        if (ret) exec_loader( cmd_line, flags, socketfd[0], stdin_fd, stdout_fd, unixdir,
-                              winedebug, binary_info, TRUE );
-
+        switch (status)
+        {
+        case STATUS_INVALID_IMAGE_WIN_64:
+            ERR( "64-bit application %s not supported in 32-bit prefix\n", debugstr_w(filename) );
+            break;
+        case STATUS_INVALID_IMAGE_FORMAT:
+            ERR( "%s not supported on this installation (%s binary)\n",
+                 debugstr_w(filename), cpu_names[cpu] );
+            break;
+        case STATUS_SUCCESS:
+            exec_loader( cmd_line, flags, socketfd[0], stdin_fd, stdout_fd, unixdir,
+                         winedebug, binary_info, TRUE );
+        }
         close( socketfd[0] );
+        SetLastError( RtlNtStatusToDosError( status ));
         return FALSE;
     }
 
@@ -1988,11 +2033,12 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
         req->process_attr   = (psa && (psa->nLength >= sizeof(*psa)) && psa->bInheritHandle) ? OBJ_INHERIT : 0;
         req->thread_access  = THREAD_ALL_ACCESS;
         req->thread_attr    = (tsa && (tsa->nLength >= sizeof(*tsa)) && tsa->bInheritHandle) ? OBJ_INHERIT : 0;
+        req->cpu            = cpu;
         req->info_size      = startup_info_size;
 
         wine_server_add_data( req, startup_info, startup_info_size );
         wine_server_add_data( req, env, (env_end - env) * sizeof(WCHAR) );
-        if ((ret = !wine_server_call_err( req )))
+        if (!(status = wine_server_call( req )))
         {
             info->dwProcessId = (DWORD)reply->pid;
             info->dwThreadId  = (DWORD)reply->tid;
@@ -2004,11 +2050,22 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
     SERVER_END_REQ;
 
     RtlReleasePebLock();
-    if (!ret)
+    if (status)
     {
+        switch (status)
+        {
+        case STATUS_INVALID_IMAGE_WIN_64:
+            ERR( "64-bit application %s not supported in 32-bit prefix\n", debugstr_w(filename) );
+            break;
+        case STATUS_INVALID_IMAGE_FORMAT:
+            ERR( "%s not supported on this installation (%s binary)\n",
+                 debugstr_w(filename), cpu_names[cpu] );
+            break;
+        }
         close( socketfd[0] );
         HeapFree( GetProcessHeap(), 0, startup_info );
         HeapFree( GetProcessHeap(), 0, winedebug );
+        SetLastError( RtlNtStatusToDosError( status ));
         return FALSE;
     }
 
@@ -2285,9 +2342,9 @@ static BOOL create_process_impl( LPCWSTR app_name, LPWSTR cmd_line, LPSECURITY_A
     else switch (binary_info.type)
     {
     case BINARY_PE:
-        TRACE( "starting %s as Win%d binary (%p-%p)\n",
+        TRACE( "starting %s as Win%d binary (%p-%p, arch %04x)\n",
                debugstr_w(name), (binary_info.flags & BINARY_FLAG_64BIT) ? 64 : 32,
-               binary_info.res_start, binary_info.res_end );
+               binary_info.res_start, binary_info.res_end, binary_info.arch );
         retv = create_process( hFile, name, tidy_cmdline, envW, cur_dir, process_attr, thread_attr,
                                inherit, flags, startup_info, info, unixdir, &binary_info, FALSE );
         break;
@@ -2430,9 +2487,9 @@ static void exec_process( LPCWSTR name )
     switch (binary_info.type)
     {
     case BINARY_PE:
-        TRACE( "starting %s as Win%d binary (%p-%p)\n",
+        TRACE( "starting %s as Win%d binary (%p-%p, arch %04x)\n",
                debugstr_w(name), (binary_info.flags & BINARY_FLAG_64BIT) ? 64 : 32,
-               binary_info.res_start, binary_info.res_end );
+               binary_info.res_start, binary_info.res_end, binary_info.arch );
         create_process( hFile, name, GetCommandLineW(), NULL, NULL, NULL, NULL,
                         FALSE, 0, &startup_info, &info, NULL, &binary_info, TRUE );
         break;
@@ -2624,30 +2681,14 @@ __ASM_STDCALL_FUNC( ExitProcess, 4, /* Shrinker depend on this particular ExitPr
                    ".byte 0x6A, 0x00\n\t" /* pushl $0 */
                    ".byte 0x68, 0x00, 0x00, 0x00, 0x00\n\t" /* pushl $0 - 4 bytes immediate */
                    "pushl 8(%ebp)\n\t"
-                   "call " __ASM_NAME("process_ExitProcess") __ASM_STDCALL(4) "\n\t"
+                   "call " __ASM_NAME("RtlExitUserProcess") __ASM_STDCALL(4) "\n\t"
                    "leave\n\t"
                    "ret $4" )
-
-void WINAPI process_ExitProcess( DWORD status )
-{
-    ULONG magic;
-    LdrLockLoaderLock( 0, 0, &magic );
-    RtlAcquirePebLock();
-    NtTerminateProcess(0, status);
-    LdrShutdownProcess();
-    NtTerminateProcess(GetCurrentProcess(), status);
-    exit(status);
-}
-
 #else
 
 void WINAPI ExitProcess( DWORD status )
 {
-    RtlAcquirePebLock();
-    NtTerminateProcess(0, status);
-    LdrShutdownProcess();
-    NtTerminateProcess(GetCurrentProcess(), status);
-    exit(status);
+    RtlExitUserProcess( status );
 }
 
 #endif

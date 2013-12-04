@@ -8,7 +8,6 @@
 *.so
 */*/tests/testlist.c
 /Make.rules
-/Maketest.rules
 /TAGS
 /autom4te.cache
 /config.cache
@@ -21,8 +20,6 @@
 Makefile
 dlldata.c
 dlls/*/*.def
-dlls/Makedll.rules
-dlls/Makeimplib.rules
 dlls/actxprxy/actxprxy_activscp.h
 dlls/actxprxy/actxprxy_activscp_p.c
 dlls/actxprxy/actxprxy_comcat.h
@@ -129,7 +126,6 @@ dlls/rpcrt4/tests/server_c.c
 dlls/rpcrt4/tests/server_s.c
 dlls/scrrun/scrrun.h
 dlls/scrrun/tests/scrrun.h
-dlls/shell32/AUTHORS
 dlls/sti/sti_wia.h
 dlls/sti/sti_wia_p.c
 dlls/urlmon/urlmon_urlmon.h
@@ -140,6 +136,7 @@ dlls/vbscript/tests/vbsregexp55.h
 dlls/vbscript/vbscript_classes.h
 dlls/vbscript/vbsglobal.h
 dlls/vbscript/vbsregexp55.h
+dlls/wbemdisp/wbemdisp_classes.h
 dlls/wbemprox/wql.tab.c
 dlls/wbemprox/wql.tab.h
 dlls/windowscodecs/windowscodecs_wincodec.h
@@ -156,8 +153,10 @@ include/atliface.h
 include/audioclient.h
 include/audiopolicy.h
 include/austream.h
+include/bdaiface.h
 include/bits.h
 include/bits1_5.h
+include/bits3_0.h
 include/comcat.h
 include/commoncontrols.h
 include/config.h
@@ -169,6 +168,7 @@ include/ctxtcall.h
 include/d3d10.h
 include/d3d10_1.h
 include/d3d11.h
+include/d3d11sdklayers.h
 include/d3dcommon.h
 include/ddstream.h
 include/devicetopology.h
@@ -194,6 +194,7 @@ include/iextag.h
 include/imnact.h
 include/imnxport.h
 include/indexsrv.h
+include/inputscope.h
 include/mediaobj.h
 include/metahost.h
 include/mimeinfo.h
@@ -256,6 +257,7 @@ include/urlhist.h
 include/urlmon.h
 include/vmr9.h
 include/wbemcli.h
+include/wbemdisp.h
 include/wbemprov.h
 include/wia_lh.h
 include/wia_xp.h
@@ -278,12 +280,12 @@ libs/wpp/ppy.tab.h
 loader/wine
 loader/wine-installed
 loader/wine-preloader
+loader/wine.inf
 loader/wine64
 loader/wine64-preloader
 loader/wine_info.plist
 msg.pot
 po/*.mo
-programs/Makeprog.rules
 programs/rpcss/epm.h
 programs/rpcss/epm_s.c
 programs/rpcss/irot.h
@@ -305,13 +307,11 @@ tools/fnt2fon
 tools/make_ctests
 tools/make_xftmpl
 tools/makedep
-tools/relpath
 tools/sfnt2fnt
 tools/widl/parser.tab.c
 tools/widl/parser.tab.h
 tools/widl/parser.yy.c
 tools/widl/widl
-tools/wine.inf
 tools/wineapploader
 tools/winebuild/winebuild
 tools/winedump/winedump
@@ -321,9 +321,7 @@ tools/winegcc/winegcc
 tools/wmc/mcy.tab.c
 tools/wmc/mcy.tab.h
 tools/wmc/wmc
-tools/wmc/wmc-installed
 tools/wrc/parser.tab.c
 tools/wrc/parser.tab.h
 tools/wrc/parser.yy.c
 tools/wrc/wrc
-tools/wrc/wrc-installed

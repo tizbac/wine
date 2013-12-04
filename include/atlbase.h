@@ -28,7 +28,9 @@
 #define _ATL_VER_30  0x0300
 #define _ATL_VER_70  0x0700
 #define _ATL_VER_80  0x0800
+#define _ATL_VER_90  0x0900
 #define _ATL_VER_100 0x0a00
+#define _ATL_VER_110 0x0b00
 
 #ifndef _ATL_VER
 #define _ATL_VER _ATL_VER_100

@@ -31,6 +31,8 @@
 #include <objidl.h>
 #include <srrestoreptapi.h>
 #include <shlobj.h>
+#include <winsvc.h>
+#include <shellapi.h>
 
 #include "wine/test.h"
 
@@ -56,6 +58,10 @@ static const BOOL is_64bit = sizeof(void *) > sizeof(int);
 static const char *msifile = "msitest.msi";
 static const char *msifile2 = "winetest2.msi";
 static const char *mstfile = "winetest.mst";
+
+static const WCHAR msifileW[] = {'m','s','i','t','e','s','t','.','m','s','i',0};
+static const WCHAR msifile2W[] = {'w','i','n','e','t','e','s','t','2','.','m','s','i',0};
+
 static CHAR CURR_DIR[MAX_PATH];
 static CHAR PROG_FILES_DIR[MAX_PATH];
 static CHAR PROG_FILES_DIR_NATIVE[MAX_PATH];
@@ -1963,7 +1969,7 @@ static BOOL check_record(MSIHANDLE rec, UINT field, LPCSTR val)
     DWORD sz;
 
     sz = sizeof buffer;
-    r = MsiRecordGetString(rec, field, buffer, &sz);
+    r = MsiRecordGetStringA(rec, field, buffer, &sz);
     return (r == ERROR_SUCCESS ) && !strcmp(val, buffer);
 }
 
@@ -1995,8 +2001,8 @@ static INT_PTR CDECL get_open_info(char *pszName, USHORT *pdate, USHORT *ptime,
     DWORD attrs;
     BOOL res;
 
-    handle = CreateFile(pszName, GENERIC_READ, FILE_SHARE_READ, NULL,
-                        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+    handle = CreateFileA(pszName, GENERIC_READ, FILE_SHARE_READ, NULL,
+                         OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
 
     ok(handle != INVALID_HANDLE_VALUE, "Failed to CreateFile %s\n", pszName);
 
@@ -2006,7 +2012,7 @@ static INT_PTR CDECL get_open_info(char *pszName, USHORT *pdate, USHORT *ptime,
     FileTimeToLocalFileTime(&finfo.ftLastWriteTime, &filetime);
     FileTimeToDosDateTime(&filetime, pdate, ptime);
 
-    attrs = GetFileAttributes(pszName);
+    attrs = GetFileAttributesA(pszName);
     ok(attrs != INVALID_FILE_ATTRIBUTES, "Failed to GetFileAttributes\n");
 
     return (INT_PTR)handle;
@@ -2061,7 +2067,7 @@ static void create_cab_file(const CHAR *name, DWORD max_size, const CHAR *files)
     {
         res = add_file(hfci, ptr, tcompTYPE_MSZIP);
         ok(res, "Failed to add file: %s\n", ptr);
-        ptr += lstrlen(ptr) + 1;
+        ptr += lstrlenA(ptr) + 1;
     }
 
     res = FCIFlushCabinet(hfci, FALSE, get_next_cabinet, progress);
@@ -2076,9 +2082,8 @@ static BOOL get_user_dirs(void)
     HKEY hkey;
     DWORD type, size;
 
-    if(RegOpenKey(HKEY_CURRENT_USER,
-                   "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
-                   &hkey))
+    if (RegOpenKeyA(HKEY_CURRENT_USER,
+                    "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders", &hkey))
         return FALSE;
 
     size = MAX_PATH;
@@ -2096,8 +2101,7 @@ static BOOL get_system_dirs(void)
     HKEY hkey;
     DWORD type, size;
 
-    if (RegOpenKey(HKEY_LOCAL_MACHINE,
-                   "Software\\Microsoft\\Windows\\CurrentVersion", &hkey))
+    if (RegOpenKeyA(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows\\CurrentVersion", &hkey))
         return FALSE;
 
     size = MAX_PATH;
@@ -2253,9 +2257,8 @@ static void write_file(const CHAR *filename, const char *data, int data_size)
 {
     DWORD size;
 
-    HANDLE hf = CreateFile(filename, GENERIC_WRITE, 0, NULL,
-                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
+    HANDLE hf = CreateFileA(filename, GENERIC_WRITE, 0, NULL,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     WriteFile(hf, data, data_size, &size, NULL);
     CloseHandle(hf);
 }
@@ -2303,9 +2306,14 @@ static void create_database_wordcount(const CHAR *name, const msi_table *tables,
 {
     MSIHANDLE db;
     UINT r;
-    int j;
+    WCHAR *nameW;
+    int j, len;
 
-    r = MsiOpenDatabaseA(name, MSIDBOPEN_CREATE, &db);
+    len = MultiByteToWideChar( CP_ACP, 0, name, -1, NULL, 0 );
+    if (!(nameW = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) ))) return;
+    MultiByteToWideChar( CP_ACP, 0, name, -1, nameW, len );
+
+    r = MsiOpenDatabaseW(nameW, MSIDBOPEN_CREATE, &db);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
     /* import the tables into the database */
@@ -2327,6 +2335,7 @@ static void create_database_wordcount(const CHAR *name, const msi_table *tables,
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
     MsiCloseHandle(db);
+    HeapFree( GetProcessHeap(), 0, nameW );
 }
 
 static void check_service_is_installed(void)
@@ -2334,10 +2343,10 @@ static void check_service_is_installed(void)
     SC_HANDLE scm, service;
     BOOL res;
 
-    scm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    scm = OpenSCManagerA(NULL, NULL, SC_MANAGER_ALL_ACCESS);
     ok(scm != NULL, "Failed to open the SC Manager\n");
 
-    service = OpenService(scm, "TestService", SC_MANAGER_ALL_ACCESS);
+    service = OpenServiceA(scm, "TestService", SC_MANAGER_ALL_ACCESS);
     ok(service != NULL, "Failed to open TestService\n");
 
     res = DeleteService(service);
@@ -2435,7 +2444,7 @@ static void test_MsiInstallProduct(void)
     ok(delete_pf("msitest\\service.exe", TRUE), "File not installed\n");
     ok(delete_pf("msitest", FALSE), "Directory not created\n");
 
-    res = RegOpenKeyEx(HKEY_CURRENT_USER, "SOFTWARE\\Wine\\msitest", 0, access, &hkey);
+    res = RegOpenKeyExA(HKEY_CURRENT_USER, "SOFTWARE\\Wine\\msitest", 0, access, &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     size = MAX_PATH;
@@ -2684,13 +2693,13 @@ static void test_MsiSetComponentState(void)
 
     CoInitialize(NULL);
 
-    lstrcpy(path, CURR_DIR);
-    lstrcat(path, "\\");
-    lstrcat(path, msifile);
+    lstrcpyA(path, CURR_DIR);
+    lstrcatA(path, "\\");
+    lstrcatA(path, msifile);
 
     MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
 
-    r = MsiOpenPackage(path, &package);
+    r = MsiOpenPackageA(path, &package);
     if (r == ERROR_INSTALL_PACKAGE_REJECTED)
     {
         skip("Not enough rights to perform tests\n");
@@ -2698,21 +2707,21 @@ static void test_MsiSetComponentState(void)
     }
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
-    r = MsiDoAction(package, "CostInitialize");
+    r = MsiDoActionA(package, "CostInitialize");
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
-    r = MsiDoAction(package, "FileCost");
+    r = MsiDoActionA(package, "FileCost");
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
-    r = MsiDoAction(package, "CostFinalize");
+    r = MsiDoActionA(package, "CostFinalize");
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
-    r = MsiGetComponentState(package, "dangler", &installed, &action);
+    r = MsiGetComponentStateA(package, "dangler", &installed, &action);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
     ok(installed == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", installed);
     ok(action == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", action);
 
-    r = MsiSetComponentState(package, "dangler", INSTALLSTATE_SOURCE);
+    r = MsiSetComponentStateA(package, "dangler", INSTALLSTATE_SOURCE);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
     MsiCloseHandle(package);
@@ -2726,6 +2735,7 @@ static void test_packagecoltypes(void)
 {
     MSIHANDLE hdb, view, rec;
     char path[MAX_PATH];
+    WCHAR pathW[MAX_PATH];
     LPCSTR query;
     UINT r, count;
 
@@ -2733,15 +2743,16 @@ static void test_packagecoltypes(void)
 
     CoInitialize(NULL);
 
-    lstrcpy(path, CURR_DIR);
-    lstrcat(path, "\\");
-    lstrcat(path, msifile);
+    lstrcpyA(path, CURR_DIR);
+    lstrcatA(path, "\\");
+    lstrcatA(path, msifile);
+    MultiByteToWideChar( CP_ACP, 0, path, -1, pathW, MAX_PATH );
 
-    r = MsiOpenDatabase(path, MSIDBOPEN_READONLY, &hdb);
+    r = MsiOpenDatabaseW(pathW, MSIDBOPEN_READONLY, &hdb);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
     query = "SELECT * FROM `Media`";
-    r = MsiDatabaseOpenView( hdb, query, &view );
+    r = MsiDatabaseOpenViewA( hdb, query, &view );
     ok(r == ERROR_SUCCESS, "MsiDatabaseOpenView failed\n");
 
     r = MsiViewGetColumnInfo( view, MSICOLINFO_NAMES, &rec );
@@ -2772,7 +2783,7 @@ static void test_packagecoltypes(void)
     MsiCloseHandle(hdb);
     CoUninitialize();
 
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void create_cc_test_files(void)
@@ -2812,15 +2823,15 @@ static void create_cc_test_files(void)
 
     create_cab_file("test3.cab", MEDIA_SIZE, "caesar\0");
 
-    DeleteFile("maximus");
-    DeleteFile("augustus");
-    DeleteFile("tiberius");
-    DeleteFile("caesar");
+    DeleteFileA("maximus");
+    DeleteFileA("augustus");
+    DeleteFileA("tiberius");
+    DeleteFileA("caesar");
 }
 
 static void delete_cab_files(void)
 {
-    SHFILEOPSTRUCT shfl;
+    SHFILEOPSTRUCTA shfl;
     CHAR path[MAX_PATH+10];
 
     lstrcpyA(path, CURR_DIR);
@@ -2833,7 +2844,7 @@ static void delete_cab_files(void)
     shfl.pTo = NULL;
     shfl.fFlags = FOF_FILESONLY | FOF_NOCONFIRMATION | FOF_NORECURSION | FOF_SILENT;
 
-    SHFileOperation(&shfl);
+    SHFileOperationA(&shfl);
 }
 
 static void test_continuouscabs(void)
@@ -2866,7 +2877,7 @@ static void test_continuouscabs(void)
     }
 
     delete_cab_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 
     create_cc_test_files();
     create_database(msifile, cc2_tables, sizeof(cc2_tables) / sizeof(msi_table));
@@ -2889,7 +2900,7 @@ static void test_continuouscabs(void)
     }
 
     delete_cab_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 
     /* Tests to show that only msi cab filename is taken in case of mismatch with the one given by previous cab */
 
@@ -2914,11 +2925,11 @@ static void test_continuouscabs(void)
     }
 
     delete_cab_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 
     /* Filename from msi is right and the one from cab is wrong */
     create_cc_test_files();
-    ok(MoveFile("test2.cab", "test2_.cab"), "Cannot rename test2.cab to test2_.cab\n");
+    ok(MoveFileA("test2.cab", "test2_.cab"), "Cannot rename test2.cab to test2_.cab\n");
     create_database(msifile, cc3_tables, sizeof(cc3_tables) / sizeof(msi_table));
 
     MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
@@ -2938,7 +2949,7 @@ static void test_continuouscabs(void)
     }
 
     delete_cab_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_caborder(void)
@@ -2987,7 +2998,7 @@ static void test_caborder(void)
     ok(!delete_pf("msitest", FALSE), "Directory is created\n");
 
     delete_cab_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 
     create_cc_test_files();
     create_database(msifile, co_tables, sizeof(co_tables) / sizeof(msi_table));
@@ -3003,7 +3014,7 @@ static void test_caborder(void)
     }
 
     delete_cab_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 
     create_cc_test_files();
     create_database(msifile, co2_tables, sizeof(co2_tables) / sizeof(msi_table));
@@ -3020,11 +3031,11 @@ static void test_caborder(void)
 
 error:
     delete_cab_files();
-    DeleteFile("imperator");
-    DeleteFile("maximus");
-    DeleteFile("augustus");
-    DeleteFile("caesar");
-    DeleteFile(msifile);
+    DeleteFileA("imperator");
+    DeleteFileA("maximus");
+    DeleteFileA("augustus");
+    DeleteFileA("caesar");
+    DeleteFileA(msifile);
 }
 
 static void test_mixedmedia(void)
@@ -3062,12 +3073,12 @@ static void test_mixedmedia(void)
 
 error:
     /* Delete the files in the temp (current) folder */
-    DeleteFile("msitest\\maximus");
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
-    DeleteFile("caesar");
-    DeleteFile("test1.cab");
-    DeleteFile(msifile);
+    DeleteFileA("msitest\\maximus");
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
+    DeleteFileA("caesar");
+    DeleteFileA("test1.cab");
+    DeleteFileA(msifile);
 }
 
 static void test_samesequence(void)
@@ -3089,7 +3100,7 @@ static void test_samesequence(void)
         ok(delete_pf("msitest", FALSE), "Directory not created\n");
     }
     delete_cab_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_uiLevelFlags(void)
@@ -3111,7 +3122,7 @@ static void test_uiLevelFlags(void)
         ok(delete_pf("msitest", FALSE), "Directory not created\n");
     }
     delete_cab_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static BOOL file_matches(LPSTR path)
@@ -3120,14 +3131,13 @@ static BOOL file_matches(LPSTR path)
     HANDLE file;
     DWORD size;
 
-    file = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                      NULL, OPEN_EXISTING, 0, NULL);
-
+    file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                       NULL, OPEN_EXISTING, 0, NULL);
     ZeroMemory(buf, MAX_PATH);
     ReadFile(file, buf, 15, &size, NULL);
     CloseHandle(file);
 
-    return !lstrcmp(buf, "msitest\\maximus");
+    return !lstrcmpA(buf, "msitest\\maximus");
 }
 
 static void test_readonlyfile(void)
@@ -3149,13 +3159,13 @@ static void test_readonlyfile(void)
 
     MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
 
-    lstrcpy(path, PROG_FILES_DIR);
-    lstrcat(path, "\\msitest");
-    CreateDirectory(path, NULL);
+    lstrcpyA(path, PROG_FILES_DIR);
+    lstrcatA(path, "\\msitest");
+    CreateDirectoryA(path, NULL);
 
-    lstrcat(path, "\\maximus");
-    file = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                      NULL, CREATE_NEW, FILE_ATTRIBUTE_READONLY, NULL);
+    lstrcatA(path, "\\maximus");
+    file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                       NULL, CREATE_NEW, FILE_ATTRIBUTE_READONLY, NULL);
 
     WriteFile(file, "readonlyfile", strlen("readonlyfile"), &size, NULL);
     CloseHandle(file);
@@ -3173,9 +3183,9 @@ static void test_readonlyfile(void)
 
 error:
     /* Delete the files in the temp (current) folder */
-    DeleteFile("msitest\\maximus");
-    RemoveDirectory("msitest");
-    DeleteFile(msifile);
+    DeleteFileA("msitest\\maximus");
+    RemoveDirectoryA("msitest");
+    DeleteFileA(msifile);
 }
 
 static void test_readonlyfile_cab(void)
@@ -3195,19 +3205,19 @@ static void test_readonlyfile_cab(void)
     CreateDirectoryA("msitest", NULL);
     create_file("maximus", 500);
     create_cab_file("test1.cab", MEDIA_SIZE, "maximus\0");
-    DeleteFile("maximus");
+    DeleteFileA("maximus");
 
     create_database(msifile, rofc_tables, sizeof(rofc_tables) / sizeof(msi_table));
 
     MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
 
-    lstrcpy(path, PROG_FILES_DIR);
-    lstrcat(path, "\\msitest");
-    CreateDirectory(path, NULL);
+    lstrcpyA(path, PROG_FILES_DIR);
+    lstrcatA(path, "\\msitest");
+    CreateDirectoryA(path, NULL);
 
-    lstrcat(path, "\\maximus");
-    file = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                      NULL, CREATE_NEW, FILE_ATTRIBUTE_READONLY, NULL);
+    lstrcatA(path, "\\maximus");
+    file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                       NULL, CREATE_NEW, FILE_ATTRIBUTE_READONLY, NULL);
 
     WriteFile(file, "readonlyfile", strlen("readonlyfile"), &size, NULL);
     CloseHandle(file);
@@ -3221,8 +3231,8 @@ static void test_readonlyfile_cab(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
     memset( buf, 0, sizeof(buf) );
-    if ((file = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                           NULL, OPEN_EXISTING, 0, NULL)) != INVALID_HANDLE_VALUE)
+    if ((file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                            NULL, OPEN_EXISTING, 0, NULL)) != INVALID_HANDLE_VALUE)
     {
         ReadFile(file, buf, sizeof(buf) - 1, &size, NULL);
         CloseHandle(file);
@@ -3234,9 +3244,9 @@ static void test_readonlyfile_cab(void)
 error:
     /* Delete the files in the temp (current) folder */
     delete_cab_files();
-    DeleteFile("msitest\\maximus");
-    RemoveDirectory("msitest");
-    DeleteFile(msifile);
+    DeleteFileA("msitest\\maximus");
+    RemoveDirectoryA("msitest");
+    DeleteFileA(msifile);
 }
 
 static void test_setdirproperty(void)
@@ -3267,9 +3277,9 @@ static void test_setdirproperty(void)
 
 error:
     /* Delete the files in the temp (current) folder */
-    DeleteFile(msifile);
-    DeleteFile("msitest\\maximus");
-    RemoveDirectory("msitest");
+    DeleteFileA(msifile);
+    DeleteFileA("msitest\\maximus");
+    RemoveDirectoryA("msitest");
 }
 
 static void test_cabisextracted(void)
@@ -3312,17 +3322,17 @@ static void test_cabisextracted(void)
 error:
     /* Delete the files in the temp (current) folder */
     delete_cab_files();
-    DeleteFile(msifile);
-    DeleteFile("maximus");
-    DeleteFile("augustus");
-    DeleteFile("caesar");
-    DeleteFile("msitest\\gaius");
-    RemoveDirectory("msitest");
+    DeleteFileA(msifile);
+    DeleteFileA("maximus");
+    DeleteFileA("augustus");
+    DeleteFileA("caesar");
+    DeleteFileA("msitest\\gaius");
+    RemoveDirectoryA("msitest");
 }
 
 static BOOL file_exists(LPCSTR file)
 {
-    return GetFileAttributes(file) != INVALID_FILE_ATTRIBUTES;
+    return GetFileAttributesA(file) != INVALID_FILE_ATTRIBUTES;
 }
 
 static BOOL pf_exists(LPCSTR file)
@@ -3338,7 +3348,7 @@ static BOOL pf_exists(LPCSTR file)
 
 static void delete_pfmsitest_files(void)
 {
-    SHFILEOPSTRUCT shfl;
+    SHFILEOPSTRUCTA shfl;
     CHAR path[MAX_PATH+11];
 
     lstrcpyA(path, PROG_FILES_DIR);
@@ -3351,7 +3361,7 @@ static void delete_pfmsitest_files(void)
     shfl.pTo = NULL;
     shfl.fFlags = FOF_FILESONLY | FOF_NOCONFIRMATION | FOF_NORECURSION | FOF_SILENT | FOF_NOERRORUI;
 
-    SHFileOperation(&shfl);
+    SHFileOperationA(&shfl);
 
     lstrcpyA(path, PROG_FILES_DIR);
     lstrcatA(path, "\\msitest");
@@ -3363,7 +3373,7 @@ static UINT run_query(MSIHANDLE hdb, MSIHANDLE hrec, const char *query)
     MSIHANDLE hview = 0;
     UINT r;
 
-    r = MsiDatabaseOpenView(hdb, query, &hview);
+    r = MsiDatabaseOpenViewA(hdb, query, &hview);
     if(r != ERROR_SUCCESS)
         return r;
 
@@ -3380,19 +3390,19 @@ static void set_transform_summary_info(void)
     MSIHANDLE suminfo = 0;
 
     /* build summary info */
-    r = MsiGetSummaryInformation(0, mstfile, 3, &suminfo);
+    r = MsiGetSummaryInformationA(0, mstfile, 3, &suminfo);
     ok(r == ERROR_SUCCESS , "Failed to open summaryinfo\n");
 
-    r = MsiSummaryInfoSetProperty(suminfo, PID_TITLE, VT_LPSTR, 0, NULL, "MSITEST");
+    r = MsiSummaryInfoSetPropertyA(suminfo, PID_TITLE, VT_LPSTR, 0, NULL, "MSITEST");
     ok(r == ERROR_SUCCESS, "Failed to set summary info\n");
 
-    r = MsiSummaryInfoSetProperty(suminfo, PID_REVNUMBER, VT_LPSTR, 0, NULL,
-                        "{7DF88A48-996F-4EC8-A022-BF956F9B2CBB}1.1.1;"
-                        "{7DF88A48-996F-4EC8-A022-BF956F9B2CBB}1.1.1;"
-                        "{4C0EAA15-0264-4E5A-8758-609EF142B92D}");
+    r = MsiSummaryInfoSetPropertyA(suminfo, PID_REVNUMBER, VT_LPSTR, 0, NULL,
+                                   "{7DF88A48-996F-4EC8-A022-BF956F9B2CBB}1.1.1;"
+                                   "{7DF88A48-996F-4EC8-A022-BF956F9B2CBB}1.1.1;"
+                                   "{4C0EAA15-0264-4E5A-8758-609EF142B92D}");
     ok(r == ERROR_SUCCESS , "Failed to set summary info\n");
 
-    r = MsiSummaryInfoSetProperty(suminfo, PID_PAGECOUNT, VT_I4, 100, NULL, NULL);
+    r = MsiSummaryInfoSetPropertyA(suminfo, PID_PAGECOUNT, VT_I4, 100, NULL, NULL);
     ok(r == ERROR_SUCCESS, "Failed to set summary info\n");
 
     r = MsiSummaryInfoPersist(suminfo);
@@ -3409,15 +3419,15 @@ static void generate_transform(void)
     UINT r;
 
     /* start with two identical databases */
-    CopyFile(msifile, msifile2, FALSE);
+    CopyFileA(msifile, msifile2, FALSE);
 
-    r = MsiOpenDatabase(msifile2, MSIDBOPEN_TRANSACT, &hdb1);
+    r = MsiOpenDatabaseW(msifile2W, MSIDBOPEN_TRANSACT, &hdb1);
     ok(r == ERROR_SUCCESS , "Failed to create database\n");
 
     r = MsiDatabaseCommit(hdb1);
     ok(r == ERROR_SUCCESS , "Failed to commit database\n");
 
-    r = MsiOpenDatabase(msifile, MSIDBOPEN_READONLY, &hdb2);
+    r = MsiOpenDatabaseW(msifileW, MSIDBOPEN_READONLY, &hdb2);
     ok(r == ERROR_SUCCESS , "Failed to create database\n");
 
     query = "INSERT INTO `Property` ( `Property`, `Value` ) VALUES ( 'prop', 'val' )";
@@ -3427,10 +3437,10 @@ static void generate_transform(void)
     /* database needs to be committed */
     MsiDatabaseCommit(hdb1);
 
-    r = MsiDatabaseGenerateTransform(hdb1, hdb2, mstfile, 0, 0);
+    r = MsiDatabaseGenerateTransformA(hdb1, hdb2, mstfile, 0, 0);
     ok(r == ERROR_SUCCESS, "return code %d, should be ERROR_SUCCESS\n", r);
 
-    r = MsiCreateTransformSummaryInfo(hdb2, hdb2, mstfile, 0, 0);
+    r = MsiCreateTransformSummaryInfoA(hdb2, hdb2, mstfile, 0, 0);
     todo_wine ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     MsiCloseHandle(hdb1);
@@ -3554,11 +3564,11 @@ static void test_transformprop(void)
 
 error:
     /* Delete the files in the temp (current) folder */
-    DeleteFile(msifile);
-    DeleteFile(msifile2);
-    DeleteFile(mstfile);
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
+    DeleteFileA(msifile);
+    DeleteFileA(msifile2);
+    DeleteFileA(mstfile);
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
 }
 
 static void test_currentworkingdir(void)
@@ -3608,9 +3618,8 @@ static void test_currentworkingdir(void)
     drive[3] = '\0';
     SetCurrentDirectoryA(drive);
 
-    lstrcpy(path, CURR_DIR);
-    if (path[lstrlenA(path) - 1] != '\\')
-        lstrcatA(path, "\\");
+    lstrcpyA(path, CURR_DIR);
+    if (path[lstrlenA(path) - 1] != '\\') lstrcatA(path, "\\");
     lstrcatA(path, msifile);
     ptr = strchr(path, ':');
     ptr +=2;
@@ -3622,18 +3631,18 @@ static void test_currentworkingdir(void)
 
 error:
     SetCurrentDirectoryA(CURR_DIR);
-    DeleteFile(msifile);
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
-    RemoveDirectory("diffdir");
+    DeleteFileA(msifile);
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
+    RemoveDirectoryA("diffdir");
 }
 
-static void set_admin_summary_info(const CHAR *name)
+static void set_admin_summary_info(const WCHAR *name)
 {
     MSIHANDLE db, summary;
     UINT r;
 
-    r = MsiOpenDatabaseA(name, MSIDBOPEN_DIRECT, &db);
+    r = MsiOpenDatabaseW(name, MSIDBOPEN_DIRECT, &db);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
     r = MsiGetSummaryInformationA(db, NULL, 1, &summary);
@@ -3662,7 +3671,7 @@ static void test_admin(void)
     create_file("msitest\\augustus", 500);
 
     create_database(msifile, adm_tables, sizeof(adm_tables) / sizeof(msi_table));
-    set_admin_summary_info(msifile);
+    set_admin_summary_info(msifileW);
 
     MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
 
@@ -3675,8 +3684,8 @@ static void test_admin(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
     ok(!delete_pf("msitest\\augustus", TRUE), "File installed\n");
     ok(!delete_pf("msitest", FALSE), "Directory created\n");
-    ok(!DeleteFile("c:\\msitest\\augustus"), "File installed\n");
-    ok(!RemoveDirectory("c:\\msitest"), "File installed\n");
+    ok(!DeleteFileA("c:\\msitest\\augustus"), "File installed\n");
+    ok(!RemoveDirectoryA("c:\\msitest"), "File installed\n");
 
     r = MsiInstallProductA(msifile, "ACTION=ADMIN");
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
@@ -3684,14 +3693,14 @@ static void test_admin(void)
     ok(!delete_pf("msitest", FALSE), "Directory created\n");
     todo_wine
     {
-        ok(DeleteFile("c:\\msitest\\augustus"), "File not installed\n");
-        ok(RemoveDirectory("c:\\msitest"), "File not installed\n");
+        ok(DeleteFileA("c:\\msitest\\augustus"), "File not installed\n");
+        ok(RemoveDirectoryA("c:\\msitest"), "File not installed\n");
     }
 
 error:
-    DeleteFile(msifile);
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
+    DeleteFileA(msifile);
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
 }
 
 static void set_admin_property_stream(LPCSTR file)
@@ -3739,7 +3748,7 @@ static void test_adminprops(void)
     create_file("msitest\\augustus", 500);
 
     create_database(msifile, amp_tables, sizeof(amp_tables) / sizeof(msi_table));
-    set_admin_summary_info(msifile);
+    set_admin_summary_info(msifileW);
     set_admin_property_stream(msifile);
 
     MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
@@ -3755,9 +3764,9 @@ static void test_adminprops(void)
     ok(delete_pf("msitest", FALSE), "Directory created\n");
 
 error:
-    DeleteFile(msifile);
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
+    DeleteFileA(msifile);
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
 }
 
 static void create_pf_data(LPCSTR file, LPCSTR data, BOOL is_file)
@@ -3837,13 +3846,13 @@ static void test_missingcab(void)
 
 error:
     delete_pf("msitest", FALSE);
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
-    DeleteFile("maximus");
-    DeleteFile("tiberius");
-    DeleteFile("test1.cab");
-    DeleteFile("test4.cab");
-    DeleteFile(msifile);
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
+    DeleteFileA("maximus");
+    DeleteFileA("tiberius");
+    DeleteFileA("test1.cab");
+    DeleteFileA("test4.cab");
+    DeleteFileA(msifile);
 }
 
 static void test_sourcefolder(void)
@@ -3888,8 +3897,8 @@ static void test_sourcefolder(void)
     }
 
 error:
-    DeleteFile(msifile);
-    DeleteFile("augustus");
+    DeleteFileA(msifile);
+    DeleteFileA("augustus");
 }
 
 static void test_customaction51(void)
@@ -3920,9 +3929,9 @@ static void test_customaction51(void)
     ok(delete_pf("msitest", FALSE), "Directory created\n");
 
 error:
-    DeleteFile(msifile);
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
+    DeleteFileA(msifile);
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
 }
 
 static void test_installstate(void)
@@ -4023,20 +4032,20 @@ static void test_installstate(void)
     ok(!delete_pf("msitest", FALSE), "Directory created\n");
 
 error:
-    DeleteFile(msifile);
-    DeleteFile("msitest\\alpha");
-    DeleteFile("msitest\\beta");
-    DeleteFile("msitest\\gamma");
-    DeleteFile("msitest\\theta");
-    DeleteFile("msitest\\delta");
-    DeleteFile("msitest\\epsilon");
-    DeleteFile("msitest\\zeta");
-    DeleteFile("msitest\\iota");
-    DeleteFile("msitest\\eta");
-    DeleteFile("msitest\\kappa");
-    DeleteFile("msitest\\lambda");
-    DeleteFile("msitest\\mu");
-    RemoveDirectory("msitest");
+    DeleteFileA(msifile);
+    DeleteFileA("msitest\\alpha");
+    DeleteFileA("msitest\\beta");
+    DeleteFileA("msitest\\gamma");
+    DeleteFileA("msitest\\theta");
+    DeleteFileA("msitest\\delta");
+    DeleteFileA("msitest\\epsilon");
+    DeleteFileA("msitest\\zeta");
+    DeleteFileA("msitest\\iota");
+    DeleteFileA("msitest\\eta");
+    DeleteFileA("msitest\\kappa");
+    DeleteFileA("msitest\\lambda");
+    DeleteFileA("msitest\\mu");
+    RemoveDirectoryA("msitest");
 }
 
 static const struct sourcepathmap
@@ -4489,8 +4498,8 @@ static void test_sourcedirprop(void)
     ok(delete_pf("msitest\\augustus", TRUE), "File installed\n");
     ok(delete_pf("msitest", FALSE), "Directory created\n");
 
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
 
     CreateDirectoryA("altsource", NULL);
     CreateDirectoryA("altsource\\msitest", NULL);
@@ -4503,14 +4512,14 @@ static void test_sourcedirprop(void)
     ok(delete_pf("msitest\\augustus", TRUE), "File installed\n");
     ok(delete_pf("msitest", FALSE), "Directory created\n");
 
-    DeleteFile("altsource\\msitest\\augustus");
-    RemoveDirectory("altsource\\msitest");
-    RemoveDirectory("altsource");
+    DeleteFileA("altsource\\msitest\\augustus");
+    RemoveDirectoryA("altsource\\msitest");
+    RemoveDirectoryA("altsource");
 
 error:
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
-    DeleteFile(msifile);
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
+    DeleteFileA(msifile);
 }
 
 static void test_adminimage(void)
@@ -4607,13 +4616,16 @@ static void test_propcase(void)
     ok(delete_pf("msitest", FALSE), "Directory not created\n");
 
 error:
-    DeleteFile(msifile);
-    DeleteFile("msitest\\augustus");
-    RemoveDirectory("msitest");
+    DeleteFileA(msifile);
+    DeleteFileA("msitest\\augustus");
+    RemoveDirectoryA("msitest");
 }
 
 static void test_int_widths( void )
 {
+    static const WCHAR msitestW[] = {'m','s','i','t','e','s','t','.','m','s','i',0};
+    static const WCHAR msitableW[] = {'m','s','i','t','a','b','l','e','.','i','d','t',0};
+    static const WCHAR slashW[] = {'\\',0};
     static const char int0[] = "int0\ni0\nint0\tint0\n1";
     static const char int1[] = "int1\ni1\nint1\tint1\n1";
     static const char int2[] = "int2\ni2\nint2\tint2\n1";
@@ -4621,7 +4633,6 @@ static void test_int_widths( void )
     static const char int4[] = "int4\ni4\nint4\tint4\n1";
     static const char int5[] = "int5\ni5\nint5\tint5\n1";
     static const char int8[] = "int8\ni8\nint8\tint8\n1";
-
     static const struct
     {
         const char  *data;
@@ -4638,38 +4649,43 @@ static void test_int_widths( void )
         { int5, sizeof(int5) - 1, ERROR_FUNCTION_FAILED },
         { int8, sizeof(int8) - 1, ERROR_FUNCTION_FAILED }
     };
-
-    char tmpdir[MAX_PATH], msitable[MAX_PATH], msidb[MAX_PATH];
+    WCHAR tmpdir[MAX_PATH], msitable[MAX_PATH], msidb[MAX_PATH];
     MSIHANDLE db;
     UINT r, i;
 
-    GetTempPathA(MAX_PATH, tmpdir);
-    CreateDirectoryA(tmpdir, NULL);
+    GetTempPathW(MAX_PATH, tmpdir);
+    CreateDirectoryW(tmpdir, NULL);
 
-    strcpy(msitable, tmpdir);
-    strcat(msitable, "\\msitable.idt");
+    lstrcpyW(msitable, tmpdir);
+    lstrcatW(msitable, slashW);
+    lstrcatW(msitable, msitableW);
 
-    strcpy(msidb, tmpdir);
-    strcat(msidb, "\\msitest.msi");
+    lstrcpyW(msidb, tmpdir);
+    lstrcatW(msidb, slashW);
+    lstrcatW(msidb, msitestW);
 
-    r = MsiOpenDatabaseA(msidb, MSIDBOPEN_CREATE, &db);
+    r = MsiOpenDatabaseW(msidb, MSIDBOPEN_CREATE, &db);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
     for (i = 0; i < sizeof(tests)/sizeof(tests[0]); i++)
     {
-        write_file(msitable, tests[i].data, tests[i].size);
+        DWORD count;
+        HANDLE handle = CreateFileW(msitable, GENERIC_WRITE, 0, NULL,
+                                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        WriteFile(handle, tests[i].data, tests[i].size, &count, NULL);
+        CloseHandle(handle);
 
-        r = MsiDatabaseImportA(db, tmpdir, "msitable.idt");
+        r = MsiDatabaseImportW(db, tmpdir, msitableW);
         ok(r == tests[i].ret, " %u expected %u, got %u\n", i, tests[i].ret, r);
 
         r = MsiDatabaseCommit(db);
         ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
-        DeleteFileA(msitable);
+        DeleteFileW(msitable);
     }
 
     MsiCloseHandle(db);
-    DeleteFileA(msidb);
-    RemoveDirectoryA(tmpdir);
+    DeleteFileW(msidb);
+    RemoveDirectoryW(tmpdir);
 }
 
 static void test_shortcut(void)
@@ -4728,7 +4744,7 @@ static void test_shortcut(void)
 
 error:
     delete_test_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_preselected(void)
@@ -4785,7 +4801,7 @@ static void test_preselected(void)
 
 error:
     delete_test_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_installed_prop(void)
@@ -4836,7 +4852,7 @@ static void test_installed_prop(void)
 
 error:
     delete_test_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_allusers_prop(void)
@@ -4940,7 +4956,7 @@ static void test_allusers_prop(void)
 
 error:
     delete_test_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static char session_manager[] = "System\\CurrentControlSet\\Control\\Session Manager";
@@ -5018,7 +5034,7 @@ static BOOL file_matches_data(LPCSTR file, LPCSTR data)
     HANDLE handle;
     char buf[128];
 
-    handle = CreateFile(file, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    handle = CreateFileA(file, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     ok(handle != INVALID_HANDLE_VALUE, "failed to open %s (%u)\n", file, GetLastError());
 
     if (ReadFile(handle, buf, sizeof(buf), &len, NULL) && len >= data_len)
@@ -5051,11 +5067,11 @@ static void test_file_in_use(void)
 
     MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
 
-    lstrcpy(path, PROG_FILES_DIR);
-    lstrcat(path, "\\msitest");
+    lstrcpyA(path, PROG_FILES_DIR);
+    lstrcatA(path, "\\msitest");
     CreateDirectoryA(path, NULL);
 
-    lstrcat(path, "\\maximus");
+    lstrcatA(path, "\\maximus");
     file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
 
     r = MsiInstallProductA(msifile, "REBOOT=ReallySuppress FULL=1");
@@ -5086,7 +5102,7 @@ error:
     delete_pf("msitest", FALSE);
     DeleteFileA("msitest\\maximus");
     delete_test_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_file_in_use_cab(void)
@@ -5107,17 +5123,17 @@ static void test_file_in_use_cab(void)
     CreateDirectoryA("msitest", NULL);
     create_file("maximus", 500);
     create_cab_file("test1.cab", MEDIA_SIZE, "maximus\0");
-    DeleteFile("maximus");
+    DeleteFileA("maximus");
 
     create_database(msifile, fiuc_tables, sizeof(fiuc_tables) / sizeof(msi_table));
 
     MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
 
-    lstrcpy(path, PROG_FILES_DIR);
-    lstrcat(path, "\\msitest");
+    lstrcpyA(path, PROG_FILES_DIR);
+    lstrcatA(path, "\\msitest");
     CreateDirectoryA(path, NULL);
 
-    lstrcat(path, "\\maximus");
+    lstrcatA(path, "\\maximus");
     file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
 
     r = MsiInstallProductA(msifile, "REBOOT=ReallySuppress FULL=1");
@@ -5149,7 +5165,7 @@ error:
     DeleteFileA("msitest\\maximus");
     delete_cab_files();
     delete_test_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_feature_override(void)
@@ -5230,7 +5246,7 @@ error:
     DeleteFileA("msitest\\preselected.txt");
     DeleteFileA("msitest\\notpreselected.txt");
     delete_test_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_icon_table(void)
@@ -5251,7 +5267,7 @@ static void test_icon_table(void)
 
     MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
 
-    res = MsiOpenDatabase(msifile, MSIDBOPEN_TRANSACT, &hdb);
+    res = MsiOpenDatabaseW(msifileW, MSIDBOPEN_TRANSACT, &hdb);
     ok(res == ERROR_SUCCESS, "failed to open db: %d\n", res);
 
     query = "CREATE TABLE `Icon` (`Name` CHAR(72) NOT NULL, `Data` OBJECT NOT NULL  PRIMARY KEY `Name`)";
@@ -5260,7 +5276,7 @@ static void test_icon_table(void)
 
     create_file("icon.ico", 100);
     record = MsiCreateRecord(1);
-    res = MsiRecordSetStream(record, 1, "icon.ico");
+    res = MsiRecordSetStreamA(record, 1, "icon.ico");
     ok(res == ERROR_SUCCESS, "Failed to add stream data to record: %d\n", res);
 
     query = "INSERT INTO `Icon` (`Name`, `Data`) VALUES ('testicon', ?)";
@@ -5280,7 +5296,7 @@ static void test_icon_table(void)
     if (res == ERROR_INSTALL_PACKAGE_REJECTED)
     {
         skip("Not enough rights to perform tests\n");
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         return;
     }
     ok(res == ERROR_SUCCESS, "Failed to do per-user install: %d\n", res);
@@ -5312,7 +5328,7 @@ static void test_icon_table(void)
     ok(!file_exists(path), "System-wide icon file not removed (%s)\n", path);
 
     delete_pfmsitest_files();
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_package_validation(void)
@@ -5341,19 +5357,19 @@ static void test_package_validation(void)
     ok(delete_pf("msitest\\maximus", TRUE), "file does not exist\n");
     ok(delete_pf("msitest", FALSE), "directory does not exist\n");
 
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
     create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 200, "Intel,9999;9999");
 
     r = MsiInstallProductA(msifile, NULL);
     ok(r == ERROR_INSTALL_LANGUAGE_UNSUPPORTED, "Expected ERROR_INSTALL_LANGUAGE_UNSUPPORTED, got %u\n", r);
 
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
     create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 200, "Intel,1033;9999");
 
     r = MsiInstallProductA(msifile, NULL);
     ok(r == ERROR_INSTALL_LANGUAGE_UNSUPPORTED, "Expected ERROR_INSTALL_LANGUAGE_UNSUPPORTED, got %u\n", r);
 
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
     create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 200, "Intel,9999;1033");
 
     r = MsiInstallProductA(msifile, NULL);
@@ -5361,25 +5377,25 @@ static void test_package_validation(void)
     ok(delete_pf("msitest\\maximus", TRUE), "file does not exist\n");
     ok(delete_pf("msitest", FALSE), "directory does not exist\n");
 
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
     create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 200, "Intel64,9999;1033");
 
     r = MsiInstallProductA(msifile, NULL);
     ok(r == ERROR_INSTALL_PLATFORM_UNSUPPORTED, "Expected ERROR_INSTALL_PLATFORM_UNSUPPORTED, got %u\n", r);
 
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
     create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 200, "Intel32,1033;1033");
 
     r = MsiInstallProductA(msifile, NULL);
     ok(r == ERROR_INSTALL_PLATFORM_UNSUPPORTED, "Expected ERROR_INSTALL_PLATFORM_UNSUPPORTED, got %u\n", r);
 
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
     create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 200, "Intel32,9999;1033");
 
     r = MsiInstallProductA(msifile, NULL);
     ok(r == ERROR_INSTALL_PLATFORM_UNSUPPORTED, "Expected ERROR_INSTALL_PLATFORM_UNSUPPORTED, got %u\n", r);
 
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
     create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "Intel;9999");
 
     r = MsiInstallProductA(msifile, NULL);
@@ -5389,14 +5405,14 @@ static void test_package_validation(void)
 
     if (GetSystemDefaultLangID() == MAKELANGID( LANG_ENGLISH, SUBLANG_ENGLISH_US ))
     {
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "Intel;9");
         r = MsiInstallProductA(msifile, NULL);
         ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
         ok(delete_pf("msitest\\maximus", TRUE), "file does not exist\n");
         ok(delete_pf("msitest", FALSE), "directory does not exist\n");
 
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "Intel;1024");
         r = MsiInstallProductA(msifile, NULL);
         ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
@@ -5404,7 +5420,7 @@ static void test_package_validation(void)
         ok(delete_pf("msitest", FALSE), "directory does not exist\n");
     }
 
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
     create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "Intel32;0");
 
     r = MsiInstallProductA(msifile, NULL);
@@ -5414,7 +5430,7 @@ static void test_package_validation(void)
 
     if (is_64bit && !is_wow64)
     {
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "Intel;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5422,7 +5438,7 @@ static void test_package_validation(void)
         ok(delete_pf("msitest\\maximus", TRUE), "file does not exist\n");
         ok(delete_pf("msitest", FALSE), "directory does not exist\n");
 
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "x64;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5430,7 +5446,7 @@ static void test_package_validation(void)
         ok(!delete_pf("msitest\\maximus", TRUE), "file exists\n");
         ok(!delete_pf("msitest", FALSE), "directory exists\n");
 
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 200, "x64;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5440,7 +5456,7 @@ static void test_package_validation(void)
     }
     else if (is_wow64)
     {
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "Intel;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5448,7 +5464,7 @@ static void test_package_validation(void)
         ok(delete_pf("msitest\\maximus", TRUE), "file does not exist\n");
         ok(delete_pf("msitest", FALSE), "directory does not exist\n");
 
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "x64;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5456,7 +5472,7 @@ static void test_package_validation(void)
         ok(!delete_pf_native("msitest\\maximus", TRUE), "file exists\n");
         ok(!delete_pf_native("msitest", FALSE), "directory exists\n");
 
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 200, "x64;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5466,7 +5482,7 @@ static void test_package_validation(void)
     }
     else
     {
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "Intel;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5474,7 +5490,7 @@ static void test_package_validation(void)
         ok(delete_pf("msitest\\maximus", TRUE), "file does not exist\n");
         ok(delete_pf("msitest", FALSE), "directory does not exist\n");
 
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "Alpha,Beta,Intel;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5482,7 +5498,7 @@ static void test_package_validation(void)
         ok(delete_pf("msitest\\maximus", TRUE), "file does not exist\n");
         ok(delete_pf("msitest", FALSE), "directory does not exist\n");
 
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 100, "x64;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5490,7 +5506,7 @@ static void test_package_validation(void)
         ok(!delete_pf("msitest\\maximus", TRUE), "file exists\n");
         ok(!delete_pf("msitest", FALSE), "directory exists\n");
 
-        DeleteFile(msifile);
+        DeleteFileA(msifile);
         create_database_template(msifile, pv_tables, sizeof(pv_tables)/sizeof(msi_table), 200, "x64;0");
 
         r = MsiInstallProductA(msifile, NULL);
@@ -5501,9 +5517,9 @@ static void test_package_validation(void)
 
 error:
     /* Delete the files in the temp (current) folder */
-    DeleteFile(msifile);
-    DeleteFile("msitest\\maximus");
-    RemoveDirectory("msitest");
+    DeleteFileA(msifile);
+    DeleteFileA("msitest\\maximus");
+    RemoveDirectoryA("msitest");
 }
 
 static void test_upgrade_code(void)
@@ -5535,7 +5551,7 @@ static void test_upgrade_code(void)
 
     DeleteFileA("msitest\\upgradecode.txt");
     RemoveDirectoryA("msitest");
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 static void test_mixed_package(void)
@@ -5640,7 +5656,7 @@ static void test_volume_props(void)
 
     DeleteFileA("msitest\\volumeprop.txt");
     RemoveDirectoryA("msitest");
-    DeleteFile(msifile);
+    DeleteFileA(msifile);
 }
 
 START_TEST(install)
@@ -5656,7 +5672,7 @@ START_TEST(install)
         pIsWow64Process(GetCurrentProcess(), &is_wow64);
 
     GetCurrentDirectoryA(MAX_PATH, prev_path);
-    GetTempPath(MAX_PATH, temp_path);
+    GetTempPathA(MAX_PATH, temp_path);
     SetCurrentDirectoryA(temp_path);
 
     lstrcpyA(CURR_DIR, temp_path);

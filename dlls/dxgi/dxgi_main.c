@@ -49,19 +49,17 @@ static void dxgi_main_cleanup(void)
     DeleteCriticalSection(&dxgi_cs);
 }
 
-BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
+BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
 {
-    TRACE("fdwReason %u\n", fdwReason);
-
-    switch(fdwReason)
+    switch (reason)
     {
         case DLL_PROCESS_ATTACH:
-            DisableThreadLibraryCalls(hInstDLL);
+            DisableThreadLibraryCalls(inst);
             break;
 
         case DLL_PROCESS_DETACH:
-            if (lpv) break;
-            dxgi_main_cleanup();
+            if (!reserved)
+                dxgi_main_cleanup();
             break;
     }
 
@@ -131,8 +129,7 @@ static HRESULT register_d3d10core_layers(HMODULE d3d10core)
         HMODULE mod;
         BOOL ret;
 
-        ret = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCSTR)d3d10core, &mod);
-        if (!ret)
+        if (!(ret = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (const char *)d3d10core, &mod)))
         {
             LeaveCriticalSection(&dxgi_cs);
             return E_FAIL;

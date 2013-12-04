@@ -314,7 +314,7 @@ static DWORD rtlraiseexception_handler( EXCEPTION_RECORD *rec, EXCEPTION_REGISTR
         return ExceptionContinueSearch;
 
     /* Eip in context is decreased by 1
-     * Increase it again, else execution will continue in the middle of a instruction */
+     * Increase it again, else execution will continue in the middle of an instruction */
     if(rec->ExceptionCode == EXCEPTION_BREAKPOINT && (context->Eip == (DWORD)code_mem + 0xa))
         context->Eip += 1;
     return ExceptionContinueExecution;
@@ -731,7 +731,7 @@ static void test_debugger(void)
 {
     char cmdline[MAX_PATH];
     PROCESS_INFORMATION pi;
-    STARTUPINFO si = { 0 };
+    STARTUPINFOA si = { 0 };
     DEBUG_EVENT de;
     DWORD continuestatus;
     PVOID code_mem_address = NULL;
@@ -748,7 +748,7 @@ static void test_debugger(void)
     }
 
     sprintf(cmdline, "%s %s %s %p", my_argv[0], my_argv[1], "debuggee", &test_stage);
-    ret = CreateProcess(NULL, cmdline, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi);
+    ret = CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi);
     ok(ret, "could not create child process error: %u\n", GetLastError());
     if (!ret)
         return;
@@ -796,7 +796,7 @@ static void test_debugger(void)
 
             if (counter > 100)
             {
-                ok(FALSE, "got way too many exceptions, probably caught in a infinite loop, terminating child\n");
+                ok(FALSE, "got way too many exceptions, probably caught in an infinite loop, terminating child\n");
                 pNtTerminateProcess(pi.hProcess, 1);
             }
             else if (counter >= 2) /* skip startup breakpoint */
@@ -1473,7 +1473,7 @@ START_TEST(exception)
                                                                  "NtQueryInformationProcess" );
     pNtSetInformationProcess           = (void*)GetProcAddress( hntdll,
                                                                  "NtSetInformationProcess" );
-    pIsWow64Process = (void *)GetProcAddress(GetModuleHandle("kernel32.dll"), "IsWow64Process");
+    pIsWow64Process = (void *)GetProcAddress(GetModuleHandleA("kernel32.dll"), "IsWow64Process");
 
 #ifdef __i386__
     if (!pNtCurrentTeb)

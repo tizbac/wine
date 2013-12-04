@@ -107,10 +107,10 @@ static BOOL copy_dll_file(void)
     lstrcatA(sys_dir, "imagehlp.dll");
 
     /* Copy DLL to a temp file */
-    GetTempPath(MAX_PATH, temp_path);
-    GetTempFileName(temp_path, "img", 0, test_dll_path);
+    GetTempPathA(MAX_PATH, temp_path);
+    GetTempFileNameA(temp_path, "img", 0, test_dll_path);
 
-    if (CopyFile(sys_dir, test_dll_path, FALSE) == 0)
+    if (CopyFileA(sys_dir, test_dll_path, FALSE) == 0)
     {
         skip("Unable to create copy of imagehlp.dll for tests.\n");
         return FALSE;
@@ -178,7 +178,8 @@ static void test_get_certificate(char *cert_data, int index)
     HANDLE hFile;
     LPWIN_CERTIFICATE cert;
     DWORD cert_len = 0;
-    DWORD err, ret;
+    DWORD err;
+    BOOL ret;
 
     hFile = CreateFileA(test_dll_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
@@ -295,5 +296,5 @@ START_TEST(integrity)
     ok(file_size == file_size_orig, "File size different after add and remove (old: %d; new: %d)\n", file_size_orig, file_size);
 
     FreeLibrary(hImageHlp);
-    DeleteFile(test_dll_path);
+    DeleteFileA(test_dll_path);
 }

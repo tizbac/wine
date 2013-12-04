@@ -667,7 +667,7 @@ static void init_TCPIP_provider( IDirectPlay4 *pDP, LPCSTR strIPAddressString, W
 
     /* IP address string */
     addressElements[1].guidDataType = DPAID_INet;
-    addressElements[1].dwDataSize   = lstrlen(strIPAddressString) + 1;
+    addressElements[1].dwDataSize   = lstrlenA(strIPAddressString) + 1;
     addressElements[1].lpData       = (LPVOID) strIPAddressString;
 
     /* Optional Port number */
@@ -6470,7 +6470,7 @@ static void test_COM_dplobby(void)
             &IID_IUnknown, (void**)&dpl);
     ok(hr == CLASS_E_NOAGGREGATION || broken(hr == E_INVALIDARG),
             "DirectPlayLobby create failed: %08x, expected CLASS_E_NOAGGREGATION\n", hr);
-    ok(!dpl || dpl == (IDirectPlayLobby*)0xdeadbeef, "dp4 = %p\n", dpl);
+    ok(!dpl || dpl == (IDirectPlayLobby*)0xdeadbeef, "dpl = %p\n", dpl);
 
     /* Invalid RIID */
     hr = CoCreateInstance(&CLSID_DirectPlayLobby, NULL, CLSCTX_INPROC_SERVER, &IID_IDirectPlay,

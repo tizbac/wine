@@ -27,10 +27,8 @@
    perhaps with a different name? */
 #define D3DXERR_INVALIDDATA                      0x88760b59
 
-HRESULT WINAPI D3DAssemble(LPCVOID data, SIZE_T datasize, LPCSTR filename,
-                           const D3D_SHADER_MACRO *defines, LPD3DINCLUDE include,
-                           UINT flags,
-                           LPD3DBLOB* shader, LPD3DBLOB* error_messages);
+HRESULT WINAPI D3DAssemble(const void *data, SIZE_T datasize, const char *filename, const D3D_SHADER_MACRO *defines,
+        ID3DInclude *include, UINT flags, ID3DBlob **shader, ID3DBlob **error_messages);
 
 struct shader_test {
     const char *text;
@@ -1488,7 +1486,7 @@ static HRESULT WINAPI testD3DInclude_open(ID3DInclude *iface, D3D_INCLUDE_TYPE i
 
 static HRESULT WINAPI testD3DInclude_close(ID3DInclude *iface, const void *data)
 {
-    HeapFree(GetProcessHeap(), 0, (LPVOID)data);
+    HeapFree(GetProcessHeap(), 0, (void *)data);
     return S_OK;
 }
 

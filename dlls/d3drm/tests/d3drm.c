@@ -918,7 +918,7 @@ static void test_Frame(void)
     IDirect3DRMVisualArray *visual_array;
     IDirect3DRMLight *light1;
     IDirect3DRMLight *light_tmp;
-    LPDIRECT3DRMLIGHTARRAY pLightArray;
+    IDirect3DRMLightArray *light_array;
     D3DCOLOR color;
     DWORD count;
     CHAR cname[64] = {0};
@@ -1193,18 +1193,18 @@ static void test_Frame(void)
     CHECK_REFCOUNT(pFrameP1, 3);
     CHECK_REFCOUNT(light1, 2);
 
-    pLightArray = NULL;
-    hr = IDirect3DRMFrame_GetLights(pFrameP1, &pLightArray);
+    light_array = NULL;
+    hr = IDirect3DRMFrame_GetLights(pFrameP1, &light_array);
     ok(hr == D3DRM_OK, "Cannot get lights (hr = %x)\n", hr);
-    if (pLightArray)
+    if (light_array)
     {
-        count = IDirect3DRMLightArray_GetSize(pLightArray);
+        count = IDirect3DRMLightArray_GetSize(light_array);
         ok(count == 1, "count = %u\n", count);
-        hr = IDirect3DRMLightArray_GetElement(pLightArray, 0, &light_tmp);
+        hr = IDirect3DRMLightArray_GetElement(light_array, 0, &light_tmp);
         ok(hr == D3DRM_OK, "Cannot get element (hr = %x)\n", hr);
         ok(light_tmp == light1, "light_tmp = %p\n", light_tmp);
         IDirect3DRMLight_Release(light_tmp);
-        IDirect3DRMLightArray_Release(pLightArray);
+        IDirect3DRMLightArray_Release(light_array);
     }
 
     /* Delete Light */
@@ -1476,7 +1476,7 @@ static void test_Device(void)
     HRESULT hr;
     IDirect3DRM *d3drm;
     IDirect3DRMDevice *device;
-    LPDIRECT3DRMWINDEVICE pWinDevice;
+    IDirect3DRMWinDevice *win_device;
     GUID driver;
     HWND window;
     RECT rc;
@@ -1513,27 +1513,26 @@ static void test_Device(void)
     ok(!strcmp(cname, "Device"), "Expected cname to be \"Device\", but got \"%s\"\n", cname);
 
     /* WinDevice */
-    hr = IDirect3DRMDevice_QueryInterface(device, &IID_IDirect3DRMWinDevice, (LPVOID*)&pWinDevice);
-    if (FAILED(hr))
+    if (FAILED(hr = IDirect3DRMDevice_QueryInterface(device, &IID_IDirect3DRMWinDevice, (void **)&win_device)))
     {
         win_skip("Cannot get IDirect3DRMWinDevice interface (hr = %x), skipping tests\n", hr);
         goto cleanup;
     }
 
-    hr = IDirect3DRMWinDevice_GetClassName(pWinDevice, NULL, cname);
+    hr = IDirect3DRMWinDevice_GetClassName(win_device, NULL, cname);
     ok(hr == E_INVALIDARG, "GetClassName failed with %x\n", hr);
-    hr = IDirect3DRMWinDevice_GetClassName(pWinDevice, NULL, NULL);
+    hr = IDirect3DRMWinDevice_GetClassName(win_device, NULL, NULL);
     ok(hr == E_INVALIDARG, "GetClassName failed with %x\n", hr);
     size = 1;
-    hr = IDirect3DRMWinDevice_GetClassName(pWinDevice, &size, cname);
+    hr = IDirect3DRMWinDevice_GetClassName(win_device, &size, cname);
     ok(hr == E_INVALIDARG, "GetClassName failed with %x\n", hr);
     size = sizeof(cname);
-    hr = IDirect3DRMWinDevice_GetClassName(pWinDevice, &size, cname);
+    hr = IDirect3DRMWinDevice_GetClassName(win_device, &size, cname);
     ok(hr == D3DRM_OK, "Cannot get classname (hr = %x)\n", hr);
     ok(size == sizeof("Device"), "wrong size: %u\n", size);
     ok(!strcmp(cname, "Device"), "Expected cname to be \"Device\", but got \"%s\"\n", cname);
 
-    IDirect3DRMWinDevice_Release(pWinDevice);
+    IDirect3DRMWinDevice_Release(win_device);
 
 cleanup:
     IDirect3DRMDevice_Release(device);
@@ -1572,11 +1571,11 @@ static const GUID* refiids[] =
     &IID_IDirect3DRMMaterial /* Not taken into account and not notified */
 };
 
-static void __cdecl object_load_callback(IDirect3DRMObject *object, REFIID objectguid, LPVOID arg)
+static void __cdecl object_load_callback(IDirect3DRMObject *object, REFIID objectguid, void *arg)
 {
     ok(object != NULL, "Arg 1 should not be null\n");
     ok(IsEqualGUID(objectguid, refiids[nb_objects]), "Arg 2 is incorrect\n");
-    ok(arg == (LPVOID)0xdeadbeef, "Arg 3 should be 0xdeadbeef (got %p)\n", arg);
+    ok(arg == (void *)0xdeadbeef, "Arg 3 should be 0xdeadbeef (got %p)\n", arg);
     nb_objects++;
 }
 

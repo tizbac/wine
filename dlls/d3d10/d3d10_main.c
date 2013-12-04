@@ -27,16 +27,15 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d10);
 
-/* At process attach */
-BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
+BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
 {
-    TRACE("fdwReason=%d\n", fdwReason);
-    switch(fdwReason)
+    switch (reason)
     {
-    case DLL_PROCESS_ATTACH:
-        DisableThreadLibraryCalls( hInstDLL );
-        break;
+        case DLL_PROCESS_ATTACH:
+            DisableThreadLibraryCalls(inst);
+            break;
     }
+
     return TRUE;
 }
 
@@ -261,21 +260,21 @@ HRESULT WINAPI D3D10CompileEffectFromMemory(void *data, SIZE_T data_size, const 
 }
 
 
-LPCSTR WINAPI D3D10GetVertexShaderProfile(ID3D10Device *device)
+const char * WINAPI D3D10GetVertexShaderProfile(ID3D10Device *device)
 {
     FIXME("device %p stub!\n", device);
 
     return "vs_4_0";
 }
 
-LPCSTR WINAPI D3D10GetGeometryShaderProfile(ID3D10Device *device)
+const char * WINAPI D3D10GetGeometryShaderProfile(ID3D10Device *device)
 {
     FIXME("device %p stub!\n", device);
 
     return "gs_4_0";
 }
 
-LPCSTR WINAPI D3D10GetPixelShaderProfile(ID3D10Device *device)
+const char * WINAPI D3D10GetPixelShaderProfile(ID3D10Device *device)
 {
     FIXME("device %p stub!\n", device);
 

@@ -361,6 +361,7 @@ static BOOL grab_clipping_window( const RECT *clip )
     struct x11drv_thread_data *data = x11drv_thread_data();
     Window clip_window;
     HWND msg_hwnd = 0;
+    POINT pos;
 
     if (GetWindowThreadProcessId( GetDesktopWindow(), NULL ) == GetCurrentThreadId())
         return TRUE;  /* don't clip in the desktop process */
@@ -386,8 +387,8 @@ static BOOL grab_clipping_window( const RECT *clip )
     TRACE( "clipping to %s win %lx\n", wine_dbgstr_rect(clip), clip_window );
 
     if (!data->clip_hwnd) XUnmapWindow( data->display, clip_window );
-    XMoveResizeWindow( data->display, clip_window,
-                       clip->left - virtual_screen_rect.left, clip->top - virtual_screen_rect.top,
+    pos = virtual_screen_to_root( clip->left, clip->top );
+    XMoveResizeWindow( data->display, clip_window, pos.x, pos.y,
                        max( 1, clip->right - clip->left ), max( 1, clip->bottom - clip->top ) );
     XMapWindow( data->display, clip_window );
 
@@ -399,7 +400,7 @@ static BOOL grab_clipping_window( const RECT *clip )
     if (!XGrabPointer( data->display, clip_window, False,
                        PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
                        GrabModeAsync, GrabModeAsync, clip_window, None, CurrentTime ))
-        clipping_cursor = 1;
+        clipping_cursor = TRUE;
 
     if (!clipping_cursor)
     {
@@ -429,7 +430,7 @@ void ungrab_clipping_window(void)
 
     TRACE( "no longer clipping\n" );
     XUnmapWindow( display, clip_window );
-    clipping_cursor = 0;
+    clipping_cursor = FALSE;
     SendMessageW( GetDesktopWindow(), WM_X11DRV_CLIP_CURSOR, 0, 0 );
 }
 
@@ -472,11 +473,11 @@ LRESULT clip_cursor_notify( HWND hwnd, HWND new_clip_hwnd )
     }
     else if (hwnd == GetForegroundWindow())  /* request to clip */
     {
-        RECT clip;
+        RECT clip, virtual_rect = get_virtual_screen_rect();
 
         GetClipCursor( &clip );
-        if (clip.left > virtual_screen_rect.left || clip.right < virtual_screen_rect.right ||
-            clip.top > virtual_screen_rect.top   || clip.bottom < virtual_screen_rect.bottom)
+        if (clip.left > virtual_rect.left || clip.right < virtual_rect.right ||
+            clip.top > virtual_rect.top   || clip.bottom < virtual_rect.bottom)
             return grab_clipping_window( &clip );
     }
     return 0;
@@ -508,10 +509,11 @@ BOOL clip_fullscreen_window( HWND hwnd, BOOL reset )
     if (!(thread_data = x11drv_thread_data())) return FALSE;
     if (GetTickCount() - thread_data->clip_reset < 1000) return FALSE;
     if (!reset && clipping_cursor && thread_data->clip_hwnd) return FALSE;  /* already clipping */
-    SetRect( &rect, 0, 0, screen_width, screen_height );
+    rect = get_primary_monitor_rect();
     if (!grab_fullscreen)
     {
-        if (!EqualRect( &rect, &virtual_screen_rect )) return FALSE;
+        RECT virtual_rect = get_virtual_screen_rect();
+        if (!EqualRect( &rect, &virtual_rect )) return FALSE;
         if (root_window != DefaultRootWindow( gdi_display )) return FALSE;
     }
     TRACE( "win %p clipping fullscreen\n", hwnd );
@@ -549,20 +551,21 @@ static void send_mouse_input( HWND hwnd, Window window, unsigned int state, INPU
         return;
     }
 
+    if (window != root_window)
+    {
+        pt.x = input->u.mi.dx;
+        pt.y = input->u.mi.dy;
+    }
+    else pt = root_to_virtual_screen( input->u.mi.dx, input->u.mi.dy );
+
     if (!(data = get_win_data( hwnd ))) return;
 
     if (window == data->whole_window)
     {
-        input->u.mi.dx += data->whole_rect.left - data->client_rect.left;
-        input->u.mi.dy += data->whole_rect.top - data->client_rect.top;
+        pt.x += data->whole_rect.left - data->client_rect.left;
+        pt.y += data->whole_rect.top - data->client_rect.top;
     }
-    if (window == root_window)
-    {
-        input->u.mi.dx += virtual_screen_rect.left;
-        input->u.mi.dy += virtual_screen_rect.top;
-    }
-    pt.x = input->u.mi.dx;
-    pt.y = input->u.mi.dy;
+
     if (GetWindowLongW( data->hwnd, GWL_EXSTYLE ) & WS_EX_LAYOUTRTL)
         pt.x = data->client_rect.right - data->client_rect.left - 1 - pt.x;
     MapWindowPoints( hwnd, 0, &pt, 1 );
@@ -623,7 +626,8 @@ static XcursorImage *create_xcursor_frame( HDC hdc, const ICONINFOEXW *iinfo, HA
 {
     XcursorImage *image, *ret = NULL;
     DWORD delay_jiffies, num_steps;
-    int x, y, i, has_alpha = FALSE;
+    int x, y, i;
+    BOOL has_alpha = FALSE;
     XcursorPixel *ptr;
 
     image = pXcursorImageCreate( width, height );
@@ -1137,7 +1141,8 @@ static Cursor create_xlib_color_cursor( HDC hdc, const ICONINFOEXW *icon, int wi
     struct gdi_image_bits bits;
     unsigned int *color_bits = NULL, *ptr;
     unsigned char *mask_bits = NULL, *xor_bits = NULL;
-    int i, x, y, has_alpha = 0;
+    int i, x, y;
+    BOOL has_alpha = FALSE;
     int rfg, gfg, bfg, rbg, gbg, bbg, fgBits, bgBits;
     unsigned int width_bytes = (width + 31) / 32 * 4;
 
@@ -1342,9 +1347,9 @@ void CDECL X11DRV_SetCursor( HCURSOR handle )
 BOOL CDECL X11DRV_SetCursorPos( INT x, INT y )
 {
     struct x11drv_thread_data *data = x11drv_init_thread_data();
+    POINT pos = virtual_screen_to_root( x, y );
 
-    XWarpPointer( data->display, root_window, root_window, 0, 0, 0, 0,
-                  x - virtual_screen_rect.left, y - virtual_screen_rect.top );
+    XWarpPointer( data->display, root_window, root_window, 0, 0, 0, 0, pos.x, pos.y );
     data->warp_serial = NextRequest( data->display );
     XNoOp( data->display );
     XFlush( data->display ); /* avoids bad mouse lag in games that do their own mouse warping */
@@ -1367,8 +1372,7 @@ BOOL CDECL X11DRV_GetCursorPos(LPPOINT pos)
     if (ret)
     {
         POINT old = *pos;
-        pos->x = winX + virtual_screen_rect.left;
-        pos->y = winY + virtual_screen_rect.top;
+        *pos = root_to_virtual_screen( winX, winY );
         TRACE( "pointer at (%d,%d) server pos %d,%d\n", pos->x, pos->y, old.x, old.y );
     }
     return ret;
@@ -1379,15 +1383,17 @@ BOOL CDECL X11DRV_GetCursorPos(LPPOINT pos)
  */
 BOOL CDECL X11DRV_ClipCursor( LPCRECT clip )
 {
-    if (!clip) clip = &virtual_screen_rect;
+    RECT virtual_rect = get_virtual_screen_rect();
+
+    if (!clip) clip = &virtual_rect;
 
     if (grab_pointer)
     {
         HWND foreground = GetForegroundWindow();
 
         /* we are clipping if the clip rectangle is smaller than the screen */
-        if (clip->left > virtual_screen_rect.left || clip->right < virtual_screen_rect.right ||
-            clip->top > virtual_screen_rect.top || clip->bottom < virtual_screen_rect.bottom)
+        if (clip->left > virtual_rect.left || clip->right < virtual_rect.right ||
+            clip->top > virtual_rect.top || clip->bottom < virtual_rect.bottom)
         {
             DWORD tid, pid;
 
@@ -1422,7 +1428,8 @@ void move_resize_window( HWND hwnd, int dir )
 {
     Display *display = thread_display();
     DWORD pt;
-    int x, y, rootX, rootY, button = 0;
+    POINT pos;
+    int button = 0;
     XEvent xev;
     Window win, root, child;
     unsigned int xstate;
@@ -1430,14 +1437,13 @@ void move_resize_window( HWND hwnd, int dir )
     if (!(win = X11DRV_get_whole_window( hwnd ))) return;
 
     pt = GetMessagePos();
-    x = (short)LOWORD( pt );
-    y = (short)HIWORD( pt );
+    pos = virtual_screen_to_root( (short)LOWORD( pt ), (short)HIWORD( pt ) );
 
     if (GetKeyState( VK_LBUTTON ) & 0x8000) button = 1;
     else if (GetKeyState( VK_MBUTTON ) & 0x8000) button = 2;
     else if (GetKeyState( VK_RBUTTON ) & 0x8000) button = 3;
 
-    TRACE( "hwnd %p/%lx, x %d, y %d, dir %d, button %d\n", hwnd, win, x, y, dir, button );
+    TRACE( "hwnd %p/%lx, x %d, y %d, dir %d, button %d\n", hwnd, win, pos.x, pos.y, dir, button );
 
     xev.xclient.type = ClientMessage;
     xev.xclient.window = win;
@@ -1446,8 +1452,8 @@ void move_resize_window( HWND hwnd, int dir )
     xev.xclient.display = display;
     xev.xclient.send_event = True;
     xev.xclient.format = 32;
-    xev.xclient.data.l[0] = x - virtual_screen_rect.left; /* x coord */
-    xev.xclient.data.l[1] = y - virtual_screen_rect.top;  /* y coord */
+    xev.xclient.data.l[0] = pos.x; /* x coord */
+    xev.xclient.data.l[1] = pos.y; /* y coord */
     xev.xclient.data.l[2] = dir; /* direction */
     xev.xclient.data.l[3] = button; /* button */
     xev.xclient.data.l[4] = 0; /* unused */
@@ -1467,15 +1473,17 @@ void move_resize_window( HWND hwnd, int dir )
     {
         MSG msg;
         INPUT input;
+        int x, y, rootX, rootY;
 
         if (!XQueryPointer( display, root_window, &root, &child, &rootX, &rootY, &x, &y, &xstate )) break;
 
         if (!(xstate & (Button1Mask << (button - 1))))
         {
             /* fake a button release event */
+            pos = root_to_virtual_screen( x, y );
             input.type = INPUT_MOUSE;
-            input.u.mi.dx          = x + virtual_screen_rect.left;
-            input.u.mi.dy          = y + virtual_screen_rect.top;
+            input.u.mi.dx          = pos.x;
+            input.u.mi.dy          = pos.y;
             input.u.mi.mouseData   = button_up_data[button - 1];
             input.u.mi.dwFlags     = button_up_flags[button - 1] | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
             input.u.mi.time        = GetTickCount();
@@ -1611,6 +1619,7 @@ static void X11DRV_RawMotion( XGenericEventCookie *xev )
 {
     XIRawEvent *event = xev->data;
     const double *values = event->valuators.values;
+    RECT virtual_rect;
     INPUT input;
     int i, j;
     double dx = 0, dy = 0;
@@ -1627,6 +1636,7 @@ static void X11DRV_RawMotion( XGenericEventCookie *xev )
     input.u.mi.dx          = 0;
     input.u.mi.dy          = 0;
 
+    virtual_rect = get_virtual_screen_rect();
     for (i = 0; i < thread_data->xi2_device_count; ++i)
     {
         if (devices[i].deviceid != event->deviceid) continue;
@@ -1643,7 +1653,7 @@ static void X11DRV_RawMotion( XGenericEventCookie *xev )
                 {
                     input.u.mi.dx = dx = val;
                     if (class->min < class->max)
-                        input.u.mi.dx = val * (virtual_screen_rect.right - virtual_screen_rect.left)
+                        input.u.mi.dx = val * (virtual_rect.right - virtual_rect.left)
                                             / (class->max - class->min);
                 }
                 else if (class->label == x11drv_atom( Rel_Y ) ||
@@ -1651,7 +1661,7 @@ static void X11DRV_RawMotion( XGenericEventCookie *xev )
                 {
                     input.u.mi.dy = dy = val;
                     if (class->min < class->max)
-                        input.u.mi.dy = val * (virtual_screen_rect.bottom - virtual_screen_rect.top)
+                        input.u.mi.dy = val * (virtual_rect.bottom - virtual_rect.top)
                                             / (class->max - class->min);
                 }
             }

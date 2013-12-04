@@ -1172,7 +1172,7 @@ static void MENU_PopupMenuCalcSize( LPPOPUPMENU lppop )
     MENUITEM *lpitem;
     HDC hdc;
     UINT start, i;
-    int textandbmp = FALSE;
+    BOOL textandbmp = FALSE;
     int orgX, orgY, maxX, maxTab, maxTabWidth, maxHeight;
 
     lppop->Width = lppop->Height = 0;
@@ -1591,7 +1591,7 @@ static void MENU_DrawMenuItem( HWND hwnd, HMENU hmenu, HWND hwndOwner, HDC hdc, 
         HBITMAP bm;
         INT y = rect.top + rect.bottom;
         RECT rc = rect;
-        int checked = FALSE;
+        BOOL checked = FALSE;
         UINT check_bitmap_width = GetSystemMetrics( SM_CXMENUCHECK );
         UINT check_bitmap_height = GetSystemMetrics( SM_CYMENUCHECK );
         /* Draw the check mark
@@ -1801,11 +1801,9 @@ static void MENU_DrawPopupMenu( HWND hwnd, HDC hdc, HMENU hmenu )
  * Paint a menu bar. Returns the height of the menu bar.
  * called from [windows/nonclient.c]
  */
-UINT MENU_DrawMenuBar( HDC hDC, LPRECT lprect, HWND hwnd,
-                         BOOL suppress_draw)
+UINT MENU_DrawMenuBar( HDC hDC, LPRECT lprect, HWND hwnd )
 {
     LPPOPUPMENU lppop;
-    HFONT hfontOld = 0;
     HMENU hMenu = GetMenu(hwnd);
 
     lppop = MENU_GetMenu( hMenu );
@@ -1814,20 +1812,7 @@ UINT MENU_DrawMenuBar( HDC hDC, LPRECT lprect, HWND hwnd,
         return GetSystemMetrics(SM_CYMENU);
     }
 
-    if (suppress_draw)
-    {
-	hfontOld = SelectObject( hDC, get_menu_font(FALSE));
-
-	if (lppop->Height == 0)
-		MENU_MenuBarCalcSize(hDC, lprect, lppop, hwnd);
-
-	lprect->bottom = lprect->top + lppop->Height;
-
-        if (hfontOld) SelectObject( hDC, hfontOld);
-	return lppop->Height;
-    }
-    else
-        return DrawMenuBarTemp(hwnd, hDC, lprect, hMenu, NULL);
+    return DrawMenuBarTemp(hwnd, hDC, lprect, hMenu, NULL);
 }
 
 

@@ -404,6 +404,38 @@ struct token_groups
 
 };
 
+enum select_op
+{
+    SELECT_NONE,
+    SELECT_WAIT,
+    SELECT_WAIT_ALL,
+    SELECT_SIGNAL_AND_WAIT,
+    SELECT_KEYED_EVENT_WAIT,
+    SELECT_KEYED_EVENT_RELEASE
+};
+
+typedef union
+{
+    enum select_op op;
+    struct
+    {
+        enum select_op  op;
+        obj_handle_t    handles[MAXIMUM_WAIT_OBJECTS];
+    } wait;
+    struct
+    {
+        enum select_op  op;
+        obj_handle_t    wait;
+        obj_handle_t    signal;
+    } signal_and_wait;
+    struct
+    {
+        enum select_op  op;
+        obj_handle_t    handle;
+        client_ptr_t    key;
+    } keyed_event;
+} select_op_t;
+
 enum apc_type
 {
     APC_NONE,
@@ -635,9 +667,11 @@ struct new_process_request
     unsigned int process_attr;
     unsigned int thread_access;
     unsigned int thread_attr;
+    cpu_type_t   cpu;
     data_size_t  info_size;
     /* VARARG(info,startup_info,info_size); */
     /* VARARG(env,unicode_str); */
+    char __pad_52[4];
 };
 struct new_process_reply
 {
@@ -1052,11 +1086,11 @@ struct select_request
     struct request_header __header;
     int          flags;
     client_ptr_t cookie;
-    obj_handle_t signal;
-    obj_handle_t prev_apc;
     timeout_t    timeout;
+    obj_handle_t prev_apc;
     /* VARARG(result,apc_result); */
-    /* VARARG(handles,handles); */
+    /* VARARG(data,select_op); */
+    char __pad_36[4];
 };
 struct select_reply
 {
@@ -1066,9 +1100,8 @@ struct select_reply
     obj_handle_t apc_handle;
     char __pad_60[4];
 };
-#define SELECT_ALL           1
-#define SELECT_ALERTABLE     2
-#define SELECT_INTERRUPTIBLE 4
+#define SELECT_ALERTABLE     1
+#define SELECT_INTERRUPTIBLE 2
 
 
 
@@ -1103,6 +1136,17 @@ struct event_op_reply
 };
 enum event_op { PULSE_EVENT, SET_EVENT, RESET_EVENT };
 
+struct query_event_request
+{
+    struct request_header __header;
+    obj_handle_t  handle;
+};
+struct query_event_reply
+{
+    struct reply_header __header;
+    int          manual_reset;
+    int          state;
+};
 
 
 struct open_event_request
@@ -1114,6 +1158,39 @@ struct open_event_request
     /* VARARG(name,unicode_str); */
 };
 struct open_event_reply
+{
+    struct reply_header __header;
+    obj_handle_t handle;
+    char __pad_12[4];
+};
+
+
+
+struct create_keyed_event_request
+{
+    struct request_header __header;
+    unsigned int access;
+    unsigned int attributes;
+    /* VARARG(objattr,object_attributes); */
+    char __pad_20[4];
+};
+struct create_keyed_event_reply
+{
+    struct reply_header __header;
+    obj_handle_t handle;
+    char __pad_12[4];
+};
+
+
+struct open_keyed_event_request
+{
+    struct request_header __header;
+    unsigned int access;
+    unsigned int attributes;
+    obj_handle_t rootdir;
+    /* VARARG(name,unicode_str); */
+};
+struct open_keyed_event_reply
 {
     struct reply_header __header;
     obj_handle_t handle;
@@ -1449,6 +1526,22 @@ struct get_socket_event_reply
     unsigned int pmask;
     unsigned int state;
     /* VARARG(errors,ints); */
+    char __pad_20[4];
+};
+
+
+
+struct get_socket_info_request
+{
+    struct request_header __header;
+    obj_handle_t handle;
+};
+struct get_socket_info_reply
+{
+    struct reply_header __header;
+    int family;
+    int type;
+    int protocol;
     char __pad_20[4];
 };
 
@@ -2954,6 +3047,8 @@ struct get_serial_info_request
 {
     struct request_header __header;
     obj_handle_t handle;
+    int          flags;
+    char __pad_20[4];
 };
 struct get_serial_info_reply
 {
@@ -2964,6 +3059,8 @@ struct get_serial_info_reply
     unsigned int writeconst;
     unsigned int writemult;
     unsigned int eventmask;
+    unsigned int cookie;
+    unsigned int pending_write;
 };
 
 
@@ -2987,6 +3084,8 @@ struct set_serial_info_reply
 };
 #define SERIALINFO_SET_TIMEOUTS  0x01
 #define SERIALINFO_SET_MASK      0x02
+#define SERIALINFO_PENDING_WRITE 0x04
+#define SERIALINFO_PENDING_WAIT  0x08
 
 
 
@@ -3700,6 +3799,22 @@ struct open_desktop_request
     char __pad_28[4];
 };
 struct open_desktop_reply
+{
+    struct reply_header __header;
+    obj_handle_t handle;
+    char __pad_12[4];
+};
+
+
+
+struct open_input_desktop_request
+{
+    struct request_header __header;
+    unsigned int flags;
+    unsigned int access;
+    unsigned int attributes;
+};
+struct open_input_desktop_reply
 {
     struct reply_header __header;
     obj_handle_t handle;
@@ -4753,8 +4868,9 @@ struct add_completion_request
     obj_handle_t  handle;
     apc_param_t   ckey;
     apc_param_t   cvalue;
-    unsigned int  information;
+    apc_param_t   information;
     unsigned int  status;
+    char __pad_44[4];
 };
 struct add_completion_reply
 {
@@ -4773,8 +4889,9 @@ struct remove_completion_reply
     struct reply_header __header;
     apc_param_t   ckey;
     apc_param_t   cvalue;
-    unsigned int  information;
+    apc_param_t   information;
     unsigned int  status;
+    char __pad_36[4];
 };
 
 
@@ -4813,8 +4930,9 @@ struct add_fd_completion_request
     struct request_header __header;
     obj_handle_t   handle;
     apc_param_t    cvalue;
+    apc_param_t    information;
     unsigned int   status;
-    unsigned int   information;
+    char __pad_36[4];
 };
 struct add_fd_completion_reply
 {
@@ -4981,7 +5099,10 @@ enum request
     REQ_select,
     REQ_create_event,
     REQ_event_op,
+    REQ_query_event,
     REQ_open_event,
+    REQ_create_keyed_event,
+    REQ_open_keyed_event,
     REQ_create_mutex,
     REQ_release_mutex,
     REQ_open_mutex,
@@ -5001,6 +5122,7 @@ enum request
     REQ_accept_into_socket,
     REQ_set_socket_event,
     REQ_get_socket_event,
+    REQ_get_socket_info,
     REQ_enable_socket_event,
     REQ_set_socket_deferred,
     REQ_alloc_console,
@@ -5130,6 +5252,7 @@ enum request
     REQ_enum_winstation,
     REQ_create_desktop,
     REQ_open_desktop,
+    REQ_open_input_desktop,
     REQ_close_desktop,
     REQ_get_thread_desktop,
     REQ_set_thread_desktop,
@@ -5237,7 +5360,10 @@ union generic_request
     struct select_request select_request;
     struct create_event_request create_event_request;
     struct event_op_request event_op_request;
+    struct query_event_request query_event_request;
     struct open_event_request open_event_request;
+    struct create_keyed_event_request create_keyed_event_request;
+    struct open_keyed_event_request open_keyed_event_request;
     struct create_mutex_request create_mutex_request;
     struct release_mutex_request release_mutex_request;
     struct open_mutex_request open_mutex_request;
@@ -5257,6 +5383,7 @@ union generic_request
     struct accept_into_socket_request accept_into_socket_request;
     struct set_socket_event_request set_socket_event_request;
     struct get_socket_event_request get_socket_event_request;
+    struct get_socket_info_request get_socket_info_request;
     struct enable_socket_event_request enable_socket_event_request;
     struct set_socket_deferred_request set_socket_deferred_request;
     struct alloc_console_request alloc_console_request;
@@ -5386,6 +5513,7 @@ union generic_request
     struct enum_winstation_request enum_winstation_request;
     struct create_desktop_request create_desktop_request;
     struct open_desktop_request open_desktop_request;
+    struct open_input_desktop_request open_input_desktop_request;
     struct close_desktop_request close_desktop_request;
     struct get_thread_desktop_request get_thread_desktop_request;
     struct set_thread_desktop_request set_thread_desktop_request;
@@ -5491,7 +5619,10 @@ union generic_reply
     struct select_reply select_reply;
     struct create_event_reply create_event_reply;
     struct event_op_reply event_op_reply;
+    struct query_event_reply query_event_reply;
     struct open_event_reply open_event_reply;
+    struct create_keyed_event_reply create_keyed_event_reply;
+    struct open_keyed_event_reply open_keyed_event_reply;
     struct create_mutex_reply create_mutex_reply;
     struct release_mutex_reply release_mutex_reply;
     struct open_mutex_reply open_mutex_reply;
@@ -5511,6 +5642,7 @@ union generic_reply
     struct accept_into_socket_reply accept_into_socket_reply;
     struct set_socket_event_reply set_socket_event_reply;
     struct get_socket_event_reply get_socket_event_reply;
+    struct get_socket_info_reply get_socket_info_reply;
     struct enable_socket_event_reply enable_socket_event_reply;
     struct set_socket_deferred_reply set_socket_deferred_reply;
     struct alloc_console_reply alloc_console_reply;
@@ -5640,6 +5772,7 @@ union generic_reply
     struct enum_winstation_reply enum_winstation_reply;
     struct create_desktop_reply create_desktop_reply;
     struct open_desktop_reply open_desktop_reply;
+    struct open_input_desktop_reply open_input_desktop_reply;
     struct close_desktop_reply close_desktop_reply;
     struct get_thread_desktop_reply get_thread_desktop_reply;
     struct set_thread_desktop_reply set_thread_desktop_reply;
@@ -5715,6 +5848,6 @@ union generic_reply
     struct set_suspend_context_reply set_suspend_context_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 440
+#define SERVER_PROTOCOL_VERSION 453
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */

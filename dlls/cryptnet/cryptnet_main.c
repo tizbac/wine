@@ -464,7 +464,6 @@ static BOOL CRYPT_GetObjectFromFile(HANDLE hFile, PCRYPT_BLOB_ARRAY pObject)
             blob.pbData = CryptMemAlloc(size.u.LowPart);
             if (blob.pbData)
             {
-                blob.cbData = size.u.LowPart;
                 ret = ReadFile(hFile, blob.pbData, size.u.LowPart, &blob.cbData,
                  NULL);
                 if (ret)
@@ -1812,14 +1811,14 @@ typedef struct _CERT_REVOCATION_PARA_NO_EXTRA_FIELDS {
     HCERTSTORE               *rgCertStore;
     HCERTSTORE                hCrlStore;
     LPFILETIME                pftTimeToUse;
-} CERT_REVOCATION_PARA_NO_EXTRA_FIELDS, *PCERT_REVOCATION_PARA_NO_EXTRA_FIELDS;
+} CERT_REVOCATION_PARA_NO_EXTRA_FIELDS;
 
 typedef struct _OLD_CERT_REVOCATION_STATUS {
     DWORD cbSize;
     DWORD dwIndex;
     DWORD dwError;
     DWORD dwReason;
-} OLD_CERT_REVOCATION_STATUS, *POLD_CERT_REVOCATION_STATUS;
+} OLD_CERT_REVOCATION_STATUS;
 
 /***********************************************************************
  *    CertDllVerifyRevocation (CRYPTNET.@)

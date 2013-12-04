@@ -36,6 +36,9 @@
 #ifdef HAVE_SYS_PARAM_H
 # include <sys/param.h>
 #endif
+#ifdef HAVE_SYS_SYSCALL_H
+# include <sys/syscall.h>
+#endif
 #ifdef HAVE_SYS_TIME_H
 # include <sys/time.h>
 #endif
@@ -66,6 +69,9 @@
 #ifdef HAVE_SYS_STATFS_H
 # include <sys/statfs.h>
 #endif
+#ifdef HAVE_TERMIOS_H
+#include <termios.h>
+#endif
 #ifdef HAVE_VALGRIND_MEMCHECK_H
 # include <valgrind/memcheck.h>
 #endif
@@ -92,6 +98,9 @@ mode_t FILE_umask = 0;
 #define SECSPERDAY         86400
 #define SECS_1601_TO_1970  ((369 * 365 + 89) * (ULONGLONG)SECSPERDAY)
 
+#define FILE_WRITE_TO_END_OF_FILE      ((LONGLONG)-1)
+#define FILE_USE_FILE_POINTER_POSITION ((LONGLONG)-2)
+
 static const WCHAR ntfsW[] = {'N','T','F','S'};
 
 /**************************************************************************
@@ -106,7 +115,7 @@ static NTSTATUS FILE_CreateFile( PHANDLE handle, ACCESS_MASK access, POBJECT_ATT
                                  ULONG options, PVOID ea_buffer, ULONG ea_length )
 {
     ANSI_STRING unix_name;
-    int created = FALSE;
+    BOOL created = FALSE;
 
     TRACE("handle=%p access=%08x name=%s objattr=%08x root=%p sec=%p io=%p alloc_size=%p "
           "attr=%08x sharing=%08x disp=%d options=%08x ea=%p.0x%08x\n",
@@ -577,14 +586,14 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
                            PIO_STATUS_BLOCK io_status, void* buffer, ULONG length,
                            PLARGE_INTEGER offset, PULONG key)
 {
-    int result, unix_handle, needs_close, timeout_init_done = 0;
+    int result, unix_handle, needs_close;
     unsigned int options;
     struct io_timeouts timeouts;
     NTSTATUS status;
     ULONG total = 0;
     enum server_fd_type type;
     ULONG_PTR cvalue = apc ? 0 : (ULONG_PTR)apc_user;
-    BOOL send_completion = FALSE;
+    BOOL send_completion = FALSE, async_read, timeout_init_done = FALSE;
 
     TRACE("(%p,%p,%p,%p,%p,%p,0x%08x,%p,%p),partial stub!\n",
           hFile,hEvent,apc,apc_user,io_status,buffer,length,offset,key);
@@ -595,30 +604,49 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
                                  &needs_close, &type, &options );
     if (status) return status;
 
+    async_read = !(options & (FILE_SYNCHRONOUS_IO_ALERT | FILE_SYNCHRONOUS_IO_NONALERT));
+
     if (!virtual_check_buffer_for_write( buffer, length ))
     {
         status = STATUS_ACCESS_VIOLATION;
         goto done;
     }
 
-    if (type == FD_TYPE_FILE && offset && offset->QuadPart != (LONGLONG)-2 /* FILE_USE_FILE_POINTER_POSITION */ )
+    if (type == FD_TYPE_FILE)
     {
-        /* async I/O doesn't make sense on regular files */
-        while ((result = pread( unix_handle, buffer, length, offset->QuadPart )) == -1)
+        if (async_read && (!offset || offset->QuadPart < 0))
         {
-            if (errno != EINTR)
-            {
-                status = FILE_GetNtStatus();
-                goto done;
-            }
+            status = STATUS_INVALID_PARAMETER;
+            goto done;
         }
-        if (options & (FILE_SYNCHRONOUS_IO_ALERT | FILE_SYNCHRONOUS_IO_NONALERT))
-            /* update file pointer position */
-            lseek( unix_handle, offset->QuadPart + result, SEEK_SET );
 
-        total = result;
-        status = total ? STATUS_SUCCESS : STATUS_END_OF_FILE;
-        goto done;
+        if (offset && offset->QuadPart != FILE_USE_FILE_POINTER_POSITION)
+        {
+            /* async I/O doesn't make sense on regular files */
+            while ((result = pread( unix_handle, buffer, length, offset->QuadPart )) == -1)
+            {
+                if (errno != EINTR)
+                {
+                    status = FILE_GetNtStatus();
+                    goto done;
+                }
+            }
+            if (!async_read)
+                /* update file pointer position */
+                lseek( unix_handle, offset->QuadPart + result, SEEK_SET );
+
+            total = result;
+            status = (total || !length) ? STATUS_SUCCESS : STATUS_END_OF_FILE;
+            goto done;
+        }
+    }
+    else if (type == FD_TYPE_SERIAL)
+    {
+        if (async_read && (!offset || offset->QuadPart < 0))
+        {
+            status = STATUS_INVALID_PARAMETER;
+            goto done;
+        }
     }
 
     for (;;)
@@ -637,7 +665,7 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
                 {
                 case FD_TYPE_FILE:
                 case FD_TYPE_CHAR:
-                    status = STATUS_END_OF_FILE;
+                    status = length ? STATUS_END_OF_FILE : STATUS_SUCCESS;
                     goto done;
                 case FD_TYPE_SERIAL:
                     break;
@@ -655,7 +683,7 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
             goto done;
         }
 
-        if (!(options & (FILE_SYNCHRONOUS_IO_ALERT | FILE_SYNCHRONOUS_IO_NONALERT)))
+        if (async_read)
         {
             async_fileio_read *fileio;
             BOOL avail_mode;
@@ -705,7 +733,7 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
 
             if (!timeout_init_done)
             {
-                timeout_init_done = 1;
+                timeout_init_done = TRUE;
                 if ((status = get_io_timeouts( hFile, type, length, TRUE, &timeouts )))
                     goto err;
                 if (hEvent) NtResetEvent( hEvent, NULL );
@@ -737,14 +765,14 @@ done:
 
 err:
     if (needs_close) close( unix_handle );
-    if (status == STATUS_SUCCESS)
+    if (status == STATUS_SUCCESS || (status == STATUS_END_OF_FILE && !async_read))
     {
         io_status->u.Status = status;
         io_status->Information = total;
         TRACE("= SUCCESS (%u)\n", total);
         if (hEvent) NtSetEvent( hEvent, NULL );
-        if (apc) NtQueueApcThread( GetCurrentThread(), (PNTAPCFUNC)apc,
-                                   (ULONG_PTR)apc_user, (ULONG_PTR)io_status, 0 );
+        if (apc && !status) NtQueueApcThread( GetCurrentThread(), (PNTAPCFUNC)apc,
+                                              (ULONG_PTR)apc_user, (ULONG_PTR)io_status, 0 );
     }
     else
     {
@@ -794,7 +822,7 @@ NTSTATUS WINAPI NtReadFileScatter( HANDLE file, HANDLE event, PIO_APC_ROUTINE ap
 
     while (length)
     {
-        if (offset && offset->QuadPart != (LONGLONG)-2 /* FILE_USE_FILE_POINTER_POSITION */)
+        if (offset && offset->QuadPart != FILE_USE_FILE_POINTER_POSITION)
             result = pread( unix_handle, (char *)segments->Buffer + pos,
                             page_size - pos, offset->QuadPart + total );
         else
@@ -895,6 +923,20 @@ static NTSTATUS FILE_AsyncWriteService(void *user, IO_STATUS_BLOCK *iosb, NTSTAT
     return status;
 }
 
+static NTSTATUS set_pending_write( HANDLE device )
+{
+    NTSTATUS status;
+
+    SERVER_START_REQ( set_serial_info )
+    {
+        req->handle = wine_server_obj_handle( device );
+        req->flags  = SERIALINFO_PENDING_WRITE;
+        status = wine_server_call( req );
+    }
+    SERVER_END_REQ;
+    return status;
+}
+
 /******************************************************************************
  *  NtWriteFile					[NTDLL.@]
  *  ZwWriteFile					[NTDLL.@]
@@ -923,14 +965,15 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
                             const void* buffer, ULONG length,
                             PLARGE_INTEGER offset, PULONG key)
 {
-    int result, unix_handle, needs_close, timeout_init_done = 0;
+    int result, unix_handle, needs_close;
     unsigned int options;
     struct io_timeouts timeouts;
     NTSTATUS status;
     ULONG total = 0;
     enum server_fd_type type;
     ULONG_PTR cvalue = apc ? 0 : (ULONG_PTR)apc_user;
-    BOOL send_completion = FALSE;
+    BOOL send_completion = FALSE, async_write, append_write = FALSE, timeout_init_done = FALSE;
+    LARGE_INTEGER offset_eof;
 
     TRACE("(%p,%p,%p,%p,%p,%p,0x%08x,%p,%p)!\n",
           hFile,hEvent,apc,apc_user,io_status,buffer,length,offset,key);
@@ -939,6 +982,12 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
 
     status = server_get_unix_fd( hFile, FILE_WRITE_DATA, &unix_handle,
                                  &needs_close, &type, &options );
+    if (status == STATUS_ACCESS_DENIED)
+    {
+        status = server_get_unix_fd( hFile, FILE_APPEND_DATA, &unix_handle,
+                                     &needs_close, &type, &options );
+        append_write = TRUE;
+    }
     if (status) return status;
 
     if (!virtual_check_buffer_for_read( buffer, length ))
@@ -947,26 +996,72 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
         goto done;
     }
 
-    if (type == FD_TYPE_FILE && offset && offset->QuadPart != (LONGLONG)-2 /* FILE_USE_FILE_POINTER_POSITION */ )
+    async_write = !(options & (FILE_SYNCHRONOUS_IO_ALERT | FILE_SYNCHRONOUS_IO_NONALERT));
+
+    if (type == FD_TYPE_FILE)
     {
-        /* async I/O doesn't make sense on regular files */
-        while ((result = pwrite( unix_handle, buffer, length, offset->QuadPart )) == -1)
+        if (async_write &&
+            (!offset || (offset->QuadPart < 0 && offset->QuadPart != FILE_WRITE_TO_END_OF_FILE)))
         {
-            if (errno != EINTR)
-            {
-                if (errno == EFAULT) status = STATUS_INVALID_USER_BUFFER;
-                else status = FILE_GetNtStatus();
-                goto done;
-            }
+            status = STATUS_INVALID_PARAMETER;
+            goto done;
         }
 
-        if (options & (FILE_SYNCHRONOUS_IO_ALERT | FILE_SYNCHRONOUS_IO_NONALERT))
-            /* update file pointer position */
-            lseek( unix_handle, offset->QuadPart + result, SEEK_SET );
+        if (append_write)
+        {
+            offset_eof.QuadPart = FILE_WRITE_TO_END_OF_FILE;
+            offset = &offset_eof;
+        }
 
-        total = result;
-        status = STATUS_SUCCESS;
-        goto done;
+        if (offset && offset->QuadPart != FILE_USE_FILE_POINTER_POSITION)
+        {
+            off_t off = offset->QuadPart;
+
+            if (offset->QuadPart == FILE_WRITE_TO_END_OF_FILE)
+            {
+                struct stat st;
+
+                if (fstat( unix_handle, &st ) == -1)
+                {
+                    status = FILE_GetNtStatus();
+                    goto done;
+                }
+                off = st.st_size;
+            }
+            else if (offset->QuadPart < 0)
+            {
+                status = STATUS_INVALID_PARAMETER;
+                goto done;
+            }
+
+            /* async I/O doesn't make sense on regular files */
+            while ((result = pwrite( unix_handle, buffer, length, off )) == -1)
+            {
+                if (errno != EINTR)
+                {
+                    if (errno == EFAULT) status = STATUS_INVALID_USER_BUFFER;
+                    else status = FILE_GetNtStatus();
+                    goto done;
+                }
+            }
+
+            if (!async_write)
+                /* update file pointer position */
+                lseek( unix_handle, off + result, SEEK_SET );
+
+            total = result;
+            status = STATUS_SUCCESS;
+            goto done;
+        }
+    }
+    else if (type == FD_TYPE_SERIAL)
+    {
+        if (async_write &&
+            (!offset || (offset->QuadPart < 0 && offset->QuadPart != FILE_WRITE_TO_END_OF_FILE)))
+        {
+            status = STATUS_INVALID_PARAMETER;
+            goto done;
+        }
     }
 
     for (;;)
@@ -998,7 +1093,7 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
             goto done;
         }
 
-        if (!(options & (FILE_SYNCHRONOUS_IO_ALERT | FILE_SYNCHRONOUS_IO_NONALERT)))
+        if (async_write)
         {
             async_fileio_write *fileio;
 
@@ -1038,7 +1133,7 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
 
             if (!timeout_init_done)
             {
-                timeout_init_done = 1;
+                timeout_init_done = TRUE;
                 if ((status = get_io_timeouts( hFile, type, length, FALSE, &timeouts )))
                     goto err;
                 if (hEvent) NtResetEvent( hEvent, NULL );
@@ -1068,6 +1163,10 @@ done:
 
 err:
     if (needs_close) close( unix_handle );
+
+    if (type == FD_TYPE_SERIAL && (status == STATUS_SUCCESS || status == STATUS_PENDING))
+        set_pending_write( hFile );
+
     if (status == STATUS_SUCCESS)
     {
         io_status->u.Status = status;
@@ -1125,7 +1224,7 @@ NTSTATUS WINAPI NtWriteFileGather( HANDLE file, HANDLE event, PIO_APC_ROUTINE ap
 
     while (length)
     {
-        if (offset && offset->QuadPart != (LONGLONG)-2 /* FILE_USE_FILE_POINTER_POSITION */)
+        if (offset && offset->QuadPart != FILE_USE_FILE_POINTER_POSITION)
             result = pwrite( unix_handle, (char *)segments->Buffer + pos,
                              page_size - pos, offset->QuadPart + total );
         else
@@ -1224,7 +1323,7 @@ static NTSTATUS ioctl_completion( void *arg, IO_STATUS_BLOCK *io, NTSTATUS statu
     return status;
 }
 
-/* do a ioctl call through the server */
+/* do an ioctl call through the server */
 static NTSTATUS server_ioctl_file( HANDLE handle, HANDLE event,
                                    PIO_APC_ROUTINE apc, PVOID apc_context,
                                    IO_STATUS_BLOCK *io, ULONG code,
@@ -1557,6 +1656,15 @@ NTSTATUS WINAPI NtSetVolumeInformationFile(
 	FileHandle,IoStatusBlock,FsInformation,Length,FsInformationClass);
 	return 0;
 }
+
+#if defined(__ANDROID__) && !defined(HAVE_FUTIMENS)
+static int futimens( int fd, const struct timespec spec[2] )
+{
+    return syscall( __NR_utimensat, fd, NULL, spec, 0 );
+}
+#define UTIME_OMIT ((1 << 30) - 2)
+#define HAVE_FUTIMENS
+#endif  /* __ANDROID__ */
 
 static NTSTATUS set_file_times( int fd, const LARGE_INTEGER *mtime, const LARGE_INTEGER *atime )
 {
@@ -2390,13 +2498,13 @@ static inline void get_device_info_fstatfs( FILE_FS_DEVICE_INFORMATION *info, co
 }
 #endif
 
-static inline int is_device_placeholder( int fd )
+static inline BOOL is_device_placeholder( int fd )
 {
     static const char wine_placeholder[] = "Wine device placeholder";
     char buffer[sizeof(wine_placeholder)-1];
 
     if (pread( fd, buffer, sizeof(wine_placeholder) - 1, 0 ) != sizeof(wine_placeholder) - 1)
-        return 0;
+        return FALSE;
     return !memcmp( buffer, wine_placeholder, sizeof(wine_placeholder) - 1 );
 }
 
@@ -2749,19 +2857,32 @@ NTSTATUS WINAPI NtFlushBuffersFile( HANDLE hFile, IO_STATUS_BLOCK* IoStatusBlock
 {
     NTSTATUS ret;
     HANDLE hEvent = NULL;
+    enum server_fd_type type;
+    int fd, needs_close;
 
-    SERVER_START_REQ( flush_file )
+    ret = server_get_unix_fd( hFile, FILE_WRITE_DATA, &fd, &needs_close, &type, NULL );
+
+    if (!ret && type == FD_TYPE_SERIAL)
     {
-        req->handle = wine_server_obj_handle( hFile );
-        ret = wine_server_call( req );
-        hEvent = wine_server_ptr_handle( reply->event );
+        ret = COMM_FlushBuffersFile( fd );
     }
-    SERVER_END_REQ;
-    if (!ret && hEvent)
+    else
     {
-        ret = NtWaitForSingleObject( hEvent, FALSE, NULL );
-        NtClose( hEvent );
+        SERVER_START_REQ( flush_file )
+        {
+            req->handle = wine_server_obj_handle( hFile );
+            ret = wine_server_call( req );
+            hEvent = wine_server_ptr_handle( reply->event );
+        }
+        SERVER_END_REQ;
+        if (!ret && hEvent)
+        {
+            ret = NtWaitForSingleObject( hEvent, FALSE, NULL );
+            NtClose( hEvent );
+        }
     }
+
+    if (needs_close) close( fd );
     return ret;
 }
 

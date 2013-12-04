@@ -36,7 +36,7 @@
 #include "wine/library.h"
 
 static const char server_config_dir[] = "/.wine";        /* config dir relative to $HOME */
-static const char server_root_prefix[] = "/tmp/.wine-";  /* prefix for server root dir */
+static const char server_root_prefix[] = "/tmp/.wine";   /* prefix for server root dir */
 static const char server_dir_prefix[] = "/server-";      /* prefix for server dir */
 
 static char *bindir;
@@ -152,16 +152,16 @@ static char *get_runtime_libdir(void)
 }
 
 /* return the directory that contains the main exe at run-time */
-static char *get_runtime_bindir( const char *argv0 )
+static char *get_runtime_exedir(void)
 {
-    char *p, *bindir, *cwd;
-    int len, size;
-
 #ifdef EXE_LINK
+    char *p, *bindir;
+    int size;
+
     for (size = 256; ; size *= 2)
     {
         int ret;
-        if (!(bindir = malloc( size ))) break;
+        if (!(bindir = malloc( size ))) return NULL;
         if ((ret = readlink( EXE_LINK, bindir, size )) == -1) break;
         if (ret != size)
         {
@@ -175,6 +175,14 @@ static char *get_runtime_bindir( const char *argv0 )
     }
     free( bindir );
 #endif
+    return NULL;
+}
+
+/* return the base directory from argv0 */
+static char *get_runtime_argvdir( const char *argv0 )
+{
+    char *p, *bindir, *cwd;
+    int len, size;
 
     if (!(p = strrchr( argv0, '/' ))) return NULL;
 
@@ -212,16 +220,20 @@ static char *get_runtime_bindir( const char *argv0 )
 /* initialize the server directory value */
 static void init_server_dir( dev_t dev, ino_t ino )
 {
-    char *p;
-#ifdef HAVE_GETUID
-    const unsigned int uid = getuid();
+    char *p, *root;
+
+#ifdef __ANDROID__  /* there's no /tmp dir on Android */
+    root = build_path( config_dir, ".wineserver" );
+#elif defined(HAVE_GETUID)
+    root = xmalloc( sizeof(server_root_prefix) + 12 );
+    sprintf( root, "%s-%u", server_root_prefix, getuid() );
 #else
-    const unsigned int uid = 0;
+    root = xstrdup( server_root_prefix );
 #endif
 
-    server_dir = xmalloc( sizeof(server_root_prefix) + 32 + sizeof(server_dir_prefix) +
-                          2*sizeof(dev) + 2*sizeof(ino) );
-    sprintf( server_dir, "%s%u%s", server_root_prefix, uid, server_dir_prefix );
+    server_dir = xmalloc( strlen(root) + sizeof(server_dir_prefix) + 2*sizeof(dev) + 2*sizeof(ino) + 2 );
+    strcpy( server_dir, root );
+    strcat( server_dir, server_dir_prefix );
     p = server_dir + strlen(server_dir);
 
     if (dev != (unsigned long)dev)
@@ -233,12 +245,14 @@ static void init_server_dir( dev_t dev, ino_t ino )
         sprintf( p, "%lx%08lx", (unsigned long)((unsigned long long)ino >> 32), (unsigned long)ino );
     else
         sprintf( p, "%lx", (unsigned long)ino );
+    free( root );
 }
 
 /* retrieve the default dll dir */
-const char *get_dlldir( const char **default_dlldir )
+const char *get_dlldir( const char **default_dlldir, const char **dll_prefix )
 {
     *default_dlldir = DLLDIR;
+    *dll_prefix = "/" DLLPREFIX;
     return dlldir;
 }
 
@@ -370,19 +384,30 @@ void wine_init_argv0_path( const char *argv0 )
     if (!(basename = strrchr( argv0, '/' ))) basename = argv0;
     else basename++;
 
-    bindir = get_runtime_bindir( argv0 );
-    libdir = get_runtime_libdir();
-
+    bindir = get_runtime_exedir();
     if (bindir && !is_valid_bindir( bindir ))
     {
         build_dir = running_from_build_dir( bindir );
         free( bindir );
         bindir = NULL;
     }
+
+    libdir = get_runtime_libdir();
     if (libdir && !bindir && !build_dir)
     {
         build_dir = running_from_build_dir( libdir );
         if (!build_dir) bindir = build_path( libdir, LIB_TO_BINDIR );
+    }
+
+    if (!libdir && !bindir && !build_dir)
+    {
+        bindir = get_runtime_argvdir( argv0 );
+        if (bindir && !is_valid_bindir( bindir ))
+        {
+            build_dir = running_from_build_dir( bindir );
+            free( bindir );
+            bindir = NULL;
+        }
     }
 
     if (build_dir)

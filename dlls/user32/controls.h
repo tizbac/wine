@@ -139,7 +139,8 @@ extern ULONG_PTR set_icon_param( HICON handle, ULONG_PTR param ) DECLSPEC_HIDDEN
 struct tagCLASS;  /* opaque structure */
 struct tagWND;
 extern ATOM get_int_atom_value( LPCWSTR name ) DECLSPEC_HIDDEN;
-extern void CLASS_RegisterBuiltinClasses(void) DECLSPEC_HIDDEN;
+extern void register_builtin_classes(void) DECLSPEC_HIDDEN;
+extern void register_desktop_class(void) DECLSPEC_HIDDEN;
 extern WNDPROC get_class_winproc( struct tagCLASS *class ) DECLSPEC_HIDDEN;
 extern struct dce *get_class_dce( struct tagCLASS *class ) DECLSPEC_HIDDEN;
 extern struct dce *set_class_dce( struct tagCLASS *class, struct dce *dce ) DECLSPEC_HIDDEN;
@@ -160,8 +161,7 @@ extern UINT MENU_GetMenuBarHeight( HWND hwnd, UINT menubarWidth,
 extern BOOL MENU_SetMenu(HWND, HMENU) DECLSPEC_HIDDEN;
 extern void MENU_TrackMouseMenuBar( HWND hwnd, INT ht, POINT pt ) DECLSPEC_HIDDEN;
 extern void MENU_TrackKbdMenuBar( HWND hwnd, UINT wParam, WCHAR wChar ) DECLSPEC_HIDDEN;
-extern UINT MENU_DrawMenuBar( HDC hDC, LPRECT lprect,
-                                HWND hwnd, BOOL suppress_draw ) DECLSPEC_HIDDEN;
+extern UINT MENU_DrawMenuBar( HDC hDC, LPRECT lprect, HWND hwnd ) DECLSPEC_HIDDEN;
 extern void MENU_EndMenu(HWND) DECLSPEC_HIDDEN;
 
 /* nonclient area */

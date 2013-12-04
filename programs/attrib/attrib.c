@@ -68,7 +68,7 @@ static int __cdecl ATTRIB_wprintf(const WCHAR *format, ...)
      */
 
     if (!output_bufW) output_bufW = HeapAlloc(GetProcessHeap(), 0,
-                                              MAX_WRITECONSOLE_SIZE);
+                                              MAX_WRITECONSOLE_SIZE*sizeof(WCHAR));
     if (!output_bufW) {
         WINE_FIXME("Out of memory - could not allocate 2 x 64K buffers\n");
         return 0;
@@ -253,7 +253,7 @@ int wmain(int argc, WCHAR *argv[])
     WCHAR originalname[MAX_PATH];
     DWORD attrib_set = 0;
     DWORD attrib_clear = 0;
-    BOOL  attrib_recurse = 0;
+    BOOL  attrib_recurse = FALSE;
     BOOL  attrib_includedirs = FALSE;
     static const WCHAR help_option[] = {'/','?','\0'};
     static const WCHAR wildcardsW[] = {'*','?','\0'};

@@ -23,8 +23,8 @@
 #include <stdio.h>
 
 #include "wine/test.h"
+#include "mmsystem.h"
 #include "dsound.h"
-#include "mmreg.h"
 #include "dsconf.h"
 
 #include "dsound_test.h"
@@ -340,7 +340,7 @@ START_TEST(duplex)
 
     CoInitialize(NULL);
 
-    hDsound = LoadLibrary("dsound.dll");
+    hDsound = LoadLibraryA("dsound.dll");
     if (hDsound)
     {
 

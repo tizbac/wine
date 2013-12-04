@@ -103,9 +103,7 @@ static ULONG WINAPI convert_Release(IDataConvert* iface)
 
     ref = InterlockedDecrement(&This->ref);
     if(ref == 0)
-    {
-        HeapFree(GetProcessHeap(), 0, This);
-    }
+        heap_free(This);
 
     return ref;
 }
@@ -361,6 +359,11 @@ static HRESULT WINAPI convert_DataConvert(IDataConvert* iface,
         case DBTYPE_BSTR:        hr = VarR8FromStr(*(WCHAR**)src, LOCALE_USER_DEFAULT, 0, d); break;
         case DBTYPE_BOOL:        hr = VarR8FromBool(*(VARIANT_BOOL*)src, d);     break;
         case DBTYPE_DECIMAL:     hr = VarR8FromDec((DECIMAL*)src, d);            break;
+        case DBTYPE_VARIANT:
+            VariantInit(&tmp);
+            if ((hr = VariantChangeType(&tmp, (VARIANT*)src, 0, VT_R8)) == S_OK)
+                *d = V_R8(&tmp);
+            break;
         default: FIXME("Unimplemented conversion %04x -> R8\n", src_type); return E_NOTIMPL;
         }
         break;
@@ -873,6 +876,11 @@ static HRESULT WINAPI convert_DataConvert(IDataConvert* iface,
         case DBTYPE_BOOL:
             V_VT(v) = VT_BOOL;
             V_BOOL(v) = *(VARIANT_BOOL*)src;
+            hr = S_OK;
+            break;
+        case DBTYPE_I2:
+            V_VT(v) = VT_I2;
+            V_I2(v) = *(signed short*)src;
             hr = S_OK;
             break;
         case DBTYPE_I4:
@@ -1543,7 +1551,7 @@ HRESULT create_oledb_convert(IUnknown *outer, void **obj)
 
     if(outer) return CLASS_E_NOAGGREGATION;
 
-    This = HeapAlloc(GetProcessHeap(), 0, sizeof(*This));
+    This = heap_alloc(sizeof(*This));
     if(!This) return E_OUTOFMEMORY;
 
     This->IDataConvert_iface.lpVtbl = &convert_vtbl;

@@ -121,7 +121,7 @@ static HRESULT navigate_anchor(HTMLAnchorElement *This)
         if(*href) {
             if(!window)
                 window = This->element.node.doc->basedoc.window;
-            hres = navigate_url(window, href, window->uri, BINDING_NAVIGATED);
+            hres = navigate_url(window, href, window->uri_nofrag, BINDING_NAVIGATED);
         }else {
             TRACE("empty href\n");
             hres = S_OK;
@@ -466,8 +466,14 @@ static HRESULT WINAPI HTMLAnchorElement_put_hash(IHTMLAnchorElement *iface, BSTR
 static HRESULT WINAPI HTMLAnchorElement_get_hash(IHTMLAnchorElement *iface, BSTR *p)
 {
     HTMLAnchorElement *This = impl_from_IHTMLAnchorElement(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+    nsAString hash_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    nsAString_Init(&hash_str, NULL);
+    nsres = nsIDOMHTMLAnchorElement_GetHash(This->nsanchor, &hash_str);
+    return return_nsstr(nsres, &hash_str, p);
 }
 
 static HRESULT WINAPI HTMLAnchorElement_put_onblur(IHTMLAnchorElement *iface, VARIANT v)

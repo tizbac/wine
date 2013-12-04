@@ -254,6 +254,14 @@ struct gl_drawable
     int                            swap_interval;
 };
 
+enum glx_swap_control_method
+{
+    GLX_SWAP_CONTROL_NONE,
+    GLX_SWAP_CONTROL_EXT,
+    GLX_SWAP_CONTROL_SGI,
+    GLX_SWAP_CONTROL_MESA
+};
+
 /* X context to associate a struct gl_drawable to an hwnd */
 static XContext gl_hwnd_context;
 /* X context to associate a struct gl_drawable to a pbuffer hdc */
@@ -270,8 +278,12 @@ static struct list context_list = LIST_INIT( context_list );
 static struct WineGLInfo WineGLInfo = { 0 };
 static struct wgl_pixel_format *pixel_formats;
 static int nb_pixel_formats, nb_onscreen_formats;
-static int use_render_texture_emulation = 1;
-static BOOL has_swap_control;
+static BOOL use_render_texture_emulation = TRUE;
+
+/* Selects the preferred GLX swap control method for use by wglSwapIntervalEXT */
+static enum glx_swap_control_method swap_control_method = GLX_SWAP_CONTROL_NONE;
+/* Set when GLX_EXT_swap_control_tear is supported, requires GLX_SWAP_CONTROL_EXT */
+static BOOL has_swap_control_tear = FALSE;
 
 static CRITICAL_SECTION context_section;
 static CRITICAL_SECTION_DEBUG critsect_debug =
@@ -384,6 +396,7 @@ static Bool (*pglXMakeContextCurrent)( Display *dpy, GLXDrawable draw, GLXDrawab
 /* GLX Extensions */
 static GLXContext (*pglXCreateContextAttribsARB)(Display *dpy, GLXFBConfig config, GLXContext share_context, Bool direct, const int *attrib_list);
 static void* (*pglXGetProcAddressARB)(const GLubyte *);
+static void (*pglXSwapIntervalEXT)(Display *dpy, GLXDrawable drawable, int interval);
 static int   (*pglXSwapIntervalSGI)(int);
 
 /* NV GLX Extension */
@@ -392,13 +405,16 @@ static void  (*pglXFreeMemoryNV)(GLvoid *pointer);
 
 /* MESA GLX Extensions */
 static void (*pglXCopySubBufferMESA)(Display *dpy, GLXDrawable drawable, int x, int y, int width, int height);
+static int (*pglXSwapIntervalMESA)(unsigned int interval);
 
 /* Standard OpenGL */
 static void (*pglFinish)(void);
 static void (*pglFlush)(void);
+static const GLubyte *(*pglGetString)(GLenum name);
 
 static void wglFinish(void);
 static void wglFlush(void);
+static const GLubyte *wglGetString(GLenum name);
 
 /* check if the extension is present in the list */
 static BOOL has_extension( const char *list, const char *ext )
@@ -422,6 +438,8 @@ static int GLXErrorHandler(Display *dpy, XErrorEvent *event, void *arg)
 
 static BOOL X11DRV_WineGL_InitOpenglInfo(void)
 {
+    static const char legacy_extensions[] = " WGL_EXT_extensions_string WGL_EXT_swap_control";
+
     int screen = DefaultScreen(gdi_display);
     Window win = 0, root = 0;
     const char *gl_renderer;
@@ -473,8 +491,9 @@ static BOOL X11DRV_WineGL_InitOpenglInfo(void)
     gl_renderer = (const char *)opengl_funcs.gl.p_glGetString(GL_RENDERER);
     WineGLInfo.glVersion = (const char *) opengl_funcs.gl.p_glGetString(GL_VERSION);
     str = (const char *) opengl_funcs.gl.p_glGetString(GL_EXTENSIONS);
-    WineGLInfo.glExtensions = HeapAlloc(GetProcessHeap(), 0, strlen(str)+1);
+    WineGLInfo.glExtensions = HeapAlloc(GetProcessHeap(), 0, strlen(str)+sizeof(legacy_extensions));
     strcpy(WineGLInfo.glExtensions, str);
+    strcat(WineGLInfo.glExtensions, legacy_extensions);
 
     /* Get the common GLX version supported by GLX client and server ( major/minor) */
     pglXQueryVersion(gdi_display, &WineGLInfo.glxVersion[0], &WineGLInfo.glxVersion[1]);
@@ -547,7 +566,7 @@ done:
 
 static BOOL has_opengl(void)
 {
-    static int init_done;
+    static BOOL init_done = FALSE;
     static void *opengl_handle;
 
     char buffer[200];
@@ -555,7 +574,7 @@ static BOOL has_opengl(void)
     unsigned int i;
 
     if (init_done) return (opengl_handle != NULL);
-    init_done = 1;
+    init_done = TRUE;
 
     /* No need to load any other libraries as according to the ABI, libGL should be self-sufficient
        and include all dependencies */
@@ -581,6 +600,7 @@ static BOOL has_opengl(void)
     do { p##func = opengl_funcs.gl.p_##func; opengl_funcs.gl.p_##func = w##func; } while(0)
     REDIRECT( glFinish );
     REDIRECT( glFlush );
+    REDIRECT( glGetString );
 #undef REDIRECT
 
     pglXGetProcAddressARB = wine_dlsym(opengl_handle, "glXGetProcAddressARB", NULL, 0);
@@ -630,6 +650,10 @@ static BOOL has_opengl(void)
 #define LOAD_FUNCPTR(f) p##f = pglXGetProcAddressARB((const GLubyte *)#f)
     /* ARB GLX Extension */
     LOAD_FUNCPTR(glXCreateContextAttribsARB);
+    /* EXT GLX Extension */
+    LOAD_FUNCPTR(glXSwapIntervalEXT);
+    /* MESA GLX Extension */
+    LOAD_FUNCPTR(glXSwapIntervalMESA);
     /* SGI GLX Extension */
     LOAD_FUNCPTR(glXSwapIntervalSGI);
     /* NV GLX Extension */
@@ -1927,6 +1951,13 @@ static void wglFlush(void)
     if (escape.gl_drawable) ExtEscape( ctx->hdc, X11DRV_ESCAPE, sizeof(escape), (LPSTR)&escape, 0, NULL );
 }
 
+static const GLubyte *wglGetString(GLenum name)
+{
+    if (name == GL_EXTENSIONS && WineGLInfo.glExtensions)
+        return (const GLubyte *)WineGLInfo.glExtensions;
+    return pglGetString(name);
+}
+
 /***********************************************************************
  *		X11DRV_wglCreateContextAttribsARB
  */
@@ -2016,10 +2047,10 @@ static struct wgl_context *X11DRV_wglCreateContextAttribsARB( HDC hdc, struct wg
  *
  * WGL_ARB_extensions_string: wglGetExtensionsStringARB
  */
-static const GLubyte *X11DRV_wglGetExtensionsStringARB(HDC hdc)
+static const char *X11DRV_wglGetExtensionsStringARB(HDC hdc)
 {
     TRACE("() returning \"%s\"\n", WineGLInfo.wglExtensions);
-    return (const GLubyte *)WineGLInfo.wglExtensions;
+    return WineGLInfo.wglExtensions;
 }
 
 /**
@@ -2389,7 +2420,7 @@ static BOOL X11DRV_wglSetPbufferAttribARB( struct wgl_pbuffer *object, const int
         SetLastError(ERROR_INVALID_HANDLE);
         return GL_FALSE;
     }
-    if (1 == use_render_texture_emulation) {
+    if (use_render_texture_emulation) {
         return GL_TRUE;
     }
     return ret;
@@ -2489,7 +2520,7 @@ static BOOL X11DRV_wglChoosePixelFormatARB( HDC hdc, const int *piAttribIList, c
                 {
                     piFormats[pfmt_it++] = i + 1;
                     TRACE("at %d/%d found FBCONFIG_ID 0x%x (%d)\n",
-                          it + 1, nCfgs, fmt_id, piFormats[pfmt_it]);
+                          it + 1, nCfgs, fmt_id, i + 1);
                     break;
                 }
             }
@@ -2798,8 +2829,8 @@ static BOOL X11DRV_wglBindTexImageARB( struct wgl_pbuffer *object, int iBuffer )
         return GL_FALSE;
     }
 
-    if (1 == use_render_texture_emulation) {
-        static int init = 0;
+    if (use_render_texture_emulation) {
+        static BOOL initialized = FALSE;
         int prev_binded_texture = 0;
         GLXContext prev_context;
         Drawable prev_drawable;
@@ -2812,8 +2843,8 @@ static BOOL X11DRV_wglBindTexImageARB( struct wgl_pbuffer *object, int iBuffer )
            This is mostly due to lack of demos/games using them. Further the use of glReadPixels
            isn't ideal performance wise but I wasn't able to get other ways working.
         */
-        if(!init) {
-            init = 1; /* Only show the FIXME once for performance reasons */
+        if(!initialized) {
+            initialized = TRUE; /* Only show the FIXME once for performance reasons */
             FIXME("partial stub!\n");
         }
 
@@ -2854,7 +2885,7 @@ static BOOL X11DRV_wglReleaseTexImageARB( struct wgl_pbuffer *object, int iBuffe
         SetLastError(ERROR_INVALID_HANDLE);
         return GL_FALSE;
     }
-    if (1 == use_render_texture_emulation) {
+    if (use_render_texture_emulation) {
         return GL_TRUE;
     }
     return ret;
@@ -2865,10 +2896,10 @@ static BOOL X11DRV_wglReleaseTexImageARB( struct wgl_pbuffer *object, int iBuffe
  *
  * WGL_EXT_extensions_string: wglGetExtensionsStringEXT
  */
-static const GLubyte *X11DRV_wglGetExtensionsStringEXT(void)
+static const char *X11DRV_wglGetExtensionsStringEXT(void)
 {
     TRACE("() returning \"%s\"\n", WineGLInfo.wglExtensions);
-    return (const GLubyte *)WineGLInfo.wglExtensions;
+    return WineGLInfo.wglExtensions;
 }
 
 /**
@@ -2912,7 +2943,10 @@ static BOOL X11DRV_wglSwapIntervalEXT(int interval)
 
     TRACE("(%d)\n", interval);
 
-    if (interval < 0)
+    /* Without WGL/GLX_EXT_swap_control_tear a negative interval
+     * is invalid.
+     */
+    if (interval < 0 && !has_swap_control_tear)
     {
         SetLastError(ERROR_INVALID_DATA);
         return FALSE;
@@ -2924,26 +2958,40 @@ static BOOL X11DRV_wglSwapIntervalEXT(int interval)
         return FALSE;
     }
 
-    if (!has_swap_control && interval == 0)
+    switch (swap_control_method)
     {
+    case GLX_SWAP_CONTROL_EXT:
+        X11DRV_expect_error(gdi_display, GLXErrorHandler, NULL);
+        pglXSwapIntervalEXT(gdi_display, gl->drawable, interval);
+        XSync(gdi_display, False);
+        ret = !X11DRV_check_error();
+        break;
+
+    case GLX_SWAP_CONTROL_MESA:
+        ret = !pglXSwapIntervalMESA(interval);
+        break;
+
+    case GLX_SWAP_CONTROL_SGI:
         /* wglSwapIntervalEXT considers an interval value of zero to mean that
          * vsync should be disabled, but glXSwapIntervalSGI considers such a
-         * value to be an error. Just silently ignore the request for now. */
-        WARN("Request to disable vertical sync is not handled\n");
-        gl->swap_interval = 0;
-    }
-    else
-    {
-        if (pglXSwapIntervalSGI)
+         * value to be an error. Just silently ignore the request for now.
+         */
+        if (!interval)
+            WARN("Request to disable vertical sync is not handled\n");
+        else
             ret = !pglXSwapIntervalSGI(interval);
-        else
-            WARN("GLX_SGI_swap_control extension is not available\n");
+        break;
 
-        if (ret)
-            gl->swap_interval = interval;
-        else
-            SetLastError(ERROR_DC_NOT_FOUND);
+    case GLX_SWAP_CONTROL_NONE:
+        /* Unlikely to happen on modern GLX implementations */
+        WARN("Request to adjust swap interval is not handled\n");
+        break;
     }
+
+    if (ret)
+        gl->swap_interval = interval;
+    else
+        SetLastError(ERROR_DC_NOT_FOUND);
 
     release_gl_drawable(gl);
 
@@ -3098,7 +3146,22 @@ static void X11DRV_WineGL_LoadExtensions(void)
         register_extension("WGL_EXT_pixel_format_packed_float");
 
     if (has_extension( WineGLInfo.glxExtensions, "GLX_EXT_swap_control"))
-        has_swap_control = TRUE;
+    {
+        swap_control_method = GLX_SWAP_CONTROL_EXT;
+        if (has_extension( WineGLInfo.glxExtensions, "GLX_EXT_swap_control_tear"))
+        {
+            register_extension("WGL_EXT_swap_control_tear");
+            has_swap_control_tear = TRUE;
+        }
+    }
+    else if (has_extension( WineGLInfo.glxExtensions, "GLX_MESA_swap_control"))
+    {
+        swap_control_method = GLX_SWAP_CONTROL_MESA;
+    }
+    else if (has_extension( WineGLInfo.glxExtensions, "GLX_SGI_swap_control"))
+    {
+        swap_control_method = GLX_SWAP_CONTROL_SGI;
+    }
 
     /* The OpenGL extension GL_NV_vertex_array_range adds wgl/glX functions which aren't exported as 'real' wgl/glX extensions. */
     if (has_extension(WineGLInfo.glExtensions, "GL_NV_vertex_array_range"))
@@ -3157,6 +3220,7 @@ static BOOL glxdrv_wglSwapBuffers( HDC hdc )
         pglXSwapBuffers(gdi_display, gl->drawable);
         break;
     case DC_GL_CHILD_WIN:
+        if (ctx) sync_context( ctx );
         escape.gl_drawable = gl->drawable;
         /* fall through */
     default:

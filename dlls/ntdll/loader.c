@@ -36,6 +36,7 @@
 #include "windef.h"
 #include "winnt.h"
 #include "winternl.h"
+#include "delayloadhandler.h"
 
 #include "wine/exception.h"
 #include "wine/library.h"
@@ -57,7 +58,7 @@ WINE_DECLARE_DEBUG_CHANNEL(imports);
 
 typedef DWORD (CALLBACK *DLLENTRYPROC)(HMODULE,DWORD,LPVOID);
 
-static int process_detaching = 0;  /* set on process detach to avoid deadlocks with thread detach */
+static BOOL process_detaching = FALSE;  /* set on process detach to avoid deadlocks with thread detach */
 static int free_lib_count;   /* recursion depth of LdrUnloadDll calls */
 
 static const char * const reason_names[] =
@@ -127,7 +128,7 @@ static inline void *get_rva( HMODULE module, DWORD va )
 }
 
 /* check whether the file name contains a path */
-static inline int contains_path( LPCWSTR name )
+static inline BOOL contains_path( LPCWSTR name )
 {
     return ((*name && (name[1] == ':')) || strchrW(name, '/') || strchrW(name, '\\'));
 }
@@ -1163,16 +1164,13 @@ static void attach_implicitly_loaded_dlls( LPVOID reserved )
  *		process_detach
  *
  * Send DLL process detach notifications.  See the comment about calling
- * sequence at process_attach.  Unless the bForceDetach flag
- * is set, only DLLs with zero refcount are notified.
+ * sequence at process_attach.
  */
-static void process_detach( BOOL bForceDetach, LPVOID lpReserved )
+static void process_detach(void)
 {
     PLIST_ENTRY mark, entry;
     PLDR_MODULE mod;
 
-    RtlEnterCriticalSection( &loader_section );
-    if (bForceDetach) process_detaching = 1;
     mark = &NtCurrentTeb()->Peb->LdrData->InInitializationOrderModuleList;
     do
     {
@@ -1183,21 +1181,19 @@ static void process_detach( BOOL bForceDetach, LPVOID lpReserved )
             /* Check whether to detach this DLL */
             if ( !(mod->Flags & LDR_PROCESS_ATTACHED) )
                 continue;
-            if ( mod->LoadCount && !bForceDetach )
+            if ( mod->LoadCount && !process_detaching )
                 continue;
 
             /* Call detach notification */
             mod->Flags &= ~LDR_PROCESS_ATTACHED;
             MODULE_InitDLL( CONTAINING_RECORD(mod, WINE_MODREF, ldr), 
-                            DLL_PROCESS_DETACH, lpReserved );
+                            DLL_PROCESS_DETACH, ULongToPtr(process_detaching) );
 
             /* Restart at head of WINE_MODREF list, as entries might have
                been added and/or removed while performing the call ... */
             break;
         }
     } while (entry != mark);
-
-    RtlLeaveCriticalSection( &loader_section );
 }
 
 /*************************************************************************
@@ -1215,7 +1211,6 @@ NTSTATUS MODULE_DllThreadAttach( LPVOID lpReserved )
 
     /* don't do any attach calls if process is exiting */
     if (process_detaching) return STATUS_SUCCESS;
-    /* FIXME: there is still a race here */
 
     RtlEnterCriticalSection( &loader_section );
 
@@ -1887,7 +1882,7 @@ static NTSTATUS find_dll_file( const WCHAR *load_path, const WCHAR *libname,
             attr.ObjectName = &nt_name;
             attr.SecurityDescriptor = NULL;
             attr.SecurityQualityOfService = NULL;
-            if (NtOpenFile( handle, GENERIC_READ, &attr, &io, FILE_SHARE_READ|FILE_SHARE_DELETE, 0 )) *handle = 0;
+            if (NtOpenFile( handle, GENERIC_READ, &attr, &io, FILE_SHARE_READ|FILE_SHARE_DELETE, FILE_SYNCHRONOUS_IO_NONALERT|FILE_NON_DIRECTORY_FILE )) *handle = 0;
             goto found;
         }
 
@@ -1922,7 +1917,7 @@ static NTSTATUS find_dll_file( const WCHAR *load_path, const WCHAR *libname,
         attr.ObjectName = &nt_name;
         attr.SecurityDescriptor = NULL;
         attr.SecurityQualityOfService = NULL;
-        if (NtOpenFile( handle, GENERIC_READ, &attr, &io, FILE_SHARE_READ|FILE_SHARE_DELETE, 0 )) *handle = 0;
+        if (NtOpenFile( handle, GENERIC_READ, &attr, &io, FILE_SHARE_READ|FILE_SHARE_DELETE, FILE_SYNCHRONOUS_IO_NONALERT|FILE_NON_DIRECTORY_FILE )) *handle = 0;
     }
 found:
     RtlFreeUnicodeString( &nt_name );
@@ -2005,7 +2000,7 @@ static NTSTATUS load_dll( LPCWSTR load_path, LPCWSTR libname, DWORD flags, WINE_
         else
         {
             nts = load_native_dll( load_path, filename, handle, flags, pwm );
-            if (nts == STATUS_INVALID_FILE_FOR_SECTION)
+            if (nts == STATUS_INVALID_IMAGE_NOT_MZ)
                 /* not in PE format, maybe it's a builtin */
                 nts = load_builtin_dll( load_path, filename, handle, flags, pwm );
         }
@@ -2130,13 +2125,16 @@ NTSTATUS WINAPI LdrAddRefDll( ULONG flags, HMODULE module )
     NTSTATUS ret = STATUS_SUCCESS;
     WINE_MODREF *wm;
 
-    if (flags) FIXME( "%p flags %x not implemented\n", module, flags );
+    if (flags & ~LDR_ADDREF_DLL_PIN) FIXME( "%p flags %x not implemented\n", module, flags );
 
     RtlEnterCriticalSection( &loader_section );
 
     if ((wm = get_modref( module )))
     {
-        if (wm->ldr.LoadCount != -1) wm->ldr.LoadCount++;
+        if (flags & LDR_ADDREF_DLL_PIN)
+            wm->ldr.LoadCount = -1;
+        else
+            if (wm->ldr.LoadCount != -1) wm->ldr.LoadCount++;
         TRACE( "(%s) ldr.LoadCount: %d\n", debugstr_w(wm->ldr.BaseDllName.Buffer), wm->ldr.LoadCount );
     }
     else ret = STATUS_INVALID_PARAMETER;
@@ -2386,6 +2384,70 @@ BOOLEAN WINAPI RtlDllShutdownInProgress(void)
     return process_detaching;
 }
 
+/****************************************************************************
+ *              LdrResolveDelayLoadedAPI   (NTDLL.@)
+ */
+void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIPTOR* desc,
+                                       PDELAYLOAD_FAILURE_DLL_CALLBACK dllhook, void* syshook,
+                                       IMAGE_THUNK_DATA* addr, ULONG flags )
+{
+    IMAGE_THUNK_DATA *pIAT, *pINT;
+    DELAYLOAD_INFO delayinfo;
+    UNICODE_STRING mod;
+    const CHAR* name;
+    HMODULE *phmod;
+    NTSTATUS nts;
+    FARPROC fp;
+    DWORD id;
+
+    FIXME("(%p, %p, %p, %p, %p, 0x%08x), partial stub\n", base, desc, dllhook, syshook, addr, flags);
+
+    phmod = get_rva(base, desc->ModuleHandleRVA);
+    pIAT = get_rva(base, desc->ImportAddressTableRVA);
+    pINT = get_rva(base, desc->ImportNameTableRVA);
+    name = get_rva(base, desc->DllNameRVA);
+    id = addr - pIAT;
+
+    if (!*phmod)
+    {
+        if (!RtlCreateUnicodeStringFromAsciiz(&mod, name))
+        {
+            nts = STATUS_NO_MEMORY;
+            goto fail;
+        }
+        nts = LdrLoadDll(NULL, 0, &mod, phmod);
+        RtlFreeUnicodeString(&mod);
+        if (nts) goto fail;
+    }
+
+    if (IMAGE_SNAP_BY_ORDINAL(pINT[id].u1.Ordinal))
+        nts = LdrGetProcedureAddress(*phmod, NULL, LOWORD(pINT[id].u1.Ordinal), (void**)&fp);
+    else
+    {
+        const IMAGE_IMPORT_BY_NAME* iibn = get_rva(base, pINT[id].u1.AddressOfData);
+        ANSI_STRING fnc;
+
+        RtlInitAnsiString(&fnc, (char*)iibn->Name);
+        nts = LdrGetProcedureAddress(*phmod, &fnc, 0, (void**)&fp);
+    }
+    if (!nts)
+    {
+        pIAT[id].u1.Function = (ULONG_PTR)fp;
+        return fp;
+    }
+
+fail:
+    delayinfo.Size = sizeof(delayinfo);
+    delayinfo.DelayloadDescriptor = desc;
+    delayinfo.ThunkAddress = addr;
+    delayinfo.TargetDllName = name;
+    delayinfo.TargetApiDescriptor.ImportDescribedByName = !IMAGE_SNAP_BY_ORDINAL(pINT[id].u1.Ordinal);
+    delayinfo.TargetApiDescriptor.Description.Ordinal = LOWORD(pINT[id].u1.Ordinal);
+    delayinfo.TargetModuleBase = *phmod;
+    delayinfo.Unused = NULL;
+    delayinfo.LastError = nts;
+    return dllhook(4, &delayinfo);
+}
 
 /******************************************************************
  *		LdrShutdownProcess (NTDLL.@)
@@ -2394,7 +2456,22 @@ BOOLEAN WINAPI RtlDllShutdownInProgress(void)
 void WINAPI LdrShutdownProcess(void)
 {
     TRACE("()\n");
-    process_detach( TRUE, (LPVOID)1 );
+    process_detaching = TRUE;
+    process_detach();
+}
+
+
+/******************************************************************
+ *		RtlExitUserProcess (NTDLL.@)
+ */
+void WINAPI RtlExitUserProcess( DWORD status )
+{
+    RtlEnterCriticalSection( &loader_section );
+    RtlAcquirePebLock();
+    NtTerminateProcess( 0, status );
+    LdrShutdownProcess();
+    NtTerminateProcess( GetCurrentProcess(), status );
+    exit( status );
 }
 
 /******************************************************************
@@ -2410,7 +2487,6 @@ void WINAPI LdrShutdownThread(void)
 
     /* don't do any detach calls if process is exiting */
     if (process_detaching) return;
-    /* FIXME: there is still a race here */
 
     RtlEnterCriticalSection( &loader_section );
 
@@ -2537,41 +2613,36 @@ static void MODULE_DecRefCount( WINE_MODREF *wm )
  */
 NTSTATUS WINAPI LdrUnloadDll( HMODULE hModule )
 {
+    WINE_MODREF *wm;
     NTSTATUS retv = STATUS_SUCCESS;
+
+    if (process_detaching) return retv;
 
     TRACE("(%p)\n", hModule);
 
     RtlEnterCriticalSection( &loader_section );
 
-    /* if we're stopping the whole process (and forcing the removal of all
-     * DLLs) the library will be freed anyway
-     */
-    if (!process_detaching)
+    free_lib_count++;
+    if ((wm = get_modref( hModule )) != NULL)
     {
-        WINE_MODREF *wm;
+        TRACE("(%s) - START\n", debugstr_w(wm->ldr.BaseDllName.Buffer));
 
-        free_lib_count++;
-        if ((wm = get_modref( hModule )) != NULL)
+        /* Recursively decrement reference counts */
+        MODULE_DecRefCount( wm );
+
+        /* Call process detach notifications */
+        if ( free_lib_count <= 1 )
         {
-            TRACE("(%s) - START\n", debugstr_w(wm->ldr.BaseDllName.Buffer));
-
-            /* Recursively decrement reference counts */
-            MODULE_DecRefCount( wm );
-
-            /* Call process detach notifications */
-            if ( free_lib_count <= 1 )
-            {
-                process_detach( FALSE, NULL );
-                MODULE_FlushModrefs();
-            }
-
-            TRACE("END\n");
+            process_detach();
+            MODULE_FlushModrefs();
         }
-        else
-            retv = STATUS_DLL_NOT_FOUND;
 
-        free_lib_count--;
+        TRACE("END\n");
     }
+    else
+        retv = STATUS_DLL_NOT_FOUND;
+
+    free_lib_count--;
 
     RtlLeaveCriticalSection( &loader_section );
 

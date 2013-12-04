@@ -351,9 +351,6 @@ HMONITOR WINAPI MonitorFromRect( LPRECT rect, DWORD flags )
 {
     struct monitor_enum_info info;
 
-    /* make sure the desktop window exists */
-    GetDesktopWindow();
-
     info.rect         = *rect;
     info.max_area     = 0;
     info.min_distance = ~0u;
@@ -461,7 +458,7 @@ void WINAPI RegisterSystemThread(DWORD flags, DWORD reserved)
 BOOL WINAPI RegisterShellHookWindow ( HWND hWnd )
 {
     FIXME("(%p): stub\n", hWnd);
-    return 0;
+    return FALSE;
 }
 
 

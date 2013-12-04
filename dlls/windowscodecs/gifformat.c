@@ -1094,7 +1094,7 @@ static int _gif_inputfunc(GifFileType *gif, GifByteType *data, int len) {
     }
 
     hr = IStream_Read(stream, data, len, &bytesread);
-    if (hr != S_OK) bytesread = 0;
+    if (FAILED(hr)) bytesread = 0;
     return bytesread;
 }
 
@@ -1180,26 +1180,39 @@ static HRESULT WINAPI GifDecoder_CopyPalette(IWICBitmapDecoder *iface, IWICPalet
     GifDecoder *This = impl_from_IWICBitmapDecoder(iface);
     WICColor colors[256];
     ColorMapObject *cm;
-    int i, trans;
+    int i, trans, count;
     ExtensionBlock *eb;
 
     TRACE("(%p,%p)\n", iface, palette);
 
     cm = This->gif->SColorMap;
-    if (!cm) return WINCODEC_ERR_FRAMEMISSING;
-
-    if (cm->ColorCount > 256)
+    if (cm)
     {
-        ERR("GIF contains invalid number of colors: %d\n", cm->ColorCount);
-        return E_FAIL;
+        if (cm->ColorCount > 256)
+        {
+            ERR("GIF contains invalid number of colors: %d\n", cm->ColorCount);
+            return E_FAIL;
+        }
+
+        for (i = 0; i < cm->ColorCount; i++)
+        {
+            colors[i] = 0xff000000 | /* alpha */
+                        cm->Colors[i].Red << 16 |
+                        cm->Colors[i].Green << 8 |
+                        cm->Colors[i].Blue;
+        }
+
+        count = cm->ColorCount;
     }
-
-    for (i = 0; i < cm->ColorCount; i++)
+    else
     {
-        colors[i] = 0xff000000 | /* alpha */
-                    cm->Colors[i].Red << 16 |
-                    cm->Colors[i].Green << 8 |
-                    cm->Colors[i].Blue;
+        colors[0] = 0xff000000;
+        colors[1] = 0xffffffff;
+
+        for (i = 2; i < 256; i++)
+            colors[i] = 0xff000000;
+
+        count = 256;
     }
 
     /* look for the transparent color extension */
@@ -1217,7 +1230,7 @@ static HRESULT WINAPI GifDecoder_CopyPalette(IWICBitmapDecoder *iface, IWICPalet
         }
     }
 
-    return IWICPalette_InitializeCustom(palette, colors, cm->ColorCount);
+    return IWICPalette_InitializeCustom(palette, colors, count);
 }
 
 static HRESULT WINAPI GifDecoder_GetMetadataQueryReader(IWICBitmapDecoder *iface,

@@ -22,12 +22,14 @@
 @ cdecl GetClipboardData(long) macdrv_GetClipboardData
 @ cdecl GetCursorPos(ptr) macdrv_GetCursorPos
 @ cdecl GetKeyboardLayout(long) macdrv_GetKeyboardLayout
+@ cdecl GetKeyboardLayoutList(long ptr) macdrv_GetKeyboardLayoutList
 @ cdecl GetKeyboardLayoutName(ptr) macdrv_GetKeyboardLayoutName
 @ cdecl GetKeyNameText(long ptr long) macdrv_GetKeyNameText
 @ cdecl GetMonitorInfo(long ptr) macdrv_GetMonitorInfo
 @ cdecl IsClipboardFormatAvailable(long) macdrv_IsClipboardFormatAvailable
 @ cdecl MapVirtualKeyEx(long long long) macdrv_MapVirtualKeyEx
 @ cdecl MsgWaitForMultipleObjectsEx(long ptr long long long) macdrv_MsgWaitForMultipleObjectsEx
+@ cdecl RegisterHotKey(long long long) macdrv_RegisterHotKey
 @ cdecl SetCapture(long long) macdrv_SetCapture
 @ cdecl SetClipboardData(long long long) macdrv_SetClipboardData
 @ cdecl SetCursor(long) macdrv_SetCursor
@@ -42,6 +44,7 @@
 @ cdecl SysCommand(long long long) macdrv_SysCommand
 @ cdecl SystemParametersInfo(long long ptr long) macdrv_SystemParametersInfo
 @ cdecl ToUnicodeEx(long long ptr ptr long long long) macdrv_ToUnicodeEx
+@ cdecl UnregisterHotKey(long long long) macdrv_UnregisterHotKey
 @ cdecl UpdateLayeredWindow(long ptr ptr) macdrv_UpdateLayeredWindow
 @ cdecl VkKeyScanEx(long long) macdrv_VkKeyScanEx
 @ cdecl WindowMessage(long long long long) macdrv_WindowMessage

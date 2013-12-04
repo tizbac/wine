@@ -81,7 +81,7 @@ BOOL EMFDRV_DeleteObject( PHYSDEV dev, HGDIOBJ obj )
     UINT index;
     BOOL ret = TRUE;
 
-    if(!(index = EMFDRV_FindObject(dev, obj))) return 0;
+    if(!(index = EMFDRV_FindObject(dev, obj))) return FALSE;
 
     emr.emr.iType = EMR_DELETEOBJECT;
     emr.emr.nSize = sizeof(emr);
@@ -503,7 +503,7 @@ COLORREF EMFDRV_SetDCPenColor( PHYSDEV dev, COLORREF color )
 /******************************************************************
  *         EMFDRV_GdiComment
  */
-BOOL EMFDRV_GdiComment(PHYSDEV dev, UINT bytes, CONST BYTE *buffer)
+BOOL EMFDRV_GdiComment(PHYSDEV dev, UINT bytes, const BYTE *buffer)
 {
     EMRGDICOMMENT *emr;
     UINT total, rounded_size;

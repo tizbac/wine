@@ -40,7 +40,6 @@
 #include "wingdi.h"
 #include "winuser.h"
 #include "wine/list.h"
-#include "wine/unicode.h"
 
 static resource_t *new_top, *new_tail;
 
@@ -54,17 +53,17 @@ struct mo_file
     /* ... rest of file data here */
 };
 
-static int is_english( const language_t *lan )
+static BOOL is_english( const language_t *lan )
 {
     return lan->id == LANG_ENGLISH && lan->sub == SUBLANG_DEFAULT;
 }
 
-static int is_rtl_language( const language_t *lan )
+static BOOL is_rtl_language( const language_t *lan )
 {
     return lan->id == LANG_ARABIC || lan->id == LANG_HEBREW || lan->id == LANG_PERSIAN;
 }
 
-static int uses_larger_font( const language_t *lan )
+static BOOL uses_larger_font( const language_t *lan )
 {
     return lan->id == LANG_CHINESE || lan->id == LANG_JAPANESE || lan->id == LANG_KOREAN;
 }
@@ -124,10 +123,10 @@ static char *get_message_context( char **msgid )
     return context;
 }
 
-static int control_has_title( const control_t *ctrl )
+static BOOL control_has_title( const control_t *ctrl )
 {
-    if (!ctrl->title) return 0;
-    if (ctrl->title->type != name_str) return 0;
+    if (!ctrl->title) return FALSE;
+    if (ctrl->title->type != name_str) return FALSE;
     /* check for text static control */
     if (ctrl->ctlclass && ctrl->ctlclass->type == name_ord && ctrl->ctlclass->name.i_name == CT_STATIC)
     {
@@ -136,12 +135,12 @@ static int control_has_title( const control_t *ctrl )
         case SS_LEFT:
         case SS_CENTER:
         case SS_RIGHT:
-            return 1;
+            return TRUE;
         default:
-            return 0;
+            return FALSE;
         }
     }
-    return 1;
+    return TRUE;
 }
 
 static resource_t *dup_resource( resource_t *res, language_t *lang )
@@ -810,7 +809,7 @@ static void add_po_menu( const resource_t *english, const resource_t *res )
     add_po_menu_items( po, english_items, items, res->res.men->lvc.language );
 }
 
-static int string_has_context( const string_t *str )
+static BOOL string_has_context( const string_t *str )
 {
     char *id, *id_buffer, *context;
 

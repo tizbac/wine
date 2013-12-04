@@ -253,7 +253,8 @@ HRESULT WINAPI BaseRenderer_Init(BaseRenderer * This, const IBaseFilterVtbl *Vtb
     piInput.pFilter = &This->filter.IBaseFilter_iface;
     lstrcpynW(piInput.achName, wcsInputPinName, sizeof(piInput.achName) / sizeof(piInput.achName[0]));
 
-    hr = BaseInputPin_Construct(&BaseRenderer_InputPin_Vtbl, &piInput, &input_BaseFuncTable, &input_BaseInputFuncTable, &This->filter.csFilter, NULL, (IPin **)&This->pInputPin);
+    hr = BaseInputPin_Construct(&BaseRenderer_InputPin_Vtbl, sizeof(BaseInputPin), &piInput, &input_BaseFuncTable,
+            &input_BaseInputFuncTable, &This->filter.csFilter, NULL, (IPin **)&This->pInputPin);
 
     if (SUCCEEDED(hr))
     {
@@ -471,7 +472,7 @@ HRESULT WINAPI BaseRendererImpl_Run(IBaseFilter * iface, REFERENCE_TIME tStart)
 
     if (This->pInputPin->pin.pConnectedTo)
     {
-        This->pInputPin->end_of_stream = 0;
+        This->pInputPin->end_of_stream = FALSE;
     }
     else if (This->filter.filterInfo.pGraph)
     {
@@ -514,7 +515,7 @@ HRESULT WINAPI BaseRendererImpl_Pause(IBaseFilter * iface)
             {
                 if (This->pInputPin->pin.pConnectedTo)
                     ResetEvent(This->evComplete);
-                This->pInputPin->end_of_stream = 0;
+                This->pInputPin->end_of_stream = FALSE;
             }
             else if (This->pFuncsTable->pfnOnStopStreaming)
                 This->pFuncsTable->pfnOnStopStreaming(This);

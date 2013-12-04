@@ -138,20 +138,20 @@ typedef struct TransactedDirEntry
   DirRef transactedParentEntry;
 
   /* True if this entry is being used. */
-  int inuse;
+  BOOL inuse;
 
   /* True if data is up to date. */
-  int read;
+  BOOL read;
 
   /* True if this entry has been modified. */
-  int dirty;
+  BOOL dirty;
 
   /* True if this entry's stream has been modified. */
-  int stream_dirty;
+  BOOL stream_dirty;
 
   /* True if this entry has been deleted in the transacted storage, but the
    * delete has not yet been committed. */
-  int deleted;
+  BOOL deleted;
 
   /* If this entry's stream has been modified, a reference to where the stream
    * is stored in the snapshot file. */
@@ -1423,7 +1423,7 @@ static HRESULT insertIntoTree(
      * The root storage contains some element, therefore, start the research
      * for the appropriate location.
      */
-    BOOL found = 0;
+    BOOL found = FALSE;
     DirRef current, next, previous, currentEntryId;
 
     /*
@@ -1442,7 +1442,7 @@ static HRESULT insertIntoTree(
     next     = currentEntry.rightChild;
     current  = currentEntryId;
 
-    while (found == 0)
+    while (!found)
     {
       LONG diff = entryNameCmp( newEntry.name, currentEntry.name);
 
@@ -1461,7 +1461,7 @@ static HRESULT insertIntoTree(
           StorageBaseImpl_WriteDirEntry(This,
                                         current,
                                         &currentEntry);
-          found = 1;
+          found = TRUE;
         }
       }
       else if (diff > 0)
@@ -1479,7 +1479,7 @@ static HRESULT insertIntoTree(
           StorageBaseImpl_WriteDirEntry(This,
                                         current,
                                         &currentEntry);
-          found = 1;
+          found = TRUE;
         }
       }
       else
@@ -2786,7 +2786,7 @@ static HRESULT StorageImpl_Construct(
   else
     This->base.lockingrole = SWMR_None;
 
-  This->base.reverted = 0;
+  This->base.reverted = FALSE;
 
   /*
    * Initialize the big block cache.
@@ -3016,7 +3016,7 @@ static void StorageImpl_Invalidate(StorageBaseImpl* iface)
 
   StorageBaseImpl_DeleteAll(&This->base);
 
-  This->base.reverted = 1;
+  This->base.reverted = TRUE;
 }
 
 static void StorageImpl_Destroy(StorageBaseImpl* iface)
@@ -4383,7 +4383,7 @@ static DirRef TransactedSnapshotImpl_FindFreeEntry(TransactedSnapshotImpl *This)
     This->entries_size = new_size;
   }
 
-  This->entries[result].inuse = 1;
+  This->entries[result].inuse = TRUE;
 
   This->firstFreeEntry = result+1;
 
@@ -4404,7 +4404,7 @@ static DirRef TransactedSnapshotImpl_CreateStubEntry(
 
     entry->newTransactedParentEntry = entry->transactedParentEntry = parentEntryRef;
 
-    entry->read = 0;
+    entry->read = FALSE;
   }
 
   return stubEntryRef;
@@ -4449,7 +4449,7 @@ static HRESULT TransactedSnapshotImpl_EnsureReadEntry(
     if (SUCCEEDED(hr))
     {
       memcpy(&This->entries[entry].data, &data, sizeof(DirEntry));
-      This->entries[entry].read = 1;
+      This->entries[entry].read = TRUE;
     }
   }
 
@@ -4488,7 +4488,7 @@ static HRESULT TransactedSnapshotImpl_MakeStreamDirty(
     }
 
     if (SUCCEEDED(hr))
-      This->entries[entry].stream_dirty = 1;
+      This->entries[entry].stream_dirty = TRUE;
 
     if (This->entries[entry].transactedParentEntry != DIRENTRY_NULL)
     {
@@ -4498,7 +4498,7 @@ static HRESULT TransactedSnapshotImpl_MakeStreamDirty(
       delete_ref = TransactedSnapshotImpl_CreateStubEntry(This, This->entries[entry].transactedParentEntry);
 
       if (delete_ref != DIRENTRY_NULL)
-        This->entries[delete_ref].deleted = 1;
+        This->entries[delete_ref].deleted = TRUE;
 
       This->entries[entry].transactedParentEntry = This->entries[entry].newTransactedParentEntry = DIRENTRY_NULL;
     }
@@ -4792,9 +4792,9 @@ static HRESULT WINAPI TransactedSnapshotImpl_Commit(
           {
             StorageBaseImpl_StreamSetSize(This->scratch, entry->stream_entry, zero);
             StorageBaseImpl_DestroyDirEntry(This->scratch, entry->stream_entry);
-            entry->stream_dirty = 0;
+            entry->stream_dirty = FALSE;
           }
-          entry->dirty = 0;
+          entry->dirty = FALSE;
           entry->transactedParentEntry = entry->newTransactedParentEntry;
         }
       }
@@ -4850,7 +4850,7 @@ static void TransactedSnapshotImpl_Invalidate(StorageBaseImpl* This)
   {
     TRACE("Storage invalidated (stg=%p)\n", This);
 
-    This->reverted = 1;
+    This->reverted = TRUE;
 
     StorageBaseImpl_DeleteAll(This);
   }
@@ -4894,8 +4894,8 @@ static HRESULT TransactedSnapshotImpl_CreateDirEntry(StorageBaseImpl *base,
   new_entry = &This->entries[new_ref];
 
   new_entry->newTransactedParentEntry = new_entry->transactedParentEntry = DIRENTRY_NULL;
-  new_entry->read = 1;
-  new_entry->dirty = 1;
+  new_entry->read = TRUE;
+  new_entry->dirty = TRUE;
   memcpy(&new_entry->data, newData, sizeof(DirEntry));
 
   *index = new_ref;
@@ -4920,7 +4920,7 @@ static HRESULT TransactedSnapshotImpl_WriteDirEntry(StorageBaseImpl *base,
 
   if (index != This->base.storageDirEntry)
   {
-    This->entries[index].dirty = 1;
+    This->entries[index].dirty = TRUE;
 
     if (data->size.QuadPart == 0 &&
         This->entries[index].transactedParentEntry != DIRENTRY_NULL)
@@ -4931,7 +4931,7 @@ static HRESULT TransactedSnapshotImpl_WriteDirEntry(StorageBaseImpl *base,
       delete_ref = TransactedSnapshotImpl_CreateStubEntry(This, This->entries[index].transactedParentEntry);
 
       if (delete_ref != DIRENTRY_NULL)
-        This->entries[delete_ref].deleted = 1;
+        This->entries[delete_ref].deleted = TRUE;
 
       This->entries[index].transactedParentEntry = This->entries[index].newTransactedParentEntry = DIRENTRY_NULL;
     }
@@ -4972,7 +4972,7 @@ static HRESULT TransactedSnapshotImpl_DestroyDirEntry(StorageBaseImpl *base,
   }
   else
   {
-    This->entries[index].deleted = 1;
+    This->entries[index].deleted = TRUE;
   }
 
   return S_OK;
@@ -5048,7 +5048,7 @@ static HRESULT TransactedSnapshotImpl_StreamSetSize(StorageBaseImpl *base,
         This->entries[index].stream_entry, zero);
       StorageBaseImpl_DestroyDirEntry(This->scratch,
         This->entries[index].stream_entry);
-      This->entries[index].stream_dirty = 0;
+      This->entries[index].stream_dirty = FALSE;
     }
     else if (This->entries[index].transactedParentEntry != DIRENTRY_NULL)
     {
@@ -5056,7 +5056,7 @@ static HRESULT TransactedSnapshotImpl_StreamSetSize(StorageBaseImpl *base,
       delete_ref = TransactedSnapshotImpl_CreateStubEntry(This, This->entries[index].transactedParentEntry);
 
       if (delete_ref != DIRENTRY_NULL)
-        This->entries[delete_ref].deleted = 1;
+        This->entries[delete_ref].deleted = TRUE;
 
       This->entries[index].transactedParentEntry = This->entries[index].newTransactedParentEntry = DIRENTRY_NULL;
     }
@@ -5255,7 +5255,7 @@ static void StorageInternalImpl_Invalidate( StorageBaseImpl *base )
   {
     TRACE("Storage invalidated (stg=%p)\n", This);
 
-    This->base.reverted = 1;
+    This->base.reverted = TRUE;
 
     This->parentStorage = NULL;
 
@@ -5740,7 +5740,7 @@ static StorageInternalImpl* StorageInternalImpl_Construct(
     newStorage->base.baseVtbl = &StorageInternalImpl_BaseVtbl;
     newStorage->base.openFlags = (openFlags & ~STGM_CREATE);
 
-    newStorage->base.reverted = 0;
+    newStorage->base.reverted = FALSE;
 
     newStorage->base.ref = 1;
 
@@ -5751,7 +5751,7 @@ static StorageInternalImpl* StorageInternalImpl_Construct(
      */
     newStorage->base.storageDirEntry = storageDirEntry;
 
-    newStorage->base.create = 0;
+    newStorage->base.create = FALSE;
 
     return newStorage;
   }
@@ -6038,10 +6038,10 @@ HRESULT BlockChainStream_GetBlockAtOffset(BlockChainStream *This,
     {
       if (!StorageImpl_WriteBigBlock(This->parentStorage, result->sector, result->data))
         return STG_E_WRITEFAULT;
-      result->dirty = 0;
+      result->dirty = FALSE;
     }
 
-    result->read = 0;
+    result->read = FALSE;
     result->index = index;
     result->sector = *sector;
   }
@@ -6066,9 +6066,9 @@ BlockChainStream* BlockChainStream_Construct(
   newStream->indexCacheLen           = 0;
   newStream->indexCacheSize          = 0;
   newStream->cachedBlocks[0].index = 0xffffffff;
-  newStream->cachedBlocks[0].dirty = 0;
+  newStream->cachedBlocks[0].dirty = FALSE;
   newStream->cachedBlocks[1].index = 0xffffffff;
-  newStream->cachedBlocks[1].dirty = 0;
+  newStream->cachedBlocks[1].dirty = FALSE;
   newStream->blockToEvict          = 0;
 
   if (FAILED(BlockChainStream_UpdateIndexCache(newStream)))
@@ -6090,7 +6090,7 @@ HRESULT BlockChainStream_Flush(BlockChainStream* This)
     if (This->cachedBlocks[i].dirty)
     {
       if (StorageImpl_WriteBigBlock(This->parentStorage, This->cachedBlocks[i].sector, This->cachedBlocks[i].data))
-        This->cachedBlocks[i].dirty = 0;
+        This->cachedBlocks[i].dirty = FALSE;
       else
         return STG_E_WRITEFAULT;
     }
@@ -6230,7 +6230,7 @@ HRESULT BlockChainStream_ReadAt(BlockChainStream* This,
         if (FAILED(StorageImpl_ReadBigBlock(This->parentStorage, cachedBlock->sector, cachedBlock->data, &read)) && !read)
           return STG_E_READFAULT;
 
-        cachedBlock->read = 1;
+        cachedBlock->read = TRUE;
       }
 
       memcpy(bufferWalker, cachedBlock->data+offsetInBlock, bytesToReadInBuffer);
@@ -6318,8 +6318,8 @@ HRESULT BlockChainStream_WriteAt(BlockChainStream* This,
 
       memcpy(cachedBlock->data+offsetInBlock, bufferWalker, bytesToWrite);
       bytesWrittenAt = bytesToWrite;
-      cachedBlock->read = 1;
-      cachedBlock->dirty = 1;
+      cachedBlock->read = TRUE;
+      cachedBlock->dirty = TRUE;
     }
 
     blockNoInSequence++;
@@ -6421,7 +6421,7 @@ static BOOL BlockChainStream_Shrink(BlockChainStream* This,
     if (This->cachedBlocks[i].index >= numBlocks)
     {
       This->cachedBlocks[i].index = 0xffffffff;
-      This->cachedBlocks[i].dirty = 0;
+      This->cachedBlocks[i].dirty = FALSE;
     }
   }
 

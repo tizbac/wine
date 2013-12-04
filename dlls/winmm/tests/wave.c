@@ -266,10 +266,9 @@ const char* wave_out_error(MMRESULT error)
     static char long_msg[1100];
     MMRESULT rc;
 
-    rc = waveOutGetErrorText(error, msg, sizeof(msg));
+    rc = waveOutGetErrorTextA(error, msg, sizeof(msg));
     if (rc != MMSYSERR_NOERROR)
-        sprintf(long_msg, "waveOutGetErrorText(%x) failed with error %x",
-                error, rc);
+        sprintf(long_msg, "waveOutGetErrorTextA(%x) failed with error %x", error, rc);
     else
         sprintf(long_msg, "%s(%s)", mmsys_error(error), msg);
     return long_msg;
@@ -278,7 +277,7 @@ const char* wave_out_error(MMRESULT error)
 const char * wave_open_flags(DWORD flags)
 {
     static char msg[1024];
-    int first = TRUE;
+    BOOL first = TRUE;
     msg[0] = 0;
     if ((flags & CALLBACK_TYPEMASK) == CALLBACK_EVENT) {
         strcat(msg, "CALLBACK_EVENT");
@@ -330,7 +329,7 @@ static const char * wave_header_flags(DWORD flags)
 {
 #define WHDR_MASK (WHDR_BEGINLOOP|WHDR_DONE|WHDR_ENDLOOP|WHDR_INQUEUE|WHDR_PREPARED)
     static char msg[1024];
-    int first = TRUE;
+    BOOL first = TRUE;
     msg[0] = 0;
     if (flags & WHDR_BEGINLOOP) {
         strcat(msg, "WHDR_BEGINLOOP");
@@ -574,12 +573,12 @@ static DWORD WINAPI callback_thread(LPVOID lpParameter)
     PeekMessageW( &msg, 0, 0, 0, PM_NOREMOVE );  /* make sure the thread has a message queue */
     SetEvent(lpParameter);
 
-    while (GetMessage(&msg, 0, 0, 0)) {
+    while (GetMessageA(&msg, 0, 0, 0)) {
         UINT message = msg.message;
         /* for some reason XP sends a WM_USER message before WOM_OPEN */
         ok (message == WOM_OPEN || message == WOM_DONE ||
             message == WOM_CLOSE || message == WM_USER || message == WM_APP,
-            "GetMessage returned unexpected message: %u\n", message);
+            "GetMessageA returned unexpected message: %u\n", message);
         if (message == WOM_OPEN || message == WOM_DONE || message == WOM_CLOSE)
             SetEvent(lpParameter);
         else if (message == WM_APP) {
@@ -591,14 +590,12 @@ static DWORD WINAPI callback_thread(LPVOID lpParameter)
     return 0;
 }
 
-static void wave_out_test_deviceOut(int device, double duration,
-                                    int headers, int loops,
-                                    LPWAVEFORMATEX pwfx, DWORD format,
-                                    DWORD flags, LPWAVEOUTCAPS pcaps,
-                                    BOOL interactive, BOOL sine, BOOL pause)
+static void wave_out_test_deviceOut(int device, double duration, int headers, int loops,
+        WAVEFORMATEX *pwfx, DWORD format, DWORD flags, WAVEOUTCAPSA *pcaps, BOOL interactive,
+        BOOL sine, BOOL pause)
 {
     HWAVEOUT wout;
-    HANDLE hevent;
+    HANDLE hevent = CreateEventW(NULL, FALSE, FALSE, NULL);
     WAVEHDR *frags = 0;
     MMRESULT rc;
     DWORD volume;
@@ -615,11 +612,6 @@ static void wave_out_test_deviceOut(int device, double duration,
     DWORD length;
     DWORD frag_length;
     int i, j;
-
-    hevent=CreateEvent(NULL,FALSE,FALSE,NULL);
-    ok(hevent!=NULL,"CreateEvent(): error=%d\n",GetLastError());
-    if (hevent==NULL)
-        return;
 
     if ((flags & CALLBACK_TYPEMASK) == CALLBACK_EVENT) {
         callback = (DWORD_PTR)hevent;
@@ -867,7 +859,7 @@ static void wave_out_test_deviceOut(int device, double duration,
     HeapFree(GetProcessHeap(), 0, buffer);
 EXIT:
     if ((flags & CALLBACK_TYPEMASK) == CALLBACK_THREAD) {
-        PostThreadMessage(thread_id, WM_APP, 0, 0);
+        PostThreadMessageW(thread_id, WM_APP, 0, 0);
         WaitForSingleObject(hevent,10000);
     }
     CloseHandle(hevent);
@@ -1186,9 +1178,22 @@ static void wave_out_test_device(UINT_PTR device)
                                 &capsA,winetest_interactive,TRUE,FALSE);
         wave_out_test_deviceOut(device,1.0,5,1,&format,0,CALLBACK_EVENT,
                                 &capsA,winetest_interactive,TRUE,FALSE);
-    } else
+    } else {
+        MMRESULT query_rc;
+
         trace("waveOutOpen(%s): WAVE_FORMAT_MULAW not supported\n",
               dev_name(device));
+
+        query_rc = waveOutOpen(NULL, device, &format, 0, 0, CALLBACK_NULL | WAVE_FORMAT_QUERY);
+        ok(query_rc==MMSYSERR_NOERROR || query_rc==WAVERR_BADFORMAT || query_rc==MMSYSERR_INVALPARAM,
+           "waveOutOpen(%s): returned %s\n",dev_name(device),wave_out_error(rc));
+
+        rc = waveOutOpen(&wout, device, &format, 0, 0, CALLBACK_NULL);
+        ok(rc == query_rc,
+           "waveOutOpen(%s): returned different from query: %s\n",dev_name(device),wave_out_error(rc));
+        if(rc == MMSYSERR_NOERROR)
+            waveOutClose(wout);
+    }
 
     wfa.wfx.wFormatTag=WAVE_FORMAT_IMA_ADPCM;
     wfa.wfx.nChannels=1;
@@ -1532,7 +1537,7 @@ static void test_fragmentsize(void)
     fmt.nAvgBytesPerSec = fmt.nBlockAlign * fmt.nSamplesPerSec;
     fmt.cbSize = sizeof(WAVEFORMATEX);
 
-    hevent = CreateEvent(NULL, FALSE, FALSE, NULL);
+    hevent = CreateEventW(NULL, FALSE, FALSE, NULL);
     g_tid = GetCurrentThreadId();
 
     rc = waveOutOpen(&wout, WAVE_MAPPER, &fmt, (DWORD_PTR)callback_func,

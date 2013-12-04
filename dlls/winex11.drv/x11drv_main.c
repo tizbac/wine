@@ -61,29 +61,25 @@ XVisualInfo default_visual = { 0 };
 XVisualInfo argb_visual = { 0 };
 Colormap default_colormap = None;
 XPixmapFormatValues **pixmap_formats;
-unsigned int screen_width;
-unsigned int screen_height;
 unsigned int screen_bpp;
-RECT virtual_screen_rect;
 Window root_window;
-int usexvidmode = 1;
-int usexrandr = 1;
-int usexcomposite = 1;
-int usexfixes = 1;
-int use_xkb = 1;
-int use_take_focus = 1;
-int use_primary_selection = 0;
-int use_system_cursors = 1;
-int show_systray = 1;
-int grab_pointer = 1;
-int grab_fullscreen = 0;
-int managed_mode = 1;
-int decorated_mode = 1;
-int private_color_map = 0;
+BOOL usexvidmode = TRUE;
+BOOL usexrandr = TRUE;
+BOOL usexcomposite = TRUE;
+BOOL use_xkb = TRUE;
+BOOL use_take_focus = TRUE;
+BOOL use_primary_selection = FALSE;
+BOOL use_system_cursors = TRUE;
+BOOL show_systray = TRUE;
+BOOL grab_pointer = TRUE;
+BOOL grab_fullscreen = FALSE;
+BOOL managed_mode = TRUE;
+BOOL decorated_mode = TRUE;
+BOOL private_color_map = FALSE;
 int primary_monitor = 0;
-int client_side_graphics = 1;
-int client_side_with_render = 1;
-int shape_layered_windows = 1;
+BOOL client_side_graphics = TRUE;
+BOOL client_side_with_render = TRUE;
+BOOL shape_layered_windows = TRUE;
 int copy_default_colors = 128;
 int alloc_system_colors = 256;
 DWORD thread_data_tls_index = TLS_OUT_OF_INDEXES;
@@ -96,7 +92,7 @@ static void *err_callback_arg;               /* error callback argument */
 static int err_callback_result;              /* error callback result */
 static unsigned long err_serial;             /* serial number of first request */
 static int (*old_error_handler)( Display *, XErrorEvent * );
-static int use_xim = 1;
+static BOOL use_xim = TRUE;
 static char input_style[20];
 
 #define IS_OPTION_TRUE(ch) \
@@ -444,7 +440,7 @@ static void X11DRV_XComposite_Init(void)
     if (!xcomposite_handle)
     {
         TRACE("Unable to open %s, XComposite disabled\n", SONAME_LIBXCOMPOSITE);
-        usexcomposite = 0;
+        usexcomposite = FALSE;
         return;
     }
 
@@ -467,7 +463,7 @@ static void X11DRV_XComposite_Init(void)
         TRACE("XComposite extension could not be queried; disabled\n");
         wine_dlclose(xcomposite_handle, NULL, 0);
         xcomposite_handle = NULL;
-        usexcomposite = 0;
+        usexcomposite = FALSE;
         return;
     }
     TRACE("XComposite is up and running error_base = %d\n", xcomp_error_base);
@@ -477,7 +473,7 @@ sym_not_found:
     TRACE("Unable to load function pointers from %s, XComposite disabled\n", SONAME_LIBXCOMPOSITE);
     wine_dlclose(xcomposite_handle, NULL, 0);
     xcomposite_handle = NULL;
-    usexcomposite = 0;
+    usexcomposite = FALSE;
 }
 #endif /* defined(SONAME_LIBXCOMPOSITE) */
 
@@ -665,6 +661,8 @@ static void thread_detach(void)
         if (data->font_set) XFreeFontSet( data->display, data->font_set );
         XCloseDisplay( data->display );
         HeapFree( GetProcessHeap(), 0, data );
+        /* clear data in case we get re-entered from user32 before the thread is truly dead */
+        TlsSetValue( thread_data_tls_index, NULL );
     }
 }
 

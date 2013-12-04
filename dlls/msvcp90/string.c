@@ -34,13 +34,27 @@ typedef struct {
     basic_string_char *bstr;
     const char *pos;
 } String_iterator_char;
-typedef String_iterator_char String_reverse_iterator_char;
+
+typedef struct {
+#if _MSVCP_VER == 80
+    void *cont;
+#endif
+    const basic_string_char *bstr;
+    const char *pos;
+} String_reverse_iterator_char;
 
 typedef struct {
     basic_string_wchar *bstr;
     const wchar_t *pos;
 } String_iterator_wchar;
-typedef String_iterator_wchar String_reverse_iterator_wchar;
+
+typedef struct {
+#if _MSVCP_VER == 80
+    void *cont;
+#endif
+    const basic_string_wchar *bstr;
+    const wchar_t *pos;
+}  String_reverse_iterator_wchar;
 
 /* size_t_noverify structure */
 typedef struct {
@@ -162,7 +176,7 @@ char CDECL MSVCP_char_traits_char_to_char_type(const int *i)
 /* ?to_int_type@?$char_traits@D@std@@SAHAEBD@Z */
 int CDECL MSVCP_char_traits_char_to_int_type(const char *ch)
 {
-    return (int)*ch;
+    return (unsigned char)*ch;
 }
 
 /* ?eq_int_type@?$char_traits@D@std@@SA_NABH0@Z */
@@ -915,8 +929,8 @@ void __thiscall MSVCP_basic_string_char_reserve(basic_string_char *this, MSVCP_s
     if(len > size)
         return;
 
-    basic_string_char_grow(this, size, FALSE);
-    basic_string_char_eos(this, len);
+    if(basic_string_char_grow(this, size, TRUE))
+        basic_string_char_eos(this, len);
 }
 
 /* ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@XZ */
@@ -1823,7 +1837,7 @@ MSVCP_size_t __thiscall MSVCP_basic_string_char_find_last_not_of_cstr_substr(
 
     TRACE("%p %p %lu %lu\n", this, find, off, len);
 
-    if(len>0 && this->size>0) {
+    if(this->size>0) {
         if(off >= this->size)
             off = this->size-1;
 
@@ -2302,6 +2316,9 @@ String_reverse_iterator_char* __thiscall MSVCP_basic_string_char_rbegin(
 {
     TRACE("%p\n", this);
 
+#if _MSVCP_VER == 80
+    ret->cont = NULL;
+#endif
     ret->bstr = this;
     ret->pos = basic_string_char_const_ptr(this)+this->size;
     return ret;
@@ -2317,6 +2334,9 @@ String_reverse_iterator_char* __thiscall MSVCP_basic_string_char_rend(
 {
     TRACE("%p\n", this);
 
+#if _MSVCP_VER == 80
+    ret->cont = NULL;
+#endif
     ret->bstr = this;
     ret->pos = basic_string_char_const_ptr(this);
     return ret;
@@ -2770,8 +2790,8 @@ void __thiscall MSVCP_basic_string_wchar_reserve(basic_string_wchar *this, MSVCP
     if(len > size)
         return;
 
-    basic_string_wchar_grow(this, size, FALSE);
-    basic_string_wchar_eos(this, len);
+    if(basic_string_wchar_grow(this, size, TRUE))
+        basic_string_wchar_eos(this, len);
 }
 
 /* ??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@XZ */
@@ -3841,7 +3861,7 @@ MSVCP_size_t __thiscall MSVCP_basic_string_wchar_find_last_not_of_cstr_substr(
 
     TRACE("%p %p %lu %lu\n", this, find, off, len);
 
-    if(len>0 && this->size>0) {
+    if(this->size>0) {
         if(off >= this->size)
             off = this->size-1;
 
@@ -4386,6 +4406,8 @@ String_iterator_wchar* __thiscall MSVCP_basic_string_wchar_end(
 
 /* ?rbegin@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AV?$reverse_iterator@V?$_String_iterator@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@@2@XZ */
 /* ?rbegin@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAA?AV?$reverse_iterator@V?$_String_iterator@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@@2@XZ */
+/* ?rbegin@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AV?$reverse_iterator@V?$_String_iterator@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@@2@XZ */
+/* ?rbegin@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAA?AV?$reverse_iterator@V?$_String_iterator@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@@2@XZ */
 /* ?rbegin@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QBE?AV?$reverse_iterator@V?$_String_const_iterator@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@@2@XZ */
 /* ?rbegin@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEBA?AV?$reverse_iterator@V?$_String_const_iterator@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@@2@XZ */
 /* ?rbegin@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AV?$reverse_iterator@V?$_String_iterator@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@@2@XZ */
@@ -4398,6 +4420,9 @@ String_reverse_iterator_wchar* __thiscall MSVCP_basic_string_wchar_rbegin(
 {
     TRACE("%p\n", this);
 
+#if _MSVCP_VER == 80
+    ret->cont = NULL;
+#endif
     ret->bstr = this;
     ret->pos = basic_string_wchar_const_ptr(this)+this->size;
     return ret;
@@ -4405,6 +4430,8 @@ String_reverse_iterator_wchar* __thiscall MSVCP_basic_string_wchar_rbegin(
 
 /* ?rend@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE?AV?$reverse_iterator@V?$_String_iterator@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@@2@XZ */
 /* ?rend@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAA?AV?$reverse_iterator@V?$_String_iterator@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@@2@XZ */
+/* ?rend@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AV?$reverse_iterator@V?$_String_iterator@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@@2@XZ */
+/* ?rend@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QEAA?AV?$reverse_iterator@V?$_String_iterator@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@@2@XZ */
 /* ?rend@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QBE?AV?$reverse_iterator@V?$_String_const_iterator@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@@2@XZ */
 /* ?rend@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEBA?AV?$reverse_iterator@V?$_String_const_iterator@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@@2@XZ */
 /* ?rend@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QAE?AV?$reverse_iterator@V?$_String_iterator@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@@2@XZ */
@@ -4417,6 +4444,9 @@ String_reverse_iterator_wchar* __thiscall MSVCP_basic_string_wchar_rend(
 {
     TRACE("%p\n", this);
 
+#if _MSVCP_VER == 80
+    ret->cont = NULL;
+#endif
     ret->bstr = this;
     ret->pos = basic_string_wchar_const_ptr(this);
     return ret;

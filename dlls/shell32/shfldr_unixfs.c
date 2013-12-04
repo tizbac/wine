@@ -388,11 +388,12 @@ static inline BOOL UNIXFS_is_pidl_of_type(LPCITEMIDLIST pIDL, SHCONTF fFilter) {
  *
  * RETURNS
  *  Success, TRUE
- *  Failure, FALSE - Path not existent, too long, insufficient rights, to many symlinks
+ *  Failure, FALSE - Path not existent, too long, insufficient rights, too many symlinks
  */
 static BOOL UNIXFS_get_unix_path(LPCWSTR pszDosPath, char *pszCanonicalPath)
 {
-    char *pPathTail, *pElement, *pCanonicalTail, szPath[FILENAME_MAX], *pszUnixPath, has_failed = 0, mb_path[FILENAME_MAX];
+    char *pPathTail, *pElement, *pCanonicalTail, szPath[FILENAME_MAX], *pszUnixPath, mb_path[FILENAME_MAX];
+    BOOL has_failed = FALSE;
     WCHAR wszDrive[] = { '?', ':', '\\', 0 }, dospath[MAX_PATH], *dospath_end;
     int cDriveSymlinkLen;
     void *redir;
@@ -423,7 +424,7 @@ static BOOL UNIXFS_get_unix_path(LPCWSTR pszDosPath, char *pszCanonicalPath)
             *dospath_end = '/';
             --dospath_end;
         }else
-            has_failed = 1;
+            has_failed = TRUE;
         while(*dospath_end != '\\' && *dospath_end != '/'){
             --dospath_end;
             if(dospath_end < dospath)

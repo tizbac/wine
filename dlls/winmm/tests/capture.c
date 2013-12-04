@@ -43,9 +43,9 @@ static const char * wave_in_error(MMRESULT error)
     static char long_msg[1100];
     MMRESULT rc;
 
-    rc = waveInGetErrorText(error, msg, sizeof(msg));
+    rc = waveInGetErrorTextA(error, msg, sizeof(msg));
     if (rc != MMSYSERR_NOERROR)
-        sprintf(long_msg, "waveInGetErrorText(%x) failed with error %x", error, rc);
+        sprintf(long_msg, "waveInGetErrorTextA(%x) failed with error %x", error, rc);
     else
         sprintf(long_msg, "%s(%s)", mmsys_error(error), msg);
     return long_msg;
@@ -127,10 +127,11 @@ static void check_position(int device, HWAVEIN win, DWORD bytes,
        dev_name(device));
 }
 
-static void wave_in_test_deviceIn(int device, LPWAVEFORMATEX pwfx, DWORD format, DWORD flags, LPWAVEINCAPS pcaps)
+static void wave_in_test_deviceIn(int device, WAVEFORMATEX *pwfx, DWORD format, DWORD flags,
+        WAVEINCAPSA *pcaps)
 {
     HWAVEIN win;
-    HANDLE hevent;
+    HANDLE hevent = CreateEventW(NULL, FALSE, FALSE, NULL);
     WAVEHDR frag;
     MMRESULT rc;
     DWORD res;
@@ -138,11 +139,6 @@ static void wave_in_test_deviceIn(int device, LPWAVEFORMATEX pwfx, DWORD format,
     WORD nChannels = pwfx->nChannels;
     WORD wBitsPerSample = pwfx->wBitsPerSample;
     DWORD nSamplesPerSec = pwfx->nSamplesPerSec;
-
-    hevent=CreateEvent(NULL,FALSE,FALSE,NULL);
-    ok(hevent!=NULL,"CreateEvent(): error=%d\n",GetLastError());
-    if (hevent==NULL)
-        return;
 
     win=NULL;
     rc=waveInOpen(&win,device,pwfx,(DWORD_PTR)hevent,0,CALLBACK_EVENT|flags);
@@ -226,10 +222,11 @@ static void wave_in_test_deviceIn(int device, LPWAVEFORMATEX pwfx, DWORD format,
            "frag.dwBytesRecorded=%d, should=%d\n",
            frag.dwBytesRecorded,pwfx->nAvgBytesPerSec);
 
-        mmt.wType = TIME_SAMPLES;
+        mmt.wType = TIME_BYTES;
         rc=waveInGetPosition(win, &mmt, sizeof(mmt));
         ok(rc==MMSYSERR_NOERROR,"waveInGetPosition(%s): rc=%s\n",
            dev_name(device),wave_in_error(rc));
+        ok(mmt.wType == TIME_BYTES, "doesn't support TIME_BYTES: %u\n", mmt.wType);
         ok(mmt.u.cb == frag.dwBytesRecorded, "Got wrong position: %u\n", mmt.u.cb);
 
         /* stop playing on error */

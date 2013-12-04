@@ -142,6 +142,8 @@ void collect_objects(script_ctx_t*) DECLSPEC_HIDDEN;
 HRESULT create_procedure_disp(script_ctx_t*,vbscode_t*,IDispatch**) DECLSPEC_HIDDEN;
 HRESULT create_script_disp(script_ctx_t*,ScriptDisp**) DECLSPEC_HIDDEN;
 
+HRESULT to_int(VARIANT*,int*) DECLSPEC_HIDDEN;
+
 static inline unsigned arg_cnt(const DISPPARAMS *dp)
 {
     return dp->cArgs - dp->cNamedArgs;
@@ -212,6 +214,7 @@ typedef enum {
     X(case,           0, ARG_ADDR,    0)          \
     X(concat,         1, 0,           0)          \
     X(const,          1, ARG_BSTR,    0)          \
+    X(dim,            1, ARG_BSTR,    ARG_UINT)   \
     X(div,            1, 0,           0)          \
     X(double,         1, ARG_DOUBLE,  0)          \
     X(empty,          1, 0,           0)          \
@@ -299,6 +302,11 @@ typedef struct {
     const WCHAR *name;
 } var_desc_t;
 
+typedef struct {
+    unsigned dim_cnt;
+    SAFEARRAYBOUND *bounds;
+} array_desc_t;
+
 struct _function_t {
     function_type_t type;
     const WCHAR *name;
@@ -307,6 +315,8 @@ struct _function_t {
     unsigned arg_cnt;
     var_desc_t *vars;
     unsigned var_cnt;
+    array_desc_t *array_descs;
+    unsigned array_cnt;
     unsigned code_off;
     vbscode_t *code_ctx;
     function_t *next;

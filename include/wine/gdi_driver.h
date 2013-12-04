@@ -97,7 +97,7 @@ struct gdi_dc_funcs
     BOOL     (*pFlattenPath)(PHYSDEV);
     BOOL     (*pFontIsLinked)(PHYSDEV);
     BOOL     (*pFrameRgn)(PHYSDEV,HRGN,HBRUSH,INT,INT);
-    BOOL     (*pGdiComment)(PHYSDEV,UINT,CONST BYTE*);
+    BOOL     (*pGdiComment)(PHYSDEV,UINT,const BYTE*);
     BOOL     (*pGdiRealizationInfo)(PHYSDEV,void*);
     UINT     (*pGetBoundsRect)(PHYSDEV,RECT*,UINT);
     BOOL     (*pGetCharABCWidths)(PHYSDEV,UINT,UINT,LPABC);
@@ -278,7 +278,7 @@ WINGDIAPI WORD      WINAPI SetHookFlags(HDC,WORD);
 extern void CDECL __wine_make_gdi_object_system( HGDIOBJ handle, BOOL set );
 extern void CDECL __wine_set_visible_region( HDC hdc, HRGN hrgn, const RECT *vis_rect,
                                              const RECT *device_rect, struct window_surface *surface );
-extern HMODULE CDECL __wine_get_driver_module( HDC hdc );
+extern void CDECL __wine_set_display_driver( HMODULE module );
 extern struct opengl_funcs * CDECL __wine_get_wgl_driver( HDC hdc, UINT version );
 extern struct d3dadapter_funcs * CDECL __wine_get_d3dadapter_driver( HDC hdc, UINT version );
 

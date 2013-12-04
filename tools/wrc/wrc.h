@@ -21,8 +21,8 @@
 #ifndef __WRC_WRC_H
 #define __WRC_WRC_H
 
-#include <time.h>	/* For time_t */
-
+#define WINE_UNICODE_API /* nothing */
+#include "wine/unicode.h"
 #include "wrctypes.h"
 
 /* From wrc.c */
@@ -47,7 +47,6 @@ extern int check_utf8;
 
 extern char *input_name;
 extern char *cmdline;
-extern time_t now;
 
 extern int line_number;
 extern int char_number;

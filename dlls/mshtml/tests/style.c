@@ -37,6 +37,13 @@ static int strcmp_wa(LPCWSTR strw, const char *stra)
     return lstrcmpA(stra, buf);
 }
 
+static BOOL wstr_contains(const WCHAR *strw, const char *stra)
+{
+    CHAR buf[512];
+    WideCharToMultiByte(CP_ACP, 0, strw, -1, buf, sizeof(buf), NULL, NULL);
+    return strstr(buf, stra) != NULL;
+}
+
 static BSTR a2bstr(const char *str)
 {
     BSTR ret;
@@ -71,6 +78,17 @@ static IHTMLElement2 *_get_elem2_iface(unsigned line, IUnknown *unk)
     hres = IUnknown_QueryInterface(unk, &IID_IHTMLElement2, (void**)&elem);
     ok_(__FILE__,line) (hres == S_OK, "Could not get IHTMLElement2: %08x\n", hres);
     return elem;
+}
+
+#define get_current_style2_iface(u) _get_current_style2_iface(__LINE__,u)
+static IHTMLCurrentStyle2 *_get_current_style2_iface(unsigned line, IUnknown *unk)
+{
+    IHTMLCurrentStyle2 *current_style2;
+    HRESULT hres;
+
+    hres = IUnknown_QueryInterface(unk, &IID_IHTMLCurrentStyle2, (void**)&current_style2);
+    ok_(__FILE__,line) (hres == S_OK, "Could not get IHTMLElement2: %08x\n", hres);
+    return current_style2;
 }
 
 static IHTMLElement *get_element_by_id(IHTMLDocument2 *doc, const char *id)
@@ -453,11 +471,52 @@ static void test_style4(IHTMLStyle4 *style4)
     VariantClear(&vdefault);
 }
 
+static void test_style6(IHTMLStyle6 *style)
+{
+    BSTR str;
+    HRESULT hres;
+
+    str = (void*)0xdeadbeef;
+    hres = IHTMLStyle6_get_outline(style, &str);
+    ok(hres == S_OK, "get_outline failed: %08x\n", hres);
+    ok(str && !*str, "outline = %s\n", wine_dbgstr_w(str));
+    SysFreeString(str);
+
+    str = a2bstr("1px");
+    hres = IHTMLStyle6_put_outline(style, str);
+    ok(hres == S_OK, "put_outline failed: %08x\n", hres);
+    SysFreeString(str);
+
+    str = (void*)0xdeadbeef;
+    hres = IHTMLStyle6_get_outline(style, &str);
+    ok(hres == S_OK, "get_outline failed: %08x\n", hres);
+    ok(wstr_contains(str, "1px"), "outline = %s\n", wine_dbgstr_w(str));
+    SysFreeString(str);
+
+    str = (void*)0xdeadbeef;
+    hres = IHTMLStyle6_get_boxSizing(style, &str);
+    ok(hres == S_OK, "get_boxSizing failed: %08x\n", hres);
+    ok(!str, "boxSizing = %s\n", wine_dbgstr_w(str));
+    SysFreeString(str);
+
+    str = a2bstr("border-box");
+    hres = IHTMLStyle6_put_boxSizing(style, str);
+    ok(hres == S_OK, "put_boxSizing failed: %08x\n", hres);
+    SysFreeString(str);
+
+    str = NULL;
+    hres = IHTMLStyle6_get_boxSizing(style, &str);
+    ok(hres == S_OK, "get_boxSizing failed: %08x\n", hres);
+    ok(!strcmp_wa(str, "border-box"), "boxSizing = %s\n", wine_dbgstr_w(str));
+    SysFreeString(str);
+}
+
 static void test_body_style(IHTMLStyle *style)
 {
     IHTMLStyle2 *style2;
     IHTMLStyle3 *style3;
     IHTMLStyle4 *style4;
+    IHTMLStyle6 *style6;
     VARIANT_BOOL b;
     VARIANT v;
     BSTR str;
@@ -2017,6 +2076,22 @@ static void test_body_style(IHTMLStyle *style)
     ok(hres == S_OK, "get_pageBreakBefore failed: %08x\n", hres);
     ok(!str, "pageBreakBefore = %s\n", wine_dbgstr_w(str));
 
+    str = (void*)0xdeadbeef;
+    hres = IHTMLStyle_get_whiteSpace(style, &str);
+    ok(hres == S_OK, "get_whiteSpace failed: %08x\n", hres);
+    ok(!str, "whiteSpace = %s\n", wine_dbgstr_w(str));
+
+    str = a2bstr("nowrap");
+    hres = IHTMLStyle_put_whiteSpace(style, str);
+    SysFreeString(str);
+    ok(hres == S_OK, "put_whiteSpace failed: %08x\n", hres);
+
+    str = NULL;
+    hres = IHTMLStyle_get_whiteSpace(style, &str);
+    ok(hres == S_OK, "get_whiteSpace failed: %08x\n", hres);
+    ok(!strcmp_wa(str, "nowrap"), "whiteSpace = %s\n", wine_dbgstr_w(str));
+    SysFreeString(str);
+
     hres = IHTMLStyle_QueryInterface(style, &IID_IHTMLStyle2, (void**)&style2);
     ok(hres == S_OK, "Could not get IHTMLStyle2 iface: %08x\n", hres);
     if(SUCCEEDED(hres)) {
@@ -2036,6 +2111,14 @@ static void test_body_style(IHTMLStyle *style)
     if(SUCCEEDED(hres)) {
         test_style4(style4);
         IHTMLStyle4_Release(style4);
+    }
+
+    hres = IHTMLStyle_QueryInterface(style, &IID_IHTMLStyle6, (void**)&style6);
+    if(SUCCEEDED(hres)) {
+        test_style6(style6);
+        IHTMLStyle6_Release(style6);
+    }else {
+        win_skip("IHTMLStyle6 not available\n");
     }
 }
 
@@ -2100,9 +2183,7 @@ static void test_style_filters(IHTMLElement *elem)
     hres = IHTMLElement2_get_currentStyle(elem2, &current_style);
     ok(hres == S_OK, "get_style failed: %08x\n", hres);
 
-    hres = IHTMLCurrentStyle_QueryInterface(current_style, &IID_IHTMLCurrentStyle2, (void**)&current_style2);
-    IHTMLCurrentStyle_Release(current_style);
-    ok(hres == S_OK, "Could not get IHTMLCurrentStyle2 iface: %08x\n", hres);
+    current_style2 = get_current_style2_iface((IUnknown*)current_style);
 
     test_style_filter(style, NULL);
     test_current_style_filter(current_style2, NULL);
@@ -2131,6 +2212,8 @@ static void test_style_filters(IHTMLElement *elem)
 
 static void test_current_style(IHTMLCurrentStyle *current_style)
 {
+    IHTMLCurrentStyle2 *current_style2;
+    VARIANT_BOOL b;
     BSTR str;
     HRESULT hres;
     VARIANT v;
@@ -2390,6 +2473,15 @@ static void test_current_style(IHTMLCurrentStyle *current_style)
     ok(hres == S_OK, "get_textIndent failed: %08x\n", hres);
     ok(V_VT(&v) == VT_BSTR, "V_VT(v) = %d\n", V_VT(&v));
     VariantClear(&v);
+
+    current_style2 = get_current_style2_iface((IUnknown*)current_style);
+
+    b = 100;
+    hres = IHTMLCurrentStyle2_get_hasLayout(current_style2, &b);
+    ok(hres == S_OK, "get_hasLayout failed: %08x\n", hres);
+    ok(b == VARIANT_TRUE, "hasLayout = %x\n", b);
+
+    IHTMLCurrentStyle2_Release(current_style2);
 }
 
 static const char basic_test_str[] = "<html><body><div id=\"divid\"></div/</body></html>";
@@ -2611,9 +2703,9 @@ static void run_test(const char *str, style_test_t test)
 
     do_advise((IUnknown*)doc, &IID_IPropertyNotifySink, (IUnknown*)&PropertyNotifySink);
 
-    while(!doc_complete && GetMessage(&msg, NULL, 0, 0)) {
+    while(!doc_complete && GetMessageW(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
     test(doc);

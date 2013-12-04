@@ -29,7 +29,9 @@
 # error You must include port.h before all other headers
 #endif
 
-#define _GNU_SOURCE  /* for pread/pwrite */
+#ifndef _GNU_SOURCE
+# define _GNU_SOURCE  /* for pread/pwrite */
+#endif
 #include <fcntl.h>
 #include <math.h>
 #include <sys/types.h>
@@ -256,6 +258,10 @@ extern int getopt_long_only (int ___argc, char *const *___argv,
 
 #ifndef HAVE_FFS
 int ffs( int x );
+#endif
+
+#ifndef HAVE_ISFINITE
+int isfinite(double x);
 #endif
 
 #ifndef HAVE_ISINF

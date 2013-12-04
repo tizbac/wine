@@ -867,7 +867,7 @@ CreateMappedBitmap (HINSTANCE hInstance, INT_PTR idBitmap, UINT wFlags,
  *     Failure: 0
  *
  * NOTES
- *     Do not use this functions anymore. Use CreateToolbarEx instead.
+ *     Do not use this function anymore. Use CreateToolbarEx instead.
  */
 
 HWND WINAPI
@@ -1492,7 +1492,7 @@ void COMCTL32_GetFontMetrics(HFONT hFont, TEXTMETRICW *ptm)
  * identifies them.
  *
  * Some of the codes are in the CCM_FIRST..CCM_LAST range, but there is no
- * colision with defined CCM_ codes.
+ * collision with defined CCM_ codes.
  */
 BOOL COMCTL32_IsReflectedMessage(UINT uMsg)
 {
@@ -1541,7 +1541,7 @@ BOOL WINAPI MirrorIcon(HICON *phicon1, HICON *phicon2)
     return FALSE;
 }
 
-static inline int IsDelimiter(WCHAR c)
+static inline BOOL IsDelimiter(WCHAR c)
 {
     switch(c)
     {

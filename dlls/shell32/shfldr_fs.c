@@ -690,7 +690,7 @@ IShellFolder_fnGetUIObjectOf (IShellFolder2 * iface,
         } else if ((IsEqualIID(riid,&IID_IShellLinkW) ||
          IsEqualIID(riid,&IID_IShellLinkA)) && (cidl == 1)) {
             pidl = ILCombine (This->pidlRoot, apidl[0]);
-            hr = IShellLink_ConstructFromFile(NULL, riid, pidl, (LPVOID*)&pObj);
+            hr = IShellLink_ConstructFromFile(NULL, riid, pidl, &pObj);
             SHFree (pidl);
         } else {
             hr = E_NOINTERFACE;
@@ -1138,7 +1138,7 @@ ISFHelper_fnAddFolder (ISFHelper * iface, HWND hwnd, LPCWSTR pwszName,
 {
     IGenericSFImpl *This = impl_from_ISFHelper(iface);
     WCHAR wszNewDir[MAX_PATH];
-    DWORD bRes;
+    BOOL bRes;
     HRESULT hres = E_FAIL;
 
     TRACE ("(%p)(%s %p)\n", This, debugstr_w(pwszName), ppidlOut);

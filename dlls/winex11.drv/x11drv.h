@@ -216,9 +216,9 @@ extern INT X11DRV_YWStoDS( HDC hdc, INT height ) DECLSPEC_HIDDEN;
 
 extern const int X11DRV_XROPfunction[];
 
-extern int client_side_graphics DECLSPEC_HIDDEN;
-extern int client_side_with_render DECLSPEC_HIDDEN;
-extern int shape_layered_windows DECLSPEC_HIDDEN;
+extern BOOL client_side_graphics DECLSPEC_HIDDEN;
+extern BOOL client_side_with_render DECLSPEC_HIDDEN;
+extern BOOL shape_layered_windows DECLSPEC_HIDDEN;
 extern const struct gdi_dc_funcs *X11DRV_XRender_Init(void) DECLSPEC_HIDDEN;
 
 extern struct opengl_funcs *get_glx_driver(UINT) DECLSPEC_HIDDEN;
@@ -365,26 +365,22 @@ extern XVisualInfo argb_visual DECLSPEC_HIDDEN;
 extern Colormap default_colormap DECLSPEC_HIDDEN;
 extern XPixmapFormatValues **pixmap_formats DECLSPEC_HIDDEN;
 extern Window root_window DECLSPEC_HIDDEN;
-extern int clipping_cursor DECLSPEC_HIDDEN;
-extern unsigned int screen_width DECLSPEC_HIDDEN;
-extern unsigned int screen_height DECLSPEC_HIDDEN;
+extern BOOL clipping_cursor DECLSPEC_HIDDEN;
 extern unsigned int screen_bpp DECLSPEC_HIDDEN;
-extern RECT virtual_screen_rect DECLSPEC_HIDDEN;
-extern int use_xkb DECLSPEC_HIDDEN;
-extern int usexrandr DECLSPEC_HIDDEN;
-extern int usexvidmode DECLSPEC_HIDDEN;
+extern BOOL use_xkb DECLSPEC_HIDDEN;
+extern BOOL usexrandr DECLSPEC_HIDDEN;
+extern BOOL usexvidmode DECLSPEC_HIDDEN;
 extern BOOL ximInComposeMode DECLSPEC_HIDDEN;
-extern int use_take_focus DECLSPEC_HIDDEN;
-extern int use_primary_selection DECLSPEC_HIDDEN;
-extern int use_system_cursors DECLSPEC_HIDDEN;
-extern int show_systray DECLSPEC_HIDDEN;
-extern int grab_pointer DECLSPEC_HIDDEN;
-extern int grab_fullscreen DECLSPEC_HIDDEN;
-extern int usexcomposite DECLSPEC_HIDDEN;
-extern int usexfixes DECLSPEC_HIDDEN;
-extern int managed_mode DECLSPEC_HIDDEN;
-extern int decorated_mode DECLSPEC_HIDDEN;
-extern int private_color_map DECLSPEC_HIDDEN;
+extern BOOL use_take_focus DECLSPEC_HIDDEN;
+extern BOOL use_primary_selection DECLSPEC_HIDDEN;
+extern BOOL use_system_cursors DECLSPEC_HIDDEN;
+extern BOOL show_systray DECLSPEC_HIDDEN;
+extern BOOL grab_pointer DECLSPEC_HIDDEN;
+extern BOOL grab_fullscreen DECLSPEC_HIDDEN;
+extern BOOL usexcomposite DECLSPEC_HIDDEN;
+extern BOOL managed_mode DECLSPEC_HIDDEN;
+extern BOOL decorated_mode DECLSPEC_HIDDEN;
+extern BOOL private_color_map DECLSPEC_HIDDEN;
 extern int primary_monitor DECLSPEC_HIDDEN;
 extern int copy_default_colors DECLSPEC_HIDDEN;
 extern int alloc_system_colors DECLSPEC_HIDDEN;
@@ -604,20 +600,6 @@ static inline void mirror_rect( const RECT *window_rect, RECT *rect )
     rect->right = width - tmp;
 }
 
-static inline BOOL is_window_rect_mapped( const RECT *rect )
-{
-    return (rect->left < virtual_screen_rect.right &&
-            rect->top < virtual_screen_rect.bottom &&
-            max( rect->right, rect->left + 1 ) > virtual_screen_rect.left &&
-            max( rect->bottom, rect->top + 1 ) > virtual_screen_rect.top);
-}
-
-static inline BOOL is_window_rect_fullscreen( const RECT *rect )
-{
-    return (rect->left <= 0 && rect->right >= screen_width &&
-            rect->top <= 0 && rect->bottom >= screen_height);
-}
-
 /* X context to associate a hwnd to an X window */
 extern XContext winContext DECLSPEC_HIDDEN;
 /* X context to associate a struct x11drv_win_data to an hwnd */
@@ -645,6 +627,10 @@ typedef int (*x11drv_error_callback)( Display *display, XErrorEvent *event, void
 extern void X11DRV_expect_error( Display *display, x11drv_error_callback callback, void *arg ) DECLSPEC_HIDDEN;
 extern int X11DRV_check_error(void) DECLSPEC_HIDDEN;
 extern void X11DRV_X_to_window_rect( struct x11drv_win_data *data, RECT *rect ) DECLSPEC_HIDDEN;
+extern POINT virtual_screen_to_root( INT x, INT y ) DECLSPEC_HIDDEN;
+extern POINT root_to_virtual_screen( INT x, INT y ) DECLSPEC_HIDDEN;
+extern RECT get_virtual_screen_rect(void) DECLSPEC_HIDDEN;
+extern RECT get_primary_monitor_rect(void) DECLSPEC_HIDDEN;
 extern void xinerama_init( unsigned int width, unsigned int height ) DECLSPEC_HIDDEN;
 
 struct x11drv_mode_info
@@ -657,7 +643,8 @@ struct x11drv_mode_info
 
 extern void X11DRV_init_desktop( Window win, unsigned int width, unsigned int height ) DECLSPEC_HIDDEN;
 extern void X11DRV_resize_desktop(unsigned int width, unsigned int height) DECLSPEC_HIDDEN;
-BOOL is_desktop_fullscreen(void) DECLSPEC_HIDDEN;
+extern BOOL is_desktop_fullscreen(void) DECLSPEC_HIDDEN;
+extern BOOL create_desktop_win_data( Window win ) DECLSPEC_HIDDEN;
 extern void X11DRV_Settings_AddDepthModes(void) DECLSPEC_HIDDEN;
 extern void X11DRV_Settings_AddOneMode(unsigned int width, unsigned int height, unsigned int bpp, unsigned int freq) DECLSPEC_HIDDEN;
 unsigned int X11DRV_Settings_GetModeCount(void) DECLSPEC_HIDDEN;
@@ -680,5 +667,21 @@ extern void X11DRV_ForceXIMReset(HWND hwnd) DECLSPEC_HIDDEN;
 extern void X11DRV_SetPreeditState(HWND hwnd, BOOL fOpen) DECLSPEC_HIDDEN;
 
 #define XEMBED_MAPPED  (1 << 0)
+
+static inline BOOL is_window_rect_mapped( const RECT *rect )
+{
+    RECT virtual_rect = get_virtual_screen_rect();
+    return (rect->left < virtual_rect.right &&
+            rect->top < virtual_rect.bottom &&
+            max( rect->right, rect->left + 1 ) > virtual_rect.left &&
+            max( rect->bottom, rect->top + 1 ) > virtual_rect.top);
+}
+
+static inline BOOL is_window_rect_fullscreen( const RECT *rect )
+{
+    RECT primary_rect = get_primary_monitor_rect();
+    return (rect->left <= primary_rect.left && rect->right >= primary_rect.right &&
+            rect->top <= primary_rect.top && rect->bottom >= primary_rect.bottom);
+}
 
 #endif  /* __WINE_X11DRV_H */

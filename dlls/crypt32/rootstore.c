@@ -256,9 +256,10 @@ static void check_and_store_certs(HCERTSTORE from, HCERTSTORE to)
             {
                 CERT_CHAIN_PARA chainPara = { sizeof(chainPara), { 0 } };
                 PCCERT_CHAIN_CONTEXT chain;
-                BOOL ret = CertGetCertificateChain(engine, cert, NULL, from,
-                 &chainPara, 0, NULL, &chain);
+                BOOL ret;
 
+                ret = CertGetCertificateChain(engine, cert, NULL, from,
+                 &chainPara, CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL, NULL, &chain);
                 if (!ret)
                     TRACE("rejecting %s: %s\n", get_cert_common_name(cert),
                      "chain creation failed");
@@ -485,6 +486,7 @@ static const char * const CRYPT_knownLocations[] = {
  "/etc/ssl/certs/ca-certificates.crt",
  "/etc/ssl/certs",
  "/etc/pki/tls/certs/ca-bundle.crt",
+ "/usr/share/ca-certificates/ca-bundle.crt",
  "/usr/local/share/certs/",
  "/etc/sfw/openssl/certs",
 };
@@ -810,9 +812,9 @@ static HCERTSTORE create_root_store(void)
     return root;
 }
 
-static PWINECRYPT_CERTSTORE CRYPT_rootStore;
+static WINECRYPT_CERTSTORE *CRYPT_rootStore;
 
-PWINECRYPT_CERTSTORE CRYPT_RootOpenStore(HCRYPTPROV hCryptProv, DWORD dwFlags)
+WINECRYPT_CERTSTORE *CRYPT_RootOpenStore(HCRYPTPROV hCryptProv, DWORD dwFlags)
 {
     TRACE("(%ld, %08x)\n", hCryptProv, dwFlags);
 
@@ -831,7 +833,7 @@ PWINECRYPT_CERTSTORE CRYPT_RootOpenStore(HCRYPTPROV hCryptProv, DWORD dwFlags)
         if (CRYPT_rootStore != root)
             CertCloseStore(root, 0);
     }
-    CertDuplicateStore(CRYPT_rootStore);
+    CRYPT_rootStore->vtbl->addref(CRYPT_rootStore);
     return CRYPT_rootStore;
 }
 

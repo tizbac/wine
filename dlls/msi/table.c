@@ -564,7 +564,7 @@ static UINT table_get_column_info( MSIDATABASE *db, LPCWSTR name, MSICOLUMNINFO 
 
     *pcount = column_count;
 
-    /* if there's no columns, there's no table */
+    /* if there are no columns, there's no table */
     if (!column_count)
         return ERROR_INVALID_PARAMETER;
 
@@ -1259,6 +1259,7 @@ static UINT get_table_value_from_record( MSITABLEVIEW *tv, MSIRECORD *rec, UINT 
 {
     MSICOLUMNINFO columninfo;
     UINT r;
+    int ival;
 
     if ( (iField <= 0) ||
          (iField > tv->num_cols) ||
@@ -1285,16 +1286,21 @@ static UINT get_table_value_from_record( MSITABLEVIEW *tv, MSIRECORD *rec, UINT 
     }
     else if ( bytes_per_column( tv->db, &columninfo, LONG_STR_BYTES ) == 2 )
     {
-        *pvalue = 0x8000 + MSI_RecordGetInteger( rec, iField );
-        if ( *pvalue & 0xffff0000 )
+        ival = MSI_RecordGetInteger( rec, iField );
+        if (ival == 0x80000000) *pvalue = 0x8000;
+        else
         {
-            ERR("field %u value %d out of range\n", iField, *pvalue - 0x8000);
-            return ERROR_FUNCTION_FAILED;
+            *pvalue = 0x8000 + MSI_RecordGetInteger( rec, iField );
+            if (*pvalue & 0xffff0000)
+            {
+                ERR("field %u value %d out of range\n", iField, *pvalue - 0x8000);
+                return ERROR_FUNCTION_FAILED;
+            }
         }
     }
     else
     {
-        INT ival = MSI_RecordGetInteger( rec, iField );
+        ival = MSI_RecordGetInteger( rec, iField );
         *pvalue = ival ^ 0x80000000;
     }
 
@@ -1522,7 +1528,7 @@ static UINT table_validate_new( MSITABLEVIEW *tv, MSIRECORD *rec, UINT *column )
 {
     UINT r, row, i;
 
-    /* check there's no null values where they're not allowed */
+    /* check there are no null values where they're not allowed */
     for( i = 0; i < tv->num_cols; i++ )
     {
         if ( tv->columns[i].type & MSITYPE_NULLABLE )
@@ -1554,7 +1560,7 @@ static UINT table_validate_new( MSITABLEVIEW *tv, MSIRECORD *rec, UINT *column )
         }
     }
 
-    /* check there's no duplicate keys */
+    /* check there are no duplicate keys */
     r = msi_table_find_row( tv, rec, &row, column );
     if (r == ERROR_SUCCESS)
         return ERROR_FUNCTION_FAILED;

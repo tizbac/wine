@@ -23,7 +23,7 @@ use strict;
 
 # base URLs for www.unicode.org files
 my $MAPPINGS = "http://www.unicode.org/Public/MAPPINGS";
-my $UNIDATA = "http://www.unicode.org/Public/6.0.0/ucd";
+my $UNIDATA = "http://www.unicode.org/Public/6.3.0/ucd";
 my $REPORTS = "http://www.unicode.org/reports";
 my $RFCS = "http://www.rfc-editor.org/rfc";
 
@@ -41,34 +41,34 @@ my $DEF_CHAR = ord '?';
 
 my @allfiles =
 (
-    [ 37,    "VENDORS/MICSFT/EBCDIC/CP037.TXT",   0, "IBM EBCDIC US Canada" ],
+    [ 37,    "VENDORS/MICSFT/EBCDIC/CP037.TXT",   0, "IBM EBCDIC US Canada", 0, 0x6f ],
     [ 424,   "VENDORS/MISC/CP424.TXT",            0, "IBM EBCDIC Hebrew" ],
     [ 437,   "VENDORS/MICSFT/PC/CP437.TXT",       1, "OEM United States" ],
-    [ 500,   "VENDORS/MICSFT/EBCDIC/CP500.TXT",   0, "IBM EBCDIC International" ],
+    [ 500,   "VENDORS/MICSFT/EBCDIC/CP500.TXT",   0, "IBM EBCDIC International", 0, 0x6f ],
     [ 737,   "VENDORS/MICSFT/PC/CP737.TXT",       1, "OEM Greek 437G" ],
     [ 775,   "VENDORS/MICSFT/PC/CP775.TXT",       1, "OEM Baltic" ],
     [ 850,   "VENDORS/MICSFT/PC/CP850.TXT",       1, "OEM Multilingual Latin 1" ],
     [ 852,   "VENDORS/MICSFT/PC/CP852.TXT",       1, "OEM Slovak Latin 2" ],
     [ 855,   "VENDORS/MICSFT/PC/CP855.TXT",       1, "OEM Cyrillic" ],
     [ 856,   "VENDORS/MISC/CP856.TXT",            0, "Hebrew PC" ],
-    [ 857,   "VENDORS/MICSFT/PC/CP857.TXT",       1, "OEM Turkish" ],
+    [ 857,   "VENDORS/MICSFT/PC/CP857.TXT",       1, "OEM Turkish", 0xf8bb ],
     [ 860,   "VENDORS/MICSFT/PC/CP860.TXT",       1, "OEM Portuguese" ],
     [ 861,   "VENDORS/MICSFT/PC/CP861.TXT",       1, "OEM Icelandic" ],
     [ 862,   "VENDORS/MICSFT/PC/CP862.TXT",       1, "OEM Hebrew" ],
     [ 863,   "VENDORS/MICSFT/PC/CP863.TXT",       1, "OEM Canadian French" ],
-    [ 864,   "VENDORS/MICSFT/PC/CP864.TXT",       0, "OEM Arabic" ],
+    [ 864,   "VENDORS/MICSFT/PC/CP864.TXT",       0, "OEM Arabic", 0xf8bb ],
     [ 865,   "VENDORS/MICSFT/PC/CP865.TXT",       1, "OEM Nordic" ],
     [ 866,   "VENDORS/MICSFT/PC/CP866.TXT",       1, "OEM Russian" ],
     [ 869,   "VENDORS/MICSFT/PC/CP869.TXT",       1, "OEM Greek" ],
     [ 874,   "VENDORS/MICSFT/WindowsBestFit/bestfit874.txt",  1, "ANSI/OEM Thai" ],
-    [ 875,   "VENDORS/MICSFT/EBCDIC/CP875.TXT",               0, "IBM EBCDIC Greek" ],
+    [ 875,   "VENDORS/MICSFT/EBCDIC/CP875.TXT",               0, "IBM EBCDIC Greek", 0, 0x6f ],
     [ 878,   "VENDORS/MISC/KOI8-R.TXT",                       0, "Russian KOI8" ],
     [ 932,   "VENDORS/MICSFT/WindowsBestFit/bestfit932.txt",  0, "ANSI/OEM Japanese Shift-JIS" ],
     [ 936,   "VENDORS/MICSFT/WindowsBestFit/bestfit936.txt",  0, "ANSI/OEM Simplified Chinese GBK" ],
     [ 949,   "VENDORS/MICSFT/WindowsBestFit/bestfit949.txt",  0, "ANSI/OEM Korean Unified Hangul" ],
     [ 950,   "VENDORS/MICSFT/WindowsBestFit/bestfit950.txt",  0, "ANSI/OEM Traditional Chinese Big5" ],
     [ 1006,  "VENDORS/MISC/CP1006.TXT",                       0, "IBM Arabic" ],
-    [ 1026,  "VENDORS/MICSFT/EBCDIC/CP1026.TXT",              0, "IBM EBCDIC Latin 5 Turkish" ],
+    [ 1026,  "VENDORS/MICSFT/EBCDIC/CP1026.TXT",              0, "IBM EBCDIC Latin 5 Turkish", 0, 0x6f ],
     [ 1250,  "VENDORS/MICSFT/WindowsBestFit/bestfit1250.txt", 0, "ANSI Eastern Europe" ],
     [ 1251,  "VENDORS/MICSFT/WindowsBestFit/bestfit1251.txt", 0, "ANSI Cyrillic" ],
     [ 1252,  "VENDORS/MICSFT/WindowsBestFit/bestfit1252.txt", 0, "ANSI Latin 1" ],
@@ -78,11 +78,13 @@ my @allfiles =
     [ 1256,  "VENDORS/MICSFT/WindowsBestFit/bestfit1256.txt", 0, "ANSI Arabic" ],
     [ 1257,  "VENDORS/MICSFT/WindowsBestFit/bestfit1257.txt", 0, "ANSI Baltic" ],
     [ 1258,  "VENDORS/MICSFT/WindowsBestFit/bestfit1258.txt", 0, "ANSI/OEM Viet Nam" ],
-    [ 1361,  "OBSOLETE/EASTASIA/KSC/JOHAB.TXT",   0, "Korean Johab" ],
+    [ 1361,  "VENDORS/MICSFT/WindowsBestFit/bestfit1361.txt", 0, "Korean Johab" ],
     [ 10000, "VENDORS/MICSFT/MAC/ROMAN.TXT",      0, "Mac Roman" ],
     [ 10001, "VENDORS/APPLE/JAPANESE.TXT",        0, "Mac Japanese" ],
     [ 10002, "VENDORS/APPLE/CHINTRAD.TXT",        0, "Mac Traditional Chinese" ],
-    [ 10003, "VENDORS/APPLE/KOREAN.TXT",          0, "Mac Korean" ],
+    [ 10003, "VENDORS/APPLE/KOREAN.TXT",          0, "Mac Korean", 0xf8e5 ],
+    [ 10004, "VENDORS/APPLE/ARABIC.TXT",          0, "Mac Arabic", 0xf826 ],
+    [ 10005, "VENDORS/APPLE/HEBREW.TXT",          0, "Mac Hebrew", 0xf7fa ],
     [ 10006, "VENDORS/MICSFT/MAC/GREEK.TXT",      0, "Mac Greek" ],
     [ 10007, "VENDORS/MICSFT/MAC/CYRILLIC.TXT",   0, "Mac Cyrillic" ],
     [ 10008, "VENDORS/APPLE/CHINSIMP.TXT",        0, "Mac Simplified Chinese" ],
@@ -91,20 +93,20 @@ my @allfiles =
     [ 10021, "VENDORS/APPLE/THAI.TXT",            0, "Mac Thai" ],
     [ 10029, "VENDORS/MICSFT/MAC/LATIN2.TXT",     0, "Mac Latin 2" ],
     [ 10079, "VENDORS/MICSFT/MAC/ICELAND.TXT",    0, "Mac Icelandic" ],
-    [ 10081, "VENDORS/MICSFT/MAC/TURKISH.TXT",    0, "Mac Turkish" ],
+    [ 10081, "VENDORS/MICSFT/MAC/TURKISH.TXT",    0, "Mac Turkish", 0xf89f ],
     [ 10082, "VENDORS/APPLE/CROATIAN.TXT",        0, "Mac Croatian" ],
     [ 20127, undef,                               0, "US-ASCII (7bit)" ],
     [ 20866, "VENDORS/MISC/KOI8-R.TXT",           0, "Russian KOI8" ],
-    [ 20932, "OBSOLETE/EASTASIA/JIS/JIS0208.TXT", 0, "EUC-JP" ],
+    [ 20932, "OBSOLETE/EASTASIA/JIS/JIS0208.TXT", 0, "EUC-JP", 0, 0x3f, 0x30fb  ],
     [ 21866, "VENDORS/MISC/KOI8-U.TXT",           0, "Ukrainian KOI8" ],
     [ 28591, "ISO8859/8859-1.TXT",                0, "ISO 8859-1 Latin 1" ],
     [ 28592, "ISO8859/8859-2.TXT",                0, "ISO 8859-2 Latin 2 (East European)" ],
-    [ 28593, "ISO8859/8859-3.TXT",                0, "ISO 8859-3 Latin 3 (South European)" ],
+    [ 28593, "ISO8859/8859-3.TXT",                0, "ISO 8859-3 Latin 3 (South European)", 0xf7f5 ],
     [ 28594, "ISO8859/8859-4.TXT",                0, "ISO 8859-4 Latin 4 (Baltic old)" ],
     [ 28595, "ISO8859/8859-5.TXT",                0, "ISO 8859-5 Cyrillic" ],
-    [ 28596, "ISO8859/8859-6.TXT",                0, "ISO 8859-6 Arabic" ],
-    [ 28597, "ISO8859/8859-7.TXT",                0, "ISO 8859-7 Greek" ],
-    [ 28598, "ISO8859/8859-8.TXT",                0, "ISO 8859-8 Hebrew" ],
+    [ 28596, "ISO8859/8859-6.TXT",                0, "ISO 8859-6 Arabic", 0xf7c8 ],
+    [ 28597, "ISO8859/8859-7.TXT",                0, "ISO 8859-7 Greek", 0xf7c5 ],
+    [ 28598, "ISO8859/8859-8.TXT",                0, "ISO 8859-8 Hebrew", 0xf79c ],
     [ 28599, "ISO8859/8859-9.TXT",                0, "ISO 8859-9 Latin 5 (Turkish)" ],
     [ 28600, "ISO8859/8859-10.TXT",               0, "ISO 8859-10 Latin 6 (Nordic)" ],
     [ 28603, "ISO8859/8859-13.TXT",               0, "ISO 8859-13 Latin 7 (Baltic)" ],
@@ -217,7 +219,10 @@ my %break_types =
     "BA"  => 0x0022,
     "SA"  => 0x0023,
     "AI"  => 0x0024,
-    "B2"  => 0x0025
+    "B2"  => 0x0025,
+    "HL"  => 0x0026,
+    "CJ"  => 0x0027,
+    "RI"  => 0x0028,
 );
 
 my %categories =
@@ -274,13 +279,8 @@ my %special_categories =
 my %directions =
 (
     "L"   => 1,    # Left-to-Right
-    "LRE" => 15,   # Left-to-Right Embedding
-    "LRO" => 15,   # Left-to-Right Override
     "R"   => 2,    # Right-to-Left
     "AL"  => 12,   # Right-to-Left Arabic
-    "RLE" => 15,   # Right-to-Left Embedding
-    "RLO" => 15,   # Right-to-Left Override
-    "PDF" => 15,   # Pop Directional Format
     "EN"  => 3,    # European Number
     "ES"  => 4,    # European Number Separator
     "ET"  => 5,    # European Number Terminator
@@ -291,7 +291,16 @@ my %directions =
     "B"   => 8,    # Paragraph Separator
     "S"   => 9,    # Segment Separator
     "WS"  => 10,   # Whitespace
-    "ON"  => 11    # Other Neutrals
+    "ON"  => 11,   # Other Neutrals
+    "LRE" => 15,   # Left-to-Right Embedding
+    "LRO" => 15,   # Left-to-Right Override
+    "RLE" => 15,   # Right-to-Left Embedding
+    "RLO" => 15,   # Right-to-Left Override
+    "PDF" => 15,   # Pop Directional Format
+    "LRI" => 15,   # Left-to-Right Isolate
+    "RLI" => 15,   # Right-to-Left Isolate
+    "FSI" => 15,   # First Strong Isolate
+    "PDI" => 15    # Pop Directional Isolate
 );
 
 my %joining_types =
@@ -558,9 +567,16 @@ sub read_codepage_file($)
             next;
         }
         # 0x12 <LR>+0x3456
-        if (/^0x([0-9a-fA-F]+)\s+<[LR]+>\+0x([0-9a-fA-F]+)\s+(\#.*)?/)
+        if (/^0x([0-9a-fA-F]+)\s+<LR>\+0x([0-9a-fA-F]+)\s+(\#.*)?/)
         {
             add_mapping( hex $1, hex $2 );
+            next;
+        }
+        # 0x12 <RL>+0x3456
+        if (/^0x([0-9a-fA-F]+)\s+<RL>\+0x([0-9a-fA-F]+)\s+(\#.*)?/)
+        {
+            my $uni = hex $2;
+            add_mapping( hex $1, $uni ) if $uni >= 0x80;
             next;
         }
         die "$name: Unrecognized line $_\n";
@@ -822,8 +838,10 @@ sub DUMP_SORTKEYS($@)
 
 ################################################################
 # add default mappings once the file had been read
-sub ADD_DEFAULT_MAPPINGS()
+sub add_default_mappings($)
 {
+    my $first_private = shift;
+
     # Apply aliases
 
     foreach my $alias (@unicode_aliases)
@@ -862,6 +880,19 @@ sub ADD_DEFAULT_MAPPINGS()
         if (defined($uni2cp[$target])) { $uni2cp[$src] = $uni2cp[$target]; }
     }
 
+    # Add a private char mapping for undefined chars
+
+    if ($first_private)
+    {
+        for (my $i = 32; $i < 256; $i++)
+        {
+            next if defined($cp2uni[$i]);
+            $cp2uni[$i] = $first_private;
+            $uni2cp[$first_private] = $i;
+            $first_private++;
+        }
+    }
+
     # Add an identity mapping for all undefined chars
 
     for (my $i = 0; $i < 256; $i++)
@@ -888,6 +919,94 @@ sub DUMP_ARRAY($$@)
     return $ret;
 }
 
+
+################################################################
+# dump a unicode->ascii mapping table
+sub dump_uni2cp_table($$)
+{
+    my ($width, $def) = @_;
+
+    # count the number of unicode->ascii subtables that contain something
+
+    my @lowerbounds;
+    my @upperbounds;
+    my $index = 0;
+    my @filled = (-1) x 256;
+    for (my $i = 0; $i < 65536; $i++)
+    {
+        next unless defined $uni2cp[$i];
+        if ($filled[$i >> 8] == -1)
+        {
+          $lowerbounds[$index] = $i & 0xff;
+          $upperbounds[$index] = 0xff - $lowerbounds[$index];
+          $filled[$i >> 8] = $index * 256;
+          $index++;
+        }
+        else
+        {
+          $upperbounds[$index-1] = 0xff - ($i & 0xff);
+        }
+    }
+
+    # add defaults mapping at the end
+    $filled[256] = $index * 256;
+    $lowerbounds[$index] = 255;
+    $upperbounds[$index] = 0;
+    $index++;
+
+    # collapse blocks upwards if possible
+    my $removed = 0;
+    $index = 0;
+    for (my $i = 0; $i < 257; $i++)
+    {
+        next if $filled[$i] == -1;
+        if ($upperbounds[$index - 1] > $lowerbounds[$index])
+        {
+           $removed += $lowerbounds[$index];
+        }
+        else
+        {
+           $removed += $upperbounds[$index - 1];
+           $lowerbounds[$index] = $upperbounds[$index - 1];
+        }
+        $filled[$i] -= $removed;
+        $index++;
+    }
+
+    # output all the subtables into a single array
+
+    printf OUTPUT "static const unsigned %s uni2cp_low[%d] =\n{\n",
+                  $width == 8 ? "char" : "short", ($index + 1) * 256 - $removed;
+
+    my $format = $width == 8 ? "0x%02x" : "0x%04x";
+    for (my $i = $index = 0; $i < 257; $i++)
+    {
+        next if $filled[$i] == -1;
+        my $start = ($i << 8) + $lowerbounds[$index];
+        my $end = ($i << 8) + 255;
+        if ($i == 256)
+        {
+            print OUTPUT "    /* defaults */\n";
+            printf OUTPUT "%s\n};\n\n", DUMP_ARRAY( $format, 0, ($def) x ($end - $start + 1) );
+        }
+        else
+        {
+            printf OUTPUT "    /* 0x%04x .. 0x%04x */\n", $start, $end;
+            printf OUTPUT "%s,\n", DUMP_ARRAY( $format, $def, @uni2cp[$start .. $end] );
+        }
+        $index++;
+    }
+
+    # output a table of the offsets of the subtables in the previous array
+
+    for (my $i = 0; $i < 256; $i++)
+    {
+        if ($filled[$i] == -1) { $filled[$i] = $filled[256]; }
+    }
+    printf OUTPUT "static const unsigned short uni2cp_high[256] =\n";
+    printf OUTPUT "{\n%s\n};\n\n", DUMP_ARRAY( "0x%04x", 0, @filled[0..255] );
+}
+
 ################################################################
 # dump an SBCS mapping table
 sub dump_sbcs_table($$$$$)
@@ -910,41 +1029,7 @@ sub dump_sbcs_table($$$$$)
         printf OUTPUT "{\n%s\n};\n\n", DUMP_ARRAY( "0x%04x", $defw, @cp2uni[0 .. 255] );
     }
 
-    # count the number of unicode->ascii subtables that contain something
-
-    my @filled = ();
-    my $subtables = 1;
-    for (my $i = 0; $i < 65536; $i++)
-    {
-        next unless defined $uni2cp[$i];
-        $filled[$i >> 8] = 1;
-        $subtables++;
-        $i |= 255;
-    }
-
-    # output all the subtables into a single array
-
-    printf OUTPUT "static const unsigned char uni2cp_low[%d] =\n{\n", $subtables*256;
-    for (my $i = 0; $i < 256; $i++)
-    {
-        next unless $filled[$i];
-        printf OUTPUT "    /* 0x%02x00 .. 0x%02xff */\n", $i, $i;
-        printf OUTPUT "%s,\n", DUMP_ARRAY( "0x%02x", $def, @uni2cp[($i<<8) .. ($i<<8)+255] );
-    }
-    printf OUTPUT "    /* defaults */\n";
-    printf OUTPUT "%s\n};\n\n", DUMP_ARRAY( "0x%02x", 0, ($def) x 256 );
-
-    # output a table of the offsets of the subtables in the previous array
-
-    my $pos = 0;
-    my @offsets = ();
-    for (my $i = 0; $i < 256; $i++)
-    {
-        if ($filled[$i]) { push @offsets, $pos; $pos += 256; }
-        else { push @offsets, ($subtables-1) * 256; }
-    }
-    printf OUTPUT "static const unsigned short uni2cp_high[256] =\n";
-    printf OUTPUT "{\n%s\n};\n\n", DUMP_ARRAY( "0x%04x", 0, @offsets );
+    dump_uni2cp_table( 8, $def );
 
     # output the code page descriptor
 
@@ -1007,8 +1092,7 @@ sub dump_dbcs_table($$$$@)
 
     # output the lead byte subtables offsets
 
-    my @offsets = ();
-    for (my $x = 0; $x < 256; $x++) { $offsets[$x] = 0; }
+    my @offsets = (0) x 256;
     for (my $x = 0; $x <= $#lblist; $x++) { $offsets[$lblist[$x]] = $x + 1; }
     if ($unused)
     {
@@ -1018,41 +1102,7 @@ sub dump_dbcs_table($$$$@)
     printf OUTPUT "static const unsigned char cp2uni_leadbytes[256] =\n";
     printf OUTPUT "{\n%s\n};\n\n", DUMP_ARRAY( "0x%02x", 0, @offsets );
 
-    # count the number of unicode->ascii subtables that contain something
-
-    my @filled = ();
-    my $subtables = 1;
-    for (my $i = 0; $i < 65536; $i++)
-    {
-        next unless defined $uni2cp[$i];
-        $filled[$i >> 8] = 1;
-        $subtables++;
-        $i |= 255;
-    }
-
-    # output all the subtables into a single array
-
-    printf OUTPUT "static const unsigned short uni2cp_low[%d] =\n{\n", $subtables*256;
-    for (my $y = 0; $y < 256; $y++)
-    {
-        next unless $filled[$y];
-        printf OUTPUT "    /* 0x%02x00 .. 0x%02xff */\n", $y, $y;
-        printf OUTPUT "%s,\n", DUMP_ARRAY( "0x%04x", $def, @uni2cp[($y<<8) .. ($y<<8)+255] );
-    }
-    printf OUTPUT "    /* defaults */\n";
-    printf OUTPUT "%s\n};\n\n", DUMP_ARRAY( "0x%04x", 0, ($def) x 256 );
-
-    # output a table of the offsets of the subtables in the previous array
-
-    my $pos = 0;
-    @offsets = ();
-    for (my $y = 0; $y < 256; $y++)
-    {
-        if ($filled[$y]) { push @offsets, $pos; $pos += 256; }
-        else { push @offsets, ($subtables-1) * 256; }
-    }
-    printf OUTPUT "static const unsigned short uni2cp_high[256] =\n";
-    printf OUTPUT "{\n%s\n};\n\n", DUMP_ARRAY( "0x%04x", 0, @offsets );
+    dump_uni2cp_table( 16, $def );
 
     # output the code page descriptor
 
@@ -1997,7 +2047,7 @@ sub read_bestfit_file($)
 # read an input file and generate the corresponding .c file
 sub HANDLE_FILE(@)
 {
-    my ($codepage,$filename,$has_glyphs,$comment,$def,$defw) = @_;
+    my ($codepage,$filename,$has_glyphs,$comment,$first_private,$def,$defw) = @_;
 
     @cp2uni = ();
     @lead_bytes = ();
@@ -2009,27 +2059,29 @@ sub HANDLE_FILE(@)
     if ($codepage == 20932)
     {
         READ_JIS0208_FILE( $filename );
-        ADD_DEFAULT_MAPPINGS();
+        add_default_mappings( $first_private );
     }
     elsif ($codepage == 20127)
     {
         fill_20127_codepage();
-        ADD_DEFAULT_MAPPINGS();
+        add_default_mappings( $first_private );
     }
     elsif ($filename =~ /\/bestfit/)
     {
         read_bestfit_file( $filename );
     }
-    elsif ($codepage == 10001)
-    {
-        read_codepage_file( $filename );
-        # add Shift-JIS mappings
-        read_bestfit_file( "VENDORS/MICSFT/WindowsBestFit/bestfit932.txt" );
-    }
     else
     {
         read_codepage_file( $filename );
-        ADD_DEFAULT_MAPPINGS();
+        if ($codepage == 10001)
+        {
+            # add Shift-JIS mappings
+            read_bestfit_file( "VENDORS/MICSFT/WindowsBestFit/bestfit932.txt" );
+        }
+        else
+        {
+            add_default_mappings( $first_private );
+        }
     }
 
     output_codepage_file( $codepage, $filename, $comment, $has_glyphs );
@@ -2063,14 +2115,14 @@ sub output_cptable($)
 
     foreach my $file (@allfiles)
     {
-        my ($codepage,$filename,$comment) = @$file;
+        my ($codepage,$filename) = @$file;
         push @tables_decl, sprintf("extern union cptable cptable_%03d;\n",$codepage);
     }
 
     push @tables_decl, sprintf("\nstatic const union cptable * const cptables[%d] =\n{\n",$#allfiles+1);
     foreach my $file (@allfiles)
     {
-        my ($codepage,$filename,$comment) = @$file;
+        my ($codepage,$filename) = @$file;
         push @tables_decl, sprintf("    &cptable_%03d,\n", $codepage);
     }
     push @tables_decl, "};";
@@ -2116,7 +2168,7 @@ dump_mirroring( "dlls/usp10/mirror.c" );
 dump_shaping( "dlls/usp10/shaping.c" );
 dump_linebreak( "dlls/usp10/linebreak.c" );
 dump_indic( "dlls/usp10/indicsyllable.c" );
-dump_intl_nls("tools/l_intl.nls");
+dump_intl_nls("loader/l_intl.nls");
 dump_nameprep( "dlls/kernel32/nameprep.c" );
 
 foreach my $file (@allfiles) { HANDLE_FILE( @{$file} ); }

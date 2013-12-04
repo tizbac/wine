@@ -49,6 +49,12 @@ typedef struct {
     struct list request_headers;
 } nsChannel;
 
+typedef struct {
+    WCHAR *headers;
+    HGLOBAL post_data;
+    ULONG post_data_len;
+} request_data_t;
+
 typedef struct BSCallbackVtbl BSCallbackVtbl;
 
 struct BSCallback {
@@ -61,9 +67,7 @@ struct BSCallback {
 
     LONG ref;
 
-    LPWSTR headers;
-    HGLOBAL post_data;
-    ULONG post_data_len;
+    request_data_t request_data;
     ULONG readed;
     DWORD bindf;
     BOOL bindinfo_ready;
@@ -102,6 +106,7 @@ typedef struct {
 #define BINDING_REPLACE      0x0002
 #define BINDING_FROMHIST     0x0004
 #define BINDING_REFRESH      0x0008
+#define BINDING_SUBMIT       0x0010
 
 HRESULT set_http_header(struct list*,const WCHAR*,int,const WCHAR*,int) DECLSPEC_HIDDEN;
 HRESULT create_redirect_nschannel(const WCHAR*,nsChannel*,nsChannel**) DECLSPEC_HIDDEN;
@@ -110,15 +115,16 @@ nsresult on_start_uri_open(NSContainer*,nsIURI*,cpp_bool*) DECLSPEC_HIDDEN;
 HRESULT hlink_frame_navigate(HTMLDocument*,LPCWSTR,nsChannel*,DWORD,BOOL*) DECLSPEC_HIDDEN;
 HRESULT create_doc_uri(HTMLOuterWindow*,IUri*,nsWineURI**) DECLSPEC_HIDDEN;
 HRESULT load_nsuri(HTMLOuterWindow*,nsWineURI*,nsChannelBSC*,DWORD) DECLSPEC_HIDDEN;
-HRESULT set_moniker(HTMLDocument*,IMoniker*,IUri*,IBindCtx*,nsChannelBSC*,BOOL) DECLSPEC_HIDDEN;
+HRESULT set_moniker(HTMLOuterWindow*,IMoniker*,IUri*,IBindCtx*,nsChannelBSC*,BOOL) DECLSPEC_HIDDEN;
 void prepare_for_binding(HTMLDocument*,IMoniker*,DWORD) DECLSPEC_HIDDEN;
 HRESULT super_navigate(HTMLOuterWindow*,IUri*,DWORD,const WCHAR*,BYTE*,DWORD) DECLSPEC_HIDDEN;
 HRESULT load_uri(HTMLOuterWindow*,IUri*,DWORD) DECLSPEC_HIDDEN;
 HRESULT navigate_new_window(HTMLOuterWindow*,IUri*,const WCHAR*,IHTMLWindow2**) DECLSPEC_HIDDEN;
 HRESULT navigate_url(HTMLOuterWindow*,const WCHAR*,IUri*,DWORD) DECLSPEC_HIDDEN;
+HRESULT submit_form(HTMLOuterWindow*,IUri*,nsIInputStream*) DECLSPEC_HIDDEN;
 
 HRESULT create_channelbsc(IMoniker*,const WCHAR*,BYTE*,DWORD,BOOL,nsChannelBSC**) DECLSPEC_HIDDEN;
-HRESULT channelbsc_load_stream(HTMLInnerWindow*,IStream*) DECLSPEC_HIDDEN;
+HRESULT channelbsc_load_stream(HTMLInnerWindow*,IMoniker*,IStream*) DECLSPEC_HIDDEN;
 void channelbsc_set_channel(nsChannelBSC*,nsChannel*,nsIStreamListener*,nsISupports*) DECLSPEC_HIDDEN;
 IUri *nsuri_get_uri(nsWineURI*) DECLSPEC_HIDDEN;
 

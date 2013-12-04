@@ -96,6 +96,7 @@ struct sock
     unsigned int        pmask;       /* pending events */
     unsigned int        flags;       /* socket flags */
     int                 polling;     /* is socket being polled? */
+    unsigned short      proto;       /* socket protocol */
     unsigned short      type;        /* socket type */
     unsigned short      family;      /* socket family */
     struct event       *event;       /* event object */
@@ -109,7 +110,7 @@ struct sock
 };
 
 static void sock_dump( struct object *obj, int verbose );
-static int sock_signaled( struct object *obj, struct thread *thread );
+static int sock_signaled( struct object *obj, struct wait_queue_entry *entry );
 static struct fd *sock_get_fd( struct object *obj );
 static void sock_destroy( struct object *obj );
 
@@ -465,12 +466,12 @@ static void sock_dump( struct object *obj, int verbose )
 {
     struct sock *sock = (struct sock *)obj;
     assert( obj->ops == &sock_ops );
-    printf( "Socket fd=%p, state=%x, mask=%x, pending=%x, held=%x\n",
+    fprintf( stderr, "Socket fd=%p, state=%x, mask=%x, pending=%x, held=%x\n",
             sock->fd, sock->state,
             sock->mask, sock->pmask, sock->hmask );
 }
 
-static int sock_signaled( struct object *obj, struct thread *thread )
+static int sock_signaled( struct object *obj, struct wait_queue_entry *entry )
 {
     struct sock *sock = (struct sock *)obj;
     assert( obj->ops == &sock_ops );
@@ -643,6 +644,7 @@ static struct object *create_socket( int family, int type, int protocol, unsigne
     init_sock( sock );
     sock->state  = (type != SOCK_STREAM) ? (FD_READ|FD_WRITE) : 0;
     sock->flags  = flags;
+    sock->proto  = protocol;
     sock->type   = type;
     sock->family = family;
 
@@ -715,6 +717,7 @@ static struct sock *accept_socket( obj_handle_t handle )
         if (sock->state & FD_WINE_NONBLOCKING)
             acceptsock->state |= FD_WINE_NONBLOCKING;
         acceptsock->mask    = sock->mask;
+        acceptsock->proto   = sock->proto;
         acceptsock->type    = sock->type;
         acceptsock->family  = sock->family;
         acceptsock->window  = sock->window;
@@ -782,7 +785,7 @@ static int accept_into_socket( struct sock *sock, struct sock *acceptsock )
     return TRUE;
 }
 
-/* set the last error depending on errno */
+/* return an errno value mapped to a WSA error */
 static int sock_get_error( int err )
 {
     switch (err)
@@ -1069,4 +1072,18 @@ DECL_HANDLER(set_socket_deferred)
     }
     sock->deferred = acceptsock;
     release_object( sock );
+}
+
+DECL_HANDLER(get_socket_info)
+{
+    struct sock *sock;
+
+    sock = (struct sock *)get_handle_obj( current->process, req->handle, FILE_READ_ATTRIBUTES, &sock_ops );
+    if (!sock) return;
+
+    reply->family   = sock->family;
+    reply->type     = sock->type;
+    reply->protocol = sock->proto;
+
+    release_object( &sock->obj );
 }

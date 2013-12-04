@@ -423,12 +423,12 @@ typedef struct {
 } fpos_int;
 
 /* stringstream */
-static basic_stringstream_char* (*__thiscall p_basic_stringstream_char_ctor)(basic_stringstream_char*, MSVCP_bool);
+static basic_stringstream_char* (*__thiscall p_basic_stringstream_char_ctor)(basic_stringstream_char*);
 static basic_stringstream_char* (*__thiscall p_basic_stringstream_char_ctor_str)(basic_stringstream_char*, const basic_string_char*, int, MSVCP_bool);
 static basic_string_char* (*__thiscall p_basic_stringstream_char_str_get)(const basic_stringstream_char*, basic_string_char*);
 static void (*__thiscall p_basic_stringstream_char_vbase_dtor)(basic_stringstream_char*);
 
-static basic_stringstream_wchar* (*__thiscall p_basic_stringstream_wchar_ctor)(basic_stringstream_wchar*, MSVCP_bool);
+static basic_stringstream_wchar* (*__thiscall p_basic_stringstream_wchar_ctor)(basic_stringstream_wchar*);
 static basic_stringstream_wchar* (*__thiscall p_basic_stringstream_wchar_ctor_str)(basic_stringstream_wchar*, const basic_string_wchar*, int, MSVCP_bool);
 static basic_string_wchar* (*__thiscall p_basic_stringstream_wchar_str_get)(const basic_stringstream_wchar*, basic_string_wchar*);
 static void (*__thiscall p_basic_stringstream_wchar_vbase_dtor)(basic_stringstream_wchar*);
@@ -467,6 +467,8 @@ static basic_istream_wchar* (*__cdecl    p_basic_istream_wchar_getline_bstr_deli
 static basic_ostream_char* (*__thiscall p_basic_ostream_char_print_double)(basic_ostream_char*, double);
 
 static basic_ostream_wchar* (*__thiscall p_basic_ostream_wchar_print_double)(basic_ostream_wchar*, double);
+
+static basic_ostream_wchar* (*__thiscall p_basic_ostream_short_print_ushort)(basic_ostream_wchar*, unsigned short);
 
 /* basic_ios */
 static locale*  (*__thiscall p_basic_ios_char_imbue)(basic_ios_char*, locale*, const locale*);
@@ -685,6 +687,9 @@ static BOOL init(void)
         SET(p_basic_ostream_wchar_print_double,
             "??6?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QEAAAEAV01@N@Z");
 
+        SET(p_basic_ostream_short_print_ushort,
+            "??6?$basic_ostream@GU?$char_traits@G@std@@@std@@QEAAAEAV01@G@Z");
+
         SET(p_ios_base_rdstate,
             "?rdstate@ios_base@std@@QEBAHXZ");
         SET(p_ios_base_setf_mask,
@@ -719,6 +724,120 @@ static BOOL init(void)
         SET(p_basic_string_wchar_dtor,
                 "??1?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QEAA@XZ");
     } else {
+#ifdef __arm__
+        SET(p_basic_stringstream_char_ctor,
+            "??_F?$basic_stringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXXZ");
+        SET(p_basic_stringstream_char_ctor_str,
+            "??0?$basic_stringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@ABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@1@H@Z");
+        SET(p_basic_stringstream_char_str_get,
+            "?str@?$basic_stringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QBE?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@XZ");
+        SET(p_basic_stringstream_char_vbase_dtor,
+            "??_D?$basic_stringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXXZ");
+
+        SET(p_basic_stringstream_wchar_ctor,
+            "??_F?$basic_stringstream@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEXXZ");
+        SET(p_basic_stringstream_wchar_ctor_str,
+            "??0?$basic_stringstream@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@ABV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@1@H@Z");
+        SET(p_basic_stringstream_wchar_str_get,
+            "?str@?$basic_stringstream@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QBE?AV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@2@XZ");
+        SET(p_basic_stringstream_wchar_vbase_dtor,
+            "??_D?$basic_stringstream@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAEXXZ");
+
+        SET(p_basic_fstream_char_ctor_name,
+            "??0?$basic_fstream@DU?$char_traits@D@std@@@std@@QAE@PBDHH@Z");
+        SET(p_basic_fstream_char_vbase_dtor,
+            "??_D?$basic_fstream@DU?$char_traits@D@std@@@std@@QAEXXZ");
+
+        SET(p_basic_fstream_wchar_ctor_name,
+            "??0?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAE@PBDHH@Z");
+        SET(p_basic_fstream_wchar_vbase_dtor,
+            "??_D?$basic_fstream@_WU?$char_traits@_W@std@@@std@@QAEXXZ");
+
+        SET(p_basic_istream_char_read_uint64,
+            "??5?$basic_istream@DU?$char_traits@D@std@@@std@@QAAAAV01@AA_K@Z");
+        SET(p_basic_istream_char_read_double,
+            "??5?$basic_istream@DU?$char_traits@D@std@@@std@@QAAAAV01@AAN@Z");
+        SET(p_basic_istream_char_get,
+            "?get@?$basic_istream@DU?$char_traits@D@std@@@std@@QAAHXZ");
+        SET(p_basic_istream_char_ipfx,
+            "?ipfx@?$basic_istream@DU?$char_traits@D@std@@@std@@QAA_N_N@Z");
+        SET(p_basic_istream_char_ignore,
+            "?ignore@?$basic_istream@DU?$char_traits@D@std@@@std@@QAEAAV12@HH@Z");
+        SET(p_basic_istream_char_seekg,
+            "?seekg@?$basic_istream@DU?$char_traits@D@std@@@std@@QAEAAV12@JH@Z");
+        SET(p_basic_istream_char_seekg_fpos,
+            "?seekg@?$basic_istream@DU?$char_traits@D@std@@@std@@QAAAAV12@V?$fpos@H@2@@Z");
+        SET(p_basic_istream_char_peek,
+            "?peek@?$basic_istream@DU?$char_traits@D@std@@@std@@QAAHXZ");
+        SET(p_basic_istream_char_tellg,
+            "?tellg@?$basic_istream@DU?$char_traits@D@std@@@std@@QAA?AV?$fpos@H@2@XZ");
+        SET(p_basic_istream_char_getline_bstr_delim,
+            "??$getline@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@YAAAV?$basic_istream@DU?$char_traits@D@std@@@0@AAV10@AAV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@0@D@Z");
+
+        SET(p_basic_istream_wchar_read_uint64,
+            "??5?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAAAAV01@AA_K@Z");
+        SET(p_basic_istream_wchar_read_double,
+            "??5?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAAAAV01@AAN@Z");
+        SET(p_basic_istream_wchar_get,
+            "?get@?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAAGXZ");
+        SET(p_basic_istream_wchar_ipfx,
+            "?ipfx@?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAA_N_N@Z");
+        SET(p_basic_istream_wchar_ignore,
+            "?ignore@?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAEAAV12@HG@Z");
+        SET(p_basic_istream_wchar_seekg,
+            "?seekg@?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAEAAV12@JH@Z");
+        SET(p_basic_istream_wchar_seekg_fpos,
+            "?seekg@?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAAAAV12@V?$fpos@H@2@@Z");
+        SET(p_basic_istream_wchar_peek,
+            "?peek@?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAAGXZ");
+        SET(p_basic_istream_wchar_tellg,
+            "?tellg@?$basic_istream@_WU?$char_traits@_W@std@@@std@@QAA?AV?$fpos@H@2@XZ");
+        SET(p_basic_istream_wchar_getline_bstr_delim,
+            "??$getline@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@YAAAV?$basic_istream@_WU?$char_traits@_W@std@@@0@AAV10@AAV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@0@_W@Z");
+
+        SET(p_basic_ostream_char_print_double,
+            "??6?$basic_ostream@DU?$char_traits@D@std@@@std@@QAAAAV01@N@Z");
+
+        SET(p_basic_ostream_wchar_print_double,
+            "??6?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QAAAAV01@N@Z");
+
+        SET(p_basic_ostream_short_print_ushort,
+            "??6?$basic_ostream@GU?$char_traits@G@std@@@std@@QAAAAV01@G@Z");
+
+        SET(p_ios_base_rdstate,
+            "?rdstate@ios_base@std@@QBAHXZ");
+        SET(p_ios_base_setf_mask,
+            "?setf@ios_base@std@@QAAHHH@Z");
+        SET(p_ios_base_unsetf,
+            "?unsetf@ios_base@std@@QAAXH@Z");
+        SET(p_ios_base_precision_set,
+            "?precision@ios_base@std@@QAEHH@Z");
+
+        SET(p_basic_ios_char_imbue,
+            "?imbue@?$basic_ios@DU?$char_traits@D@std@@@std@@QAA?AVlocale@2@ABV32@@Z");
+
+        SET(p_basic_ios_wchar_imbue,
+            "?imbue@?$basic_ios@_WU?$char_traits@_W@std@@@std@@QAA?AVlocale@2@ABV32@@Z");
+
+        SET(p_locale_ctor_cstr,
+            "??0locale@std@@QAE@PBDH@Z");
+        SET(p_locale_dtor,
+            "??1locale@std@@QAE@XZ");
+
+        SET(p_basic_string_char_ctor_cstr,
+                "??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@PBD@Z");
+        SET(p_basic_string_char_cstr,
+                "?c_str@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QBEPBDXZ");
+        SET(p_basic_string_char_dtor,
+                "??1?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@XZ");
+
+        SET(p_basic_string_wchar_ctor_cstr,
+                "??0?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@PB_W@Z");
+        SET(p_basic_string_wchar_cstr,
+                "?c_str@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QBEPB_WXZ");
+        SET(p_basic_string_wchar_dtor,
+                "??1?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@XZ");
+#else
         SET(p_basic_stringstream_char_ctor,
             "??_F?$basic_stringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEXXZ");
         SET(p_basic_stringstream_char_ctor_str,
@@ -795,6 +914,9 @@ static BOOL init(void)
         SET(p_basic_ostream_wchar_print_double,
             "??6?$basic_ostream@_WU?$char_traits@_W@std@@@std@@QAEAAV01@N@Z");
 
+        SET(p_basic_ostream_short_print_ushort,
+            "??6?$basic_ostream@GU?$char_traits@G@std@@@std@@QAEAAV01@G@Z");
+
         SET(p_ios_base_rdstate,
             "?rdstate@ios_base@std@@QBEHXZ");
         SET(p_ios_base_setf_mask,
@@ -828,6 +950,7 @@ static BOOL init(void)
                 "?c_str@?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QBEPB_WXZ");
         SET(p_basic_string_wchar_dtor,
                 "??1?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@QAE@XZ");
+#endif
     }
 
     init_thiscall_thunk();
@@ -1187,7 +1310,7 @@ static void test_num_put_put_double(void)
 
     for(i=0; i<sizeof(tests)/sizeof(tests[0]); i++) {
         /* char version */
-        call_func2(p_basic_stringstream_char_ctor, &ss, TRUE);
+        call_func1(p_basic_stringstream_char_ctor, &ss);
 
         if(tests[i].lcl) {
             call_func3(p_locale_ctor_cstr, &lcl, tests[i].lcl, 0x3f /* FIXME: support categories */);
@@ -1213,7 +1336,7 @@ static void test_num_put_put_double(void)
         call_func1(p_basic_stringstream_char_vbase_dtor, &ss);
 
         /* wchar_t version */
-        call_func2(p_basic_stringstream_wchar_ctor, &wss, TRUE);
+        call_func1(p_basic_stringstream_wchar_ctor, &wss);
 
         if(tests[i].lcl) {
             call_func3(p_locale_ctor_cstr, &lcl, tests[i].lcl, 0x3f /* FIXME: support categories */);
@@ -1808,6 +1931,25 @@ static void test_istream_getline(void)
     }
 }
 
+static void test_ostream_print_ushort(void)
+{
+    static const wchar_t str65[] = { '6','5',0 };
+
+    basic_stringstream_wchar wss;
+    basic_string_wchar pwstr;
+    const wchar_t *wstr;
+
+    call_func1(p_basic_stringstream_wchar_ctor, &wss);
+    call_func2(p_basic_ostream_short_print_ushort, &wss.base.base2, 65);
+
+    call_func2(p_basic_stringstream_wchar_str_get, &wss, &pwstr);
+    wstr = call_func1(p_basic_string_wchar_cstr, &pwstr);
+    ok(!lstrcmpW(str65, wstr), "wstr = %s\n", wine_dbgstr_w(wstr));
+
+    call_func1(p_basic_string_wchar_dtor, &pwstr);
+    call_func1(p_basic_stringstream_wchar_vbase_dtor, &wss);
+}
+
 
 START_TEST(ios)
 {
@@ -1824,6 +1966,7 @@ START_TEST(ios)
     test_istream_peek();
     test_istream_tellg();
     test_istream_getline();
+    test_ostream_print_ushort();
 
     ok(!invalid_parameter, "invalid_parameter_handler was invoked too many times\n");
 }

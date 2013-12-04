@@ -290,7 +290,7 @@ const struct builtin_class_descr MESSAGE_builtin_class =
     0,                    /* style */
     WINPROC_MESSAGE,      /* proc */
     0,                    /* extra */
-    IDC_ARROW,            /* cursor */
+    0,                    /* cursor */
     0                     /* brush */
 };
 
@@ -422,14 +422,14 @@ static const unsigned int message_unicode_flags[] =
 };
 
 /* check whether a given message type includes pointers */
-static inline int is_pointer_message( UINT message )
+static inline BOOL is_pointer_message( UINT message )
 {
     if (message >= 8*sizeof(message_pointer_flags)) return FALSE;
     return (message_pointer_flags[message / 32] & SET(message)) != 0;
 }
 
 /* check whether a given message type contains Unicode (or ASCII) chars */
-static inline int is_unicode_message( UINT message )
+static inline BOOL is_unicode_message( UINT message )
 {
     if (message >= 8*sizeof(message_unicode_flags)) return FALSE;
     return (message_unicode_flags[message / 32] & SET(message)) != 0;
@@ -1999,6 +1999,7 @@ static BOOL post_dde_message( struct packed_message *data, const struct send_mes
     HGLOBAL     hunlock = 0;
     int         i;
     DWORD       res;
+    ULONGLONG   hpack;
 
     if (!UnpackDDElParam( info->msg, info->lparam, &uiLo, &uiHi ))
         return FALSE;
@@ -2019,7 +2020,7 @@ static BOOL post_dde_message( struct packed_message *data, const struct send_mes
             HGLOBAL h = dde_get_pair( (HANDLE)uiHi );
             if (h)
             {
-                ULONGLONG hpack = pack_ptr( h );
+                hpack = pack_ptr( h );
                 /* send back the value of h on the other side */
                 push_data( data, &hpack, sizeof(hpack) );
                 lp = uiLo;
@@ -4080,7 +4081,7 @@ BOOL WINAPI WaitMessage(void)
 /***********************************************************************
  *		MsgWaitForMultipleObjectsEx   (USER32.@)
  */
-DWORD WINAPI MsgWaitForMultipleObjectsEx( DWORD count, CONST HANDLE *pHandles,
+DWORD WINAPI MsgWaitForMultipleObjectsEx( DWORD count, const HANDLE *pHandles,
                                           DWORD timeout, DWORD mask, DWORD flags )
 {
     HANDLE handles[MAXIMUM_WAIT_OBJECTS];
@@ -4114,7 +4115,7 @@ DWORD WINAPI MsgWaitForMultipleObjectsEx( DWORD count, CONST HANDLE *pHandles,
 /***********************************************************************
  *		MsgWaitForMultipleObjects (USER32.@)
  */
-DWORD WINAPI MsgWaitForMultipleObjects( DWORD count, CONST HANDLE *handles,
+DWORD WINAPI MsgWaitForMultipleObjects( DWORD count, const HANDLE *handles,
                                         BOOL wait_all, DWORD timeout, DWORD mask )
 {
     return MsgWaitForMultipleObjectsEx( count, handles, timeout, mask,
@@ -4204,7 +4205,7 @@ typedef struct BroadcastParm
     UINT msg;
     WPARAM wp;
     LPARAM lp;
-    DWORD success;
+    BOOL success;
     HWINSTA winsta;
 } BroadcastParm;
 
@@ -4245,7 +4246,7 @@ static BOOL CALLBACK bcast_childwindow( HWND hw, LPARAM lp )
         return TRUE;
 
 fail:
-        parm->success = 0;
+        parm->success = FALSE;
         return FALSE;
     }
     else if (parm->flags & BSF_POSTMESSAGE)

@@ -1,68 +1,33 @@
-DEFS      = -D__WINESRC__ $(EXTRADEFS)
 MODCFLAGS = @BUILTINFLAG@
+EXTRALIBS = @LIBPTHREAD@
 
 C_SRCS = \
 	main.c \
 	preloader.c
 
-MAIN_BINARY    = @MAIN_BINARY@
-EXTRA_BINARIES = @EXTRA_BINARIES@
-
 PROGRAMS = \
 	wine \
 	wine-installed \
 	wine-preloader \
+	wine.inf \
+	wine_info.plist \
 	wine64 \
 	wine64-preloader
 
-MANPAGE = wine.man
-
-EXTRA_MANPAGES = \
-	wine.de.man \
-	wine.fr.man \
-	wine.pl.man
+MANPAGES = \
+	wine.de.UTF-8.man.in \
+	wine.fr.UTF-8.man.in \
+	wine.man.in \
+	wine.pl.UTF-8.man.in
 
 INSTALLDIRS = \
 	$(DESTDIR)$(bindir) \
-	$(DESTDIR)$(mandir)/man$(prog_manext) \
-	$(DESTDIR)$(mandir)/de.UTF-8/man$(prog_manext) \
-	$(DESTDIR)$(mandir)/fr.UTF-8/man$(prog_manext) \
-	$(DESTDIR)$(mandir)/pl.UTF-8/man$(prog_manext)
-
-all: $(MAIN_BINARY) wine-installed $(EXTRA_BINARIES)
+	$(DESTDIR)$(datadir)/wine
 
 @MAKE_RULES@
 
-LIBPTHREAD  = @LIBPTHREAD@
-LDEXECFLAGS = @LDEXECFLAGS@
+@LOADER_RULES@
 
-wine-preloader wine64-preloader: preloader.o Makefile.in
-	$(CC) -o $@ -static -nostartfiles -nodefaultlibs -Wl,-Ttext=0x7c400000 preloader.o $(LIBPORT) $(LDFLAGS)
-
-$(MAIN_BINARY): main.o Makefile.in wine_info.plist
-	$(CC) -o $@ $(LDEXECFLAGS) main.o $(LIBWINE) $(LIBPORT) $(LIBPTHREAD) $(EXTRALIBS) $(LDFLAGS) $(LDRPATH_LOCAL)
-
-wine-installed: main.o Makefile.in wine_info.plist
-	$(CC) -o $@ $(LDEXECFLAGS) main.o $(LIBWINE) $(LIBPORT) $(LIBPTHREAD) $(EXTRALIBS) $(LDFLAGS) $(LDRPATH_INSTALL)
-
-wine_info.plist: wine_info.plist.in
-	LC_ALL=C sed -e 's,@PACKAGE_VERSION\@,@PACKAGE_VERSION@,g' $(srcdir)/wine_info.plist.in >$@ || ($(RM) $@ && false)
-
-$(EXTRA_BINARIES:%=__install__%): $(EXTRA_BINARIES) $(DESTDIR)$(bindir) dummy
-	f=`expr $@ : '__install__\(.*\)'` && $(INSTALL_PROGRAM) $$f $(DESTDIR)$(bindir)/$$f
-
-.PHONY: $(EXTRA_BINARIES:%=__install__%)
-
-install install-lib:: wine-installed $(DESTDIR)$(bindir) $(EXTRA_BINARIES:%=__install__%) @WOW64_DISABLE@ install-man-pages
-	$(INSTALL_PROGRAM) wine-installed $(DESTDIR)$(bindir)/$(MAIN_BINARY)
-
-install-man-pages:: $(EXTRA_MANPAGES) $(INSTALLDIRS) dummy
-	$(INSTALL_DATA) wine.de.man $(DESTDIR)$(mandir)/de.UTF-8/man$(prog_manext)/wine.$(prog_manext)
-	$(INSTALL_DATA) wine.fr.man $(DESTDIR)$(mandir)/fr.UTF-8/man$(prog_manext)/wine.$(prog_manext)
-	$(INSTALL_DATA) wine.pl.man $(DESTDIR)$(mandir)/pl.UTF-8/man$(prog_manext)/wine.$(prog_manext)
-
-uninstall::
-	-cd $(DESTDIR)$(bindir) && $(RM) $(MAIN_BINARY) $(EXTRA_BINARIES)
-	$(RM) $(DESTDIR)$(mandir)/de.UTF-8/man$(prog_manext)/wine.$(prog_manext)
-	$(RM) $(DESTDIR)$(mandir)/fr.UTF-8/man$(prog_manext)/wine.$(prog_manext)
-	$(RM) $(DESTDIR)$(mandir)/pl.UTF-8/man$(prog_manext)/wine.$(prog_manext)
+# Make sure that make_makefiles sees the generated rules
+install install-lib::
+clean::

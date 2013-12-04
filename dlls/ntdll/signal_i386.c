@@ -100,7 +100,42 @@ typedef struct
  * signal context platform-specific definitions
  */
 
-#if defined (__linux__)
+#ifdef __ANDROID__
+
+typedef struct ucontext
+{
+    unsigned long     uc_flags;
+    struct ucontext  *uc_link;
+    stack_t           uc_stack;
+    struct sigcontext uc_mcontext;
+    sigset_t          uc_sigmask;
+} SIGCONTEXT;
+
+#define EAX_sig(context)     ((context)->uc_mcontext.eax)
+#define EBX_sig(context)     ((context)->uc_mcontext.ebx)
+#define ECX_sig(context)     ((context)->uc_mcontext.ecx)
+#define EDX_sig(context)     ((context)->uc_mcontext.edx)
+#define ESI_sig(context)     ((context)->uc_mcontext.esi)
+#define EDI_sig(context)     ((context)->uc_mcontext.edi)
+#define EBP_sig(context)     ((context)->uc_mcontext.ebp)
+#define ESP_sig(context)     ((context)->uc_mcontext.esp)
+
+#define CS_sig(context)      ((context)->uc_mcontext.cs)
+#define DS_sig(context)      ((context)->uc_mcontext.ds)
+#define ES_sig(context)      ((context)->uc_mcontext.es)
+#define SS_sig(context)      ((context)->uc_mcontext.ss)
+#define FS_sig(context)      ((context)->uc_mcontext.fs)
+#define GS_sig(context)      ((context)->uc_mcontext.gs)
+
+#define EFL_sig(context)     ((context)->uc_mcontext.eflags)
+#define EIP_sig(context)     ((context)->uc_mcontext.eip)
+#define TRAP_sig(context)    ((context)->uc_mcontext.trapno)
+#define ERROR_sig(context)   ((context)->uc_mcontext.err)
+
+#define FPU_sig(context)     ((FLOATING_SAVE_AREA*)((context)->uc_mcontext.fpstate))
+#define FPUX_sig(context)    (FPU_sig(context) && !((context)->uc_mcontext.fpstate->status >> 16) ? (XMM_SAVE_AREA32 *)(FPU_sig(context) + 1) : NULL)
+
+#elif defined (__linux__)
 
 typedef ucontext_t SIGCONTEXT;
 
@@ -413,7 +448,7 @@ static size_t signal_stack_size;
 
 static wine_signal_handler handlers[256];
 
-static int fpux_support;  /* whether the CPU support extended fpu context */
+static BOOL fpux_support;  /* whether the CPU supports extended fpu context */
 
 extern void DECLSPEC_NORETURN __wine_restore_regs( const CONTEXT *context );
 
@@ -1091,7 +1126,7 @@ static inline void save_context( CONTEXT *context, const SIGCONTEXT *sigcontext,
     {
         context->ContextFlags |= CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS;
         memcpy( context->ExtendedRegisters, fpux, sizeof(*fpux) );
-        fpux_support = 1;
+        fpux_support = TRUE;
         if (!fpu) fpux_to_fpu( &context->FloatSave, fpux );
     }
     if (!fpu && !fpux) save_fpu( context );

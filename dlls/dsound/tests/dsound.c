@@ -29,9 +29,9 @@
 #include <windows.h>
 
 #include "wine/test.h"
+#include "mmsystem.h"
 #include "dsound.h"
 #include "dsconf.h"
-#include "mmreg.h"
 #include "initguid.h"
 #include "ks.h"
 #include "ksmedia.h"
@@ -1123,7 +1123,7 @@ static HRESULT test_duplicate(LPGUID lpGuid)
         bufdesc.lpwfxFormat=&wfx;
         rc=IDirectSound_CreateSoundBuffer(dso,&bufdesc,&original,NULL);
         ok(rc==DS_OK && original!=NULL,
-           "IDirectSound_CreateSoundBuffer() failed to create a original "
+           "IDirectSound_CreateSoundBuffer() failed to create an original "
            "buffer %08x\n",rc);
         if (rc==DS_OK && original!=NULL) {
             LPDIRECTSOUNDBUFFER duplicated=NULL;
@@ -1135,7 +1135,7 @@ static HRESULT test_duplicate(LPGUID lpGuid)
 
             /* Prepare notify events */
             for (i=0;i<sizeof(event)/sizeof(event[0]);i++) {
-                event[i] = CreateEvent(NULL,FALSE,FALSE,NULL);
+                event[i] = CreateEventW(NULL, FALSE, FALSE, NULL);
             }
 
             /* Make silent buffer */
@@ -1498,7 +1498,7 @@ static BOOL WINAPI dsenum_callback(LPGUID lpGuid, LPCSTR lpcstrDescription,
     if (!number++)
     {
         ok (!lpcstrModule[0], "lpcstrModule(%s) != NULL\n", lpcstrModule);
-        return 1;
+        return TRUE;
     }
 
     rc = test_dsound(lpGuid);
@@ -1518,7 +1518,7 @@ static BOOL WINAPI dsenum_callback(LPGUID lpGuid, LPCSTR lpcstrDescription,
         test_invalid_fmts(lpGuid);
     }
 
-    return 1;
+    return TRUE;
 }
 
 static void dsound_tests(void)
@@ -1646,7 +1646,7 @@ START_TEST(dsound)
 
     CoInitialize(NULL);
 
-    hDsound = LoadLibrary("dsound.dll");
+    hDsound = LoadLibraryA("dsound.dll");
     if (hDsound)
     {
         BOOL ret;
@@ -1655,7 +1655,7 @@ START_TEST(dsound)
         ok( ret, "FreeLibrary(1) returned %d\n", GetLastError());
     }
 
-    hDsound = LoadLibrary("dsound.dll");
+    hDsound = LoadLibraryA("dsound.dll");
     if (hDsound)
     {
 

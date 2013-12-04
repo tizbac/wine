@@ -173,9 +173,7 @@ static BOOL DP_CreateDirectPlay2( LPVOID lpDP )
   This->dp2->spData.lpCB->dwVersion = DPSP_MAJORVERSION;
 
   /* This is the pointer to the service provider */
-  if( FAILED( DPSP_CreateInterface( &IID_IDirectPlaySP,
-                                    (LPVOID*)&This->dp2->spData.lpISP, This ) )
-    )
+  if ( FAILED( dplaysp_create( &IID_IDirectPlaySP, (void**)&This->dp2->spData.lpISP, This ) ) )
   {
     /* FIXME: Memory leak */
     return FALSE;
@@ -187,8 +185,7 @@ static BOOL DP_CreateDirectPlay2( LPVOID lpDP )
                                          sizeof( *This->dp2->dplspData.lpCB ) );
   This->dp2->dplspData.lpCB->dwSize = sizeof(  *This->dp2->dplspData.lpCB );
 
-  if( FAILED( DPLSP_CreateInterface( &IID_IDPLobbySP,
-                                     (LPVOID*)&This->dp2->dplspData.lpISP, This ) )
+  if( FAILED( dplobbysp_create( &IID_IDPLobbySP, (void**)&This->dp2->dplspData.lpISP, This ) )
     )
   {
     /* FIXME: Memory leak */

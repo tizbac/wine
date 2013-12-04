@@ -50,7 +50,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(sync);
 
 /* check if current version is NT or Win95 */
-static inline int is_version_nt(void)
+static inline BOOL is_version_nt(void)
 {
     return !(GetVersion() & 0x80000000);
 }
@@ -1015,7 +1015,7 @@ BOOL WINAPI AssignProcessToJobObject( HANDLE job, HANDLE process )
  */
 BOOL WINAPI IsProcessInJob( HANDLE process, HANDLE job, PBOOL result )
 {
-    NTSTATUS status = NtIsProcessInJob( job, process );
+    NTSTATUS status = NtIsProcessInJob( process, job );
     switch(status)
     {
     case STATUS_PROCESS_IN_JOB:
@@ -1467,7 +1467,7 @@ BOOL WINAPI WaitNamedPipeA (LPCSTR name, DWORD nTimeOut)
     if (!MultiByteToWideChar( CP_ACP, 0, name, -1, buffer, MAX_PATH ))
     {
         SetLastError( ERROR_FILENAME_EXCED_RANGE );
-        return 0;
+        return FALSE;
     }
     return WaitNamedPipeW( buffer, nTimeOut );
 }
@@ -2235,6 +2235,35 @@ BOOL WINAPI QueryMemoryResourceNotification(HANDLE handle, PBOOL state)
     }
     SetLastError( ERROR_INVALID_PARAMETER );
     return FALSE;
+}
+
+/***********************************************************************
+ *           InitOnceBeginInitialize    (KERNEL32.@)
+ */
+BOOL WINAPI InitOnceBeginInitialize( INIT_ONCE *once, DWORD flags, BOOL *pending, void **context )
+{
+    NTSTATUS status = RtlRunOnceBeginInitialize( once, flags, context );
+    if (status >= 0) *pending = (status == STATUS_PENDING);
+    else SetLastError( RtlNtStatusToDosError(status) );
+    return status >= 0;
+}
+
+/***********************************************************************
+ *           InitOnceComplete    (KERNEL32.@)
+ */
+BOOL WINAPI InitOnceComplete( INIT_ONCE *once, DWORD flags, void *context )
+{
+    NTSTATUS status = RtlRunOnceComplete( once, flags, context );
+    if (status != STATUS_SUCCESS) SetLastError( RtlNtStatusToDosError(status) );
+    return !status;
+}
+
+/***********************************************************************
+ *           InitOnceExecuteOnce    (KERNEL32.@)
+ */
+BOOL WINAPI InitOnceExecuteOnce( INIT_ONCE *once, PINIT_ONCE_FN func, void *param, void **context )
+{
+    return !RtlRunOnceExecuteOnce( once, (PRTL_RUN_ONCE_INIT_FN)func, param, context );
 }
 
 #ifdef __i386__

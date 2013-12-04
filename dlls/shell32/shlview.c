@@ -1751,17 +1751,11 @@ static HRESULT WINAPI IShellView_fnQueryInterface(IShellView2 *iface, REFIID rii
 
 	*ppvObj = NULL;
 
-	if(IsEqualIID(riid, &IID_IUnknown))
+	if(IsEqualIID(riid, &IID_IUnknown) ||
+	   IsEqualIID(riid, &IID_IShellView) ||
+	   IsEqualIID(riid, &IID_IShellView2))
 	{
-	  *ppvObj = This;
-	}
-	else if(IsEqualIID(riid, &IID_IShellView))
-	{
-          *ppvObj = This;
-	}
-	else if(IsEqualIID(riid, &IID_IShellView2))
-	{
-          *ppvObj = This;
+	  *ppvObj = &This->IShellView2_iface;
 	}
 	else if(IsEqualIID(riid, &IID_IShellFolderView))
 	{
@@ -2081,9 +2075,14 @@ static HRESULT WINAPI IShellView2_fnCreateViewWindow2(IShellView2 *iface,
         LPSV2CVW2_PARAMS view_params)
 {
     IShellViewImpl *This = impl_from_IShellView2(iface);
+    INITCOMMONCONTROLSEX icex;
     WNDCLASSW wc;
     HRESULT hr;
     HWND wnd;
+
+    icex.dwSize = sizeof( icex );
+    icex.dwICC = ICC_LISTVIEW_CLASSES;
+    InitCommonControlsEx( &icex );
 
     TRACE("(%p)->(view_params %p)\n", iface, view_params);
 

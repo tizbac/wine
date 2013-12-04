@@ -223,7 +223,7 @@ NTSTATUS WINAPI NtAdjustPrivilegesToken(
         ret = wine_server_call( req );
         if (PreviousState)
         {
-            *ReturnLength = reply->len + FIELD_OFFSET( TOKEN_PRIVILEGES, Privileges );
+            if (ReturnLength) *ReturnLength = reply->len + FIELD_OFFSET( TOKEN_PRIVILEGES, Privileges );
             PreviousState->PrivilegeCount = reply->len / sizeof(LUID_AND_ATTRIBUTES);
         }
     }
@@ -850,7 +850,7 @@ static inline void do_cpuid(unsigned int ax, unsigned int *p)
 }
 
 /* From xf86info havecpuid.c 1.11 */
-static inline int have_cpuid(void)
+static inline BOOL have_cpuid(void)
 {
 #ifdef __i386__
 	unsigned int f1, f2;
@@ -868,16 +868,16 @@ static inline int have_cpuid(void)
                 : "ir" (0x00200000));
 	return ((f1^f2) & 0x00200000) != 0;
 #elif defined(__x86_64__)
-        return 1;
+        return TRUE;
 #else
-        return 0;
+        return FALSE;
 #endif
 }
 
 /* Detect if a SSE2 processor is capable of Denormals Are Zero (DAZ) mode.
  *
  * This function assumes you have already checked for SSE2/FXSAVE support. */
-static inline int have_sse_daz_mode(void)
+static inline BOOL have_sse_daz_mode(void)
 {
 #ifdef __i386__
     typedef struct DECLSPEC_ALIGN(16) _M128A {
@@ -913,7 +913,7 @@ static inline int have_sse_daz_mode(void)
 
     return (state->MxCsr_Mask & (1 << 6)) >> 6;
 #else /* all x86_64 processors include SSE2 with DAZ mode */
-    return 1;
+    return TRUE;
 #endif
 }
 
@@ -1080,10 +1080,16 @@ static inline void get_cpuinfo(SYSTEM_CPU_INFORMATION* info)
             while (isspace(*value)) value++;
             if ((s = strchr(value,'\n')))
                 *s='\0';
-            if (!strcasecmp(line, "CPU architecture"))
+            if (!strcasecmp(line, "CPU part"))
             {
                 if (isdigit(value[0]))
-                    info->Level = atoi(value);
+                    info->Level = strtol(value, NULL, 16);
+                continue;
+            }
+            if (!strcasecmp(line, "CPU revision"))
+            {
+                if (isdigit(value[0]))
+                    info->Revision = atoi(value);
                 continue;
             }
             if (!strcasecmp(line, "features"))

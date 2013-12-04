@@ -244,13 +244,13 @@ static void test_midi_mci(HWND hwnd)
     char buf[1024];
     memset(buf, 0, sizeof(buf));
 
-    err = mciSendString("sysinfo sequencer quantity", buf, sizeof(buf), hwnd);
+    err = mciSendStringA("sysinfo sequencer quantity", buf, sizeof(buf), hwnd);
     ok(!err, "mci sysinfo sequencer quantity returned %d\n", err);
     if (!err) trace("Found %s MCI sequencer devices\n", buf);
 
     if (!strcmp(buf, "0")) return;
 
-    err = mciSendString("capability sequencer can record", buf, sizeof(buf), hwnd);
+    err = mciSendStringA("capability sequencer can record", buf, sizeof(buf), hwnd);
     ok(!err, "mci sysinfo sequencer quantity returned %d\n", err);
     if(!err) ok(!strcmp(buf, "false"), "capability can record is %s\n", buf);
 }
@@ -282,7 +282,7 @@ static void test_midiOut_device(UINT udev, HWND hwnd)
         rc = midiOutOpen(&hm, udev, (DWORD_PTR)hwnd, (DWORD_PTR)MYCBINST, CALLBACK_WINDOW);
     else
         rc = midiOutOpen(&hm, udev, (DWORD_PTR)callback_func, (DWORD_PTR)MYCBINST, CALLBACK_FUNCTION);
-    if (rc == MMSYSERR_NOTSUPPORTED)
+    if (rc == MMSYSERR_NOTSUPPORTED || rc == MMSYSERR_NODRIVER)
     {
         skip( "MIDI out not supported\n" );
         return;
@@ -481,7 +481,7 @@ static void test_midiStream(UINT udev, HWND hwnd)
         rc = midiStreamOpen(&hm, &udev, 1, (DWORD_PTR)hwnd, (DWORD_PTR)MYCBINST, CALLBACK_WINDOW);
     else
         rc = midiStreamOpen(&hm, &udev, 1, (DWORD_PTR)callback_func, (DWORD_PTR)MYCBINST, CALLBACK_FUNCTION);
-    if (rc == MMSYSERR_NOTSUPPORTED)
+    if (rc == MMSYSERR_NOTSUPPORTED || rc == MMSYSERR_NODRIVER)
     {
         skip( "MIDI stream not supported\n" );
         return;

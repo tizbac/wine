@@ -262,6 +262,8 @@ static void winstation_init(void)
         if (handle) SetThreadDesktop( handle );
     }
     HeapFree( GetProcessHeap(), 0, buffer );
+
+    register_desktop_class();
 }
 
 
@@ -277,9 +279,6 @@ static BOOL process_attach(void)
 
     /* Setup palette function pointers */
     palette_init();
-
-    /* Initialize built-in window classes */
-    CLASS_RegisterBuiltinClasses();
 
     return TRUE;
 }

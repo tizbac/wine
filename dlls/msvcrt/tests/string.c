@@ -19,8 +19,6 @@
  */
 
 #include "wine/test.h"
-#include "winbase.h"
-#include "winnls.h"
 #include <string.h>
 #include <mbstring.h>
 #include <wchar.h>
@@ -31,6 +29,11 @@
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
+
+/* make it use a definition from string.h */
+#undef strncpy
+#include "winbase.h"
+#include "winnls.h"
 
 static char *buf_to_string(const unsigned char *bin, int len, int nr)
 {
@@ -432,9 +435,7 @@ static void test_mbcp(void)
     expect_eq(_ismbblead(0x84), 1, int, "%d");
     expect_eq(_ismbblead(0xd3), 1, int, "%d");
     expect_eq(_ismbblead(0xd7), 0, int, "%d");
-    todo_wine {
-      expect_eq(_ismbblead(0xd8), 1, int, "%d");
-    }
+    expect_eq(_ismbblead(0xd8), 1, int, "%d");
     expect_eq(_ismbblead(0xd9), 1, int, "%d");
 
     expect_eq(_ismbbtrail(0x30), 0, int, "%d");
@@ -810,23 +811,33 @@ static void test_wcscpy_s(void)
         return;
     }
 
+    if (p_set_invalid_parameter_handler)
+        ok(p_set_invalid_parameter_handler(test_invalid_parameter_handler) == NULL,
+            "Invalid parameter handler was already set\n");
+
     /* Test NULL Dest */
+    errno = EBADF;
     ret = p_wcscpy_s(NULL, 18, szLongText);
     ok(ret == EINVAL, "p_wcscpy_s expect EINVAL got %d\n", ret);
+    ok(errno == EINVAL, "expected errno EINVAL got %d\n", errno);
 
     /* Test NULL Source */
+    errno = EBADF;
     szDest[0] = 'A';
     ret = p_wcscpy_s(szDest, 18, NULL);
     ok(ret == EINVAL, "expected EINVAL got %d\n", ret);
-    ok(szDest[0] == 0, "szDest[0] not 0\n");
+    ok(errno == EINVAL, "expected errno EINVAL got %d\n", errno);
+    ok(szDest[0] == 0, "szDest[0] not 0, got %c\n", szDest[0]);
 
     /* Test invalid size */
+    errno = EBADF;
     szDest[0] = 'A';
     ret = p_wcscpy_s(szDest, 0, szLongText);
     /* Later versions changed the return value for this case to EINVAL,
      * and don't modify the result if the dest size is 0.
      */
     ok(ret == ERANGE || ret == EINVAL, "expected ERANGE/EINVAL got %d\n", ret);
+    ok(errno == ERANGE || errno == EINVAL, "expected errno ERANGE/EINVAL got %d\n", errno);
     ok(szDest[0] == 0 || ret == EINVAL, "szDest[0] not 0\n");
 
     /* Copy same buffer size */
@@ -835,14 +846,20 @@ static void test_wcscpy_s(void)
     ok(lstrcmpW(szDest, szLongText) == 0, "szDest != szLongText\n");
 
     /* Copy smaller buffer size */
+    errno = EBADF;
     szDest[0] = 'A';
     ret = p_wcscpy_s(szDestShort, 8, szLongText);
     ok(ret == ERANGE || ret == EINVAL, "expected ERANGE/EINVAL got %d\n", ret);
+    ok(errno == ERANGE || errno == EINVAL, "expected errno ERANGE/EINVAL got %d\n", errno);
     ok(szDestShort[0] == 0, "szDestShort[0] not 0\n");
 
     if(!p_wcsncpy_s)
     {
         win_skip("wcsncpy_s not found\n");
+
+        if (p_set_invalid_parameter_handler)
+            ok(p_set_invalid_parameter_handler(NULL) == test_invalid_parameter_handler,
+                    "Cannot reset invalid parameter handler\n");
         return;
     }
 
@@ -888,6 +905,10 @@ static void test_wcscpy_s(void)
     ok(ret == STRUNCATE, "expected ERROR_SUCCESS got %d\n", ret);
     ok(szDestShort[0]=='1' && szDestShort[1]=='1' && szDestShort[2]=='1' && szDestShort[3]=='1',
             "szDestShort = %s\n", wine_dbgstr_w(szDestShort));
+
+    if (p_set_invalid_parameter_handler)
+        ok(p_set_invalid_parameter_handler(NULL) == test_invalid_parameter_handler,
+                "Cannot reset invalid parameter handler\n");
 }
 
 static void test__wcsupr_s(void)
@@ -1322,6 +1343,26 @@ static void test_strtol(void)
     errno = 0;
     ul = strtoul("9223372036854775807L", &e, 0);
     ok(ul==4294967295ul, "wrong value %u\n", ul);
+    ok(errno == ERANGE, "wrong errno %d\n", errno);
+
+    errno = 0;
+    ul = strtoul("-2", NULL, 0);
+    ok(ul == -2, "wrong value %u\n", ul);
+    ok(errno == 0, "wrong errno %d\n", errno);
+
+    errno = 0;
+    ul = strtoul("-4294967294", NULL, 0);
+    ok(ul == 2, "wrong value %u\n", ul);
+    ok(errno == 0, "wrong errno %d\n", errno);
+
+    errno = 0;
+    ul = strtoul("-4294967295", NULL, 0);
+    ok(ul==1, "wrong value %u\n", ul);
+    ok(errno == 0, "wrong errno %d\n", errno);
+
+    errno = 0;
+    ul = strtoul("-4294967296", NULL, 0);
+    ok(ul == 1, "wrong value %u\n", ul);
     ok(errno == ERANGE, "wrong errno %d\n", errno);
 }
 
@@ -1844,6 +1885,11 @@ static void test__itoa_s(void)
     ok(!strcmp(buffer, "-12345678"),
        "Expected output buffer string to be \"-12345678\", got \"%s\"\n",
        buffer);
+
+    itoa(100, buffer, 100);
+    ok(!strcmp(buffer, "10"),
+            "Expected output buffer string to be \"10\", got \"%s\"\n", buffer);
+
     if (p_set_invalid_parameter_handler)
         ok(p_set_invalid_parameter_handler(NULL) == test_invalid_parameter_handler,
                 "Cannot reset invalid parameter handler\n");
@@ -2358,7 +2404,7 @@ static void test_wctomb(void)
 
     ret = p_wcrtomb((char*)dst, 0xffff, NULL);
     ok(ret == -1, "wcrtomb did not return -1\n");
-    ok(dst[0] == 0x3f, "dst[0] = %x, expected 0x20\n", dst[0]);
+    ok(dst[0] == 0x3f, "dst[0] = %x, expected 0x3f\n", dst[0]);
 
     setlocale(LC_ALL, "C");
 }
@@ -2556,6 +2602,36 @@ static void test_atoi(void)
     ok(r == 0, "atoi(4294967296) = %d\n", r);
 }
 
+static void test_strncpy(void)
+{
+#define TEST_STRNCPY_LEN 10
+    char *ret;
+    char dst[TEST_STRNCPY_LEN + 1];
+    char not_null_terminated[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0'};
+
+    /* strlen(src) > TEST_STRNCPY_LEN */
+    ret = strncpy(dst, "01234567890123456789", TEST_STRNCPY_LEN);
+    ok(ret == dst, "ret != dst\n");
+    ok(!strncmp(dst, "0123456789", TEST_STRNCPY_LEN), "dst != 0123456789\n");
+
+    /* without null-terminated */
+    ret = strncpy(dst, not_null_terminated, TEST_STRNCPY_LEN);
+    ok(ret == dst, "ret != dst\n");
+    ok(!strncmp(dst, "0123456789", TEST_STRNCPY_LEN), "dst != 0123456789\n");
+
+    /* strlen(src) < TEST_STRNCPY_LEN */
+    strcpy(dst, "0123456789");
+    ret = strncpy(dst, "012345", TEST_STRNCPY_LEN);
+    ok(ret == dst, "ret != dst\n");
+    ok(!strcmp(dst, "012345"), "dst != 012345\n");
+    ok(dst[TEST_STRNCPY_LEN - 1] == '\0', "dst[TEST_STRNCPY_LEN - 1] != 0\n");
+
+    /* strlen(src) == TEST_STRNCPY_LEN */
+    ret = strncpy(dst, "0123456789", TEST_STRNCPY_LEN);
+    ok(ret == dst, "ret != dst\n");
+    ok(!strncmp(dst, "0123456789", TEST_STRNCPY_LEN), "dst != 0123456789\n");
+}
+
 START_TEST(string)
 {
     char mem[100];
@@ -2657,4 +2733,5 @@ START_TEST(string)
     test__stricmp();
     test__wcstoi64();
     test_atoi();
+    test_strncpy();
 }

@@ -26,26 +26,29 @@ static ID3D10Device *create_device(void)
     ID3D10Device *device;
 
     if (SUCCEEDED(D3D10CreateDevice(NULL, D3D10_DRIVER_TYPE_HARDWARE, NULL, 0, D3D10_SDK_VERSION, &device)))
-    {
-        trace("Created a HW device\n");
         return device;
-    }
 
     trace("Failed to create a HW device, trying REF\n");
     if (SUCCEEDED(D3D10CreateDevice(NULL, D3D10_DRIVER_TYPE_REFERENCE, NULL, 0, D3D10_SDK_VERSION, &device)))
-    {
-        trace("Created a REF device\n");
         return device;
-    }
 
     trace("Failed to create a device, returning NULL\n");
     return NULL;
 }
 
-static void test_device_interfaces(ID3D10Device *device)
+static void test_device_interfaces(void)
 {
-    HRESULT hr;
+    ID3D10Device *device;
+    ULONG refcount;
     IUnknown *obj;
+    HRESULT hr;
+
+    device = create_device();
+    if (!device)
+    {
+        skip("Failed to create device, skipping tests\n");
+        return;
+    }
 
     if (SUCCEEDED(hr = ID3D10Device_QueryInterface(device, &IID_IUnknown, (void **)&obj)))
         IUnknown_Release(obj);
@@ -62,6 +65,9 @@ static void test_device_interfaces(ID3D10Device *device)
     if (SUCCEEDED(hr = ID3D10Device_QueryInterface(device, &IID_IDXGIDevice, (void **)&obj)))
         IUnknown_Release(obj);
     ok(SUCCEEDED(hr), "ID3D10Device does not implement IDXGIDevice (%#x)\n", hr);
+
+    refcount = ID3D10Device_Release(device);
+    ok(!refcount, "Device has %u references left\n", refcount);
 }
 
 static void test_stateblock_mask(void)
@@ -224,19 +230,6 @@ static void test_stateblock_mask(void)
 
 START_TEST(device)
 {
-    ID3D10Device *device;
-    ULONG refcount;
-
-    device = create_device();
-    if (!device)
-    {
-        skip("Failed to create device, skipping tests\n");
-        return;
-    }
-
-    test_device_interfaces(device);
+    test_device_interfaces();
     test_stateblock_mask();
-
-    refcount = ID3D10Device_Release(device);
-    ok(!refcount, "Device has %u references left\n", refcount);
 }

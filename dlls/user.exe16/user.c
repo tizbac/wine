@@ -560,11 +560,11 @@ BOOL16 WINAPI ClipCursor16( const RECT16 *rect )
 BOOL16 WINAPI GetCursorPos16( POINT16 *pt )
 {
     POINT pos;
-    if (!pt) return 0;
+    if (!pt) return FALSE;
     GetCursorPos(&pos);
     pt->x = pos.x;
     pt->y = pos.y;
-    return 1;
+    return TRUE;
 }
 
 
@@ -2792,7 +2792,7 @@ DWORD WINAPI DumpIcon16( SEGPTR pInfo, WORD *lpLen,
  */
 static BOOL DRAG_QueryUpdate16( HWND hQueryWnd, SEGPTR spDragInfo )
 {
-    BOOL bResult = 0;
+    BOOL bResult;
     WPARAM wParam;
     POINT pt, old_pt;
     LPDRAGINFO16 ptrDragInfo = MapSL(spDragInfo);

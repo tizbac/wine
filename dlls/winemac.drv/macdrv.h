@@ -38,15 +38,16 @@
 extern BOOL skip_single_buffer_flushes DECLSPEC_HIDDEN;
 extern BOOL allow_vsync DECLSPEC_HIDDEN;
 extern BOOL allow_set_gamma DECLSPEC_HIDDEN;
+extern BOOL allow_software_rendering DECLSPEC_HIDDEN;
+extern BOOL disable_window_decorations DECLSPEC_HIDDEN;
+extern HMODULE macdrv_module DECLSPEC_HIDDEN;
 
 
 extern const char* debugstr_cf(CFTypeRef t) DECLSPEC_HIDDEN;
 
 static inline CGRect cgrect_from_rect(RECT rect)
 {
-    if (rect.left >= rect.right || rect.top >= rect.bottom)
-        return CGRectNull;
-    return CGRectMake(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+    return CGRectMake(rect.left, rect.top, max(0, rect.right - rect.left), max(0, rect.bottom - rect.top));
 }
 
 static inline RECT rect_from_cgrect(CGRect cgrect)
@@ -133,12 +134,12 @@ struct macdrv_win_data
     macdrv_view         gl_view;                /* view for GL */
     RECT                gl_rect;                /* GL view rectangle relative to whole_rect */
     COLORREF            color_key;              /* color key for layered window; CLR_INVALID is not color keyed */
-    BOOL                on_screen : 1;          /* is window ordered in? (minimized or not) */
-    BOOL                shaped : 1;             /* is window using a custom region shape? */
-    BOOL                layered : 1;            /* is window layered and with valid attributes? */
-    BOOL                ulw_layered : 1;        /* has UpdateLayeredWindow() been called for window? */
-    BOOL                per_pixel_alpha : 1;    /* is window using per-pixel alpha? */
-    BOOL                minimized : 1;          /* is window minimized? */
+    unsigned int        on_screen : 1;          /* is window ordered in? (minimized or not) */
+    unsigned int        shaped : 1;             /* is window using a custom region shape? */
+    unsigned int        layered : 1;            /* is window layered and with valid attributes? */
+    unsigned int        ulw_layered : 1;        /* has UpdateLayeredWindow() been called for window? */
+    unsigned int        per_pixel_alpha : 1;    /* is window using per-pixel alpha? */
+    unsigned int        minimized : 1;          /* is window minimized? */
     struct window_surface *surface;
     struct window_surface *unminimized_surface;
 };
@@ -147,6 +148,7 @@ extern struct macdrv_win_data *get_win_data(HWND hwnd) DECLSPEC_HIDDEN;
 extern void release_win_data(struct macdrv_win_data *data) DECLSPEC_HIDDEN;
 extern macdrv_window macdrv_get_cocoa_window(HWND hwnd, BOOL require_on_screen) DECLSPEC_HIDDEN;
 extern RGNDATA *get_region_data(HRGN hrgn, HDC hdc_lptodp) DECLSPEC_HIDDEN;
+extern void activate_on_following_focus(void) DECLSPEC_HIDDEN;
 extern struct window_surface *create_surface(macdrv_window window, const RECT *rect,
                                              struct window_surface *old_surface, BOOL use_alpha) DECLSPEC_HIDDEN;
 extern void set_window_surface(macdrv_window window, struct window_surface *window_surface) DECLSPEC_HIDDEN;
@@ -156,13 +158,17 @@ extern void surface_clip_to_visible_rect(struct window_surface *window_surface, 
 extern void macdrv_handle_event(const macdrv_event *event) DECLSPEC_HIDDEN;
 
 extern void macdrv_window_close_requested(HWND hwnd) DECLSPEC_HIDDEN;
-extern void macdrv_window_frame_changed(HWND hwnd, CGRect frame) DECLSPEC_HIDDEN;
+extern void macdrv_window_frame_changed(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
 extern void macdrv_window_got_focus(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
 extern void macdrv_window_lost_focus(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
 extern void macdrv_app_deactivated(void) DECLSPEC_HIDDEN;
 extern void macdrv_app_quit_requested(const macdrv_event *event) DECLSPEC_HIDDEN;
-extern void macdrv_window_did_minimize(HWND hwnd) DECLSPEC_HIDDEN;
+extern void macdrv_window_minimize_requested(HWND hwnd) DECLSPEC_HIDDEN;
 extern void macdrv_window_did_unminimize(HWND hwnd) DECLSPEC_HIDDEN;
+extern void macdrv_window_brought_forward(HWND hwnd) DECLSPEC_HIDDEN;
+extern void macdrv_window_resize_ended(HWND hwnd) DECLSPEC_HIDDEN;
+extern BOOL query_resize_start(HWND hwnd) DECLSPEC_HIDDEN;
+extern BOOL query_min_max_info(HWND hwnd) DECLSPEC_HIDDEN;
 
 extern void macdrv_mouse_button(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
 extern void macdrv_mouse_moved(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
@@ -172,6 +178,8 @@ extern void macdrv_release_capture(HWND hwnd, const macdrv_event *event) DECLSPE
 extern void macdrv_compute_keyboard_layout(struct macdrv_thread_data *thread_data) DECLSPEC_HIDDEN;
 extern void macdrv_keyboard_changed(const macdrv_event *event) DECLSPEC_HIDDEN;
 extern void macdrv_key_event(HWND hwnd, const macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_hotkey_press(const macdrv_event *event) DECLSPEC_HIDDEN;
+extern HKL macdrv_get_hkl_from_source(TISInputSourceRef input_source) DECLSPEC_HIDDEN;
 
 extern void macdrv_displays_changed(const macdrv_event *event) DECLSPEC_HIDDEN;
 
@@ -197,14 +205,13 @@ extern CGImageRef create_cgimage_from_icon_bitmaps(HDC hdc, HANDLE icon, HBITMAP
 extern CGImageRef create_cgimage_from_icon(HANDLE icon, int width, int height) DECLSPEC_HIDDEN;
 extern CFArrayRef create_app_icon_images(void) DECLSPEC_HIDDEN;
 
-extern void macdrv_status_item_clicked(const macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_status_item_mouse_button(const macdrv_event *event) DECLSPEC_HIDDEN;
+extern void macdrv_status_item_mouse_move(const macdrv_event *event) DECLSPEC_HIDDEN;
 
 
 /**************************************************************************
  * Mac IME driver
  */
-
-extern void IME_RegisterClasses(HINSTANCE hImeInst) DECLSPEC_HIDDEN;
 
 extern BOOL macdrv_process_text_input(UINT vkey, UINT scan, UINT repeat, const BYTE *key_state,
                                       void *himc) DECLSPEC_HIDDEN;

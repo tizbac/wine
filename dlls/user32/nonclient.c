@@ -289,7 +289,7 @@ BOOL WINAPI DrawCaptionTempW (HWND hwnd, HDC hdc, const RECT *rect, HFONT hFont,
         FillRect (hdc, &rc, GetSysColorBrush (COLOR_3DFACE));
 
         if (uFlags & DC_ACTIVE) {
-            HBRUSH hbr = SelectObject (hdc, SYSCOLOR_55AABrush);
+            HBRUSH hbr = SelectObject (hdc, SYSCOLOR_Get55AABrush());
             PatBlt (hdc, rc.left, rc.top,
                       rc.right-rc.left, rc.bottom-rc.top, 0xFA0089);
             SelectObject (hdc, hbr);
@@ -980,7 +980,7 @@ static void  NC_DrawCaption( HDC  hdc, RECT *rect, HWND hwnd, DWORD  style,
  *
  *   Paint the non-client area for windows.
  */
-static void  NC_DoNCPaint( HWND  hwnd, HRGN  clip, BOOL  suppress_menupaint )
+static void  NC_DoNCPaint( HWND  hwnd, HRGN  clip )
 {
     HDC hdc;
     RECT rfuzz, rect, rectClip;
@@ -1062,7 +1062,7 @@ static void  NC_DoNCPaint( HWND  hwnd, HRGN  clip, BOOL  suppress_menupaint )
 
 	TRACE("Calling DrawMenuBar with rect (%s)\n", wine_dbgstr_rect(&r));
 
-	rect.top += MENU_DrawMenuBar( hdc, &r, hwnd, suppress_menupaint ) + 1;
+	rect.top += MENU_DrawMenuBar( hdc, &r, hwnd ) + 1;
     }
 
     TRACE("After MenuBar, rect is (%s).\n", wine_dbgstr_rect(&rect));
@@ -1109,7 +1109,7 @@ LRESULT NC_HandleNCPaint( HWND hwnd , HRGN clip)
 	if( dwStyle & WS_MINIMIZE )
 	    WINPOS_RedrawIconTitle( hwnd );
 	else
-	    NC_DoNCPaint( hwnd, clip, FALSE );
+	    NC_DoNCPaint( hwnd, clip );
     }
     return 0;
 }
@@ -1143,7 +1143,7 @@ LRESULT NC_HandleNCActivate( HWND hwnd, WPARAM wParam, LPARAM lParam )
         if (IsIconic(hwnd))
             WINPOS_RedrawIconTitle( hwnd );
         else
-            NC_DoNCPaint( hwnd, (HRGN)1, FALSE );
+            NC_DoNCPaint( hwnd, (HRGN)1 );
     }
 
     return TRUE;
@@ -1291,7 +1291,7 @@ static void NC_TrackMinMaxBox( HWND hwnd, WORD wParam )
     ReleaseCapture();
     ReleaseDC( hwnd, hdc );
 
-    /* If the item minimize or maximize of the sysmenu are not there */
+    /* If the minimize or maximize items of the sysmenu are not there */
     /* or if the style is not present, do nothing */
     if ((!pressed) || (state == 0xFFFFFFFF))
         return;
@@ -1321,7 +1321,7 @@ static void NC_TrackCloseButton (HWND hwnd, WPARAM wParam, LPARAM lParam)
 
     state = GetMenuState(hSysMenu, SC_CLOSE, MF_BYCOMMAND);
 
-    /* If the item close of the sysmenu is disabled or not there do nothing */
+    /* If the close item of the sysmenu is disabled or not present do nothing */
     if((state & MF_DISABLED) || (state & MF_GRAYED) || (state == 0xFFFFFFFF))
         return;
 
@@ -1530,7 +1530,7 @@ LRESULT NC_HandleNCLButtonDblClk( HWND hwnd, WPARAM wParam, LPARAM lParam )
             HMENU hSysMenu = GetSystemMenu(hwnd, FALSE);
             UINT state = GetMenuState(hSysMenu, SC_CLOSE, MF_BYCOMMAND);
 
-            /* If the item close of the sysmenu is disabled or not there do nothing */
+            /* If the close item of the sysmenu is disabled or not present do nothing */
             if ((state & (MF_DISABLED | MF_GRAYED)) || (state == 0xFFFFFFFF))
                 break;
 
