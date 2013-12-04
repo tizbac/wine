@@ -147,7 +147,7 @@ void* WINAPI Direct3DShaderValidatorCreate9(void)
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
 {
     /* At process attach */
-    TRACE("fdwReason=%d\n", fdwReason);
+    TRACE("fdwReason=%d\n", reason);
     switch (fdwReason)
     {
         case DLL_PROCESS_ATTACH:
