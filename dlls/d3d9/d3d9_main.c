@@ -148,7 +148,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
 {
     /* At process attach */
     TRACE("fdwReason=%d\n", reason);
-    switch (fdwReason)
+    switch (reason)
     {
         case DLL_PROCESS_ATTACH:
             d3dadapter9_init(inst);
