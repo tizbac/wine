@@ -151,12 +151,12 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
     switch (fdwReason)
     {
         case DLL_PROCESS_ATTACH:
-            d3dadapter9_init(hInstDLL);
-            DisableThreadLibraryCalls(hInstDLL);
+            d3dadapter9_init(inst);
+            DisableThreadLibraryCalls(inst);
             break;
 
         case DLL_PROCESS_DETACH:
-            d3dadapter9_destroy(hInstDLL);
+            d3dadapter9_destroy(inst);
             break;
     }
     return TRUE;
