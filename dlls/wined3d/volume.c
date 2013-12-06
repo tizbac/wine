@@ -812,12 +812,12 @@ static const struct wined3d_resource_ops volume_resource_ops =
     volume_unload,
 };
 
-static HRESULT volume_init(struct wined3d_volume *volume, struct wined3d_device *device, UINT width,
-        UINT height, UINT depth, UINT level, DWORD usage, enum wined3d_format_id format_id,
-        enum wined3d_pool pool, void *parent, const struct wined3d_parent_ops *parent_ops)
+static HRESULT volume_init(struct wined3d_volume *volume, struct wined3d_texture *container,
+        const struct wined3d_resource_desc *desc, UINT level)
 {
+    struct wined3d_device *device = container->resource.device;
     const struct wined3d_gl_info *gl_info = &device->adapter->gl_info;
-    const struct wined3d_format *format = wined3d_get_format(gl_info, format_id);
+    const struct wined3d_format *format = wined3d_get_format(gl_info, desc->format);
     HRESULT hr;
     UINT size;
 
@@ -828,19 +828,18 @@ static HRESULT volume_init(struct wined3d_volume *volume, struct wined3d_device 
     }
     /* TODO: Write tests for other resources and move this check
      * to resource_init, if applicable. */
-    if (usage & WINED3DUSAGE_DYNAMIC
-            && (pool == WINED3D_POOL_MANAGED || pool == WINED3D_POOL_SCRATCH))
+    if (desc->usage & WINED3DUSAGE_DYNAMIC
+            && (desc->pool == WINED3D_POOL_MANAGED || desc->pool == WINED3D_POOL_SCRATCH))
     {
-        WARN("Attempted to create a DYNAMIC texture in pool %u.\n", pool);
+        WARN("Attempted to create a DYNAMIC texture in pool %s.\n", debug_d3dpool(desc->pool));
         return WINED3DERR_INVALIDCALL;
     }
 
-    size = wined3d_format_calculate_size(format, device->surface_alignment, width, height, depth);
+    size = wined3d_format_calculate_size(format, device->surface_alignment, desc->width, desc->height, desc->depth);
 
-    hr = resource_init(&volume->resource, device, WINED3D_RTYPE_VOLUME, format,
-            WINED3D_MULTISAMPLE_NONE, 0, usage, pool, width, height, depth,
-            size, parent, parent_ops, &volume_resource_ops);
-    if (FAILED(hr))
+    if (FAILED(hr = resource_init(&volume->resource, device, WINED3D_RTYPE_VOLUME, format,
+            WINED3D_MULTISAMPLE_NONE, 0, desc->usage, desc->pool, desc->width, desc->height, desc->depth,
+            size, NULL, &wined3d_null_parent_ops, &volume_resource_ops)))
     {
         WARN("Failed to initialize resource, returning %#x.\n", hr);
         return hr;
@@ -849,7 +848,7 @@ static HRESULT volume_init(struct wined3d_volume *volume, struct wined3d_device 
     volume->texture_level = level;
     volume->locations = WINED3D_LOCATION_DISCARDED;
 
-    if (pool == WINED3D_POOL_DEFAULT && usage & WINED3DUSAGE_DYNAMIC
+    if (desc->pool == WINED3D_POOL_DEFAULT && desc->usage & WINED3DUSAGE_DYNAMIC
             && gl_info->supported[ARB_PIXEL_BUFFER_OBJECT]
             && !format->convert)
     {
@@ -857,37 +856,48 @@ static HRESULT volume_init(struct wined3d_volume *volume, struct wined3d_device 
         volume->flags |= WINED3D_VFLAG_PBO;
     }
 
+    volume_set_container(volume, container);
+
     return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_volume_create(struct wined3d_device *device, UINT width, UINT height,
-        UINT depth, UINT level, DWORD usage, enum wined3d_format_id format_id, enum wined3d_pool pool,
-        void *parent, const struct wined3d_parent_ops *parent_ops, struct wined3d_volume **volume)
+HRESULT wined3d_volume_create(struct wined3d_texture *container, const struct wined3d_resource_desc *desc,
+        unsigned int level, struct wined3d_volume **volume)
 {
+    struct wined3d_device_parent *device_parent = container->resource.device->device_parent;
+    const struct wined3d_parent_ops *parent_ops;
     struct wined3d_volume *object;
+    void *parent;
     HRESULT hr;
 
-    TRACE("device %p, width %u, height %u, depth %u, usage %#x, format %s, pool %s\n",
-            device, width, height, depth, usage, debug_d3dformat(format_id), debug_d3dpool(pool));
-    TRACE("parent %p, parent_ops %p, volume %p.\n", parent, parent_ops, volume);
+    TRACE("container %p, width %u, height %u, depth %u, level %u, format %s, "
+            "usage %#x, pool %s, volume %p.\n",
+            container, desc->width, desc->height, desc->depth, level, debug_d3dformat(desc->format),
+            desc->usage, debug_d3dpool(desc->pool), volume);
 
-    object = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*object));
-    if (!object)
-    {
-        *volume = NULL;
-        return WINED3DERR_OUTOFVIDEOMEMORY;
-    }
+    if (!(object = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*object))))
+        return E_OUTOFMEMORY;
 
-    hr = volume_init(object, device, width, height, depth, level,
-            usage, format_id, pool, parent, parent_ops);
-    if (FAILED(hr))
+    if (FAILED(hr = volume_init(object, container, desc, level)))
     {
         WARN("Failed to initialize volume, returning %#x.\n", hr);
         HeapFree(GetProcessHeap(), 0, object);
         return hr;
     }
 
-    TRACE("Created volume %p.\n", object);
+    if (FAILED(hr = device_parent->ops->volume_created(device_parent,
+            wined3d_texture_get_parent(container), object, &parent, &parent_ops)))
+    {
+        WARN("Failed to create volume parent, hr %#x.\n", hr);
+        volume_set_container(object, NULL);
+        wined3d_volume_decref(object);
+        return hr;
+    }
+
+    TRACE("Created volume %p, parent %p, parent_ops %p.\n", object, parent, parent_ops);
+
+    object->resource.parent = parent;
+    object->resource.parent_ops = parent_ops;
     *volume = object;
 
     return WINED3D_OK;

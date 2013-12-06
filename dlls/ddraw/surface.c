@@ -1174,7 +1174,10 @@ static HRESULT WINAPI ddraw_surface7_Flip(IDirectDrawSurface7 *iface, IDirectDra
 {
     struct ddraw_surface *dst_impl = impl_from_IDirectDrawSurface7(iface);
     struct ddraw_surface *src_impl = unsafe_impl_from_IDirectDrawSurface7(src);
+    struct ddraw_texture *ddraw_texture, *prev_ddraw_texture;
     DDSCAPS2 caps = {DDSCAPS_FLIP, 0, 0, 0};
+    struct wined3d_surface *tmp, *rt;
+    struct wined3d_texture *texture;
     IDirectDrawSurface7 *current;
     HRESULT hr;
 
@@ -1184,6 +1187,11 @@ static HRESULT WINAPI ddraw_surface7_Flip(IDirectDrawSurface7 *iface, IDirectDra
         return DDERR_NOTFLIPPABLE;
 
     wined3d_mutex_lock();
+
+    tmp = dst_impl->wined3d_surface;
+    texture = dst_impl->wined3d_texture;
+    rt = wined3d_device_get_render_target(dst_impl->ddraw->wined3d_device, 0);
+    ddraw_texture = wined3d_texture_get_parent(dst_impl->wined3d_texture);
 
     if (src_impl)
     {
@@ -1203,22 +1211,68 @@ static HRESULT WINAPI ddraw_surface7_Flip(IDirectDrawSurface7 *iface, IDirectDra
                 return DDERR_NOTFLIPPABLE;
             }
         }
+
+        if (rt == dst_impl->wined3d_surface)
+            wined3d_device_set_render_target(dst_impl->ddraw->wined3d_device, 0, src_impl->wined3d_surface, FALSE);
+        wined3d_resource_set_parent(wined3d_surface_get_resource(src_impl->wined3d_surface), dst_impl);
+        dst_impl->wined3d_surface = src_impl->wined3d_surface;
+        prev_ddraw_texture = wined3d_texture_get_parent(src_impl->wined3d_texture);
+        wined3d_resource_set_parent(wined3d_texture_get_resource(src_impl->wined3d_texture), ddraw_texture);
+        dst_impl->wined3d_texture = src_impl->wined3d_texture;
+        ddraw_texture = prev_ddraw_texture;
     }
     else
     {
-        if (FAILED(hr = ddraw_surface7_GetAttachedSurface(iface, &caps, &current)))
+        for (current = iface;;)
         {
-            ERR("Can't find a flip target\n");
-            wined3d_mutex_unlock();
-            return DDERR_NOTFLIPPABLE; /* Unchecked */
+            if (FAILED(hr = ddraw_surface7_GetAttachedSurface(current, &caps, &current)))
+            {
+                ERR("Can't find a flip target\n");
+                wined3d_mutex_unlock();
+                return DDERR_NOTFLIPPABLE; /* Unchecked */
+            }
+            ddraw_surface7_Release(current);
+            if (current == iface)
+            {
+                dst_impl = impl_from_IDirectDrawSurface7(iface);
+                break;
+            }
+
+            src_impl = impl_from_IDirectDrawSurface7(current);
+            if (rt == dst_impl->wined3d_surface)
+                wined3d_device_set_render_target(dst_impl->ddraw->wined3d_device, 0, src_impl->wined3d_surface, FALSE);
+            wined3d_resource_set_parent(wined3d_surface_get_resource(src_impl->wined3d_surface), dst_impl);
+            dst_impl->wined3d_surface = src_impl->wined3d_surface;
+            prev_ddraw_texture = wined3d_texture_get_parent(src_impl->wined3d_texture);
+            wined3d_resource_set_parent(wined3d_texture_get_resource(src_impl->wined3d_texture), ddraw_texture);
+            ddraw_texture = prev_ddraw_texture;
+            dst_impl->wined3d_texture = src_impl->wined3d_texture;
+            dst_impl = src_impl;
         }
-        src_impl = impl_from_IDirectDrawSurface7(current);
-        ddraw_surface7_Release(current);
     }
 
-    if (SUCCEEDED(hr = wined3d_surface_flip(dst_impl->wined3d_surface, src_impl->wined3d_surface, flags))
-            && (dst_impl->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE))
+    /* We don't have to worry about potential texture bindings, since
+     * flippable surfaces can never be textures. */
+    if (rt == src_impl->wined3d_surface)
+        wined3d_device_set_render_target(dst_impl->ddraw->wined3d_device, 0, tmp, FALSE);
+    wined3d_resource_set_parent(wined3d_surface_get_resource(tmp), src_impl);
+    src_impl->wined3d_surface = tmp;
+    wined3d_resource_set_parent(wined3d_texture_get_resource(texture), ddraw_texture);
+    src_impl->wined3d_texture = texture;
+
+    if (flags)
+    {
+        static UINT once;
+        if (!once++)
+            FIXME("Ignoring flags %#x.\n", flags);
+        else
+            WARN("Ignoring flags %#x.\n", flags);
+    }
+
+    if (dst_impl->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE)
         hr = ddraw_surface_update_frontbuffer(dst_impl, NULL, FALSE);
+    else
+        hr = DD_OK;
 
     wined3d_mutex_unlock();
 
@@ -5629,6 +5683,8 @@ HRESULT ddraw_surface_create(struct ddraw *ddraw, const DDSURFACEDESC2 *surface_
 
     if (desc->ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE)
     {
+        DWORD flippable = desc->ddsCaps.dwCaps & (DDSCAPS_FLIP | DDSCAPS_COMPLEX);
+
         if (desc->ddsCaps.dwCaps & DDSCAPS_TEXTURE)
         {
             WARN("Tried to create a primary surface with DDSCAPS_TEXTURE.\n");
@@ -5636,11 +5692,28 @@ HRESULT ddraw_surface_create(struct ddraw *ddraw, const DDSURFACEDESC2 *surface_
             return DDERR_INVALIDCAPS;
         }
 
-        if ((desc->ddsCaps.dwCaps & DDSCAPS_FLIP) && !(ddraw->cooperative_level & DDSCL_EXCLUSIVE))
+        if (flippable)
         {
-            WARN("Tried to create a flippable primary surface without DDSCL_EXCLUSIVE.\n");
-            HeapFree(GetProcessHeap(), 0, texture);
-            return DDERR_NOEXCLUSIVEMODE;
+            if (flippable != (DDSCAPS_FLIP | DDSCAPS_COMPLEX))
+            {
+                WARN("Tried to create a flippable primary surface without both DDSCAPS_FLIP and DDSCAPS_COMPLEX.\n");
+                HeapFree(GetProcessHeap(), 0, texture);
+                return DDERR_INVALIDCAPS;
+            }
+
+            if (!(desc->dwFlags & DDSD_BACKBUFFERCOUNT) || !desc->dwBackBufferCount)
+            {
+                WARN("Tried to create a flippable primary surface without any back buffers.\n");
+                HeapFree(GetProcessHeap(), 0, texture);
+                return DDERR_INVALIDCAPS;
+            }
+
+            if (!(ddraw->cooperative_level & DDSCL_EXCLUSIVE))
+            {
+                WARN("Tried to create a flippable primary surface without DDSCL_EXCLUSIVE.\n");
+                HeapFree(GetProcessHeap(), 0, texture);
+                return DDERR_NOEXCLUSIVEMODE;
+            }
         }
     }
 

@@ -4569,6 +4569,162 @@ done:
     DestroyWindow(window);
 }
 
+static void test_primary_caps(void)
+{
+    const DWORD placement = DDSCAPS_LOCALVIDMEM | DDSCAPS_VIDEOMEMORY | DDSCAPS_SYSTEMMEMORY;
+    IDirectDrawSurface4 *surface;
+    DDSURFACEDESC2 surface_desc;
+    IDirectDraw4 *ddraw;
+    unsigned int i;
+    ULONG refcount;
+    HWND window;
+    HRESULT hr;
+
+    static const struct
+    {
+        DWORD coop_level;
+        DWORD caps_in;
+        DWORD back_buffer_count;
+        HRESULT hr;
+        DWORD caps_out;
+    }
+    test_data[] =
+    {
+        {
+            DDSCL_NORMAL,
+            DDSCAPS_PRIMARYSURFACE,
+            ~0u,
+            DD_OK,
+            DDSCAPS_VISIBLE | DDSCAPS_PRIMARYSURFACE,
+        },
+        {
+            DDSCL_NORMAL,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_TEXTURE,
+            ~0u,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+        {
+            DDSCL_NORMAL,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_FRONTBUFFER,
+            ~0u,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+        {
+            DDSCL_NORMAL,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_BACKBUFFER,
+            ~0u,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+        {
+            DDSCL_NORMAL,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_FLIP,
+            ~0u,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+        {
+            DDSCL_NORMAL,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_COMPLEX,
+            ~0u,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+        {
+            DDSCL_NORMAL,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_COMPLEX | DDSCAPS_FLIP,
+            ~0u,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+        {
+            DDSCL_NORMAL,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_COMPLEX | DDSCAPS_FLIP,
+            0,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+        {
+            DDSCL_NORMAL,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_COMPLEX | DDSCAPS_FLIP,
+            1,
+            DDERR_NOEXCLUSIVEMODE,
+            ~0u,
+        },
+        {
+            DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_COMPLEX | DDSCAPS_FLIP,
+            0,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+        {
+            DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_COMPLEX | DDSCAPS_FLIP,
+            1,
+            DD_OK,
+            DDSCAPS_VISIBLE | DDSCAPS_PRIMARYSURFACE | DDSCAPS_FRONTBUFFER | DDSCAPS_FLIP | DDSCAPS_COMPLEX,
+        },
+        {
+            DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_COMPLEX | DDSCAPS_FLIP | DDSCAPS_FRONTBUFFER,
+            1,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+        {
+            DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN,
+            DDSCAPS_PRIMARYSURFACE | DDSCAPS_COMPLEX | DDSCAPS_FLIP | DDSCAPS_BACKBUFFER,
+            1,
+            DDERR_INVALIDCAPS,
+            ~0u,
+        },
+    };
+
+    if (!(ddraw = create_ddraw()))
+    {
+        skip("Failed to create a ddraw object, skipping test.\n");
+        return;
+    }
+
+    window = CreateWindowA("static", "ddraw_test", WS_OVERLAPPEDWINDOW,
+            0, 0, 640, 480, 0, 0, 0, 0);
+
+    for (i = 0; i < sizeof(test_data) / sizeof(*test_data); ++i)
+    {
+        hr = IDirectDraw4_SetCooperativeLevel(ddraw, window, test_data[i].coop_level);
+        ok(SUCCEEDED(hr), "Failed to set cooperative level, hr %#x.\n", hr);
+
+        memset(&surface_desc, 0, sizeof(surface_desc));
+        surface_desc.dwSize = sizeof(surface_desc);
+        surface_desc.dwFlags = DDSD_CAPS;
+        if (test_data[i].back_buffer_count != ~0u)
+            surface_desc.dwFlags |= DDSD_BACKBUFFERCOUNT;
+        surface_desc.ddsCaps.dwCaps = test_data[i].caps_in;
+        surface_desc.dwBackBufferCount = test_data[i].back_buffer_count;
+        hr = IDirectDraw4_CreateSurface(ddraw, &surface_desc, &surface, NULL);
+        ok(hr == test_data[i].hr, "Test %u: Got unexpected hr %#x, expected %#x.\n", i, hr, test_data[i].hr);
+        if (FAILED(hr))
+            continue;
+
+        memset(&surface_desc, 0, sizeof(surface_desc));
+        surface_desc.dwSize = sizeof(surface_desc);
+        hr = IDirectDrawSurface4_GetSurfaceDesc(surface, &surface_desc);
+        ok(SUCCEEDED(hr), "Test %u: Failed to get surface desc, hr %#x.\n", i, hr);
+        ok((surface_desc.ddsCaps.dwCaps & ~placement) == test_data[i].caps_out,
+                "Test %u: Got unexpected caps %#x, expected %#x.\n",
+                i, surface_desc.ddsCaps.dwCaps, test_data[i].caps_out);
+
+        IDirectDrawSurface4_Release(surface);
+    }
+
+    refcount = IDirectDraw4_Release(ddraw);
+    ok(refcount == 0, "The ddraw object was not properly freed, refcount %u.\n", refcount);
+    DestroyWindow(window);
+}
+
 static void test_surface_lock(void)
 {
     IDirectDraw4 *ddraw;
@@ -4932,10 +5088,10 @@ static void test_flip(void)
     color = get_surface_color(backbuffer1, 320, 240);
     /* The testbot seems to just copy the contents of one surface to all the
      * others, instead of properly flipping. */
-    todo_wine ok(compare_color(color, 0x0000ff00, 1) || broken(sysmem_primary && compare_color(color, 0x000000ff, 1)),
+    ok(compare_color(color, 0x0000ff00, 1) || broken(sysmem_primary && compare_color(color, 0x000000ff, 1)),
             "Got unexpected color 0x%08x.\n", color);
     color = get_surface_color(backbuffer2, 320, 240);
-    todo_wine ok(compare_color(color, 0x000000ff, 1), "Got unexpected color 0x%08x.\n", color);
+    ok(compare_color(color, 0x000000ff, 1), "Got unexpected color 0x%08x.\n", color);
     U5(fx).dwFillColor = 0xffff0000;
     hr = IDirectDrawSurface4_Blt(backbuffer3, NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &fx);
     ok(SUCCEEDED(hr), "Failed to fill surface, hr %#x.\n", hr);
@@ -4943,10 +5099,10 @@ static void test_flip(void)
     hr = IDirectDrawSurface4_Flip(primary, NULL, DDFLIP_WAIT);
     ok(SUCCEEDED(hr), "Failed to flip, hr %#x.\n", hr);
     color = get_surface_color(backbuffer1, 320, 240);
-    todo_wine ok(compare_color(color, 0x000000ff, 1) || broken(sysmem_primary && compare_color(color, 0x00ff0000, 1)),
+    ok(compare_color(color, 0x000000ff, 1) || broken(sysmem_primary && compare_color(color, 0x00ff0000, 1)),
             "Got unexpected color 0x%08x.\n", color);
     color = get_surface_color(backbuffer2, 320, 240);
-    todo_wine ok(compare_color(color, 0x00ff0000, 1), "Got unexpected color 0x%08x.\n", color);
+    ok(compare_color(color, 0x00ff0000, 1), "Got unexpected color 0x%08x.\n", color);
     U5(fx).dwFillColor = 0xff00ff00;
     hr = IDirectDrawSurface4_Blt(backbuffer3, NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &fx);
     ok(SUCCEEDED(hr), "Failed to fill surface, hr %#x.\n", hr);
@@ -4954,7 +5110,7 @@ static void test_flip(void)
     hr = IDirectDrawSurface4_Flip(primary, NULL, DDFLIP_WAIT);
     ok(SUCCEEDED(hr), "Failed to flip, hr %#x.\n", hr);
     color = get_surface_color(backbuffer1, 320, 240);
-    todo_wine ok(compare_color(color, 0x00ff0000, 1) || broken(sysmem_primary && compare_color(color, 0x0000ff00, 1)),
+    ok(compare_color(color, 0x00ff0000, 1) || broken(sysmem_primary && compare_color(color, 0x0000ff00, 1)),
             "Got unexpected color 0x%08x.\n", color);
     color = get_surface_color(backbuffer2, 320, 240);
     ok(compare_color(color, 0x0000ff00, 1), "Got unexpected color 0x%08x.\n", color);
@@ -5047,12 +5203,12 @@ static void test_set_surface_desc(void)
     ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS | DDSD_PIXELFORMAT;
     ddsd.dwWidth = 8;
     ddsd.dwHeight = 8;
-    ddsd.ddpfPixelFormat.dwSize = sizeof(ddsd.ddpfPixelFormat);
-    ddsd.ddpfPixelFormat.dwFlags = DDPF_RGB;
-    U1(ddsd.ddpfPixelFormat).dwRGBBitCount = 32;
-    U2(ddsd.ddpfPixelFormat).dwRBitMask = 0x00ff0000;
-    U3(ddsd.ddpfPixelFormat).dwGBitMask = 0x0000ff00;
-    U4(ddsd.ddpfPixelFormat).dwBBitMask = 0x000000ff;
+    U4(ddsd).ddpfPixelFormat.dwSize = sizeof(U4(ddsd).ddpfPixelFormat);
+    U4(ddsd).ddpfPixelFormat.dwFlags = DDPF_RGB;
+    U1(U4(ddsd).ddpfPixelFormat).dwRGBBitCount = 32;
+    U2(U4(ddsd).ddpfPixelFormat).dwRBitMask = 0x00ff0000;
+    U3(U4(ddsd).ddpfPixelFormat).dwGBitMask = 0x0000ff00;
+    U4(U4(ddsd).ddpfPixelFormat).dwBBitMask = 0x000000ff;
     ddsd.ddsCaps.dwCaps = DDSCAPS_SYSTEMMEMORY;
 
     hr = IDirectDraw4_CreateSurface(ddraw, &ddsd, &surface, NULL);
@@ -5224,12 +5380,12 @@ static void test_set_surface_desc(void)
 
     /* Setting the pixelformat without LPSURFACE is an error, but with LPSURFACE it works. */
     ddsd.dwFlags = DDSD_PIXELFORMAT;
-    ddsd.ddpfPixelFormat.dwSize = sizeof(ddsd.ddpfPixelFormat);
-    ddsd.ddpfPixelFormat.dwFlags = DDPF_RGB;
-    U1(ddsd.ddpfPixelFormat).dwRGBBitCount = 32;
-    U2(ddsd.ddpfPixelFormat).dwRBitMask = 0x00ff0000;
-    U3(ddsd.ddpfPixelFormat).dwGBitMask = 0x0000ff00;
-    U4(ddsd.ddpfPixelFormat).dwBBitMask = 0x000000ff;
+    U4(ddsd).ddpfPixelFormat.dwSize = sizeof(U4(ddsd).ddpfPixelFormat);
+    U4(ddsd).ddpfPixelFormat.dwFlags = DDPF_RGB;
+    U1(U4(ddsd).ddpfPixelFormat).dwRGBBitCount = 32;
+    U2(U4(ddsd).ddpfPixelFormat).dwRBitMask = 0x00ff0000;
+    U3(U4(ddsd).ddpfPixelFormat).dwGBitMask = 0x0000ff00;
+    U4(U4(ddsd).ddpfPixelFormat).dwBBitMask = 0x000000ff;
     hr = IDirectDrawSurface4_SetSurfaceDesc(surface, &ddsd, 0);
     ok(hr == DDERR_INVALIDPARAMS, "Setting the pixel format returned %#x.\n", hr);
 
@@ -5261,12 +5417,12 @@ static void test_set_surface_desc(void)
         ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS | DDSD_PIXELFORMAT;
         ddsd.dwWidth = 8;
         ddsd.dwHeight = 8;
-        ddsd.ddpfPixelFormat.dwSize = sizeof(ddsd.ddpfPixelFormat);
-        ddsd.ddpfPixelFormat.dwFlags = DDPF_RGB;
-        U1(ddsd.ddpfPixelFormat).dwRGBBitCount = 32;
-        U2(ddsd.ddpfPixelFormat).dwRBitMask = 0x00ff0000;
-        U3(ddsd.ddpfPixelFormat).dwGBitMask = 0x0000ff00;
-        U4(ddsd.ddpfPixelFormat).dwBBitMask = 0x000000ff;
+        U4(ddsd).ddpfPixelFormat.dwSize = sizeof(U4(ddsd).ddpfPixelFormat);
+        U4(ddsd).ddpfPixelFormat.dwFlags = DDPF_RGB;
+        U1(U4(ddsd).ddpfPixelFormat).dwRGBBitCount = 32;
+        U2(U4(ddsd).ddpfPixelFormat).dwRBitMask = 0x00ff0000;
+        U3(U4(ddsd).ddpfPixelFormat).dwGBitMask = 0x0000ff00;
+        U4(U4(ddsd).ddpfPixelFormat).dwBBitMask = 0x000000ff;
         ddsd.ddsCaps.dwCaps = invalid_caps_tests[i].caps;
         ddsd.ddsCaps.dwCaps2 = invalid_caps_tests[i].caps2;
 
@@ -5342,6 +5498,7 @@ START_TEST(ddraw4)
     test_block_formats_creation();
     test_unsupported_formats();
     test_rt_caps();
+    test_primary_caps();
     test_surface_lock();
     test_surface_discard();
     test_flip();
