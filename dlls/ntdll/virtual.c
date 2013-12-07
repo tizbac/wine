@@ -2734,7 +2734,7 @@ NTSTATUS WINAPI NtFlushVirtualMemory( HANDLE process, LPCVOID *addr_ptr,
     {
         if (!*size_ptr) *size_ptr = view->size;
         *addr_ptr = addr;
-        if (msync( addr, *size_ptr, MS_SYNC )) status = STATUS_NOT_MAPPED_DATA;
+        if (msync( addr, *size_ptr, MS_ASYNC )) status = STATUS_NOT_MAPPED_DATA;
     }
     server_leave_uninterrupted_section( &csVirtual, &sigset );
     return status;
