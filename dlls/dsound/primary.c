@@ -204,11 +204,6 @@ static HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device, WAVEFORMATEX *wfx, 
     HeapFree(GetProcessHeap(), 0, device->pwfx);
     device->pwfx = wfx;
 
-    if (device->state == STATE_PLAYING)
-        device->state = STATE_STARTING;
-    else if (device->state == STATE_STOPPING)
-        device->state = STATE_STOPPED;
-
     device->writelead = (wfx->nSamplesPerSec / 100) * wfx->nBlockAlign;
 
     TRACE("buflen: %u, fraglen: %u, mix_buffer_len: %u\n",
@@ -321,7 +316,7 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
     return S_OK;
 
 err_service:
-    ERR("GetService failed: %08x\n", hres);
+    WARN("GetService failed: %08x\n", hres);
 err:
     if (volume)
         IAudioStreamVolume_Release(volume);
@@ -354,36 +349,6 @@ HRESULT DSOUND_PrimaryDestroy(DirectSoundDevice *device)
 	/* **** */
 
 	return DS_OK;
-}
-
-HRESULT DSOUND_PrimaryPlay(DirectSoundDevice *device)
-{
-    HRESULT hr;
-
-    TRACE("(%p)\n", device);
-
-    hr = IAudioClient_Start(device->client);
-    if(FAILED(hr) && hr != AUDCLNT_E_NOT_STOPPED){
-        WARN("Start failed: %08x\n", hr);
-        return hr;
-    }
-
-    return DS_OK;
-}
-
-HRESULT DSOUND_PrimaryStop(DirectSoundDevice *device)
-{
-    HRESULT hr;
-
-    TRACE("(%p)\n", device);
-
-    hr = IAudioClient_Stop(device->client);
-    if(FAILED(hr)){
-        WARN("Stop failed: %08x\n", hr);
-        return hr;
-    }
-
-    return DS_OK;
 }
 
 WAVEFORMATEX *DSOUND_CopyFormat(const WAVEFORMATEX *wfex)
@@ -647,16 +612,7 @@ static HRESULT WINAPI PrimaryBufferImpl_Play(IDirectSoundBuffer *iface, DWORD re
 		return DSERR_INVALIDPARAM;
 	}
 
-	/* **** */
-	EnterCriticalSection(&(device->mixlock));
-
-	if (device->state == STATE_STOPPED)
-		device->state = STATE_STARTING;
-	else if (device->state == STATE_STOPPING)
-		device->state = STATE_PLAYING;
-
-	LeaveCriticalSection(&(device->mixlock));
-	/* **** */
+	device->stopped = 0;
 
 	return DS_OK;
 }
@@ -667,16 +623,7 @@ static HRESULT WINAPI PrimaryBufferImpl_Stop(IDirectSoundBuffer *iface)
         DirectSoundDevice *device = This->device;
 	TRACE("(%p)\n", iface);
 
-	/* **** */
-	EnterCriticalSection(&(device->mixlock));
-
-	if (device->state == STATE_PLAYING)
-		device->state = STATE_STOPPING;
-	else if (device->state == STATE_STARTING)
-		device->state = STATE_STOPPED;
-
-	LeaveCriticalSection(&(device->mixlock));
-	/* **** */
+	device->stopped = 1;
 
 	return DS_OK;
 }
@@ -744,7 +691,7 @@ static HRESULT WINAPI PrimaryBufferImpl_GetCurrentPosition(IDirectSoundBuffer *i
 		*playpos = mixpos;
 	if (writepos) {
 		*writepos = mixpos;
-		if (device->state != STATE_STOPPED) {
+		if (!device->stopped) {
 			/* apply the documented 10ms lead to writepos */
 			*writepos += device->writelead;
 			*writepos %= device->buflen;
@@ -770,8 +717,7 @@ static HRESULT WINAPI PrimaryBufferImpl_GetStatus(IDirectSoundBuffer *iface, DWO
 	}
 
 	*status = 0;
-	if ((device->state == STATE_STARTING) ||
-	    (device->state == STATE_PLAYING))
+	if (!device->stopped)
 		*status |= DSBSTATUS_PLAYING | DSBSTATUS_LOOPING;
 
 	TRACE("status=%x\n", *status);
