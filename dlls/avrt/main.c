@@ -80,6 +80,7 @@ HANDLE WINAPI AvSetMmThreadCharacteristicsW(LPCWSTR TaskName, LPDWORD TaskIndex)
         SetLastError(ERROR_INVALID_HANDLE);
         return NULL;
     }
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
     return (HANDLE)0x12345678;
 }
 
