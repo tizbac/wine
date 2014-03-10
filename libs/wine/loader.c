@@ -73,6 +73,13 @@ char **__wine_main_argv = NULL;
 WCHAR **__wine_main_wargv = NULL;
 char **__wine_main_environ = NULL;
 
+#ifdef __linux__
+#include <pthread.h>
+typeof(pthread_create) *call_pthread_create, *__glob_pthread_create;
+typeof(pthread_join) *call_pthread_join, *__glob_pthread_join;
+typeof(pthread_detach) *call_pthread_detach, *__glob_pthread_detach;
+#endif
+
 struct dll_path_context
 {
     unsigned int index; /* current index in the dll path list */

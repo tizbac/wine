@@ -202,6 +202,45 @@ static int pre_exec(void)
 
 #endif
 
+#ifdef __linux__
+
+extern typeof(pthread_create) *call_pthread_create, *__glob_pthread_create;
+extern typeof(pthread_detach) *call_pthread_detach, *__glob_pthread_detach;
+extern typeof(pthread_join) *call_pthread_join, *__glob_pthread_join;
+
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+		   void *(*start_routine) (void *), void *arg)
+{
+    return call_pthread_create(thread, attr, start_routine, arg);
+}
+
+int pthread_detach(pthread_t thread)
+{
+    return call_pthread_detach(thread);
+}
+
+int pthread_join(pthread_t thread, void **retval)
+{
+    return call_pthread_join(thread, retval);
+}
+
+static void init_thread_hook(void) {
+    call_pthread_create = __glob_pthread_create = dlvsym(RTLD_NEXT, "pthread_create", "GLIBC_2.2.5");
+    if (!__glob_pthread_create)
+        call_pthread_create = __glob_pthread_create = dlvsym(RTLD_NEXT, "pthread_create", "GLIBC_2.1");
+
+    call_pthread_detach = __glob_pthread_detach = dlsym(RTLD_NEXT, "pthread_detach");
+    call_pthread_join = __glob_pthread_join = dlsym(RTLD_NEXT, "pthread_join");
+
+    /* Call a function from libpthread to ensure being linked against it */
+    pthread_yield();
+}
+
+#else
+
+#define init_thread_hook()
+
+#endif
 
 /**********************************************************************
  *           main
@@ -210,6 +249,8 @@ int main( int argc, char *argv[] )
 {
     char error[1024];
     int i;
+
+    init_thread_hook();
 
     if (!getenv( "WINELOADERNOEXEC" ))  /* first time around */
     {

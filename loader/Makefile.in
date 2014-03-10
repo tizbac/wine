@@ -1,4 +1,4 @@
-EXTRALIBS = $(PTHREAD_LIBS)
+EXTRALIBS = $(PTHREAD_LIBS) $(DL_LIBS)
 
 C_SRCS = \
 	main.c \
