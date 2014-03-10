@@ -1,4 +1,5 @@
 EXTRALIBS = $(POLL_LIBS) $(RT_LIBS)
+EXTRAINCL = $(DBUS_CFLAGS)
 
 C_SRCS = \
 	async.c \
@@ -30,6 +31,7 @@ C_SRCS = \
 	region.c \
 	registry.c \
 	request.c \
+	rtkit.c \
 	semaphore.c \
 	serial.c \
 	signal.c \
