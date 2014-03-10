@@ -31,7 +31,6 @@
 #include "wine/list.h"
 
 extern int ds_hel_buflen DECLSPEC_HIDDEN;
-extern int ds_snd_queue_max DECLSPEC_HIDDEN;
 
 /*****************************************************************************
  * Predeclare the interface implementation structures
@@ -70,10 +69,8 @@ struct DirectSoundDevice
     DSCAPS                      drvcaps;
     DWORD                       priolevel, sleeptime;
     PWAVEFORMATEX               pwfx, primary_pwfx;
-    UINT                        playing_offs_bytes, in_mmdev_bytes, prebuf;
-    DWORD                       fraglen;
     LPBYTE                      buffer;
-    DWORD                       writelead, buflen, state, playpos, mixpos;
+    DWORD                       writelead, buflen, aclen, fraglen, state, playpos, pad;
     int                         nrofbuffers;
     IDirectSoundBufferImpl**    buffers;
     RTL_RWLOCK                  buffer_list_lock;
@@ -206,7 +203,6 @@ HRESULT DSOUND_PrimaryCreate(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT DSOUND_PrimaryDestroy(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT DSOUND_PrimaryPlay(DirectSoundDevice *device) DECLSPEC_HIDDEN;
 HRESULT DSOUND_PrimaryStop(DirectSoundDevice *device) DECLSPEC_HIDDEN;
-HRESULT DSOUND_PrimaryGetPosition(DirectSoundDevice *device, LPDWORD playpos, LPDWORD writepos) DECLSPEC_HIDDEN;
 LPWAVEFORMATEX DSOUND_CopyFormat(LPCWAVEFORMATEX wfex) DECLSPEC_HIDDEN;
 HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave) DECLSPEC_HIDDEN;
 HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device) DECLSPEC_HIDDEN;
