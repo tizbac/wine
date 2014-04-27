@@ -5,4 +5,4 @@ C_SRCS = \
 	notify.c \
 	matchmaking.c
 
-@MAKE_DLL_RULES@
+

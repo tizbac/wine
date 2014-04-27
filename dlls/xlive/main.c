@@ -1335,7 +1335,7 @@ void WINAPI XUserSetContext( DWORD dwUserIndex, DWORD dwContextId,DWORD dwContex
 
 // #5278: XUserWriteAchievements
 INT WINAPI XUserWriteAchievements (DWORD dwNumAchievements,
-                                   CONST XUSER_ACHIEVEMENT *pAchievements,
+                                   const XUSER_ACHIEVEMENT *pAchievements,
                                    void *pOverlapped) {
     XUSER_ACHIEVEMENT * curr = pAchievements;
     int k = 0;
@@ -1378,9 +1378,9 @@ INT WINAPI XUserCreateAchievementEnumerator(DWORD dwTitleId, DWORD dwUserIndex, 
 // #5281: XUserReadStats
 INT WINAPI XUserReadStats (DWORD dwTitleId,
                            DWORD dwNumXuids,
-                           CONST XUID *pXuids,
+                           const XUID *pXuids,
                            DWORD dwNumStatsSpecs,
-                           CONST XUSER_STATS_SPEC *pSpecs,
+                           const XUSER_STATS_SPEC *pSpecs,
                            PDWORD *pcbResults,
                            PXUSER_STATS_READ_RESULTS pResults,
                            void *pOverlapped) {
@@ -1497,7 +1497,7 @@ void WINAPI XUserSetProperty(
     DWORD dwUserIndex,
     DWORD dwPropertyId,
     DWORD cbValue,
-    CONST VOID *pvValue ) {
+    const VOID *pvValue ) {
     XUserSetPropertyEx(dwUserIndex,dwPropertyId,cbValue,pvValue,0x0);
 }
 
