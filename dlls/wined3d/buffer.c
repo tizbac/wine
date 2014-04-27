@@ -32,17 +32,17 @@ WINE_DEFAULT_DEBUG_CHANNEL(d3d);
 #define WINED3D_BUFFER_HASDESC      0x01    /* A vertex description has been found. */
 #define WINED3D_BUFFER_CREATEBO     0x02    /* Create a buffer object for this buffer. */
 #define WINED3D_BUFFER_DOUBLEBUFFER 0x04    /* Keep both a buffer object and a system memory copy for this buffer. */
-#define WINED3D_BUFFER_DISCARD      0x08    /* The next PreLoad may discard the buffer contents. */
-#define WINED3D_BUFFER_NOSYNC       0x10    /* All locks since the last preload had NOOVERWRITE set. */
-#define WINED3D_BUFFER_APPLESYNC    0x20    /* Using sync as in GL_APPLE_flush_buffer_range. */
-#define WINED3D_BUFFER_DISCARDED    0x40    /* The buffer has been discarded since the last draw. */
+#define WINED3D_BUFFER_FLUSH        0x08    /* Manual unmap flushing. */
+#define WINED3D_BUFFER_DISCARD      0x10    /* A DISCARD lock has occurred since the last preload. */
+#define WINED3D_BUFFER_NOSYNC       0x20    /* All locks since the last preload had NOOVERWRITE set. */
+#define WINED3D_BUFFER_APPLESYNC    0x40    /* Using sync as in GL_APPLE_flush_buffer_range. */
 
 #define VB_MAXDECLCHANGES     100     /* After that number of decl changes we stop converting */
 #define VB_RESETDECLCHANGE    1000    /* Reset the decl changecount after that number of draws */
 #define VB_MAXFULLCONVERSIONS 5       /* Number of full conversions before we stop converting */
 #define VB_RESETFULLCONVS     20      /* Reset full conversion counts after that number of draws */
 
-void buffer_invalidate_bo_range(struct wined3d_buffer *buffer, UINT offset, UINT size)
+static void buffer_invalidate_bo_range(struct wined3d_buffer *buffer, UINT offset, UINT size)
 {
     if (!offset && !size)
         goto invalidate_all;
@@ -118,7 +118,7 @@ static void delete_gl_buffer(struct wined3d_buffer *This, const struct wined3d_g
 }
 
 /* Context activation is done by the caller. */
-void buffer_create_buffer_object(struct wined3d_buffer *This, struct wined3d_context *context)
+static void buffer_create_buffer_object(struct wined3d_buffer *This, struct wined3d_context *context)
 {
     GLenum gl_usage = GL_STATIC_DRAW_ARB;
     GLenum error;
@@ -167,6 +167,8 @@ void buffer_create_buffer_object(struct wined3d_buffer *This, struct wined3d_con
         {
             GL_EXTCALL(glBufferParameteriAPPLE(This->buffer_type_hint, GL_BUFFER_FLUSHING_UNMAP_APPLE, GL_FALSE));
             checkGLcall("glBufferParameteriAPPLE(This->buffer_type_hint, GL_BUFFER_FLUSHING_UNMAP_APPLE, GL_FALSE)");
+            This->flags |= WINED3D_BUFFER_FLUSH;
+
             GL_EXTCALL(glBufferParameteriAPPLE(This->buffer_type_hint, GL_BUFFER_SERIALIZED_MODIFY_APPLE, GL_FALSE));
             checkGLcall("glBufferParameteriAPPLE(This->buffer_type_hint, GL_BUFFER_SERIALIZED_MODIFY_APPLE, GL_FALSE)");
             This->flags |= WINED3D_BUFFER_APPLESYNC;
@@ -192,10 +194,7 @@ void buffer_create_buffer_object(struct wined3d_buffer *This, struct wined3d_con
     if (This->flags & WINED3D_BUFFER_DOUBLEBUFFER)
         buffer_invalidate_bo_range(This, 0, 0);
     else
-    {
         wined3d_resource_free_sysmem(&This->resource);
-        This->map_mem = NULL;
-    }
 
     return;
 
@@ -424,7 +423,7 @@ static inline void fixup_d3dcolor(DWORD *dst_color)
 {
     DWORD src_color = *dst_color;
 
-    /* Color conversion like in draw_strided_slow. watch out for little endianity
+    /* Color conversion like in drawStridedSlow. watch out for little endianity
      * If we want that stuff to work on big endian machines too we have to consider more things
      *
      * 0xff000000: Alpha mask
@@ -458,8 +457,7 @@ void buffer_get_memory(struct wined3d_buffer *buffer, struct wined3d_context *co
     data->buffer_object = buffer->buffer_object;
     if (!buffer->buffer_object)
     {
-        if ((!buffer->resource.map_count || buffer->flags & WINED3D_BUFFER_DOUBLEBUFFER)
-                && buffer->flags & WINED3D_BUFFER_CREATEBO)
+        if ((buffer->flags & WINED3D_BUFFER_CREATEBO) && !buffer->resource.map_count)
         {
             buffer_create_buffer_object(buffer, context);
             buffer->flags &= ~WINED3D_BUFFER_CREATEBO;
@@ -498,8 +496,6 @@ BYTE *buffer_get_sysmem(struct wined3d_buffer *This, struct wined3d_context *con
 
     if (!wined3d_resource_allocate_sysmem(&This->resource))
         ERR("Failed to allocate system memory.\n");
-    This->resource.heap_memory = This->resource.map_heap_memory;
-    This->map_mem = This->resource.heap_memory;
 
     if (This->buffer_type_hint == GL_ELEMENT_ARRAY_BUFFER_ARB)
         context_invalidate_state(context, STATE_INDEXBUFFER);
@@ -547,38 +543,28 @@ static void buffer_unload(struct wined3d_resource *resource)
     resource_unload(resource);
 }
 
-void wined3d_buffer_cleanup_cs(struct wined3d_buffer *buffer)
-{
-    struct wined3d_context *context;
-    struct wined3d_device *device = buffer->resource.device;
-
-    if (buffer->buffer_object)
-    {
-        context = context_acquire(device, NULL);
-        delete_gl_buffer(buffer, context->gl_info);
-        context_release(context);
-
-        HeapFree(GetProcessHeap(), 0, buffer->conversion_map);
-    }
-
-    HeapFree(GetProcessHeap(), 0, buffer->maps);
-    HeapFree(GetProcessHeap(), 0, buffer);
-}
-
 ULONG CDECL wined3d_buffer_decref(struct wined3d_buffer *buffer)
 {
     ULONG refcount = InterlockedDecrement(&buffer->resource.ref);
+    struct wined3d_context *context;
 
     TRACE("%p decreasing refcount to %u.\n", buffer, refcount);
 
     if (!refcount)
     {
-        struct wined3d_device *device = buffer->resource.device;
+        if (buffer->buffer_object)
+        {
+            context = context_acquire(buffer->resource.device, NULL);
+            delete_gl_buffer(buffer, context->gl_info);
+            context_release(context);
+
+            HeapFree(GetProcessHeap(), 0, buffer->conversion_map);
+        }
 
         resource_cleanup(&buffer->resource);
-
         buffer->resource.parent_ops->wined3d_object_destroyed(buffer->resource.parent);
-        wined3d_cs_emit_buffer_cleanup(device->cs, buffer);
+        HeapFree(GetProcessHeap(), 0, buffer->maps);
+        HeapFree(GetProcessHeap(), 0, buffer);
     }
 
     return refcount;
@@ -673,17 +659,43 @@ drop_query:
 /* The caller provides a GL context */
 static void buffer_direct_upload(struct wined3d_buffer *This, const struct wined3d_gl_info *gl_info, DWORD flags)
 {
+    BYTE *map;
     UINT start = 0, len = 0;
 
     /* This potentially invalidates the element array buffer binding, but the
      * caller always takes care of this. */
     GL_EXTCALL(glBindBufferARB(This->buffer_type_hint, This->buffer_object));
     checkGLcall("glBindBufferARB");
-
-    if (flags & WINED3D_BUFFER_DISCARD)
+    if (gl_info->supported[ARB_MAP_BUFFER_RANGE])
     {
-        GL_EXTCALL(glBufferDataARB(This->buffer_type_hint, This->resource.size, NULL, GL_STREAM_DRAW_ARB));
-        checkGLcall("glBufferDataARB");
+        GLbitfield mapflags;
+        mapflags = GL_MAP_WRITE_BIT | GL_MAP_FLUSH_EXPLICIT_BIT;
+        if (flags & WINED3D_BUFFER_DISCARD)
+            mapflags |= GL_MAP_INVALIDATE_BUFFER_BIT;
+        if (flags & WINED3D_BUFFER_NOSYNC)
+            mapflags |= GL_MAP_UNSYNCHRONIZED_BIT;
+        map = GL_EXTCALL(glMapBufferRange(This->buffer_type_hint, 0,
+                    This->resource.size, mapflags));
+        checkGLcall("glMapBufferRange");
+    }
+    else
+    {
+        if (This->flags & WINED3D_BUFFER_APPLESYNC)
+        {
+            DWORD syncflags = 0;
+            if (flags & WINED3D_BUFFER_DISCARD)
+                syncflags |= WINED3D_MAP_DISCARD;
+            if (flags & WINED3D_BUFFER_NOSYNC)
+                syncflags |= WINED3D_MAP_NOOVERWRITE;
+            buffer_sync_apple(This, syncflags, gl_info);
+        }
+        map = GL_EXTCALL(glMapBufferARB(This->buffer_type_hint, GL_WRITE_ONLY_ARB));
+        checkGLcall("glMapBufferARB");
+    }
+    if (!map)
+    {
+        ERR("Failed to map opengl buffer\n");
+        return;
     }
 
     while (This->modified_areas)
@@ -692,9 +704,21 @@ static void buffer_direct_upload(struct wined3d_buffer *This, const struct wined
         start = This->maps[This->modified_areas].offset;
         len = This->maps[This->modified_areas].size;
 
-        GL_EXTCALL(glBufferSubDataARB(This->buffer_type_hint, start, len, (BYTE *)This->resource.heap_memory + start));
-        checkGLcall("glBufferSubDataARB");
+        memcpy(map + start, (BYTE *)This->resource.heap_memory + start, len);
+
+        if (gl_info->supported[ARB_MAP_BUFFER_RANGE])
+        {
+            GL_EXTCALL(glFlushMappedBufferRange(This->buffer_type_hint, start, len));
+            checkGLcall("glFlushMappedBufferRange");
+        }
+        else if (This->flags & WINED3D_BUFFER_FLUSH)
+        {
+            GL_EXTCALL(glFlushMappedBufferRangeAPPLE(This->buffer_type_hint, start, len));
+            checkGLcall("glFlushMappedBufferRangeAPPLE");
+        }
     }
+    GL_EXTCALL(glUnmapBufferARB(This->buffer_type_hint));
+    checkGLcall("glUnmapBufferARB");
 }
 
 /* Context activation is done by the caller. */
@@ -710,6 +734,12 @@ void buffer_internal_preload(struct wined3d_buffer *buffer, struct wined3d_conte
     BYTE *data;
 
     TRACE("buffer %p.\n", buffer);
+
+    if (buffer->resource.map_count)
+    {
+        WARN("Buffer is mapped, skipping preload.\n");
+        return;
+    }
 
     buffer->flags &= ~(WINED3D_BUFFER_NOSYNC | WINED3D_BUFFER_DISCARD);
 
@@ -899,15 +929,10 @@ void buffer_internal_preload(struct wined3d_buffer *buffer, struct wined3d_conte
 
 void CDECL wined3d_buffer_preload(struct wined3d_buffer *buffer)
 {
-    struct wined3d_device *device = buffer->resource.device;
-
-    if (buffer->resource.map_count)
-    {
-        WARN("Buffer is mapped, skipping preload.\n");
-        return;
-    }
-
-    wined3d_cs_emit_buffer_preload(device->cs, buffer);
+    struct wined3d_context *context;
+    context = context_acquire(buffer->resource.device, NULL);
+    buffer_internal_preload(buffer, context, NULL);
+    context_release(context);
 }
 
 struct wined3d_resource * CDECL wined3d_buffer_get_resource(struct wined3d_buffer *buffer)
@@ -921,30 +946,8 @@ HRESULT CDECL wined3d_buffer_map(struct wined3d_buffer *buffer, UINT offset, UIN
 {
     LONG count;
     BYTE *base;
-    struct wined3d_device *device = buffer->resource.device;
-    struct wined3d_context *context;
 
     TRACE("buffer %p, offset %u, size %u, data %p, flags %#x\n", buffer, offset, size, data, flags);
-
-    /* FIXME: There is a race condition with the same code in
-     * buffer_internal_preload and buffer_get_memory.
-     *
-     * This deals with a race condition concering buffer creation and buffer maps.
-     * If a VBO is created by the worker thread while the buffer is mapped, outdated
-     * data may be uploaded, and the BO range is not properly invaliated. Keep in
-     * mind that a broken application might draw from a buffer before mapping it.
-     *
-     * Don't try to solve this by going back to always invalidating changed areas.
-     * This won't work if we ever want to support glMapBufferRange mapping with
-     * GL_ARB_buffer_storage in the CS.
-     *
-     * Also keep in mind that UnLoad can destroy the VBO, so simply creating it
-     * on buffer creation won't work either. */
-    if (buffer->flags & WINED3D_BUFFER_CREATEBO)
-    {
-        wined3d_cs_emit_create_vbo(device->cs, buffer);
-        buffer->flags &= ~WINED3D_BUFFER_CREATEBO;
-    }
 
     flags = wined3d_resource_sanitize_map_flags(&buffer->resource, flags);
     /* Filter redundant WINED3D_MAP_DISCARD maps. The 3DMark2001 multitexture
@@ -953,7 +956,7 @@ HRESULT CDECL wined3d_buffer_map(struct wined3d_buffer *buffer, UINT offset, UIN
      * previous contents of the buffer. The r600g driver only does this when
      * the buffer is currently in use, while the proprietary NVIDIA driver
      * appears to do this unconditionally. */
-    if (buffer->flags & WINED3D_BUFFER_DISCARDED)
+    if (buffer->flags & WINED3D_BUFFER_DISCARD)
         flags &= ~WINED3D_MAP_DISCARD;
     count = ++buffer->resource.map_count;
 
@@ -964,23 +967,17 @@ HRESULT CDECL wined3d_buffer_map(struct wined3d_buffer *buffer, UINT offset, UIN
          * being uploaded in that case. Two such applications are Port Royale
          * and Darkstar One. */
         if (flags & WINED3D_MAP_DISCARD)
-            wined3d_cs_emit_buffer_invalidate_bo_range(device->cs, buffer, 0, 0);
+            buffer_invalidate_bo_range(buffer, 0, 0);
         else if (!(flags & WINED3D_MAP_READONLY))
-            wined3d_cs_emit_buffer_invalidate_bo_range(device->cs, buffer, offset, size);
+            buffer_invalidate_bo_range(buffer, offset, size);
 
         if (!(buffer->flags & WINED3D_BUFFER_DOUBLEBUFFER))
         {
             if (count == 1)
             {
                 struct wined3d_device *device = buffer->resource.device;
+                struct wined3d_context *context;
                 const struct wined3d_gl_info *gl_info;
-
-                if (wined3d_settings.cs_multithreaded)
-                {
-                    FIXME("waiting for cs\n");
-                    wined3d_cs_emit_glfinish(device->cs);
-                    device->cs->ops->finish(device->cs);
-                }
 
                 context = context_acquire(device, NULL);
                 gl_info = context->gl_info;
@@ -1033,47 +1030,20 @@ HRESULT CDECL wined3d_buffer_map(struct wined3d_buffer *buffer, UINT offset, UIN
                     TRACE("New pointer is %p.\n", buffer->resource.heap_memory);
                     buffer->map_ptr = NULL;
                 }
-                buffer->map_mem = buffer->resource.heap_memory;
                 context_release(context);
             }
         }
-        else if(!wined3d_settings.cs_multithreaded)
-        {
-            if (flags & WINED3D_MAP_DISCARD)
-                buffer->flags |= WINED3D_BUFFER_DISCARD;
 
-            if (buffer_is_dirty(buffer))
-            {
-                if (buffer->flags & WINED3D_BUFFER_NOSYNC && !(flags & WINED3D_MAP_NOOVERWRITE))
-                {
-                    buffer->flags &= ~WINED3D_BUFFER_NOSYNC;
-                }
-            }
-            else if(flags & WINED3D_MAP_NOOVERWRITE)
-            {
-                buffer->flags |= WINED3D_BUFFER_NOSYNC;
-            }
-        }
         if (flags & WINED3D_MAP_DISCARD)
-            buffer->flags |= WINED3D_BUFFER_DISCARDED;
+            buffer->flags |= WINED3D_BUFFER_DISCARD;
 
+        if (!(flags & WINED3D_MAP_NOOVERWRITE))
+            buffer->flags &= ~WINED3D_BUFFER_NOSYNC;
+        else if (!buffer_is_dirty(buffer))
+            buffer->flags |= WINED3D_BUFFER_NOSYNC;
     }
 
-    if (wined3d_settings.cs_multithreaded && count == 1)
-    {
-        BOOL swvp = device->create_parms.flags & WINED3DCREATE_SOFTWARE_VERTEXPROCESSING;
-        if (flags & WINED3D_MAP_DISCARD && !swvp)
-        {
-            buffer->map_mem = wined3d_resource_allocate_sysmem2(&buffer->resource);
-            wined3d_cs_emit_swap_mem(device->cs, buffer, buffer->map_mem);
-        }
-        else if(!(flags & (WINED3D_MAP_NOOVERWRITE | WINED3D_MAP_READONLY)))
-        {
-            wined3d_resource_wait_fence((struct wined3d_resource *)buffer);
-        }
-    }
-
-    base = buffer->map_ptr ? buffer->map_ptr : buffer->map_mem;
+    base = buffer->map_ptr ? buffer->map_ptr : buffer->resource.heap_memory;
     *data = base + offset;
 
     TRACE("Returning memory at %p (base %p, offset %u).\n", *data, base, offset);
@@ -1127,7 +1097,7 @@ void CDECL wined3d_buffer_unmap(struct wined3d_buffer *buffer)
                 checkGLcall("glFlushMappedBufferRange");
             }
         }
-        else if (buffer->flags & WINED3D_BUFFER_APPLESYNC)
+        else if (buffer->flags & WINED3D_BUFFER_FLUSH)
         {
             for (i = 0; i < buffer->modified_areas; ++i)
             {
@@ -1138,35 +1108,22 @@ void CDECL wined3d_buffer_unmap(struct wined3d_buffer *buffer)
         }
 
         GL_EXTCALL(glUnmapBufferARB(buffer->buffer_type_hint));
-        if (wined3d_settings.cs_multithreaded)
-            gl_info->gl_ops.gl.p_glFinish();
-        else if (wined3d_settings.strict_draw_ordering)
+        if (wined3d_settings.strict_draw_ordering)
             gl_info->gl_ops.gl.p_glFlush(); /* Flush to ensure ordering across contexts. */
         context_release(context);
 
-        buffer->map_mem = NULL;
         buffer_clear_dirty_areas(buffer);
         buffer->map_ptr = NULL;
     }
-}
-
-static void wined3d_buffer_location_invalidated(struct wined3d_resource *resource, DWORD location)
-{
-    ERR("Not yet implemented.\n");
-}
-
-/* Context activation is done by the caller. */
-static void wined3d_buffer_load_location(struct wined3d_resource *resource,
-        struct wined3d_context *context, DWORD location)
-{
-    ERR("Not yet implemented.\n");
+    else if (buffer->flags & WINED3D_BUFFER_HASDESC)
+    {
+        wined3d_buffer_preload(buffer);
+    }
 }
 
 static const struct wined3d_resource_ops buffer_resource_ops =
 {
     buffer_unload,
-    wined3d_buffer_location_invalidated,
-    wined3d_buffer_load_location,
 };
 
 static HRESULT buffer_init(struct wined3d_buffer *buffer, struct wined3d_device *device,
@@ -1193,7 +1150,6 @@ static HRESULT buffer_init(struct wined3d_buffer *buffer, struct wined3d_device 
         return hr;
     }
     buffer->buffer_type_hint = bind_hint;
-    buffer->map_mem = buffer->resource.heap_memory;
 
     TRACE("size %#x, usage %#x, format %s, memory @ %p, iface @ %p.\n", buffer->resource.size, buffer->resource.usage,
             debug_d3dformat(buffer->resource.format->id), buffer->resource.heap_memory, buffer);
@@ -1209,11 +1165,11 @@ static HRESULT buffer_init(struct wined3d_buffer *buffer, struct wined3d_device 
 
     dynamic_buffer_ok = gl_info->supported[APPLE_FLUSH_BUFFER_RANGE] || gl_info->supported[ARB_MAP_BUFFER_RANGE];
 
-    /* Observations show that draw_strided_slow is faster on dynamic VBs than converting +
+    /* Observations show that drawStridedSlow is faster on dynamic VBs than converting +
      * drawStridedFast (half-life 2 and others).
      *
      * Basically converting the vertices in the buffer is quite expensive, and observations
-     * show that draw_strided_slow is faster than converting + uploading + drawStridedFast.
+     * show that drawStridedSlow is faster than converting + uploading + drawStridedFast.
      * Therefore do not create a VBO for WINED3DUSAGE_DYNAMIC buffers.
      */
     if (!gl_info->supported[ARB_VERTEX_BUFFER_OBJECT])
@@ -1260,9 +1216,6 @@ static HRESULT buffer_init(struct wined3d_buffer *buffer, struct wined3d_device 
         return E_OUTOFMEMORY;
     }
     buffer->maps_size = 1;
-
-    if (wined3d_settings.cs_multithreaded)
-        buffer->flags |= WINED3D_BUFFER_DOUBLEBUFFER;
 
     return WINED3D_OK;
 }
@@ -1368,11 +1321,4 @@ HRESULT CDECL wined3d_buffer_create_ib(struct wined3d_device *device, UINT size,
     *buffer = object;
 
     return WINED3D_OK;
-}
-
-void buffer_swap_mem(struct wined3d_buffer *buffer, BYTE *mem)
-{
-    wined3d_resource_free_sysmem(&buffer->resource);
-    buffer->resource.heap_memory = mem;
-    buffer->flags |= WINED3D_BUFFER_DISCARD;
 }

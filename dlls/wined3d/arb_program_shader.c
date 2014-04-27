@@ -706,7 +706,7 @@ static void shader_arb_load_constants_internal(struct shader_arb_priv *priv,
     {
         const struct wined3d_shader *pshader = state->shader[WINED3D_SHADER_TYPE_PIXEL];
         const struct arb_ps_compiled_shader *gl_shader = priv->compiled_fprog;
-        UINT rt_height = state->fb.render_targets[0]->resource.height;
+        UINT rt_height = state->fb->render_targets[0]->resource.height;
 
         /* Load DirectX 9 float constants for pixel shader */
         priv->highest_dirty_ps_const = shader_arb_load_constantsF(pshader, gl_info, GL_FRAGMENT_PROGRAM_ARB,
@@ -4673,7 +4673,7 @@ static void shader_arb_select(void *shader_priv, struct wined3d_context *context
         }
         else
         {
-            UINT rt_height = state->fb.render_targets[0]->resource.height;
+            UINT rt_height = state->fb->render_targets[0]->resource.height;
             shader_arb_ps_local_constants(compiled, context, state, rt_height);
         }
 
@@ -7634,7 +7634,7 @@ HRESULT arbfp_blit_surface(struct wined3d_device *device, DWORD filter,
 
     /* Now load the surface */
     if (wined3d_settings.offscreen_rendering_mode != ORM_FBO
-            && (src_surface->resource.locations & (WINED3D_LOCATION_TEXTURE_RGB | WINED3D_LOCATION_DRAWABLE))
+            && (src_surface->locations & (WINED3D_LOCATION_TEXTURE_RGB | WINED3D_LOCATION_DRAWABLE))
             == WINED3D_LOCATION_DRAWABLE
             && !surface_is_offscreen(src_surface))
     {
@@ -7664,16 +7664,14 @@ HRESULT arbfp_blit_surface(struct wined3d_device *device, DWORD filter,
     /* Leave the opengl state valid for blitting */
     arbfp_blit_unset(context->gl_info);
 
-    if (wined3d_settings.cs_multithreaded)
-        context->gl_info->gl_ops.gl.p_glFinish();
-    else if (wined3d_settings.strict_draw_ordering
+    if (wined3d_settings.strict_draw_ordering
             || (dst_surface->swapchain && (dst_surface->swapchain->front_buffer == dst_surface)))
         context->gl_info->gl_ops.gl.p_glFlush(); /* Flush to ensure ordering across contexts. */
 
     context_release(context);
 
-    wined3d_resource_validate_location(&dst_surface->resource, dst_surface->draw_binding);
-    wined3d_resource_invalidate_location(&dst_surface->resource, ~dst_surface->draw_binding);
+    surface_validate_location(dst_surface, dst_surface->draw_binding);
+    surface_invalidate_location(dst_surface, ~dst_surface->draw_binding);
 
     return WINED3D_OK;
 }

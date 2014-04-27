@@ -304,16 +304,11 @@ static void wined3d_caps_gl_ctx_create_attribs(struct wined3d_caps_gl_ctx *caps_
         return;
     }
 
-    wglMakeCurrent(NULL, NULL);
-
     if (!wglMakeCurrent(caps_gl_ctx->dc, new_ctx))
     {
         ERR("Failed to make new context current, last error %#x.\n", GetLastError());
         if (!wglDeleteContext(new_ctx))
             ERR("Failed to delete new context, last error %#x.\n", GetLastError());
-
-        wglMakeCurrent(caps_gl_ctx->dc, caps_gl_ctx->gl_ctx);
-
         gl_info->p_wglCreateContextAttribsARB = NULL;
         return;
     }
@@ -4811,7 +4806,7 @@ static void WINE_GLAPI invalid_texcoord_func(GLenum unit, const void *data)
 }
 
 /* Helper functions for providing vertex data to opengl. The arrays are initialized based on
- * the extension detection and are used in draw_strided_slow
+ * the extension detection and are used in drawStridedSlow
  */
 static void WINE_GLAPI position_d3dcolor(const void *data)
 {
