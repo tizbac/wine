@@ -87,6 +87,8 @@ struct thread
     timeout_t              creation_time; /* Thread creation time */
     timeout_t              exit_time;     /* Thread exit time */
     struct token          *token;         /* security token associated with this thread */
+    struct list            rt_entry;      /* entry for member in linked realtime list */
+    int                    rt_prio;       /* current realtime thread priority */
 };
 
 struct thread_snapshot

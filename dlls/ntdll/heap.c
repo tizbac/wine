@@ -117,7 +117,8 @@ C_ASSERT( sizeof(ARENA_LARGE) % LARGE_ALIGNMENT == 0 );
 /* Max size of the blocks on the free lists */
 static const SIZE_T HEAP_freeListSizes[] =
 {
-    0x10, 0x20, 0x30, 0x40, 0x60, 0x80, 0x100, 0x200, 0x400, 0x1000, ~0UL
+    0x8, 0x10, 0x20, 0x30, 0x40, 0x60, 0x80, 0x100, 0x200, 0x400, 0x1000,
+    0x10000, 0x100000, 0x1000000, 0x10000000, ~0UL
 };
 #define HEAP_NB_FREE_LISTS  (sizeof(HEAP_freeListSizes)/sizeof(HEAP_freeListSizes[0]))
 
@@ -308,6 +309,20 @@ static inline unsigned int get_freelist_index( SIZE_T size )
     return i;
 }
 
+/* compute the smallest index whose elements are at least as big as size */
+/* size is the size of the whole block including the arena header */
+static inline unsigned int get_freelist_index_at_least( SIZE_T size )
+{
+    return get_freelist_index(size);
+}
+
+/* compute the smallest index whose elements are at most as big as size */
+/* size is the size of the whole block including the arena header */
+static inline unsigned int get_freelist_index_at_most( SIZE_T size )
+{
+    return get_freelist_index(size + 1) - 1;
+}
+
 /* get the memory protection type to use for a given heap */
 static inline ULONG get_protection_type( DWORD flags )
 {
@@ -467,7 +482,8 @@ static HEAP *HEAP_GetPtr(
  */
 static inline void HEAP_InsertFreeBlock( HEAP *heap, ARENA_FREE *pArena, BOOL last )
 {
-    FREE_LIST_ENTRY *pEntry = heap->freeList + get_freelist_index( pArena->size + sizeof(*pArena) );
+    FREE_LIST_ENTRY *pEntry = heap->freeList + get_freelist_index_at_most( pArena->size + sizeof(*pArena) );
+
     if (last)
     {
         /* insert at end of free list, i.e. before the next free list entry */
@@ -993,7 +1009,7 @@ static ARENA_FREE *HEAP_FindFreeBlock( HEAP *heap, SIZE_T size,
     SUBHEAP *subheap;
     struct list *ptr;
     SIZE_T total_size;
-    FREE_LIST_ENTRY *pEntry = heap->freeList + get_freelist_index( size + sizeof(ARENA_INUSE) );
+    FREE_LIST_ENTRY *pEntry = heap->freeList + get_freelist_index_at_least( size + sizeof(ARENA_INUSE) );
 
     /* Find a suitable free list, and in it find a block large enough */
 

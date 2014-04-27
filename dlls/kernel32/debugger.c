@@ -257,7 +257,8 @@ void WINAPI OutputDebugStringA( LPCSTR str )
     }
     SERVER_END_REQ;
 
-    WARN("%s\n", debugstr_a(str));
+    ERR("%s\n", debugstr_a(str));
+    
 
     /* send string to a system-wide monitor */
     /* FIXME should only send to monitor if no debuggers are attached */

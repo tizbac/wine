@@ -1,0 +1,6 @@
+TESTDLL   = xlive.dll
+
+C_SRCS = \
+	xlive.c
+
+@MAKE_TEST_RULES@

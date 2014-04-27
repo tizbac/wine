@@ -467,6 +467,169 @@ static void test_formats(AUDCLNT_SHAREMODE mode)
     }
 }
 
+static void test_formats2(void)
+{
+    IAudioClient *ac;
+    HRESULT hr;
+    WAVEFORMATEX *pwfx, *pwfx2;
+    WAVEFORMATEXTENSIBLE *pwfe, wfe, *pwfe2;
+
+    hr = IMMDevice_Activate(dev, &IID_IAudioClient, CLSCTX_INPROC_SERVER,
+                            NULL, (void**)&ac);
+
+    ok(hr == S_OK, "Activation failed with %08x\n", hr);
+    if (hr != S_OK)
+        return;
+
+    hr = IAudioClient_GetMixFormat(ac, &pwfx);
+    ok(hr == S_OK, "GetMixFormat failed: %08x\n", hr);
+    if (hr != S_OK)
+        return;
+
+    ok(pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE, "Invalid wFormatTag\n");
+    if (pwfx->wFormatTag != WAVE_FORMAT_EXTENSIBLE) {
+        CoTaskMemFree(pwfx);
+        return;
+    }
+
+    pwfe = (WAVEFORMATEXTENSIBLE*)pwfx;
+    ok(pwfe->Samples.wValidBitsPerSample, "wValidBitsPerSample should be non-zero\n");
+
+    if (pwfx->nChannels > 2) {
+        trace("Limiting channels to 2\n");
+        pwfx->nChannels = 2;
+        pwfx->nBlockAlign = pwfx->wBitsPerSample / 8 * pwfx->nChannels;
+        pwfx->nAvgBytesPerSec = pwfx->nBlockAlign * pwfx->nSamplesPerSec;
+        pwfe->dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+    }
+
+    wfe = *pwfe;
+    pwfx->nAvgBytesPerSec = pwfx->nBlockAlign = 0;
+
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_EXCLUSIVE, pwfx, NULL);
+    ok(hr == AUDCLNT_E_UNSUPPORTED_FORMAT || hr == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED,
+       "Exclusive IsFormatSupported with nAvgBytesPerSec=0 and nBlockAlign=0 returned %08x\n", hr);
+
+    pwfx2 = NULL;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == E_INVALIDARG && !pwfx2,
+       "Shared IsFormatSupported with nAvgBytesPerSec=0 and nBlockAlign=0 returned %08x %p\n", hr, pwfx2);
+    CoTaskMemFree(pwfx2);
+
+    pwfx->wFormatTag = WAVE_FORMAT_PCM;
+    pwfx2 = NULL;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == S_OK && !pwfx2,
+       "Shared IsFormatSupported with nAvgBytesPerSec=0 and nBlockAlign=0 returned %08x %p\n", hr, pwfx2);
+    CoTaskMemFree(pwfx2);
+
+    *pwfe = wfe;
+    pwfe->dwChannelMask = 0;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_EXCLUSIVE, pwfx, NULL);
+    ok(hr == AUDCLNT_E_UNSUPPORTED_FORMAT || hr == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED,
+       "Exclusive IsFormatSupported with dwChannelMask=0 returned %08x\n", hr);
+
+    pwfx2 = NULL;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == S_OK,
+       "Shared IsFormatSupported with dwChannelMask=0 returned %08x\n", hr);
+    CoTaskMemFree(pwfx2);
+
+
+    pwfe->dwChannelMask = 0x3ffff;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_EXCLUSIVE, pwfx, NULL);
+    ok(hr == AUDCLNT_E_UNSUPPORTED_FORMAT || hr == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED,
+       "Exclusive IsFormatSupported with dwChannelMask=0x3ffff returned %08x\n", hr);
+
+    pwfx2 = NULL;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == S_OK && !pwfx2,
+       "Shared IsFormatSupported with dwChannelMask=0x3ffff returned %08x %p\n", hr, pwfx2);
+    CoTaskMemFree(pwfx2);
+
+
+    pwfe->dwChannelMask = 0x40000000;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_EXCLUSIVE, pwfx, NULL);
+    ok(hr == AUDCLNT_E_UNSUPPORTED_FORMAT || hr == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED,
+       "Exclusive IsFormatSupported with dwChannelMask=0x40000000 returned %08x\n", hr);
+
+    pwfx2 = NULL;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == S_OK && !pwfx2,
+       "Shared IsFormatSupported with dwChannelMask=0x40000000 returned %08x %p\n", hr, pwfx2);
+    CoTaskMemFree(pwfx2);
+
+    pwfe->dwChannelMask = SPEAKER_ALL | SPEAKER_RESERVED;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_EXCLUSIVE, pwfx, NULL);
+    ok(hr == AUDCLNT_E_UNSUPPORTED_FORMAT || hr == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED,
+       "Exclusive IsFormatSupported with dwChannelMask=SPEAKER_ALL | SPEAKER_RESERVED returned %08x\n", hr);
+
+    pwfx2 = NULL;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == S_OK && !pwfx2,
+       "Shared IsFormatSupported with dwChannelMask=SPEAKER_ALL | SPEAKER_RESERVED returned %08x %p\n", hr, pwfx2);
+    CoTaskMemFree(pwfx2);
+
+    *pwfe = wfe;
+    pwfe->Samples.wValidBitsPerSample = 0;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_EXCLUSIVE, pwfx, NULL);
+    ok(hr == AUDCLNT_E_UNSUPPORTED_FORMAT || hr == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED,
+       "Exclusive IsFormatSupported with wValidBitsPerSample=0 returned %08x\n", hr);
+
+    pwfx2 = NULL;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == S_FALSE && pwfx2,
+       "Shared IsFormatSupported with wValidBitsPerSample=0 returned %08x %p\n", hr, pwfx2);
+    if (pwfx2) {
+        pwfe2 = (WAVEFORMATEXTENSIBLE*)pwfx2;
+        ok(pwfe2->Samples.wValidBitsPerSample == pwfx->wBitsPerSample,
+           "Shared IsFormatSupported had wValidBitsPerSample set to %u, not %u\n",
+           pwfe2->Samples.wValidBitsPerSample, pwfx->wBitsPerSample);
+        CoTaskMemFree(pwfx2);
+    }
+
+    pwfx2 = NULL;
+    pwfe->Samples.wValidBitsPerSample = pwfx->wBitsPerSample + 1;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == E_INVALIDARG && !pwfx2,
+       "Shared IsFormatSupported with wValidBitsPerSample += 1 returned %08x %p\n", hr, pwfx2);
+
+    *pwfe = wfe;
+    memset(&pwfe->SubFormat, 0xff, 16);
+    pwfx2 = NULL;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == AUDCLNT_E_UNSUPPORTED_FORMAT && !pwfx2,
+       "Shared IsFormatSupported with SubFormat=-1 returned %08x %p\n", hr, pwfx2);
+    CoTaskMemFree(pwfx2);
+
+    *pwfe = wfe;
+    pwfx2 = NULL;
+    pwfe->Samples.wValidBitsPerSample = pwfx->wBitsPerSample = 256;
+    pwfx->nBlockAlign = pwfx->wBitsPerSample / 8 * pwfx->nChannels;
+    pwfx->nAvgBytesPerSec = pwfx->nBlockAlign * pwfx->nSamplesPerSec;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == E_INVALIDARG && !pwfx2,
+       "Shared IsFormatSupported with wBitsPerSample=256 returned %08x %p\n", hr, pwfx2);
+    CoTaskMemFree(pwfx2);
+
+    *pwfe = wfe;
+    pwfx2 = NULL;
+    pwfe->Samples.wValidBitsPerSample = pwfx->wBitsPerSample - 1;
+    hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
+    ok(hr == S_FALSE && pwfx2,
+       "Shared IsFormatSupported with wValidBitsPerSample-=1 returned %08x %p\n", hr, pwfx2);
+    if (pwfx2) {
+        pwfe2 = (WAVEFORMATEXTENSIBLE*)pwfx2;
+        ok(pwfe2->Samples.wValidBitsPerSample == pwfx->wBitsPerSample,
+           "Shared IsFormatSupported had wValidBitsPerSample set to %u, not %u\n",
+           pwfe2->Samples.wValidBitsPerSample, pwfx->wBitsPerSample);
+        CoTaskMemFree(pwfx2);
+    }
+
+    CoTaskMemFree(pwfx);
+    IAudioClient_Release(ac);
+}
+
 static void test_references(void)
 {
     IAudioClient *ac;
@@ -651,7 +814,7 @@ static void test_event(void)
 
     /* Still receiving events! */
     r = WaitForSingleObject(event, 20);
-    todo_wine ok(r == WAIT_OBJECT_0, "Wait(event) after Stop gave %x\n", r);
+    ok(r == WAIT_OBJECT_0, "Wait(event) after Stop gave %x\n", r);
 
     hr = IAudioClient_Reset(ac);
     ok(hr == S_OK, "Reset failed: %08x\n", hr);
@@ -659,13 +822,13 @@ static void test_event(void)
     ok(ResetEvent(event), "ResetEvent\n");
 
     r = WaitForSingleObject(event, 120);
-    todo_wine ok(r == WAIT_OBJECT_0, "Wait(event) after Reset gave %x\n", r);
+    ok(r == WAIT_OBJECT_0, "Wait(event) after Reset gave %x\n", r);
 
     hr = IAudioClient_SetEventHandle(ac, NULL);
     ok(hr == E_INVALIDARG, "SetEventHandle(NULL) returns %08x\n", hr);
 
     r = WaitForSingleObject(event, 70);
-    todo_wine ok(r == WAIT_OBJECT_0, "Wait(NULL event) gave %x\n", r);
+    ok(r == WAIT_OBJECT_0, "Wait(NULL event) gave %x\n", r);
 
     /* test releasing a playing stream */
     hr = IAudioClient_Start(ac);
@@ -935,7 +1098,7 @@ static void test_clock(int share)
     if (share)
     ok(gbsize == bufsize,
        "BufferSize %u at rate %u\n", gbsize, pwfx->nSamplesPerSec);
-    else todo_wine
+    else
     ok(gbsize == parts * fragment || gbsize == MulDiv(bufsize, 1, 1024) * 1024,
        "BufferSize %u misfits fragment size %u at rate %u\n", gbsize, fragment, pwfx->nSamplesPerSec);
 
@@ -955,7 +1118,7 @@ static void test_clock(int share)
     trace("Clock Frequency %u\n", (UINT)freq);
 
     /* MSDN says it's arbitrary units, but shared mode is unlikely to change */
-    if (share) todo_wine
+    if (share)
         ok(freq == pwfx->nSamplesPerSec * pwfx->nBlockAlign,
            "Clock Frequency %u\n", (UINT)freq);
     else
@@ -983,7 +1146,7 @@ static void test_clock(int share)
     ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
     trace("data at %p\n", data);
 
-    hr = IAudioRenderClient_ReleaseBuffer(arc, avail, winetest_debug>2 ?
+    hr = IAudioRenderClient_ReleaseBuffer(arc, avail, winetest_interactive ?
         wave_generate_tone(pwfx, data, avail) : AUDCLNT_BUFFERFLAGS_SILENT);
     ok(hr == S_OK, "ReleaseBuffer failed: %08x\n", hr);
     if(hr == S_OK) sum += avail;
@@ -1020,8 +1183,7 @@ static void test_clock(int share)
     ok(hr == S_OK, "GetPosition failed: %08x\n", hr);
     ok(pos >= last, "Position %u vs. last %u\n", (UINT)pos,(UINT)last);
     last = pos;
-    if(/*share &&*/ winetest_debug>1) todo_wine
-        ok(pos*1000/freq <= slept*1.1, "Position %u too far after stop %ums\n", (UINT)pos, slept);
+    ok(pos*1000/freq <= slept*1.1, "Position %u too far after stop %ums\n", (UINT)pos, slept);
 
     hr = IAudioClient_Start(ac); /* #2 */
     ok(hr == S_OK, "Start failed: %08x\n", hr);
@@ -1054,12 +1216,11 @@ static void test_clock(int share)
     ok(pos * pwfx->nSamplesPerSec <= sum * freq, "Position %u > written %u\n", (UINT)pos, sum);
     /* Prove that Stop must not drop frames (in shared mode). */
     ok(pad ? pos > last : pos >= last, "Position %u vs. last %u\n", (UINT)pos,(UINT)last);
-    if (share && pad > 0 && winetest_debug>1) todo_wine
+    if (share && pad > 0)
         ok(pos*1000/freq <= slept*1.1, "Position %u too far after playing %ums\n", (UINT)pos, slept);
     /* in exclusive mode, testbot's w7 machines yield pos > sum-pad */
-    if(/*share &&*/ winetest_debug>1)
-        ok(pos * pwfx->nSamplesPerSec == (sum-pad) * freq,
-           "Position %u after stop vs. %u padding\n", (UINT)pos, pad);
+    ok(pos * pwfx->nSamplesPerSec == (sum-pad) * freq,
+       "Position %u after stop vs. %u padding\n", (UINT)pos, pad);
     last = pos;
 
     Sleep(100);
@@ -1087,7 +1248,7 @@ static void test_clock(int share)
     ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
     trace("data at %p\n", data);
 
-    hr = IAudioRenderClient_ReleaseBuffer(arc, avail, winetest_debug>2 ?
+    hr = IAudioRenderClient_ReleaseBuffer(arc, avail, winetest_interactive ?
         wave_generate_tone(pwfx, data, avail) : AUDCLNT_BUFFERFLAGS_SILENT);
     ok(hr == S_OK, "ReleaseBuffer failed: %08x\n", hr);
     if(hr == S_OK) sum += avail;
@@ -1112,10 +1273,7 @@ static void test_clock(int share)
     trace("position %u past %ums sleep #3\n", (UINT)pos, slept);
     ok(pos > last, "Position %u vs. last %u\n", (UINT)pos,(UINT)last);
     ok(pos * pwfx->nSamplesPerSec <= sum * freq, "Position %u > written %u\n", (UINT)pos, sum);
-    if (winetest_debug>1)
-        ok(pos*1000/freq <= slept*1.1, "Position %u too far after playing %ums\n", (UINT)pos, slept);
-    else
-        skip("Rerun with WINETEST_DEBUG=2 for GetPosition tests.\n");
+    ok(pos*1000/freq <= slept*1.1, "Position %u too far after playing %ums\n", (UINT)pos, slept);
     last = pos;
 
     hr = IAudioClient_Reset(ac);
@@ -1133,11 +1291,10 @@ static void test_clock(int share)
     ok(pos >= last, "Position %u vs. last %u\n", (UINT)pos,(UINT)last);
     ok(pcpos > pcpos0, "pcpos should increase\n");
     ok(pos * pwfx->nSamplesPerSec <= sum * freq, "Position %u > written %u\n", (UINT)pos, sum);
-    if (pad > 0 && winetest_debug>1) todo_wine
+    if (pad > 0)
         ok(pos*1000/freq <= slept*1.1, "Position %u too far after stop %ums\n", (UINT)pos, slept);
-    if(winetest_debug>1)
-        ok(pos * pwfx->nSamplesPerSec == (sum-pad) * freq,
-           "Position %u after stop vs. %u padding\n", (UINT)pos, pad);
+    ok(pos * pwfx->nSamplesPerSec == (sum-pad) * freq,
+       "Position %u after stop vs. %u padding\n", (UINT)pos, pad);
     last = pos;
 
     /* Begin the big loop */
@@ -1160,19 +1317,17 @@ static void test_clock(int share)
     ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
     trace("data at %p for prefill %u\n", data, avail);
 
-    if (winetest_debug>2) {
-        hr = IAudioClient_Stop(ac);
-        ok(hr == S_OK, "Stop failed: %08x\n", hr);
+    hr = IAudioClient_Stop(ac);
+    ok(hr == S_OK, "Stop failed: %08x\n", hr);
 
-        Sleep(20);
-        slept += 20;
+    Sleep(20);
+    slept += 20;
 
-        hr = IAudioClient_Reset(ac);
-        ok(hr == AUDCLNT_E_BUFFER_OPERATION_PENDING, "Reset failed: %08x\n", hr);
+    hr = IAudioClient_Reset(ac);
+    ok(hr == AUDCLNT_E_BUFFER_OPERATION_PENDING, "Reset failed: %08x\n", hr);
 
-        hr = IAudioClient_Start(ac);
-        ok(hr == S_OK, "Start failed: %08x\n", hr);
-    }
+    hr = IAudioClient_Start(ac);
+    ok(hr == S_OK, "Start failed: %08x\n", hr);
 
     /* Despite passed time, data must still point to valid memory... */
     hr = IAudioRenderClient_ReleaseBuffer(arc, avail,
@@ -1217,14 +1372,13 @@ static void test_clock(int share)
         trace("padding %u position %u/%u slept %ums iteration %d\n", pad, (UINT)pos, sum-pad, slept, i);
         ok(pad ? pos > last : pos >= last, "No position increase at iteration %d\n", i);
         ok(pos * pwfx->nSamplesPerSec <= sum * freq, "Position %u > written %u\n", (UINT)pos, sum);
-        if (winetest_debug>1) {
-            /* Padding does not lag behind by much */
-            ok(pos * pwfx->nSamplesPerSec <= (sum-pad+fragment) * freq, "Position %u > written %u\n", (UINT)pos, sum);
-            ok(pos*1000/freq <= slept*1.1, "Position %u too far after %ums\n", (UINT)pos, slept);
-            if (pad) /* not in case of underrun */
-                ok((pos-last)*1000/freq >= 90 && 110 >= (pos-last)*1000/freq,
-                   "Position delta %ld not regular\n", (long)(pos-last));
-        }
+
+        /* Padding does not lag behind by much */
+        ok(pos * pwfx->nSamplesPerSec <= (sum-pad+fragment) * freq, "Position %u > written %u\n", (UINT)pos, sum);
+        ok(pos*1000/freq <= slept*1.1, "Position %u too far after %ums\n", (UINT)pos, slept);
+        if (pad) /* not in case of underrun */
+            ok((pos-last)*1000/freq >= 90 && 110 >= (pos-last)*1000/freq,
+               "Position delta %ld not regular\n", (long)(pos-last));
         last = pos;
 
         hr = IAudioClient_GetStreamLatency(ac, &t1);
@@ -1237,7 +1391,7 @@ static void test_clock(int share)
         /* ok(hr == AUDCLNT_E_BUFFER_TOO_LARGE || (hr == S_OK && i==0) without todo_wine */
         ok(hr == S_OK || hr == AUDCLNT_E_BUFFER_TOO_LARGE,
            "GetBuffer large (%u) failed: %08x\n", avail, hr);
-        if(hr == S_OK && i) todo_wine ok(FALSE, "GetBuffer large (%u) at iteration %d\n", avail, i);
+        if(hr == S_OK && i) ok(FALSE, "GetBuffer large (%u) at iteration %d\n", avail, i);
         /* Only the first iteration should allow that large a buffer
          * as prefill was drained during the first 350+100ms sleep.
          * Afterwards, only 100ms of data should find room per iteration. */
@@ -2089,7 +2243,7 @@ static void test_worst_case(void)
     hr = IAudioClock_GetFrequency(acl, &freq);
     ok(hr == S_OK, "GetFrequency failed: %08x\n", hr);
 
-    for(j = 0; j <= (winetest_interactive ? 9 : 2); j++){
+    for(j = 0; j < 10; j++){
         sum = 0;
         trace("Should play %ums continuous tone with fragment size %u.\n",
               (ULONG)(defp/100), fragment);
@@ -2098,15 +2252,13 @@ static void test_worst_case(void)
         ok(hr == S_OK, "GetPosition failed: %08x\n", hr);
 
         /* XAudio2 prefills one period, play without it */
-        if(winetest_debug>2){
-            hr = IAudioRenderClient_GetBuffer(arc, fragment, &data);
-            ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
+        hr = IAudioRenderClient_GetBuffer(arc, fragment, &data);
+        ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
 
-            hr = IAudioRenderClient_ReleaseBuffer(arc, fragment, AUDCLNT_BUFFERFLAGS_SILENT);
-            ok(hr == S_OK, "ReleaseBuffer failed: %08x\n", hr);
-            if(hr == S_OK)
-                sum += fragment;
-        }
+        hr = IAudioRenderClient_ReleaseBuffer(arc, fragment, AUDCLNT_BUFFERFLAGS_SILENT);
+        ok(hr == S_OK, "ReleaseBuffer failed: %08x\n", hr);
+        if(hr == S_OK)
+            sum += fragment;
 
         hr = IAudioClient_Start(ac);
         ok(hr == S_OK, "Start failed: %08x\n", hr);
@@ -2256,6 +2408,7 @@ START_TEST(render)
     test_audioclient();
     test_formats(AUDCLNT_SHAREMODE_EXCLUSIVE);
     test_formats(AUDCLNT_SHAREMODE_SHARED);
+    test_formats2();
     test_references();
     test_marshal();
     trace("Output to a MS-DOS console is particularly slow and disturbs timing.\n");

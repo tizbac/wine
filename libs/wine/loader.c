@@ -39,6 +39,10 @@
 # include <unistd.h>
 #endif
 
+#ifdef HAVE_VALGRIND_MEMCHECK_H
+#include <valgrind/memcheck.h>
+#endif
+
 #ifdef __APPLE__
 #include <crt_externs.h>
 #define environ (*_NSGetEnviron())
@@ -62,6 +66,10 @@ extern char **environ;
 #include "windef.h"
 #include "winbase.h"
 #include "wine/library.h"
+
+#ifdef HAVE_VALGRIND_MEMCHECK_H
+#include <valgrind/memcheck.h>
+#endif
 
 /* argc/argv for the Windows application */
 int __wine_main_argc = 0;
@@ -650,7 +658,6 @@ int wine_dll_get_owner( const char *name, char *buffer, int size, int *exists )
     return ret;
 }
 
-
 /***********************************************************************
  *           set_max_limit
  *
@@ -660,6 +667,11 @@ static void set_max_limit( int limit )
 {
 #ifdef HAVE_SETRLIMIT
     struct rlimit rlimit;
+
+#if defined(RLIMIT_NOFILE) && defined(RUNNING_ON_VALGRIND)
+    if (limit == RLIMIT_NOFILE && RUNNING_ON_VALGRIND)
+        return;
+#endif
 
     if (!getrlimit( limit, &rlimit ))
     {
@@ -907,6 +919,34 @@ jint JNI_OnLoad( JavaVM *vm, void *reserved )
 #endif  /* __ANDROID__ */
 
 /***********************************************************************
+ *           set_rttime_limit
+ *
+ * set a limit on the cpu time used
+ */
+static void set_rttime_limit(void)
+{
+#if defined(HAVE_SETRLIMIT) && defined(__linux__)
+#ifndef RLIMIT_RTTIME
+#define RLIMIT_RTTIME 15
+#endif
+    struct rlimit rlimit;
+
+    if (!getrlimit( RLIMIT_RTTIME, &rlimit ))
+    {
+        /* 1000 ms maximum realtime before the first SIGXCPU, this will drop
+         * all realtime threads to normal priority.
+         */
+        if (rlimit.rlim_max > 5000000)
+            rlimit.rlim_max = 5000000;
+        rlimit.rlim_cur = 1000000;
+
+        setrlimit( RLIMIT_RTTIME, &rlimit );
+    }
+#endif
+}
+
+
+/***********************************************************************
  *           wine_init
  *
  * Main Wine initialisation.
@@ -925,6 +965,7 @@ void wine_init( int argc, char *argv[], char *error, int error_size )
 #ifdef RLIMIT_AS
     set_max_limit( RLIMIT_AS );
 #endif
+    set_rttime_limit();
 
     wine_init_argv0_path( argv[0] );
     build_dll_path();

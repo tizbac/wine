@@ -1747,7 +1747,7 @@ BOOL WINAPI SetNamedPipeHandleState(
      * runtime, and it slows down InstallShield a fair bit. */
     WARN("stub: %p %p/%d %p %p\n",
           hNamedPipe, lpMode, lpMode ? *lpMode : 0, lpMaxCollectionCount, lpCollectDataTimeout);
-    return FALSE;
+    return TRUE;
 }
 
 /***********************************************************************

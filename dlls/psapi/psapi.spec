@@ -13,7 +13,7 @@
 @ stdcall GetModuleBaseNameA(long long ptr long) kernel32.K32GetModuleBaseNameA
 @ stdcall GetModuleBaseNameW(long long ptr long) kernel32.K32GetModuleBaseNameW
 @ stdcall GetModuleFileNameExA(long long ptr long) kernel32.K32GetModuleFileNameExA
-@ stdcall GetModuleFileNameExW(long long ptr long) kernel32.K32GetModuleFileNameExW
+@ stdcall GetModuleFileNameExW(long long ptr long)
 @ stdcall GetModuleInformation(long long ptr long) kernel32.K32GetModuleInformation
 @ stdcall GetPerformanceInfo(ptr long) kernel32.K32GetPerformanceInfo
 @ stdcall GetProcessImageFileNameA(long ptr long) kernel32.K32GetProcessImageFileNameA
