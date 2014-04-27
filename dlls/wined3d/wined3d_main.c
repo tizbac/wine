@@ -85,6 +85,7 @@ struct wined3d_settings wined3d_settings =
     ~0U,            /* No GS shader model limit by default. */
     ~0U,            /* No PS shader model limit by default. */
     FALSE,          /* 3D support enabled by default. */
+    FALSE,          /* No multithreaded CS by default. */
 };
 
 struct wined3d * CDECL wined3d_create(DWORD flags)
@@ -303,6 +304,12 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
         {
             TRACE("Disabling 3D support.\n");
             wined3d_settings.no_3d = TRUE;
+        }
+        if (!get_config_key(hkey, appkey, "CSMT", buffer, size)
+                && !strcmp(buffer,"enabled"))
+        {
+            TRACE("Enabling multithreaded command stream.\n");
+            wined3d_settings.cs_multithreaded = TRUE;
         }
     }
 

@@ -2937,7 +2937,7 @@ void set_texture_matrix(const struct wined3d_gl_info *gl_info, const float *smat
                 * check for pixel shaders, and the shader has to undo the default gl divide.
                 *
                 * A more serious problem occurs if the app passes 4 coordinates in, and the
-                * 4th is != 1.0(opengl default). This would have to be fixed in drawStridedSlow
+                * 4th is != 1.0(opengl default). This would have to be fixed in draw_strided_slow
                 * or a replacement shader. */
                 default:
                     mat[3] = mat[7] = mat[11] = 0; mat[15] = 1;
@@ -3237,7 +3237,7 @@ void gen_ffp_frag_op(const struct wined3d_context *context, const struct wined3d
     unsigned int i;
     DWORD ttff;
     DWORD cop, aop, carg0, carg1, carg2, aarg0, aarg1, aarg2;
-    const struct wined3d_surface *rt = state->fb->render_targets[0];
+    const struct wined3d_surface *rt = state->fb.render_targets[0];
     const struct wined3d_gl_info *gl_info = context->gl_info;
     const struct wined3d_d3d_info *d3d_info = context->d3d_info;
 
