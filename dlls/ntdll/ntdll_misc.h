@@ -28,6 +28,7 @@
 #include "winnt.h"
 #include "winternl.h"
 #include "wine/server.h"
+#include "wine/list.h"
 
 #define MAX_NT_PATH_LENGTH 277
 
@@ -235,6 +236,8 @@ struct ntdll_thread_data
     WINE_VM86_TEB_INFO vm86;          /* 1fc vm86 private data */
     void              *exit_frame;    /* 204 exit frame pointer */
 #endif
+    struct list entry;
+    BOOL detached;
 };
 
 static inline struct ntdll_thread_data *ntdll_get_thread_data(void)

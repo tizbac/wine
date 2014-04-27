@@ -117,6 +117,12 @@ WINE_1.0
     wine_utf8_mbstowcs;
     wine_utf8_wcstombs;
     wine_wctype_table;
+    __glob_pthread_create;
+    call_pthread_create;
+    __glob_pthread_join;
+    call_pthread_join;
+    __glob_pthread_detach;
+    call_pthread_detach;
 
   local: *;
 };

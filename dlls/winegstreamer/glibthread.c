@@ -43,6 +43,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#if 0
 #include "windef.h"
 #include "winbase.h"
 #include "winnls.h"
@@ -388,3 +389,15 @@ void g_thread_impl_init (void)
   g_thread_self_tls = TlsAlloc ();
   g_thread_init(&g_thread_functions_for_glib_use_default);
 }
+
+#else
+
+void g_thread_impl_init (void)
+{
+  static gboolean beenhere = FALSE;
+
+  if (!beenhere++)
+    g_thread_init(NULL);
+}
+
+#endif

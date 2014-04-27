@@ -512,14 +512,14 @@ static void test_formats2(void)
 
     pwfx2 = NULL;
     hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
-    ok(hr == E_INVALIDARG && !pwfx2,
+    ok((hr == E_INVALIDARG || hr == AUDCLNT_E_UNSUPPORTED_FORMAT) && !pwfx2,
        "Shared IsFormatSupported with nAvgBytesPerSec=0 and nBlockAlign=0 returned %08x %p\n", hr, pwfx2);
     CoTaskMemFree(pwfx2);
 
     pwfx->wFormatTag = WAVE_FORMAT_PCM;
     pwfx2 = NULL;
     hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
-    ok(hr == S_OK && !pwfx2,
+    ok((hr == S_OK || hr == AUDCLNT_E_UNSUPPORTED_FORMAT) && !pwfx2,
        "Shared IsFormatSupported with nAvgBytesPerSec=0 and nBlockAlign=0 returned %08x %p\n", hr, pwfx2);
     CoTaskMemFree(pwfx2);
 
@@ -578,7 +578,7 @@ static void test_formats2(void)
 
     pwfx2 = NULL;
     hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
-    ok(hr == S_FALSE && pwfx2,
+    ok((hr == S_FALSE || hr == AUDCLNT_E_UNSUPPORTED_FORMAT) && pwfx2,
        "Shared IsFormatSupported with wValidBitsPerSample=0 returned %08x %p\n", hr, pwfx2);
     if (pwfx2) {
         pwfe2 = (WAVEFORMATEXTENSIBLE*)pwfx2;
@@ -591,7 +591,7 @@ static void test_formats2(void)
     pwfx2 = NULL;
     pwfe->Samples.wValidBitsPerSample = pwfx->wBitsPerSample + 1;
     hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
-    ok(hr == E_INVALIDARG && !pwfx2,
+    ok((hr == E_INVALIDARG || hr == AUDCLNT_E_UNSUPPORTED_FORMAT) && !pwfx2,
        "Shared IsFormatSupported with wValidBitsPerSample += 1 returned %08x %p\n", hr, pwfx2);
 
     *pwfe = wfe;
@@ -608,7 +608,7 @@ static void test_formats2(void)
     pwfx->nBlockAlign = pwfx->wBitsPerSample / 8 * pwfx->nChannels;
     pwfx->nAvgBytesPerSec = pwfx->nBlockAlign * pwfx->nSamplesPerSec;
     hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
-    ok(hr == E_INVALIDARG && !pwfx2,
+    ok((hr == E_INVALIDARG || hr == AUDCLNT_E_UNSUPPORTED_FORMAT) && !pwfx2,
        "Shared IsFormatSupported with wBitsPerSample=256 returned %08x %p\n", hr, pwfx2);
     CoTaskMemFree(pwfx2);
 

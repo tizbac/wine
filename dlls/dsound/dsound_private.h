@@ -77,8 +77,8 @@ struct DirectSoundDevice
     CRITICAL_SECTION            mixlock;
     IDirectSoundBufferImpl     *primary;
     DWORD                       speaker_config;
-    float *tmp_buffer;
-    DWORD                       tmp_buffer_len, mix_buffer_len;
+    float *tmp_buffer, *cp_buffer;
+    DWORD                       tmp_buffer_len, mix_buffer_len, cp_buffer_len;
 
     DSVOLUMEPAN                 volpan;
 

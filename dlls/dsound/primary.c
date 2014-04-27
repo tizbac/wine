@@ -356,10 +356,14 @@ WAVEFORMATEX *DSOUND_CopyFormat(const WAVEFORMATEX *wfex)
     WAVEFORMATEX *pwfx;
     if(wfex->wFormatTag == WAVE_FORMAT_PCM){
         pwfx = HeapAlloc(GetProcessHeap(), 0, sizeof(WAVEFORMATEX));
+        if (!pwfx)
+            return NULL;
         CopyMemory(pwfx, wfex, sizeof(PCMWAVEFORMAT));
         pwfx->cbSize = 0;
     }else{
         pwfx = HeapAlloc(GetProcessHeap(), 0, sizeof(WAVEFORMATEX) + wfex->cbSize);
+        if (!pwfx)
+            return NULL;
         CopyMemory(pwfx, wfex, sizeof(WAVEFORMATEX) + wfex->cbSize);
     }
 
@@ -433,8 +437,12 @@ HRESULT primarybuffer_SetFormat(DirectSoundDevice *device, LPCWAVEFORMATEX passe
 		} else
 			HeapFree(GetProcessHeap(), 0, old_fmt);
 	} else {
-		HeapFree(GetProcessHeap(), 0, device->primary_pwfx);
-		device->primary_pwfx = DSOUND_CopyFormat(passed_fmt);
+		WAVEFORMATEX *wfx = DSOUND_CopyFormat(passed_fmt);
+		if (wfx) {
+			HeapFree(GetProcessHeap(), 0, device->primary_pwfx);
+			device->primary_pwfx = wfx;
+		} else
+			err = DSERR_OUTOFMEMORY;
 	}
 
 out:
