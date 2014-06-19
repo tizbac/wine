@@ -1919,8 +1919,8 @@ static BOOL glxdrv_wglShareLists(struct wgl_context *org, struct wgl_context *de
 
     if((org->has_been_current && dest->has_been_current) || dest->has_been_current)
     {
-        ERR("Could not share display lists, one of the contexts has been current already !\n");
-        return FALSE;
+        ERR("Could not share display lists, one of the contexts has been current already,faking success for unity games !\n");
+        return TRUE;
     }
     else if(dest->sharing)
     {
