@@ -34,6 +34,9 @@
 
 #include <limits.h>
 #include <stdio.h>
+#ifdef HAVE_FLOAT_H
+# include <float.h>
+#endif
 
 #include "wined3d_private.h"
 
@@ -2332,6 +2335,7 @@ static void shader_glsl_binop(const struct wined3d_shader_instruction *ins)
         case WINED3DSIH_AND:  op = "&";  break;
         case WINED3DSIH_DIV:  op = "/";  break;
         case WINED3DSIH_IADD: op = "+";  break;
+        case WINED3DSIH_ISHL: op = "<<"; break;
         case WINED3DSIH_MUL:  op = "*";  break;
         case WINED3DSIH_SUB:  op = "-";  break;
         case WINED3DSIH_USHR: op = ">>"; break;
@@ -4070,6 +4074,8 @@ static void shader_glsl_texkill(const struct wined3d_shader_instruction *ins)
     shader_glsl_add_dst_param(ins, &ins->dst[0], &dst_param);
     if (ins->ctx->reg_maps->shader_version.major >= 2)
     {
+        if (ins->ctx->reg_maps->shader_version.major >= 4)
+            FIXME("SM4 discard not implemented.\n");
         /* 2.0 shaders compare all 4 components in texkill */
         shader_addline(ins->ctx->buffer, "if (any(lessThan(%s.xyzw, vec4(0.0)))) discard;\n", dst_param.reg_name);
     } else {
@@ -6019,7 +6025,7 @@ static GLhandleARB create_glsl_blt_shader(const struct wined3d_gl_info *gl_info,
     GLhandleARB vshader_id, pshader_id;
     const char *blt_pshader;
 
-    static const char *blt_vshader =
+    static const char blt_vshader[] =
         "#version 120\n"
         "void main(void)\n"
         "{\n"
@@ -6590,7 +6596,10 @@ static void shader_glsl_get_caps(const struct wined3d_gl_info *gl_info, struct s
      * the shader will generate incorrect results too. Unfortunately, GL deliberately doesn't
      * offer a way to query this.
      */
-    caps->ps_1x_max_value = 8.0;
+    if (shader_model >= 4)
+        caps->ps_1x_max_value = FLT_MAX;
+    else
+        caps->ps_1x_max_value = 1024.0f;
 
     /* Ideally we'd only set caps like sRGB writes here if supported by both
      * the shader backend and the fragment pipe, but we can get called before
@@ -6642,6 +6651,7 @@ static const SHADER_HANDLER shader_glsl_instruction_handler_table[WINED3DSIH_TAB
     /* WINED3DSIH_DEFB                  */ shader_glsl_nop,
     /* WINED3DSIH_DEFI                  */ shader_glsl_nop,
     /* WINED3DSIH_DIV                   */ shader_glsl_binop,
+    /* WINED3DSIH_DP2                   */ shader_glsl_dot,
     /* WINED3DSIH_DP2ADD                */ shader_glsl_dp2add,
     /* WINED3DSIH_DP3                   */ shader_glsl_dot,
     /* WINED3DSIH_DP4                   */ shader_glsl_dot,
@@ -6665,6 +6675,7 @@ static const SHADER_HANDLER shader_glsl_instruction_handler_table[WINED3DSIH_TAB
     /* WINED3DSIH_IFC                   */ shader_glsl_ifc,
     /* WINED3DSIH_IGE                   */ shader_glsl_relop,
     /* WINED3DSIH_IMUL                  */ shader_glsl_imul,
+    /* WINED3DSIH_ISHL                  */ shader_glsl_binop,
     /* WINED3DSIH_ITOF                  */ shader_glsl_to_float,
     /* WINED3DSIH_LABEL                 */ shader_glsl_label,
     /* WINED3DSIH_LD                    */ NULL,

@@ -3284,7 +3284,7 @@ static GLuint create_arb_blt_vertex_program(const struct wined3d_gl_info *gl_inf
     GLuint program_id = 0;
     GLint pos;
 
-    const char *blt_vprogram =
+    static const char blt_vprogram[] =
         "!!ARBvp1.0\n"
         "PARAM c[1] = { { 1, 0.5 } };\n"
         "MOV result.position, vertex.position;\n"
@@ -5191,6 +5191,7 @@ static const SHADER_HANDLER shader_arb_instruction_handler_table[WINED3DSIH_TABL
     /* WINED3DSIH_DEFB                  */ shader_hw_nop,
     /* WINED3DSIH_DEFI                  */ shader_hw_nop,
     /* WINED3DSIH_DIV                   */ NULL,
+    /* WINED3DSIH_DP2                   */ NULL,
     /* WINED3DSIH_DP2ADD                */ pshader_hw_dp2add,
     /* WINED3DSIH_DP3                   */ shader_hw_map2gl,
     /* WINED3DSIH_DP4                   */ shader_hw_map2gl,
@@ -5214,6 +5215,7 @@ static const SHADER_HANDLER shader_arb_instruction_handler_table[WINED3DSIH_TABL
     /* WINED3DSIH_IFC                   */ shader_hw_ifc,
     /* WINED3DSIH_IGE                   */ NULL,
     /* WINED3DSIH_IMUL                  */ NULL,
+    /* WINED3DSIH_ISHL                  */ NULL,
     /* WINED3DSIH_ITOF                  */ NULL,
     /* WINED3DSIH_LABEL                 */ shader_hw_label,
     /* WINED3DSIH_LD                    */ NULL,
@@ -7282,9 +7284,8 @@ static void upload_palette(const struct wined3d_surface *surface, struct wined3d
     struct wined3d_device *device = surface->resource.device;
     const struct wined3d_gl_info *gl_info = context->gl_info;
     struct arbfp_blit_priv *priv = device->blit_priv;
-    BOOL colorkey = !!(surface->container->color_key_flags & WINEDDSD_CKSRCBLT);
 
-    d3dfmt_p8_init_palette(surface, table, colorkey);
+    d3dfmt_p8_init_palette(surface, table);
 
     if (!priv->palette_texture)
         gl_info->gl_ops.gl.p_glGenTextures(1, &priv->palette_texture);

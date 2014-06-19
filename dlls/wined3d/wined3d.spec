@@ -160,6 +160,7 @@
 @ cdecl wined3d_palette_create(ptr long long ptr ptr)
 @ cdecl wined3d_palette_decref(ptr)
 @ cdecl wined3d_palette_get_entries(ptr long long long ptr)
+@ cdecl wined3d_palette_apply_to_dc(ptr ptr)
 @ cdecl wined3d_palette_incref(ptr)
 @ cdecl wined3d_palette_set_entries(ptr long long long ptr)
 
@@ -207,7 +208,6 @@
 @ cdecl wined3d_surface_get_blt_status(ptr long)
 @ cdecl wined3d_surface_get_flip_status(ptr long)
 @ cdecl wined3d_surface_get_overlay_position(ptr ptr ptr)
-@ cdecl wined3d_surface_get_palette(ptr)
 @ cdecl wined3d_surface_get_parent(ptr)
 @ cdecl wined3d_surface_get_pitch(ptr)
 @ cdecl wined3d_surface_get_priority(ptr)

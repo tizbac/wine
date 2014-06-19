@@ -114,16 +114,6 @@ static HRESULT return_int(VARIANT *res, int val)
     return S_OK;
 }
 
-static HRESULT return_bool(VARIANT *res, int val)
-{
-    if(res) {
-        V_VT(res) = VT_BOOL;
-        V_BOOL(res) = val != 0 ? VARIANT_TRUE : VARIANT_FALSE;
-    }
-
-    return S_OK;
-}
-
 static inline HRESULT return_double(VARIANT *res, double val)
 {
     if(res) {
@@ -385,8 +375,25 @@ static HRESULT show_msgbox(script_ctx_t *ctx, BSTR prompt, VARIANT *res)
 
 static HRESULT Global_CCur(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    VARIANT v;
+    HRESULT hres;
+
+    TRACE("%s\n", debugstr_variant(arg));
+
+    assert(args_cnt == 1);
+
+    V_VT(&v) = VT_EMPTY;
+    hres = VariantChangeType(&v, arg, 0, VT_CY);
+    if(FAILED(hres))
+        return hres;
+
+    if(!res) {
+        VariantClear(&v);
+        return DISP_E_BADVARTYPE;
+    }
+
+    *res = v;
+    return S_OK;
 }
 
 static HRESULT Global_CInt(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
@@ -413,36 +420,46 @@ static HRESULT Global_CLng(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARI
 
 static HRESULT Global_CBool(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    int val;
+    VARIANT v;
+    HRESULT hres;
+
     TRACE("%s\n", debugstr_variant(arg));
 
     assert(args_cnt == 1);
 
-    switch(V_VT(arg)) {
-    case VT_I2:
-        val = V_I2(arg);
-        break;
-    case VT_I4:
-        val = V_I4(arg);
-        break;
-    case VT_R4:
-	val = V_R4(arg) > 0.0 || V_R4(arg) < 0.0;
-        break;
-    case VT_R8:
-        val = V_R8(arg) > 0.0 || V_R8(arg) < 0.0;
-        break;
-    default:
-        ERR("Not a numeric value: %s\n", debugstr_variant(arg));
-        return E_FAIL;
-    }
+    V_VT(&v) = VT_EMPTY;
+    hres = VariantChangeType(&v, arg, VARIANT_LOCALBOOL, VT_BOOL);
+    if(FAILED(hres))
+        return hres;
 
-    return return_bool(res, val);
+    if(res)
+        *res = v;
+    else
+        VariantClear(&v);
+    return S_OK;
 }
 
 static HRESULT Global_CByte(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    VARIANT v;
+    HRESULT hres;
+
+    TRACE("%s\n", debugstr_variant(arg));
+
+    assert(args_cnt == 1);
+
+    V_VT(&v) = VT_EMPTY;
+    hres = VariantChangeType(&v, arg, VARIANT_LOCALBOOL, VT_UI1);
+    if(FAILED(hres))
+        return hres;
+
+    if(!res) {
+        VariantClear(&v);
+        return DISP_E_BADVARTYPE;
+    }
+
+    *res = v;
+    return S_OK;
 }
 
 static HRESULT Global_CDate(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
@@ -1129,9 +1146,15 @@ static HRESULT Global_Asc(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIA
     return E_NOTIMPL;
 }
 
+/* The function supports only single-byte and double-byte character sets. It
+ * ignores language specified by IActiveScriptSite::GetLCID. The argument needs
+ * to be in range of short or unsigned short. */
 static HRESULT Global_Chr(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIANT *res)
 {
-    int c;
+    int cp, c, len = 0;
+    CPINFO cpi;
+    WCHAR ch;
+    char buf[2];
     HRESULT hres;
 
     TRACE("%s\n", debugstr_variant(arg));
@@ -1140,14 +1163,26 @@ static HRESULT Global_Chr(vbdisp_t *This, VARIANT *arg, unsigned args_cnt, VARIA
     if(FAILED(hres))
         return hres;
 
-    if(c < 0 || c >= 0x100) {
+    cp = GetACP();
+    if(!GetCPInfo(cp, &cpi))
+        cpi.MaxCharSize = 1;
+
+    if((c!=(short)c && c!=(unsigned short)c) ||
+            (unsigned short)c>=(cpi.MaxCharSize>1 ? 0x10000 : 0x100)) {
         WARN("invalid arg %d\n", c);
         return MAKE_VBSERROR(VBSE_ILLEGAL_FUNC_CALL);
     }
 
-    if(res) {
-        WCHAR ch = c;
+    if(c>>8)
+        buf[len++] = c>>8;
+    if(!len || IsDBCSLeadByteEx(cp, buf[0]))
+        buf[len++] = c;
+    if(!MultiByteToWideChar(0, 0, buf, len, &ch, 1)) {
+        WARN("invalid arg %d, cp %d\n", c, cp);
+        return E_FAIL;
+    }
 
+    if(res) {
         V_VT(res) = VT_BSTR;
         V_BSTR(res) = SysAllocStringLen(&ch, 1);
         if(!V_BSTR(res))

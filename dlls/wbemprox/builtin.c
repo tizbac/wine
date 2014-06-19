@@ -84,6 +84,8 @@ static const WCHAR class_process_getowner_outW[] =
      'N','E','R','_','O','U','T',0};
 static const WCHAR class_processorW[] =
     {'W','i','n','3','2','_','P','r','o','c','e','s','s','o','r',0};
+static const WCHAR class_processor2W[] =
+    {'C','I','M','_','P','r','o','c','e','s','s','o','r',0};
 static const WCHAR class_sounddeviceW[] =
     {'W','i','n','3','2','_','S','o','u','n','d','D','e','v','i','c','e',0};
 static const WCHAR class_videocontrollerW[] =
@@ -129,6 +131,8 @@ static const WCHAR prop_csdversionW[] =
     {'C','S','D','V','e','r','s','i','o','n',0};
 static const WCHAR prop_currentbitsperpixelW[] =
     {'C','u','r','r','e','n','t','B','i','t','s','P','e','r','P','i','x','e','l',0};
+static const WCHAR prop_currentclockspeedW[] =
+    {'C','u','r','r','e','n','t','C','l','o','c','k','S','p','e','e','d',0};
 static const WCHAR prop_currenthorizontalresW[] =
     {'C','u','r','r','e','n','t','H','o','r','i','z','o','n','t','a','l','R','e','s','o','l','u','t','i','o','n',0};
 static const WCHAR prop_currentverticalresW[] =
@@ -440,6 +444,7 @@ static const struct column col_processor[] =
 {
     { prop_addresswidthW,         CIM_UINT16, VT_I4 },
     { prop_cpustatusW,            CIM_UINT16 },
+    { prop_currentclockspeedW,    CIM_UINT32, VT_I4 },
     { prop_deviceidW,             CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { prop_familyW,               CIM_UINT16, VT_I4 },
     { prop_manufacturerW,         CIM_STRING|COL_FLAG_DYNAMIC },
@@ -746,6 +751,7 @@ struct record_processor
 {
     UINT16       addresswidth;
     UINT16       cpu_status;
+    UINT32       currentclockspeed;
     const WCHAR *device_id;
     UINT16       family;
     const WCHAR *manufacturer;
@@ -1959,7 +1965,7 @@ static void get_processor_name( WCHAR *name )
         regs_to_str( regs, 16, name + 32 );
     }
 }
-static UINT get_processor_maxclockspeed( void )
+static UINT get_processor_currentclockspeed( UINT index )
 {
     PROCESSOR_POWER_INFORMATION *info;
     UINT ret = 1000, size = get_processor_count() * sizeof(PROCESSOR_POWER_INFORMATION);
@@ -1968,7 +1974,21 @@ static UINT get_processor_maxclockspeed( void )
     if ((info = heap_alloc( size )))
     {
         status = NtPowerInformation( ProcessorInformation, NULL, 0, info, size );
-        if (!status) ret = info[0].MaxMhz;
+        if (!status) ret = info[index].CurrentMhz;
+        heap_free( info );
+    }
+    return ret;
+}
+static UINT get_processor_maxclockspeed( UINT index )
+{
+    PROCESSOR_POWER_INFORMATION *info;
+    UINT ret = 1000, size = get_processor_count() * sizeof(PROCESSOR_POWER_INFORMATION);
+    NTSTATUS status;
+
+    if ((info = heap_alloc( size )))
+    {
+        status = NtPowerInformation( ProcessorInformation, NULL, 0, info, size );
+        if (!status) ret = info[index].MaxMhz;
         heap_free( info );
     }
     return ret;
@@ -1986,7 +2006,7 @@ static enum fill_status fill_processor( struct table *table, const struct expr *
     static const WCHAR fmtW[] = {'C','P','U','%','u',0};
     WCHAR device_id[14], processor_id[17], manufacturer[13], name[49] = {0};
     struct record_processor *rec;
-    UINT i, offset = 0, maxclockspeed, num_cores, num_logical_processors, count = get_processor_count();
+    UINT i, offset = 0, num_cores, num_logical_processors, count = get_processor_count();
     enum fill_status status = FILL_STATUS_UNFILTERED;
 
     if (!resize_table( table, count, sizeof(*rec) )) return FILL_STATUS_FAILED;
@@ -1995,7 +2015,6 @@ static enum fill_status fill_processor( struct table *table, const struct expr *
     get_processor_manufacturer( manufacturer );
     get_processor_name( name );
 
-    maxclockspeed = get_processor_maxclockspeed();
     num_logical_processors = get_logical_processor_count( &num_cores ) / count;
     num_cores /= count;
 
@@ -2004,11 +2023,12 @@ static enum fill_status fill_processor( struct table *table, const struct expr *
         rec = (struct record_processor *)(table->data + offset);
         rec->addresswidth           = get_osarchitecture() == os_32bitW ? 32 : 64;
         rec->cpu_status             = 1; /* CPU Enabled */
+        rec->currentclockspeed      = get_processor_currentclockspeed( i );
         sprintfW( device_id, fmtW, i );
         rec->device_id              = heap_strdupW( device_id );
         rec->family                 = 2; /* Unknown */
         rec->manufacturer           = heap_strdupW( manufacturer );
-        rec->maxclockspeed          = maxclockspeed;
+        rec->maxclockspeed          = get_processor_maxclockspeed( i );
         rec->name                   = heap_strdupW( name );
         rec->num_cores              = num_cores;
         rec->num_logical_processors = num_logical_processors;
@@ -2390,6 +2410,7 @@ static struct table builtin_classes[] =
     { class_physicalmemoryW, SIZEOF(col_physicalmemory), col_physicalmemory, 0, 0, NULL, fill_physicalmemory },
     { class_processW, SIZEOF(col_process), col_process, 0, 0, NULL, fill_process },
     { class_processorW, SIZEOF(col_processor), col_processor, 0, 0, NULL, fill_processor },
+    { class_processor2W, SIZEOF(col_processor), col_processor, 0, 0, NULL, fill_processor },
     { class_qualifiersW, SIZEOF(col_qualifier), col_qualifier, SIZEOF(data_qualifier), 0, (BYTE *)data_qualifier },
     { class_serviceW, SIZEOF(col_service), col_service, 0, 0, NULL, fill_service },
     { class_sounddeviceW, SIZEOF(col_sounddevice), col_sounddevice, SIZEOF(data_sounddevice), 0, (BYTE *)data_sounddevice },

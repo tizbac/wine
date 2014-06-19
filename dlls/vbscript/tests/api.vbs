@@ -140,12 +140,22 @@ Call ok(Chr(119.5) = "x", "Chr(119.5) = " & Chr(119.5))
 sub testChrError
     on error resume next
 
+    if isEnglishLang then
+        call Err.clear()
+        call Chr(-1)
+        call ok(Err.number = 5, "Err.number = " & Err.number)
+
+        call Err.clear()
+        call Chr(256)
+        call ok(Err.number = 5, "Err.number = " & Err.number)
+    end if
+
     call Err.clear()
-    call Chr(-1)
+    call Chr(65536)
     call ok(Err.number = 5, "Err.number = " & Err.number)
 
     call Err.clear()
-    call Chr(256)
+    call Chr(-32769)
     call ok(Err.number = 5, "Err.number = " & Err.number)
 end sub
 
@@ -477,5 +487,151 @@ Call ok(CBool(0) = false, "CBool(0) = " & CBool(0))
 Call ok(getVT(CBool(0)) = "VT_BOOL", "getVT(CBool(0)) = " & getVT(CBool(0)))
 Call ok(CBool(-5) = true, "CBool(-5) = " & CBool(-5))
 Call ok(getVT(CBool(-5)) = "VT_BOOL", "getVT(CBool(-5)) = " & getVT(CBool(-5)))
+
+Sub testCBoolError(strings, error_num)
+    on error resume next
+
+    Call Err.clear()
+    Call CBool(strings)
+    Call ok(Err.number = error_num, "Err.number = " & Err.number)
+End Sub
+
+Class ValClass
+    Public myval
+
+    Public default Property Get defprop
+        defprop = myval
+    End Property
+End Class
+
+Dim MyObject
+Set MyObject = New ValClass
+
+Call ok(CBool(Empty) = False, "CBool(Empty) = " & CBool(Empty))
+Call ok(getVT(CBool(Empty)) = "VT_BOOL", "getVT(CBool(Empty)) = " & getVT(CBool(Empty)))
+Call ok(CBool(1) = True, "CBool(1) = " & CBool(1))
+Call ok(getVT(CBool(1)) = "VT_BOOL", "getVT(CBool(1)) = " & getVT(CBool(1)))
+Call ok(CBool(0) = False, "CBool(0) = " & CBool(0))
+Call ok(getVT(CBool(0)) = "VT_BOOL", "getVT(CBool(0)) = " & getVT(CBool(0)))
+Call ok(CBool(-0.56) = True, "CBool(-0.56) = " & CBool(-0.56))
+Call ok(getVT(CBool(-0.56)) = "VT_BOOL", "getVT(CBool(-0.56)) = " & getVT(CBool(-0.56)))
+Call testCBoolError("", 13)
+Call ok(CBool("0") = False, "CBool(""0"") = " & CBool("0"))
+Call ok(getVT(CBool("0")) = "VT_BOOL", "getVT(CBool(""0"")) = " & getVT(CBool("0")))
+If isEnglishLang Then
+    Call ok(CBool("0.1") = True, "CBool(""0.1"") = " & CBool("0.1"))
+    Call ok(getVT(CBool("0.1")) = "VT_BOOL", "getVT(CBool(""0.1"")) = " & getVT(CBool("0.1")))
+End If
+    Call ok(CBool("true") = True, "CBool(""true"") = " & CBool("true"))
+Call ok(getVT(CBool("true")) = "VT_BOOL", "getVT(CBool(""true"")) = " & getVT(CBool("true")))
+Call ok(CBool("false") = False, "CBool(""false"") = " & CBool("false"))
+Call ok(getVT(CBool("false")) = "VT_BOOL", "getVT(CBool(""false"")) = " & getVT(CBool("false")))
+Call ok(CBool("TRUE") = True, "CBool(""TRUE"") = " & CBool("TRUE"))
+Call ok(getVT(CBool("TRUE")) = "VT_BOOL", "getVT(CBool(""TRUE"")) = " & getVT(CBool("TRUE")))
+Call ok(CBool("FALSE") = False, "CBool(""FALSE"") = " & CBool("FALSE"))
+Call ok(getVT(CBool("FALSE")) = "VT_BOOL", "getVT(CBool(""FALSE"")) = " & getVT(CBool("FALSE")))
+Call ok(CBool("#TRUE#") = True, "CBool(""#TRUE#"") = " & CBool("#TRUE#"))
+Call ok(getVT(CBool("#TRUE#")) = "VT_BOOL", "getVT(CBool(""#TRUE#"")) = " & getVT(CBool("#TRUE#")))
+Call ok(CBool("#FALSE#") = False, "CBool(""#FALSE#"") = " & CBool("#FALSE#"))
+Call ok(getVT(CBool("#FALSE#")) = "VT_BOOL", "getVT(CBool(""#FALSE#"")) = " & getVT(CBool("#FALSE#")))
+Call ok(CBool(MyObject) = False, "CBool(MyObject) = " & CBool(MyObject))
+Call ok(getVT(CBool(MyObject)) = "VT_BOOL", "getVT(CBool(MyObject)) = " & getVT(CBool(MyObject)))
+MyObject.myval = 1
+Call ok(CBool(MyObject) = True, "CBool(MyObject) = " & CBool(MyObject))
+Call ok(getVT(CBool(MyObject)) = "VT_BOOL", "getVT(CBool(MyObject)) = " & getVT(CBool(MyObject)))
+MyObject.myval = 0
+Call ok(CBool(MyObject) = False, "CBool(MyObject) = " & CBool(MyObject))
+Call ok(getVT(CBool(MyObject)) = "VT_BOOL", "getVT(CBool(MyObject)) = " & getVT(CBool(MyObject)))
+
+Sub testCByteError(strings, error_num1,error_num2)
+    on error resume next
+    Dim x
+
+    Call Err.clear()
+    x = CByte(strings)
+    Call ok(Err.number = error_num1, "Err.number = " & Err.number)
+
+    Call Err.clear()
+    Call CByte(strings)
+    Call ok(Err.number = error_num2, "Err.number = " & Err.number)
+End Sub
+
+Call ok(CByte(Empty) = 0, "CByte(Empty) = " & CByte(Empty))
+Call ok(getVT(CByte(Empty)) = "VT_UI1", "getVT(CByte(Empty)) = " & getVT(CByte(Empty)))
+Call ok(CByte(255) = 255, "CByte(255) = " & CByte(255))
+Call ok(getVT(CByte(255)) = "VT_UI1", "getVT(CByte(255)) = " & getVT(CByte(255)))
+Call ok(CByte(255.49) = 255, "CByte(255.49) = " & CByte(255.49))
+Call ok(getVT(CByte(255.49)) = "VT_UI1", "getVT(CByte(255.49)) = " & getVT(CByte(255.49)))
+Call testCByteError(1, 0, 458)
+Call testCByteError("", 13, 13)
+Call testCByteError("-1", 6, 6)
+Call testCByteError("258", 6, 6)
+Call testCByteError("TRUE", 13, 13)
+Call testCByteError("FALSE", 13, 13)
+Call testCByteError("#TRue#", 13, 13)
+Call testCByteError("#fAlSE#", 13, 13)
+If isEnglishLang Then
+    Call ok(CByte("-0.5") = 0, "CByte(""-0.5"") = " & CByte("-0.5"))
+    Call ok(getVT(CByte("-0.5")) = "VT_UI1", "getVT(CByte(""-0.5"")) = " & getVT(CByte("-0.5")))
+End If
+Call ok(CByte(True) = 255, "CByte(True) = " & CByte(True))
+Call ok(getVT(CByte(True)) = "VT_UI1", "getVT(CByte(True)) = " & getVT(CByte(True)))
+Call ok(CByte(False) = 0, "CByte(False) = " & CByte(False))
+Call ok(getVT(CByte(False)) = "VT_UI1", "getVT(CByte(False)) = " & getVT(CByte(False)))
+Call ok(CByte(MyObject) = 0, "CByte(MyObject) = " & CByte(MyObject))
+Call ok(getVT(CByte(MyObject)) = "VT_UI1", "getVT(CByte(MyObject)) = " & getVT(CByte(MyObject)))
+MyObject.myval = 1
+Call ok(CByte(MyObject) = 1, "CByte(MyObject) = " & CByte(MyObject))
+Call ok(getVT(CByte(MyObject)) = "VT_UI1", "getVT(CByte(MyObject)) = " & getVT(CByte(MyObject)))
+MyObject.myval = 0
+Call ok(CByte(MyObject) = 0, "CByte(MyObject) = " & CByte(MyObject))
+Call ok(getVT(CByte(MyObject)) = "VT_UI1", "getVT(CByte(MyObject)) = " & getVT(CByte(MyObject)))
+
+Sub testCCurError(strings, error_num1, error_num2)
+    on error resume next
+    Dim x
+
+    Call Err.clear()
+    x = CCur(strings)
+    Call ok(Err.number = error_num1, "Err.number = " & Err.number)
+
+    Call Err.clear()
+    Call CCur(strings)
+    Call ok(Err.number = error_num2, "Err.number = " & Err.number)
+End Sub
+
+Call ok(CCur(Empty) = 0, "CCur(Empty) = " & CCur(Empty))
+Call ok(getVT(CCur(Empty)) = "VT_CY", "getVT(CCur(Empty)) = " & getVT(CCur(Empty)))
+Call ok(CCur(-32768) = -32768, "CCur(-32768) = " & CCur(-32768))
+Call ok(getVT(CCur(-32768)) = "VT_CY", "getVT(CCur(-32768)) = " & getVT(CCur(-32768)))
+Call ok(CCur(32768) = 32768, "CCur(32768) = " & CCur(32768))
+Call ok(getVT(CCur(32768)) = "VT_CY", "getVT(CCur(32768)) = " & getVT(CCur(32768)))
+Call ok(CCur(0.000149) = 0.0001, "CCur(0.000149) = " & CCur(0.000149))
+Call ok(getVT(CCur(0.000149)) = "VT_CY", "getVT(CCur(0.000149)) = " & getVT(CCur(0.000149)))
+Call ok(CCur(2147483647.99) = 2147483647.99, "CCur(2147483647.99) = " & CCur(2147483647.99))
+Call ok(getVT(CCur(2147483647.99)) = "VT_CY", "getVT(CCur(2147483647.99)) = " & getVT(CCur(2147483647.99)))
+Call ok(CCur("-1") = -1, "CCur(""-1"") = " & CCur("-1"))
+Call ok(getVT(CCur("-1")) = "VT_CY", "getVT(CCur(""-1"")) = " & getVT(CCur("-1")))
+If isEnglishLang Then
+    Call ok(CCur("-0.5") = -0.5, "CCur(""-0.5"") = " & CCur("-0.5"))
+    Call ok(getVT(CCur("-0.5")) = "VT_CY", "getVT(CCur(""-0.5"")) = " & getVT(CCur("-0.5")))
+End If
+Call testCCurError("", 13, 13)
+Call testCCurError("-1", 0, 458)
+Call testCCurError("TRUE", 13, 13)
+Call testCCurError("FALSE", 13, 13)
+Call testCCurError("#TRue#", 13, 13)
+Call testCCurError("#fAlSE#", 13, 13)
+Call testCCurError(1, 0, 458)
+Call ok(CCur(True) = -1, "CCur(True) = " & CCur(True))
+Call ok(getVT(CCur(True)) = "VT_CY", "getVT(CCur(True)) = " & getVT(CCur(True)))
+Call ok(CCur(False) = 0, "CCur(False) = " & CCur(False))
+Call ok(getVT(CCur(False)) = "VT_CY", "getVT(CCur(False)) = " & getVT(CCur(False)))
+MyObject.myval = 0.1
+Call ok(CCur(MyObject) = 0.1, "CCur(MyObject) = " & CCur(MyObject))
+Call ok(getVT(CCur(MyObject)) = "VT_CY", "getVT(CCur(MyObject)) = " & getVT(CCur(MyObject)))
+MyObject.myval = 0
+Call ok(CCur(MyObject) = 0, "CCur(MyObject) = " & CCur(MyObject))
+Call ok(getVT(CCur(MyObject)) = "VT_CY", "getVT(CCur(MyObject)) = " & getVT(CCur(MyObject)))
 
 Call reportSuccess()

@@ -740,10 +740,10 @@ static const struct wined3d_format_texture_info format_texture_info[] =
             | WINED3DFMT_FLAG_VTF,
             ARB_TEXTURE_FLOAT,          NULL},
     /* Palettized formats */
-    {WINED3DFMT_P8_UINT,                GL_RGBA,                          GL_RGBA,                                0,
+    {WINED3DFMT_P8_UINT,                GL_ALPHA8,                        GL_ALPHA8,                              0,
             GL_ALPHA,                   GL_UNSIGNED_BYTE,                 0,
             0,
-            ARB_FRAGMENT_PROGRAM,       NULL},
+            0,                          NULL},
     /* Standard ARGB formats */
     {WINED3DFMT_B8G8R8_UNORM,           GL_RGB8,                          GL_RGB8,                                0,
             GL_BGR,                     GL_UNSIGNED_BYTE,                 0,
@@ -3064,6 +3064,7 @@ DWORD wined3d_format_convert_from_float(const struct wined3d_surface *surface, c
         {WINED3DFMT_R8G8B8X8_UNORM,     255.0f,  255.0f,  255.0f,  255.0f,  0,  8, 16, 24},
         {WINED3DFMT_B10G10R10A2_UNORM, 1023.0f, 1023.0f, 1023.0f,    3.0f, 20, 10,  0, 30},
         {WINED3DFMT_R10G10B10A2_UNORM, 1023.0f, 1023.0f, 1023.0f,    3.0f,  0, 10, 20, 30},
+        {WINED3DFMT_P8_UINT,              0.0f,    0.0f,    0.0f,  255.0f,  0,  0,  0,  0},
     };
     const struct wined3d_format *format = surface->resource.format;
     unsigned int i;
@@ -3085,40 +3086,6 @@ DWORD wined3d_format_convert_from_float(const struct wined3d_surface *surface, c
         TRACE("Returning 0x%08x.\n", ret);
 
         return ret;
-    }
-
-    if (format->id == WINED3DFMT_P8_UINT)
-    {
-        PALETTEENTRY *e;
-        BYTE r, g, b, a;
-
-        if (!surface->palette)
-        {
-            WARN("Surface doesn't have a palette, returning 0.\n");
-            return 0;
-        }
-
-        r = (BYTE)((color->r * 255.0f) + 0.5f);
-        g = (BYTE)((color->g * 255.0f) + 0.5f);
-        b = (BYTE)((color->b * 255.0f) + 0.5f);
-        a = (BYTE)((color->a * 255.0f) + 0.5f);
-
-        e = &surface->palette->palents[a];
-        if (e->peRed == r && e->peGreen == g && e->peBlue == b)
-            return a;
-
-        WARN("Alpha didn't match index, searching full palette.\n");
-
-        for (i = 0; i < 256; ++i)
-        {
-            e = &surface->palette->palents[i];
-            if (e->peRed == r && e->peGreen == g && e->peBlue == b)
-                return i;
-        }
-
-        FIXME("Unable to convert color to palette index.\n");
-
-        return 0;
     }
 
     FIXME("Conversion for format %s not implemented.\n", debug_d3dformat(format->id));

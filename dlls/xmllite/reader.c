@@ -123,7 +123,7 @@ static const char *debugstr_nodetype(XmlNodeType nodetype)
     return type_names[nodetype];
 }
 
-static const char *debugstr_prop(XmlReaderProperty prop)
+static const char *debugstr_reader_prop(XmlReaderProperty prop)
 {
     static const char * const prop_names[] =
     {
@@ -154,6 +154,11 @@ static const struct xml_encoding_data xml_encoding_map[] = {
     { utf16W, XmlEncoding_UTF16, ~0 },
     { utf8W,  XmlEncoding_UTF8,  CP_UTF8 }
 };
+
+const WCHAR *get_encoding_name(xml_encoding encoding)
+{
+    return xml_encoding_map[encoding].name;
+}
 
 typedef struct
 {
@@ -256,14 +261,6 @@ static inline xmlreader *impl_from_IXmlReader(IXmlReader *iface)
 static inline xmlreaderinput *impl_from_IXmlReaderInput(IXmlReaderInput *iface)
 {
     return CONTAINING_RECORD(iface, xmlreaderinput, IXmlReaderInput_iface);
-}
-
-static inline void *m_realloc(IMalloc *imalloc, void *mem, size_t len)
-{
-    if (imalloc)
-        return IMalloc_Realloc(imalloc, mem, len);
-    else
-        return heap_realloc(mem, len);
 }
 
 /* reader memory allocation functions */
@@ -554,7 +551,7 @@ static void free_encoded_buffer(xmlreaderinput *input, encoded_buffer *buffer)
     readerinput_free(input, buffer->data);
 }
 
-static HRESULT get_code_page(xml_encoding encoding, UINT *cp)
+HRESULT get_code_page(xml_encoding encoding, UINT *cp)
 {
     if (encoding == XmlEncoding_Unknown)
     {
@@ -642,7 +639,7 @@ static void readerinput_release_stream(xmlreaderinput *readerinput)
 
 /* Queries already stored interface for IStream/ISequentialStream.
    Interface supplied on creation will be overwritten */
-static HRESULT readerinput_query_for_stream(xmlreaderinput *readerinput)
+static inline HRESULT readerinput_query_for_stream(xmlreaderinput *readerinput)
 {
     HRESULT hr;
 
@@ -2517,7 +2514,7 @@ static HRESULT WINAPI xmlreader_SetInput(IXmlReader* iface, IUnknown *input)
     {
         /* create IXmlReaderInput basing on supplied interface */
         hr = CreateXmlReaderInputWithEncodingName(input,
-                                         NULL, NULL, FALSE, NULL, &readerinput);
+                                         This->imalloc, NULL, FALSE, NULL, &readerinput);
         if (hr != S_OK) return hr;
         This->input = impl_from_IXmlReaderInput(readerinput);
     }
@@ -2537,7 +2534,7 @@ static HRESULT WINAPI xmlreader_GetProperty(IXmlReader* iface, UINT property, LO
 {
     xmlreader *This = impl_from_IXmlReader(iface);
 
-    TRACE("(%p)->(%s %p)\n", This, debugstr_prop(property), value);
+    TRACE("(%p)->(%s %p)\n", This, debugstr_reader_prop(property), value);
 
     if (!value) return E_INVALIDARG;
 
@@ -2561,7 +2558,7 @@ static HRESULT WINAPI xmlreader_SetProperty(IXmlReader* iface, UINT property, LO
 {
     xmlreader *This = impl_from_IXmlReader(iface);
 
-    TRACE("(%p)->(%s %lu)\n", This, debugstr_prop(property), value);
+    TRACE("(%p)->(%s %lu)\n", This, debugstr_reader_prop(property), value);
 
     switch (property)
     {

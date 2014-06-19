@@ -3323,7 +3323,7 @@ HRESULT WINAPI CoGetInstanceFromFile(
 
   init_multi_qi(count, results);
 
-  /* optionaly get CLSID from a file */
+  /* optionally get CLSID from a file */
   if (!rclsid)
   {
     hr = GetClassFile(filename, &clsid);
@@ -3385,7 +3385,7 @@ HRESULT WINAPI CoGetInstanceFromIStorage(
 
   init_multi_qi(count, results);
 
-  /* optionaly get CLSID from a file */
+  /* optionally get CLSID from a file */
   if (!rclsid)
   {
     memset(&stat.clsid, 0, sizeof(stat.clsid));

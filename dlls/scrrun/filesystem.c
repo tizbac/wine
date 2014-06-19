@@ -888,6 +888,24 @@ static HRESULT WINAPI drive_get_RootFolder(IDrive *iface, IFolder **folder)
     return E_NOTIMPL;
 }
 
+static HRESULT variant_from_largeint(const ULARGE_INTEGER *src, VARIANT *v)
+{
+    HRESULT hr = S_OK;
+
+    if (src->u.HighPart || src->u.LowPart > INT_MAX)
+    {
+        V_VT(v) = VT_R8;
+        hr = VarR8FromUI8(src->QuadPart, &V_R8(v));
+    }
+    else
+    {
+        V_VT(v) = VT_I4;
+        V_I4(v) = src->u.LowPart;
+    }
+
+    return hr;
+}
+
 static HRESULT WINAPI drive_get_AvailableSpace(IDrive *iface, VARIANT *v)
 {
     struct drive *This = impl_from_IDrive(iface);
@@ -901,8 +919,7 @@ static HRESULT WINAPI drive_get_AvailableSpace(IDrive *iface, VARIANT *v)
     if (!GetDiskFreeSpaceExW(This->root, &avail, NULL, NULL))
         return E_FAIL;
 
-    V_VT(v) = VT_R8;
-    return VarR8FromUI8(avail.QuadPart, &V_R8(v));
+    return variant_from_largeint(&avail, v);
 }
 
 static HRESULT WINAPI drive_get_FreeSpace(IDrive *iface, VARIANT *v)
@@ -918,8 +935,7 @@ static HRESULT WINAPI drive_get_FreeSpace(IDrive *iface, VARIANT *v)
     if (!GetDiskFreeSpaceExW(This->root, &freespace, NULL, NULL))
         return E_FAIL;
 
-    V_VT(v) = VT_R8;
-    return VarR8FromUI8(freespace.QuadPart, &V_R8(v));
+    return variant_from_largeint(&freespace, v);
 }
 
 static HRESULT WINAPI drive_get_TotalSize(IDrive *iface, VARIANT *v)
@@ -935,8 +951,7 @@ static HRESULT WINAPI drive_get_TotalSize(IDrive *iface, VARIANT *v)
     if (!GetDiskFreeSpaceExW(This->root, NULL, &total, NULL))
         return E_FAIL;
 
-    V_VT(v) = VT_R8;
-    return VarR8FromUI8(total.QuadPart, &V_R8(v));
+    return variant_from_largeint(&total, v);
 }
 
 static HRESULT WINAPI drive_get_VolumeName(IDrive *iface, BSTR *name)
@@ -1831,8 +1846,32 @@ static HRESULT WINAPI filecoll_get__NewEnum(IFileCollection *iface, IUnknown **p
 static HRESULT WINAPI filecoll_get_Count(IFileCollection *iface, LONG *count)
 {
     struct filecollection *This = impl_from_IFileCollection(iface);
-    FIXME("(%p)->(%p)\n", This, count);
-    return E_NOTIMPL;
+    static const WCHAR allW[] = {'\\','*',0};
+    WIN32_FIND_DATAW data;
+    WCHAR pathW[MAX_PATH];
+    HANDLE handle;
+
+    TRACE("(%p)->(%p)\n", This, count);
+
+    if(!count)
+        return E_POINTER;
+
+    *count = 0;
+
+    strcpyW(pathW, This->path);
+    strcatW(pathW, allW);
+    handle = FindFirstFileW(pathW, &data);
+    if (handle == INVALID_HANDLE_VALUE)
+        return HRESULT_FROM_WIN32(GetLastError());
+
+    do
+    {
+        if (is_file_data(&data))
+            *count += 1;
+    } while (FindNextFileW(handle, &data));
+    FindClose(handle);
+
+    return S_OK;
 }
 
 static const IFileCollectionVtbl filecollectionvtbl = {
@@ -2596,6 +2635,7 @@ static HRESULT WINAPI file_get_DateLastAccessed(IFile *iface, DATE *pdate)
 static HRESULT WINAPI file_get_Size(IFile *iface, VARIANT *pvarSize)
 {
     struct file *This = impl_from_IFile(iface);
+    ULARGE_INTEGER size;
     WIN32_FIND_DATAW fd;
     HANDLE f;
 
@@ -2609,14 +2649,10 @@ static HRESULT WINAPI file_get_Size(IFile *iface, VARIANT *pvarSize)
         return create_error(GetLastError());
     FindClose(f);
 
-    if(fd.nFileSizeHigh || fd.nFileSizeLow>INT_MAX) {
-        V_VT(pvarSize) = VT_R8;
-        V_R8(pvarSize) = ((ULONGLONG)fd.nFileSizeHigh<<32) + fd.nFileSizeLow;
-    }else {
-        V_VT(pvarSize) = VT_I4;
-        V_I4(pvarSize) = fd.nFileSizeLow;
-    }
-    return S_OK;
+    size.u.LowPart = fd.nFileSizeLow;
+    size.u.HighPart = fd.nFileSizeHigh;
+
+    return variant_from_largeint(&size, pvarSize);
 }
 
 static HRESULT WINAPI file_get_Type(IFile *iface, BSTR *pbstrType)
@@ -2720,9 +2756,6 @@ static HRESULT create_file(BSTR path, IFile **file)
         heap_free(f);
         return E_FAIL;
     }
-
-    if(path[len-1]=='/' || path[len-1]=='\\')
-        path[len-1] = 0;
 
     attrs = GetFileAttributesW(f->path);
     if(attrs==INVALID_FILE_ATTRIBUTES ||
@@ -3657,11 +3690,15 @@ static HRESULT WINAPI filesys_GetFileVersion(IFileSystem3 *iface, BSTR name, BST
     }
 
     ret = VerQueryValueW(ptr, rootW, (void**)&info, &len);
-    heap_free(ptr);
     if (!ret)
+    {
+        heap_free(ptr);
         return HRESULT_FROM_WIN32(GetLastError());
+    }
 
     get_versionstring(info, ver);
+    heap_free(ptr);
+
     *version = SysAllocString(ver);
     TRACE("version=%s\n", debugstr_w(ver));
 

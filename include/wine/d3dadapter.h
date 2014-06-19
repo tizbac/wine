@@ -1,5 +1,7 @@
 /*
- * Copyright 2014 Henri Verbeet for CodeWeavers
+ * d3dadapter display driver definitions
+ *
+ * Copyright (c) 2013 Joakim Sindholt
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -14,35 +16,27 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
- *
  */
 
-#include "config.h"
-#include "wine/port.h"
-#include "wine/debug.h"
+#ifndef __WINE_D3DADAPTER_H
+#define __WINE_D3DADAPTER_H
 
-#define COBJMACROS
-#include "d2d1.h"
+#ifndef __WINE_CONFIG_H
+# error You must include config.h to use this header
+#endif
 
-WINE_DEFAULT_DEBUG_CHANNEL(d2d);
+#ifdef SONAME_LIBD3DADAPTER9
 
-BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
+#include <d3dadapter/d3dadapter9.h>
+
+#define WINE_D3DADAPTER_DRIVER_VERSION 0
+
+struct d3dadapter_funcs
 {
-    switch (reason)
-    {
-        case DLL_PROCESS_ATTACH:
-            DisableThreadLibraryCalls(inst);
-            break;
-    }
+    HRESULT (*create_present_group)(const WCHAR *device_name, UINT adapter, HWND focus, D3DPRESENT_PARAMETERS *params, unsigned nparams, ID3DPresentGroup **group);
+    HRESULT (*create_adapter9)(HDC hdc, ID3DAdapter9 **adapter);
+};
 
-    return TRUE;
-}
+#endif /* SONAME_LIBD3DADAPTER9 */
 
-HRESULT WINAPI D2D1CreateFactory(D2D1_FACTORY_TYPE factory_type, REFIID iid,
-        const D2D1_FACTORY_OPTIONS *factory_options, void **factory)
-{
-    FIXME("factory_type %#x, iid %s, factory_options %p, factory %p stub!\n",
-            factory_type, debugstr_guid(iid), factory_options, factory);
-
-    return E_NOTIMPL;
-}
+#endif /* __WINE_D3DADAPTER_H */

@@ -722,8 +722,8 @@
 @ cdecl _mbscoll(str str)
 @ cdecl _mbscoll_l(str str ptr)
 @ cdecl _mbscpy(ptr str)
-# stub _mbscpy_s(ptr long str)
-# stub _mbscpy_s_l(ptr long str ptr)
+@ cdecl _mbscpy_s(ptr long str)
+@ cdecl _mbscpy_s_l(ptr long str ptr)
 @ cdecl _mbscspn(str str)
 # stub _mbscspn_l(str str ptr)
 @ cdecl _mbsdec(ptr ptr)
@@ -755,7 +755,7 @@
 @ cdecl _mbsnbcpy(ptr str long)
 # stub _mbsnbcpy_l(ptr str long ptr)
 @ cdecl _mbsnbcpy_s(ptr long str long)
-# stub _mbsnbcpy_s_l(ptr long str long ptr)
+@ cdecl _mbsnbcpy_s_l(ptr long str long ptr)
 @ cdecl _mbsnbicmp(str str long)
 # stub _mbsnbicmp_l(str str long ptr)
 @ cdecl _mbsnbicoll(str str long)
@@ -1106,10 +1106,10 @@
 @ cdecl _wcsicmp_l(wstr wstr ptr) MSVCRT__wcsicmp_l
 @ cdecl _wcsicoll(wstr wstr) MSVCRT__wcsicoll
 @ cdecl _wcsicoll_l(wstr wstr ptr) MSVCRT__wcsicoll_l
-@ cdecl _wcslwr(wstr) ntdll._wcslwr
-# stub _wcslwr_l(wstr ptr)
+@ cdecl _wcslwr(wstr) MSVCRT__wcslwr
+@ cdecl _wcslwr_l(wstr ptr) MSVCRT__wcslwr_l
 @ cdecl _wcslwr_s(wstr long) MSVCRT__wcslwr_s
-# stub _wcslwr_s_l(wstr long ptr)
+@ cdecl _wcslwr_s_l(wstr long ptr) MSVCRT__wcslwr_s_l
 @ cdecl _wcsncoll(wstr wstr long) MSVCRT__wcsncoll
 @ cdecl _wcsncoll_l(wstr wstr long ptr) MSVCRT__wcsncoll_l
 @ cdecl _wcsnicmp(wstr wstr long) MSVCRT__wcsnicmp
@@ -1131,7 +1131,7 @@
 @ cdecl -ret64 _wcstoui64_l(wstr ptr long ptr) MSVCRT__wcstoui64_l
 @ cdecl _wcstoul_l(wstr ptr long ptr) MSVCRT__wcstoul_l
 @ cdecl _wcsupr(wstr) ntdll._wcsupr
-# stub _wcsupr_l(wstr ptr)
+@ cdecl _wcsupr_l(wstr ptr) MSVCRT__wcsupr_l
 @ cdecl _wcsupr_s(wstr long) MSVCRT__wcsupr_s
 @ cdecl _wcsupr_s_l(wstr long ptr) MSVCRT__wcsupr_s_l
 # stub _wcsxfrm_l(ptr wstr long ptr)

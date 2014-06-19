@@ -175,8 +175,9 @@ static HRESULT WINAPI HTMLTableRow_put_bgColor(IHTMLTableRow *iface, VARIANT v)
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
 
-    nsAString_InitDepend(&val, V_BSTR(&v));
-    variant_to_nscolor(&v, &val);
+    if (!variant_to_nscolor(&v, &val))
+        return S_OK;
+
     nsres = nsIDOMHTMLTableRowElement_SetBgColor(This->nsrow, &val);
     nsAString_Finish(&val);
 
@@ -314,8 +315,15 @@ static HRESULT WINAPI HTMLTableRow_insertCell(IHTMLTableRow *iface, LONG index, 
 static HRESULT WINAPI HTMLTableRow_deleteCell(IHTMLTableRow *iface, LONG index)
 {
     HTMLTableRow *This = impl_from_IHTMLTableRow(iface);
-    FIXME("(%p)->(%d)\n", This, index);
-    return E_NOTIMPL;
+    nsresult nsres;
+
+    TRACE("(%p)->(%d)\n", This, index);
+    nsres = nsIDOMHTMLTableRowElement_DeleteCell(This->nsrow, index);
+    if(NS_FAILED(nsres)) {
+        ERR("Delete Cell failed: %08x\n", nsres);
+        return E_FAIL;
+    }
+    return S_OK;
 }
 
 static const IHTMLTableRowVtbl HTMLTableRowVtbl = {

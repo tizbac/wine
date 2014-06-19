@@ -446,6 +446,7 @@ enum WINED3D_SHADER_INSTRUCTION_HANDLER
     WINED3DSIH_DEFB,
     WINED3DSIH_DEFI,
     WINED3DSIH_DIV,
+    WINED3DSIH_DP2,
     WINED3DSIH_DP2ADD,
     WINED3DSIH_DP3,
     WINED3DSIH_DP4,
@@ -469,6 +470,7 @@ enum WINED3D_SHADER_INSTRUCTION_HANDLER
     WINED3DSIH_IFC,
     WINED3DSIH_IGE,
     WINED3DSIH_IMUL,
+    WINED3DSIH_ISHL,
     WINED3DSIH_ITOF,
     WINED3DSIH_LABEL,
     WINED3DSIH_LD,
@@ -2341,7 +2343,6 @@ enum wined3d_conversion_type
 {
     WINED3D_CT_NONE,
     WINED3D_CT_PALETTED,
-    WINED3D_CT_PALETTED_CK,
     WINED3D_CT_CK_565,
     WINED3D_CT_CK_5551,
     WINED3D_CT_CK_RGB24,
@@ -2349,7 +2350,7 @@ enum wined3d_conversion_type
     WINED3D_CT_CK_ARGB32,
 };
 
-void d3dfmt_p8_init_palette(const struct wined3d_surface *surface, BYTE table[256][4], BOOL colorkey) DECLSPEC_HIDDEN;
+void d3dfmt_p8_init_palette(const struct wined3d_surface *surface, BYTE table[256][4]) DECLSPEC_HIDDEN;
 
 struct wined3d_sampler
 {
@@ -2635,11 +2636,6 @@ struct wined3d_swapchain
     HDC backup_dc;
     HWND backup_wnd;
 };
-
-static inline BOOL swapchain_is_p8(const struct wined3d_swapchain *swapchain)
-{
-    return swapchain->desc.backbuffer_format == WINED3DFMT_P8_UINT;
-}
 
 void x11_copy_to_screen(const struct wined3d_swapchain *swapchain, const RECT *rect) DECLSPEC_HIDDEN;
 
@@ -2957,10 +2953,8 @@ struct wined3d_palette
     LONG ref;
     struct wined3d_device *device;
 
-    HPALETTE                   hpal;
-    WORD                       palVersion;     /*|               */
-    WORD                       palNumEntries;  /*|  LOGPALETTE   */
-    PALETTEENTRY               palents[256];   /*|               */
+    unsigned int size;
+    RGBQUAD colors[256];
     DWORD flags;
 };
 

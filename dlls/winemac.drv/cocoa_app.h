@@ -66,6 +66,9 @@ enum {
     double mouseMoveDeltaX, mouseMoveDeltaY;
     NSUInteger unmatchedMouseDowns;
 
+    NSTimeInterval lastScrollTime;
+    double accumScrollX, accumScrollY;
+
     NSMutableDictionary* originalDisplayModes;
     NSMutableDictionary* latentDisplayModes;
     BOOL displaysCapturedForFullscreen;
@@ -96,6 +99,8 @@ enum {
 @property (nonatomic) CGEventSourceKeyboardType keyboardType;
 @property (readonly, copy, nonatomic) NSEvent* lastFlagsChanged;
 @property (readonly, nonatomic) BOOL areDisplaysCaptured;
+
+@property (readonly) BOOL clippingCursor;
 
     + (WineApplicationController*) sharedController;
 

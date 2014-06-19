@@ -1099,6 +1099,8 @@ static HRESULT WINAPI AudioClient_Initialize(IAudioClient *iface,
     This->period_frames = MulDiv(fmt->nSamplesPerSec, period, 10000000);
 
     This->bufsize_frames = MulDiv(duration, fmt->nSamplesPerSec, 10000000);
+    if(mode == AUDCLNT_SHAREMODE_EXCLUSIVE)
+        This->bufsize_frames -= This->bufsize_frames % This->period_frames;
     This->local_buffer = HeapAlloc(GetProcessHeap(), 0,
             This->bufsize_frames * fmt->nBlockAlign);
     if(!This->local_buffer){
@@ -2143,7 +2145,10 @@ static HRESULT WINAPI AudioClock_GetFrequency(IAudioClock *iface, UINT64 *freq)
 
     TRACE("(%p)->(%p)\n", This, freq);
 
-    *freq = This->fmt->nSamplesPerSec;
+    if(This->share == AUDCLNT_SHAREMODE_SHARED)
+        *freq = This->fmt->nSamplesPerSec * This->fmt->nBlockAlign;
+    else
+        *freq = This->fmt->nSamplesPerSec;
 
     return S_OK;
 }
@@ -2192,6 +2197,9 @@ static HRESULT WINAPI AudioClock_GetPosition(IAudioClock *iface, UINT64 *pos,
     }
 
     This->last_pos_frames = *pos;
+
+    if(This->share == AUDCLNT_SHAREMODE_SHARED)
+        *pos *= This->fmt->nBlockAlign;
 
     LeaveCriticalSection(&This->lock);
 

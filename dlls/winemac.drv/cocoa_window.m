@@ -431,7 +431,7 @@ static inline NSUInteger adjusted_modifiers_for_option_behavior(NSUInteger modif
             event->im_set_text.data = [window imeData];
             event->im_set_text.text = (CFStringRef)[[markedText string] copy];
             event->im_set_text.complete = FALSE;
-            event->im_set_text.cursor_pos = markedTextSelection.location;
+            event->im_set_text.cursor_pos = markedTextSelection.location + markedTextSelection.length;
 
             [[window queue] postEvent:event];
 
@@ -628,7 +628,8 @@ static inline NSUInteger adjusted_modifiers_for_option_behavior(NSUInteger modif
 
     - (BOOL) preventResizing
     {
-        return ([self styleMask] & NSResizableWindowMask) && (disabled || !resizable || maximized);
+        BOOL preventForClipping = cursor_clipping_locks_windows && [[WineApplicationController sharedController] clippingCursor];
+        return ([self styleMask] & NSResizableWindowMask) && (disabled || !resizable || maximized || preventForClipping);
     }
 
     - (void) adjustFeaturesForState
@@ -659,8 +660,15 @@ static inline NSUInteger adjusted_modifiers_for_option_behavior(NSUInteger modif
             [self setContentMinSize:savedContentMinSize];
         }
 
-        if (allow_immovable_windows)
-            [self setMovable:!disabled && !maximized];
+        if (allow_immovable_windows || cursor_clipping_locks_windows)
+        {
+            if (allow_immovable_windows && (disabled || maximized))
+                [self setMovable:NO];
+            else if (cursor_clipping_locks_windows && [[WineApplicationController sharedController] clippingCursor])
+                [self setMovable:NO];
+            else
+                [self setMovable:YES];
+        }
     }
 
     - (void) adjustFullScreenBehavior:(NSWindowCollectionBehavior)behavior
@@ -1492,6 +1500,11 @@ static inline NSUInteger adjusted_modifiers_for_option_behavior(NSUInteger modif
         macdrv_event* event = macdrv_create_event(WINDOW_BROUGHT_FORWARD, self);
         [queue postEvent:event];
         macdrv_release_event(event);
+    }
+
+    - (void) updateForCursorClipping
+    {
+        [self adjustFeaturesForState];
     }
 
 

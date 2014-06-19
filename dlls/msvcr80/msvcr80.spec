@@ -54,7 +54,7 @@
 @ extern ??_7__non_rtti_object@std@@6B@ MSVCRT___non_rtti_object_vtable
 @ extern ??_7bad_cast@std@@6B@ MSVCRT_bad_cast_vtable
 @ extern ??_7bad_typeid@std@@6B@ MSVCRT_bad_typeid_vtable
-@ extern ??_7exception@@6B@ MSVCRT_exception_vtable
+@ extern ??_7exception@@6B@ MSVCRT_exception_old_vtable
 @ extern ??_7exception@std@@6B@ MSVCRT_exception_vtable
 @ thiscall -arch=i386 ??_Fbad_cast@std@@QAEXXZ(ptr) MSVCRT_bad_cast_default_ctor
 @ cdecl -arch=win64 ??_Fbad_cast@std@@QEAAXXZ(ptr) MSVCRT_bad_cast_default_ctor
@@ -172,7 +172,7 @@
 @ stub -arch=win64 _SetThrowImageBase
 @ cdecl _Strftime(str long str ptr ptr)
 @ cdecl _XcptFilter(long ptr)
-@ stub __AdjustPointer
+@ cdecl __AdjustPointer(ptr ptr)
 @ stub __BuildCatchObject
 @ stub __BuildCatchObjectHelper
 @ stdcall -arch=x86_64 __C_specific_handler(ptr long ptr ptr) ntdll.__C_specific_handler
@@ -207,7 +207,7 @@
 @ cdecl ___unguarded_readlc_active_add_func() MSVCRT____unguarded_readlc_active_add_func
 @ extern __argc MSVCRT___argc
 @ extern __argv MSVCRT___argv
-### extern __badioinfo #don't forward to msvcrt.__badioinfo, it has different size
+@ extern __badioinfo MSVCRT___badioinfo
 @ cdecl __clean_type_info_names_internal(ptr)
 @ cdecl -arch=i386 __control87_2(long long ptr ptr)
 @ stub __create_locale
@@ -297,7 +297,6 @@
 @ cdecl __p__winver()
 @ cdecl __p__wpgmptr() MSVCRT___p__wpgmptr
 @ cdecl __pctype_func() MSVCRT___pctype_func
-#FIXME: add correct __pioinfo implementation
 @ extern __pioinfo MSVCRT___pioinfo
 @ stub __pwctype_func
 @ cdecl __pxcptinfoptrs() MSVCRT___pxcptinfoptrs
@@ -774,8 +773,8 @@
 @ stub _mbscmp_l
 @ cdecl _mbscoll(str str)
 @ cdecl _mbscoll_l(str str ptr)
-@ stub _mbscpy_s
-@ stub _mbscpy_s_l
+@ cdecl _mbscpy_s(ptr long str)
+@ cdecl _mbscpy_s_l(ptr long str ptr)
 @ cdecl _mbscspn(str str)
 @ stub _mbscspn_l
 @ cdecl _mbsdec(ptr ptr)
@@ -805,7 +804,7 @@
 @ cdecl _mbsnbcpy(ptr str long)
 @ stub _mbsnbcpy_l
 @ cdecl _mbsnbcpy_s(ptr long str long)
-@ stub _mbsnbcpy_s_l
+@ cdecl _mbsnbcpy_s_l(ptr long str long ptr)
 @ cdecl _mbsnbicmp(str str long)
 @ stub _mbsnbicmp_l
 @ cdecl _mbsnbicoll(str str long)
@@ -1170,10 +1169,10 @@
 @ cdecl _wcsicmp_l(wstr wstr ptr) MSVCRT__wcsicmp_l
 @ cdecl _wcsicoll(wstr wstr) MSVCRT__wcsicoll
 @ cdecl _wcsicoll_l(wstr wstr ptr) MSVCRT__wcsicoll_l
-@ cdecl _wcslwr(wstr) ntdll._wcslwr
-@ stub _wcslwr_l
+@ cdecl _wcslwr(wstr) MSVCRT__wcslwr
+@ cdecl _wcslwr_l(wstr ptr) MSVCRT__wcslwr_l
 @ cdecl _wcslwr_s(wstr long) MSVCRT__wcslwr_s
-@ stub _wcslwr_s_l
+@ cdecl _wcslwr_s_l(wstr long ptr) MSVCRT__wcslwr_s_l
 @ cdecl _wcsncoll(wstr wstr long) MSVCRT__wcsncoll
 @ cdecl _wcsncoll_l(wstr wstr long ptr) MSVCRT__wcsncoll_l
 @ cdecl _wcsnicmp(wstr wstr long) MSVCRT__wcsnicmp
@@ -1195,7 +1194,7 @@
 @ cdecl -ret64 _wcstoui64_l(wstr ptr long ptr) MSVCRT__wcstoui64_l
 @ cdecl _wcstoul_l(wstr ptr long ptr) MSVCRT__wcstoul_l
 @ cdecl _wcsupr(wstr) ntdll._wcsupr
-@ stub _wcsupr_l
+@ cdecl _wcsupr_l(wstr ptr) MSVCRT__wcsupr_l
 @ cdecl _wcsupr_s(wstr long) MSVCRT__wcsupr_s
 @ cdecl _wcsupr_s_l(wstr long ptr) MSVCRT__wcsupr_s_l
 @ stub _wcsxfrm_l
