@@ -128,16 +128,8 @@ static HRESULT DSOUND_WaveFormat(DirectSoundDevice *device, IAudioClient *client
     return S_OK;
 }
 
-HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
+static void DSOUND_ReleaseDevice(DirectSoundDevice *device)
 {
-    WAVEFORMATEX *wfx = NULL;
-    HRESULT hres;
-    REFERENCE_TIME period, buflen = 800000;
-    UINT32 frames;
-    DWORD period_ms;
-
-    TRACE("(%p, %d)\n", device, forcewave);
-
     if(device->client){
         IAudioClient_Release(device->client);
         device->client = NULL;
@@ -145,10 +137,6 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
     if(device->render){
         IAudioRenderClient_Release(device->render);
         device->render = NULL;
-    }
-    if(device->clock){
-        IAudioClock_Release(device->clock);
-        device->clock = NULL;
     }
     if(device->volume){
         IAudioStreamVolume_Release(device->volume);
@@ -160,157 +148,82 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
         device->playpos %= device->buflen;
         device->pad = 0;
     }
+}
 
-    hres = IMMDevice_Activate(device->mmdevice, &IID_IAudioClient,
-            CLSCTX_INPROC_SERVER, NULL, (void **)&device->client);
-    if(FAILED(hres)) {
-        WARN("Activate failed: %08x\n", hres);
-        return hres;
+static HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device, WAVEFORMATEX *wfx, DWORD aclen, BOOL forcewave)
+{
+    IDirectSoundBufferImpl** dsb = device->buffers;
+    LPBYTE newbuf;
+    DWORD new_buflen;
+    BOOL mixfloat = FALSE;
+    int i;
+
+    TRACE("(%p)\n", device);
+
+    new_buflen = device->buflen;
+    new_buflen -= new_buflen % wfx->nBlockAlign;
+
+    if (wfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
+        (wfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+         IsEqualGUID(&((WAVEFORMATEXTENSIBLE*)wfx)->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)))
+        mixfloat = TRUE;
+
+    /* reallocate emulated primary buffer */
+    if (forcewave) {
+        if (device->buffer)
+            newbuf = HeapReAlloc(GetProcessHeap(), 0, device->buffer, new_buflen);
+        else
+            newbuf = HeapAlloc(GetProcessHeap(), 0, new_buflen);
+
+        if (!newbuf) {
+            ERR("failed to allocate primary buffer\n");
+            return DSERR_OUTOFMEMORY;
+        }
+        device->mix_buffer_len = 0;
+    } else if (!mixfloat) {
+        DWORD alloc_len = aclen / (wfx->nBlockAlign / 8) * sizeof(float);
+
+        if (device->buffer)
+            newbuf = HeapReAlloc(GetProcessHeap(), 0, device->buffer, alloc_len);
+        else
+            newbuf = HeapAlloc(GetProcessHeap(), 0, alloc_len);
+
+        if (!newbuf) {
+            ERR("failed to allocate primary buffer\n");
+            return DSERR_OUTOFMEMORY;
+        }
+        device->mix_buffer_len = alloc_len;
+    } else {
+        HeapFree(GetProcessHeap(), 0, device->buffer);
+        newbuf = NULL;
+        device->mix_buffer_len = 0;
     }
 
-    hres = DSOUND_WaveFormat(device, device->client, forcewave, &wfx);
-    if (FAILED(hres)) {
-        IAudioClient_Release(device->client);
-        device->client = NULL;
-        return hres;
-    }
+    device->buffer = newbuf;
+    device->buflen = new_buflen;
     HeapFree(GetProcessHeap(), 0, device->pwfx);
     device->pwfx = wfx;
 
-    hres = IAudioClient_Initialize(device->client,
-            AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST |
-            AUDCLNT_STREAMFLAGS_EVENTCALLBACK, buflen, 0, device->pwfx, NULL);
-    if(FAILED(hres)){
-        IAudioClient_Release(device->client);
-        device->client = NULL;
-        WARN("Initialize failed: %08x\n", hres);
-        return hres;
-    }
-    IAudioClient_SetEventHandle(device->client, device->sleepev);
+    if (device->state == STATE_PLAYING)
+        device->state = STATE_STARTING;
+    else if (device->state == STATE_STOPPING)
+        device->state = STATE_STOPPED;
 
-    hres = IAudioClient_GetService(device->client, &IID_IAudioRenderClient,
-            (void**)&device->render);
-    if(FAILED(hres)){
-        IAudioClient_Release(device->client);
-        device->client = NULL;
-        WARN("GetService failed: %08x\n", hres);
-        return hres;
-    }
-
-    hres = IAudioClient_GetService(device->client, &IID_IAudioClock,
-            (void**)&device->clock);
-    if(FAILED(hres)){
-        IAudioClient_Release(device->client);
-        IAudioRenderClient_Release(device->render);
-        device->client = NULL;
-        device->render = NULL;
-        WARN("GetService failed: %08x\n", hres);
-        return hres;
-    }
-
-    hres = IAudioClient_GetService(device->client, &IID_IAudioStreamVolume,
-            (void**)&device->volume);
-    if(FAILED(hres)){
-        IAudioClient_Release(device->client);
-        IAudioRenderClient_Release(device->render);
-        IAudioClock_Release(device->clock);
-        device->client = NULL;
-        device->render = NULL;
-        device->clock = NULL;
-        WARN("GetService failed: %08x\n", hres);
-        return hres;
-    }
-
-    /* Now kick off the timer so the event fires periodically */
-    hres = IAudioClient_Start(device->client);
-    if (FAILED(hres))
-        WARN("starting failed with %08x\n", hres);
-
-    hres = IAudioClient_GetStreamLatency(device->client, &period);
-    if (FAILED(hres)) {
-        WARN("GetStreamLatency failed with %08x\n", hres);
-        period = 100000;
-    }
-    period_ms = (period + 9999) / 10000;
-
-    hres = IAudioClient_GetBufferSize(device->client, &frames);
-    if (FAILED(hres)) {
-        WARN("GetBufferSize failed with %08x\n", hres);
-        frames = (UINT64)device->pwfx->nSamplesPerSec * buflen / 10000000;
-    }
-
-    device->fraglen = MulDiv(device->pwfx->nSamplesPerSec, period, 10000000) * device->pwfx->nBlockAlign;
-    device->aclen = frames * device->pwfx->nBlockAlign;
-    TRACE("period %u ms fraglen %u buflen %u\n", period_ms, device->fraglen, device->aclen);
-
-    if (period_ms < 3)
-        device->sleeptime = 5;
-    else
-        device->sleeptime = period_ms * 5 / 2;
-
-    return S_OK;
-}
-
-HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device)
-{
-	IDirectSoundBufferImpl** dsb = device->buffers;
-	LPBYTE newbuf;
-        int i;
-
-	TRACE("(%p)\n", device);
-
-	/* on original windows, the buffer it set to a fixed size, no matter what the settings are.
-	   on windows this size is always fixed (tested on win-xp) */
-	if (!device->buflen)
-		device->buflen = ds_hel_buflen;
-	device->buflen -= device->buflen % device->pwfx->nBlockAlign;
-
-	HeapFree(GetProcessHeap(), 0, device->mix_buffer);
-	device->mix_buffer_len = (device->buflen / (device->pwfx->wBitsPerSample / 8)) * sizeof(float);
-	device->mix_buffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, device->mix_buffer_len);
-	if (!device->mix_buffer)
-		return DSERR_OUTOFMEMORY;
-
-	if (device->state == STATE_PLAYING) device->state = STATE_STARTING;
-	else if (device->state == STATE_STOPPING) device->state = STATE_STOPPED;
-
-    /* reallocate emulated primary buffer */
-    if (device->buffer)
-        newbuf = HeapReAlloc(GetProcessHeap(),0,device->buffer, device->buflen);
-    else
-        newbuf = HeapAlloc(GetProcessHeap(),0, device->buflen);
-
-    if (!newbuf) {
-        ERR("failed to allocate primary buffer\n");
-        return DSERR_OUTOFMEMORY;
-        /* but the old buffer might still exist and must be re-prepared */
-    }
-
-    device->writelead = (device->pwfx->nSamplesPerSec / 100) * device->pwfx->nBlockAlign;
-
-    device->buffer = newbuf;
+    device->writelead = (wfx->nSamplesPerSec / 100) * wfx->nBlockAlign;
 
     TRACE("buflen: %u, fraglen: %u, mix_buffer_len: %u\n",
-            device->buflen, device->fraglen, device->mix_buffer_len);
+          device->buflen, device->fraglen, device->mix_buffer_len);
 
-    if(device->pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
-            (device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
-             IsEqualGUID(&((WAVEFORMATEXTENSIBLE*)device->pwfx)->SubFormat,
-                 &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)))
-        device->normfunction = normfunctions[4];
+    if (!forcewave && !mixfloat)
+        device->normfunction = normfunctions[wfx->nBlockAlign/8 - 1];
     else
-        device->normfunction = normfunctions[device->pwfx->wBitsPerSample/8 - 1];
+        device->normfunction = NULL;
 
-    FillMemory(device->buffer, device->buflen, (device->pwfx->wBitsPerSample == 8) ? 128 : 0);
-    FillMemory(device->mix_buffer, device->mix_buffer_len, 0);
+    if (device->mix_buffer_len)
+        FillMemory(device->buffer, device->mix_buffer_len, 0);
+    else if (device->buffer)
+        FillMemory(device->buffer, device->buflen, (wfx->wBitsPerSample == 8) ? 128 : 0);
     device->playpos = 0;
-
-    if (device->pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
-	 (device->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
-	  IsEqualGUID(&((WAVEFORMATEXTENSIBLE*)device->pwfx)->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)))
-        device->normfunction = normfunctions[4];
-    else
-        device->normfunction = normfunctions[device->pwfx->wBitsPerSample/8 - 1];
 
     for (i = 0; i < device->nrofbuffers; i++) {
         RtlAcquireResourceExclusive(&dsb[i]->lock, TRUE);
@@ -321,35 +234,103 @@ HRESULT DSOUND_PrimaryOpen(DirectSoundDevice *device)
     return DS_OK;
 }
 
-
-static void DSOUND_PrimaryClose(DirectSoundDevice *device)
+HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
 {
-    HRESULT hr;
+    HRESULT hres;
+    REFERENCE_TIME period;
+    UINT32 frames;
+    DWORD period_ms;
+    IAudioClient *client = NULL;
+    IAudioRenderClient *render = NULL;
+    IAudioStreamVolume *volume = NULL;
+    DWORD fraglen, aclen;
+    WAVEFORMATEX *wfx = NULL;
 
-    TRACE("(%p)\n", device);
+    TRACE("(%p, %d)\n", device, forcewave);
 
-    if(device->client){
-        hr = IAudioClient_Stop(device->client);
-        if(FAILED(hr))
-            WARN("Stop failed: %08x\n", hr);
+    hres = IMMDevice_Activate(device->mmdevice, &IID_IAudioClient,
+            CLSCTX_INPROC_SERVER, NULL, (void **)&client);
+    if(FAILED(hres)){
+        WARN("Activate failed: %08x\n", hres);
+        return hres;
     }
-}
 
-HRESULT DSOUND_PrimaryCreate(DirectSoundDevice *device)
-{
-	HRESULT err = DS_OK;
-	TRACE("(%p)\n", device);
+    hres = DSOUND_WaveFormat(device, client, forcewave, &wfx);
+    if (FAILED(hres)) {
+        IAudioClient_Release(client);
+        return hres;
+    }
 
-	device->buflen = ds_hel_buflen;
-	err = DSOUND_PrimaryOpen(device);
+    hres = IAudioClient_Initialize(client,
+            AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST |
+            AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 800000, 0, wfx, NULL);
+    if(FAILED(hres)){
+        IAudioClient_Release(client);
+        ERR("Initialize failed: %08x\n", hres);
+        return hres;
+    }
 
-	if (err != DS_OK) {
-		WARN("DSOUND_PrimaryOpen failed\n");
-		return err;
-	}
+    IAudioClient_SetEventHandle(client, device->sleepev);
 
-	device->state = STATE_STOPPED;
-	return DS_OK;
+    hres = IAudioClient_GetService(client, &IID_IAudioRenderClient, (void**)&render);
+    if(FAILED(hres))
+        goto err_service;
+
+    hres = IAudioClient_GetService(client, &IID_IAudioStreamVolume, (void**)&volume);
+    if(FAILED(hres))
+        goto err_service;
+
+    /* Now kick off the timer so the event fires periodically */
+    hres = IAudioClient_Start(client);
+    if (FAILED(hres)) {
+        WARN("Start failed with %08x\n", hres);
+        goto err;
+    }
+    hres = IAudioClient_GetStreamLatency(client, &period);
+    if (FAILED(hres)) {
+        WARN("GetStreamLatency failed with %08x\n", hres);
+        goto err;
+    }
+    hres = IAudioClient_GetBufferSize(client, &frames);
+    if (FAILED(hres)) {
+        WARN("GetBufferSize failed with %08x\n", hres);
+        goto err;
+    }
+
+    period_ms = (period + 9999) / 10000;
+    fraglen = MulDiv(wfx->nSamplesPerSec, period, 10000000) * wfx->nBlockAlign;
+    aclen = frames * wfx->nBlockAlign;
+    TRACE("period %u ms fraglen %u buflen %u\n", period_ms, fraglen, aclen);
+
+    hres = DSOUND_PrimaryOpen(device, wfx, aclen, forcewave);
+    if(FAILED(hres))
+        goto err;
+
+    DSOUND_ReleaseDevice(device);
+    device->client = client;
+    device->render = render;
+    device->volume = volume;
+    device->fraglen = fraglen;
+    device->aclen = aclen;
+
+    if (period_ms < 3)
+        device->sleeptime = 5;
+    else
+        device->sleeptime = period_ms * 5 / 2;
+
+    return S_OK;
+
+err_service:
+    ERR("GetService failed: %08x\n", hres);
+err:
+    if (volume)
+        IAudioStreamVolume_Release(volume);
+    if (render)
+        IAudioRenderClient_Release(render);
+    if (client)
+        IAudioClient_Release(client);
+    HeapFree(GetProcessHeap(), 0, wfx);
+    return hres;
 }
 
 HRESULT DSOUND_PrimaryDestroy(DirectSoundDevice *device)
@@ -358,8 +339,6 @@ HRESULT DSOUND_PrimaryDestroy(DirectSoundDevice *device)
 
 	/* **** */
 	EnterCriticalSection(&(device->mixlock));
-
-	DSOUND_PrimaryClose(device);
 
 	if(device->primary && (device->primary->ref || device->primary->numIfaces))
 		WARN("Destroying primary buffer while references held (%u %u)\n", device->primary->ref, device->primary->numIfaces);
@@ -436,7 +415,6 @@ HRESULT primarybuffer_SetFormat(DirectSoundDevice *device, LPCWAVEFORMATEX passe
 	HRESULT err = S_OK;
 	WAVEFORMATEX *old_fmt;
 	WAVEFORMATEXTENSIBLE *fmtex, *passed_fmtex = (WAVEFORMATEXTENSIBLE*)passed_fmt;
-	BOOL forced = (device->priolevel == DSSCL_WRITEPRIMARY);
 
 	TRACE("(%p,%p)\n", device, passed_fmt);
 
@@ -486,24 +464,12 @@ HRESULT primarybuffer_SetFormat(DirectSoundDevice *device, LPCWAVEFORMATEX passe
 			fmtex->Samples.wValidBitsPerSample = fmtex->Format.wBitsPerSample;
 		}
 
-		DSOUND_PrimaryClose(device);
-
-		err = DSOUND_ReopenDevice(device, forced);
+		err = DSOUND_ReopenDevice(device, TRUE);
 		if (FAILED(err)) {
 			ERR("No formats could be opened\n");
-			goto done;
-		}
-
-		err = DSOUND_PrimaryOpen(device);
-		if (err != DS_OK) {
-			ERR("DSOUND_PrimaryOpen failed\n");
-			goto done;
-		}
-
-done:
-		if (err != DS_OK)
+			HeapFree(GetProcessHeap(), 0, device->primary_pwfx);
 			device->primary_pwfx = old_fmt;
-		else
+		} else
 			HeapFree(GetProcessHeap(), 0, old_fmt);
 	} else {
 		WAVEFORMATEX *wfx = DSOUND_CopyFormat(passed_fmt);
