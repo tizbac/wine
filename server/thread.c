@@ -52,6 +52,8 @@
 #include "user.h"
 #include "security.h"
 
+extern int rtkit_make_realtime(pid_t process, pid_t thread, int priority);
+extern int rtkit_undo_realtime(pid_t thread);
 
 #ifdef __i386__
 static const unsigned int supported_cpus = CPU_FLAG(CPU_x86);
@@ -476,7 +478,17 @@ static void set_thread_info( struct thread *thread,
         if ((req->priority >= min && req->priority <= max) ||
             req->priority == THREAD_PRIORITY_IDLE ||
             req->priority == THREAD_PRIORITY_TIME_CRITICAL)
+        {
+            if (thread->unix_tid == -1)
+                {}
+            else if (thread->priority == THREAD_PRIORITY_TIME_CRITICAL &&
+                     req->priority != THREAD_PRIORITY_TIME_CRITICAL)
+                rtkit_undo_realtime(thread->unix_tid);
+            else if (thread->priority != THREAD_PRIORITY_TIME_CRITICAL &&
+                     req->priority == THREAD_PRIORITY_TIME_CRITICAL)
+                rtkit_make_realtime(thread->unix_pid, thread->unix_tid, 1);
             thread->priority = req->priority;
+        }
         else
             set_error( STATUS_INVALID_PARAMETER );
     }
@@ -1300,6 +1312,10 @@ DECL_HANDLER(init_thread)
         set_thread_affinity( current, current->affinity );
     }
     debug_level = max( debug_level, req->debug_level );
+
+    /* Raced with SetThreadPriority */
+    if (current->priority == THREAD_PRIORITY_TIME_CRITICAL)
+        rtkit_make_realtime(current->unix_pid, current->unix_tid, 1);
 
     reply->pid     = get_process_id( process );
     reply->tid     = get_thread_id( current );
