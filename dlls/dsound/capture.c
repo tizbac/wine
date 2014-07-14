@@ -51,7 +51,7 @@ typedef struct IDirectSoundCaptureBufferImpl
     IDirectSoundCaptureBuffer8          IDirectSoundCaptureBuffer8_iface;
     IDirectSoundNotify                  IDirectSoundNotify_iface;
     LONG                                numIfaces; /* "in use interfaces" refcount */
-    LONG                                ref, refn;
+    LONG                                ref, refn, has_dsc8;
     /* IDirectSoundCaptureBuffer fields */
     DirectSoundCaptureDevice            *device;
     DSCBUFFERDESC                       *pdscbd;
@@ -241,8 +241,9 @@ static HRESULT WINAPI IDirectSoundCaptureBufferImpl_QueryInterface(IDirectSoundC
 
     *ppobj = NULL;
 
-    if ( IsEqualGUID( &IID_IDirectSoundCaptureBuffer, riid ) ||
-         IsEqualGUID( &IID_IDirectSoundCaptureBuffer8, riid ) ) {
+    if ( IsEqualIID( &IID_IUnknown, riid ) ||
+         IsEqualIID( &IID_IDirectSoundCaptureBuffer, riid ) ||
+         (This->has_dsc8 && IsEqualIID( &IID_IDirectSoundCaptureBuffer8, riid )) ) {
 	IDirectSoundCaptureBuffer8_AddRef(iface);
         *ppobj = iface;
         return S_OK;
@@ -1234,6 +1235,8 @@ static HRESULT WINAPI IDirectSoundCaptureImpl_CreateCaptureBuffer(IDirectSoundCa
 
     if (hr != DS_OK)
 	WARN("IDirectSoundCaptureBufferImpl_Create failed\n");
+    else
+        This->device->capture_buffer->has_dsc8 = This->has_dsc8;
 
     return hr;
 }
