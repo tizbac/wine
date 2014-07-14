@@ -52,8 +52,8 @@
 #include "user.h"
 #include "security.h"
 
-extern int rtkit_make_realtime(pid_t process, pid_t thread, int priority);
-extern int rtkit_undo_realtime(pid_t thread);
+extern int rtkit_make_realtime(struct thread *thread, pid_t tid, int priority);
+extern int rtkit_undo_realtime(struct thread *thread);
 
 #ifdef __i386__
 static const unsigned int supported_cpus = CPU_FLAG(CPU_x86);
@@ -203,6 +203,8 @@ static inline void init_thread_structure( struct thread *thread )
     list_init( &thread->mutex_list );
     list_init( &thread->system_apc );
     list_init( &thread->user_apc );
+    list_init( &thread->rt_entry );
+    thread->rt_prio = 0;
 
     for (i = 0; i < MAX_INFLIGHT_FDS; i++)
         thread->inflight[i].server = thread->inflight[i].client = -1;
@@ -271,6 +273,9 @@ static void cleanup_thread( struct thread *thread )
 {
     int i;
 
+    thread->unix_tid = -1;
+    if (!list_empty(&thread->rt_entry))
+        rtkit_undo_realtime(thread);
     clear_apc_queue( &thread->system_apc );
     clear_apc_queue( &thread->user_apc );
     free( thread->req_data );
@@ -462,6 +467,15 @@ affinity_t get_thread_affinity( struct thread *thread )
 #define THREAD_PRIORITY_REALTIME_HIGHEST 6
 #define THREAD_PRIORITY_REALTIME_LOWEST -7
 
+static int rtprio(int ntprio)
+{
+    if (ntprio == THREAD_PRIORITY_TIME_CRITICAL - 1)
+        return 1;
+    else if (ntprio == THREAD_PRIORITY_TIME_CRITICAL)
+        return 2;
+    return 0;
+}
+
 /* set all information about a thread */
 static void set_thread_info( struct thread *thread,
                              const struct set_thread_info_request *req )
@@ -477,17 +491,21 @@ static void set_thread_info( struct thread *thread,
         }
         if ((req->priority >= min && req->priority <= max) ||
             req->priority == THREAD_PRIORITY_IDLE ||
+            req->priority == THREAD_PRIORITY_TIME_CRITICAL - 1 ||
             req->priority == THREAD_PRIORITY_TIME_CRITICAL)
         {
+            int newprio = rtprio(req->priority);
             if (thread->unix_tid == -1)
-                {}
-            else if (thread->priority == THREAD_PRIORITY_TIME_CRITICAL &&
-                     req->priority != THREAD_PRIORITY_TIME_CRITICAL)
-                rtkit_undo_realtime(thread->unix_tid);
-            else if (thread->priority != THREAD_PRIORITY_TIME_CRITICAL &&
-                     req->priority == THREAD_PRIORITY_TIME_CRITICAL)
-                rtkit_make_realtime(thread->unix_pid, thread->unix_tid, 1);
-            thread->priority = req->priority;
+                thread->rt_prio = newprio;
+            else if (thread->priority == THREAD_PRIORITY_TIME_CRITICAL && !newprio)
+                rtkit_undo_realtime(thread);
+            else if (thread->rt_prio != newprio)
+                rtkit_make_realtime(thread, thread->unix_tid, newprio);
+
+            if (newprio)
+                thread->priority = THREAD_PRIORITY_TIME_CRITICAL;
+            else
+                thread->priority = req->priority;
         }
         else
             set_error( STATUS_INVALID_PARAMETER );
@@ -1315,7 +1333,7 @@ DECL_HANDLER(init_thread)
 
     /* Raced with SetThreadPriority */
     if (current->priority == THREAD_PRIORITY_TIME_CRITICAL)
-        rtkit_make_realtime(current->unix_pid, current->unix_tid, 1);
+        rtkit_make_realtime(current, current->unix_tid, current->rt_prio);
 
     reply->pid     = get_process_id( process );
     reply->tid     = get_thread_id( current );

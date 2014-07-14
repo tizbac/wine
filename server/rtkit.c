@@ -35,7 +35,11 @@
 #include <unistd.h>
 #include <dbus/dbus.h>
 #include <stdio.h>
+#include <signal.h>
+#include <limits.h>
+#include <syscall.h>
 #include "object.h"
+#include "thread.h"
 
 #ifndef RLIMIT_RTTIME
 #define RLIMIT_RTTIME 15
@@ -52,6 +56,8 @@ FUNCPTR(dbus_connection_send_with_reply_and_block);
 FUNCPTR(dbus_message_unref);
 FUNCPTR(dbus_set_error_from_message);
 #undef FUNCPTR
+
+static struct list rt_thread_list = LIST_INIT(rt_thread_list);
 
 static int translate_error( unsigned tid, const char *name )
 {
@@ -85,6 +91,88 @@ static void init_dbus(void)
 #undef FUNCPTR
 }
 
+#define MSG_SIGXCPU "wineserver: SIGXCPU called on wineserver from kernel, realtime priority removed!\n"
+
+static int sched_normal(struct thread *cur)
+{
+    int ret = 0;
+
+    if (cur->unix_tid != -1) {
+        struct sched_param parm;
+        memset( &parm, 0, sizeof( parm ) );
+        ret = sched_setscheduler(cur->unix_tid, SCHED_OTHER | SCHED_RESET_ON_FORK, &parm);
+        if (ret < 0)
+            ret = -errno;
+    }
+
+    list_remove(&cur->rt_entry);
+    list_init(&cur->rt_entry);
+    cur->rt_prio = 0;
+    cur->priority = 0;
+    return ret;
+}
+
+static void sigxcpu_handler(int sig, siginfo_t *si, void *ucontext)
+{
+    struct thread *cur, *tmp;
+    int found = 0;
+    int old_errno = errno;
+
+    if (si->si_code & SI_KERNEL) {
+        struct sched_param parm;
+        memset( &parm, 0, sizeof( parm ) );
+
+        sched_setscheduler(syscall( SYS_gettid ), SCHED_OTHER | SCHED_RESET_ON_FORK, &parm);
+
+        write(2, MSG_SIGXCPU, sizeof(MSG_SIGXCPU)-1);
+        goto restore_errno;
+    }
+
+    LIST_FOR_EACH_ENTRY_SAFE(cur, tmp, &rt_thread_list, struct thread, rt_entry)
+    {
+        if (si->si_pid == cur->unix_pid && cur->rt_prio == 1) {
+            found = 1;
+            sched_normal(cur);
+        }
+    }
+
+    if (!found) {
+        LIST_FOR_EACH_ENTRY_SAFE(cur, tmp, &rt_thread_list, struct thread, rt_entry)
+        {
+            if (si->si_pid == cur->unix_pid)
+                sched_normal(cur);
+        }
+    }
+
+restore_errno:
+    errno = old_errno;
+}
+
+static void setup_rt(void)
+{
+    struct sigaction sa;
+    struct rlimit rlimit;
+
+    sa.sa_sigaction = sigxcpu_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGXCPU, &sa, NULL);
+
+    if (!getrlimit( RLIMIT_RTTIME, &rlimit ))
+    {
+        /* wineserver can run for 1.5 seconds continuously at realtime before
+         * it gets throttled down. At this point we probably hit a bug
+         * somewhere.
+         */
+        if (rlimit.rlim_max > 2000000)
+            rlimit.rlim_max = 2000000;
+        if (rlimit.rlim_cur > 1500000)
+            rlimit.rlim_cur = 1500000;
+
+        setrlimit( RLIMIT_RTTIME, &rlimit );
+    }
+}
+
 static DBusConnection *get_dbus(void)
 {
     static DBusConnection *bus;
@@ -96,16 +184,18 @@ static DBusConnection *get_dbus(void)
     pdbus_error_init( &error );
 
     bus = pdbus_bus_get( DBUS_BUS_SYSTEM, &error );
+    setup_rt();
     return bus;
 }
 
-int rtkit_make_realtime( pid_t process, pid_t thread, int priority )
+int rtkit_make_realtime( struct thread *thread, pid_t unix_tid, int priority )
 {
     DBusConnection *bus;
     DBusMessage *m = NULL, *r = NULL;
-    dbus_uint64_t pid = process;
-    dbus_uint64_t tid = thread;
+    dbus_uint64_t pid = thread ? thread->unix_pid : getpid();
+    dbus_uint64_t tid = unix_tid;
     dbus_uint32_t rtprio = priority;
+    sigset_t sigset;
     DBusError error;
     int ret;
 
@@ -133,16 +223,29 @@ int rtkit_make_realtime( pid_t process, pid_t thread, int priority )
         ret = -ENOMEM;
         goto out;
     }
+
+    sigemptyset( &sigset );
+    sigaddset( &sigset, SIGXCPU );
+    sigprocmask( SIG_BLOCK, &sigset, NULL );
+
     r = pdbus_connection_send_with_reply_and_block( bus, m, -1, &error );
     if (!r)
     {
         ret = translate_error( tid, error.name );
-        goto out;
+        goto out_unblock;
     }
     if (pdbus_set_error_from_message( &error, r ))
         ret = translate_error( tid, error.name );
-    else
+    else {
         ret = 0;
+        if (thread) {
+            if (list_empty(&thread->rt_entry))
+                list_add_tail( &rt_thread_list, &thread->rt_entry );
+            thread->rt_prio = rtprio;
+        }
+    }
+out_unblock:
+    sigprocmask( SIG_UNBLOCK, &sigset, NULL );
 out:
     if (m)
         pdbus_message_unref( m );
@@ -150,29 +253,38 @@ out:
         pdbus_message_unref( r );
     pdbus_error_free( &error );
     if (debug_level)
-        fprintf( stderr, "%04x: Setting realtime priority of %u returns %i\n", (int)tid, rtprio, ret );
+        fprintf( stderr, "%04x: Setting realtime priority of %u returns %i %m\n", (int)tid, rtprio, ret );
     return ret;
 }
 
-int rtkit_undo_realtime( pid_t thread )
+int rtkit_undo_realtime( struct thread *thread )
 {
-    struct sched_param parm;
-    int ret;
-    memset( &parm, 0, sizeof( parm ) );
-    ret = sched_setscheduler( thread, SCHED_OTHER, &parm );
-    if (ret < 0)
-        return -errno;
-    return ret;
+    sigset_t sigset;
+    int ret = 0;
+
+    sigemptyset( &sigset );
+    sigaddset( &sigset, SIGXCPU );
+    sigprocmask( SIG_BLOCK, &sigset, NULL );
+
+    if (!list_empty(&thread->rt_entry))
+        ret = sched_normal(thread);
+
+    if (debug_level)
+        fprintf( stderr, "%04x: Removing realtime priority of %u returns %i %m\n",
+                 (int)thread->unix_tid, thread->rt_prio, ret );
+
+    sigprocmask( SIG_UNBLOCK, &sigset, NULL );
+    return ret < 0 ? -errno : 0;
 }
 
 #else
 
-int rtkit_make_realtime( pid_t process, pid_t thread, int priority )
+int rtkit_make_realtime( struct thread *thread, pid_t unix_tid, int priority )
 {
     return -ENOTSUP;
 }
 
-int rtkit_undo_realtime( pid_t thread )
+int rtkit_undo_realtime( struct thread *thread )
 {
     return -ENOTSUP;
 }
