@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 #ifdef HAVE_GETOPT_H
 # include <getopt.h>
 #endif
@@ -37,6 +38,8 @@
 #include "thread.h"
 #include "request.h"
 #include "wine/library.h"
+
+extern int rtkit_make_realtime(pid_t process, pid_t thread, int priority);
 
 /* command-line options */
 int debug_level = 0;
@@ -145,6 +148,7 @@ int main( int argc, char *argv[] )
     init_signals();
     init_directories();
     init_registry();
+    rtkit_make_realtime(getpid(), syscall( SYS_gettid ), 2);
     main_loop();
     return 0;
 }
