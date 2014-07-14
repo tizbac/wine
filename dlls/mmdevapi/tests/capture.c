@@ -241,7 +241,7 @@ static void test_capture(IAudioClient *ac, HANDLE handle, WAVEFORMATEX *wfx)
         ok(hr == S_OK, "Valid IAudioCaptureClient_GetBuffer returns %08x\n", hr);
         ok(frames2 == frames, "GetBuffer after ReleaseBuffer(0) %u/%u\n", frames2, frames);
         ok(pos2 == pos, "Position after ReleaseBuffer(0) %u/%u\n", (UINT)pos2, (UINT)pos);
-        todo_wine ok(qpc2 == qpc, "HPC after ReleaseBuffer(0) %u vs. %u\n", (UINT)qpc2, (UINT)qpc);
+        ok(qpc2 == qpc, "HPC after ReleaseBuffer(0) %u vs. %u\n", (UINT)qpc2, (UINT)qpc);
     }
 
     /* trace after the GCP test because log output to MS-DOS console disturbs timing */
@@ -304,13 +304,13 @@ static void test_capture(IAudioClient *ac, HANDLE handle, WAVEFORMATEX *wfx)
 
     if(hr == S_OK){
         /* The discontinuity is reported here, but is this an old or new packet? */
-        todo_wine ok(flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, "expect DISCONTINUITY %x\n", flags);
+        ok(flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, "expect DISCONTINUITY %x\n", flags);
         ok(pad == next, "GCP %u vs. BufferSize %u\n", (UINT32)pad, next);
 
         /* Native's position is one period further than what we read.
          * Perhaps that's precisely the meaning of DATA_DISCONTINUITY:
          * signal when the position jump left a gap. */
-        todo_wine ok(pos == sum + frames, "Position %u gap %d\n",
+        ok(pos == sum + frames, "Position %u gap %d\n",
                      (UINT)pos, (UINT)pos - sum);
         if(flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY)
             sum = pos;
@@ -388,7 +388,7 @@ static void test_capture(IAudioClient *ac, HANDLE handle, WAVEFORMATEX *wfx)
         /* Only PulseAudio goes here; despite snd_pcm_drop it manages
          * to fill GetBufferSize with a single snd_pcm_read */
         trace("Test marked todo: only PulseAudio gets here\n");
-        todo_wine ok(flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, "expect DISCONTINUITY %x\n", flags);
+        ok(flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, "expect DISCONTINUITY %x\n", flags);
         /* Reset zeroes padding, not the position */
         ok(pos >= sum, "Position %u last %u\n", (UINT)pos, sum);
         /*sum = pos; check after next GetBuffer */

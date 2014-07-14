@@ -983,7 +983,7 @@ static void test_clock(int share)
     ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
     trace("data at %p\n", data);
 
-    hr = IAudioRenderClient_ReleaseBuffer(arc, avail, winetest_debug>2 ?
+    hr = IAudioRenderClient_ReleaseBuffer(arc, avail, winetest_interactive ?
         wave_generate_tone(pwfx, data, avail) : AUDCLNT_BUFFERFLAGS_SILENT);
     ok(hr == S_OK, "ReleaseBuffer failed: %08x\n", hr);
     if(hr == S_OK) sum += avail;
@@ -1020,8 +1020,7 @@ static void test_clock(int share)
     ok(hr == S_OK, "GetPosition failed: %08x\n", hr);
     ok(pos >= last, "Position %u vs. last %u\n", (UINT)pos,(UINT)last);
     last = pos;
-    if(/*share &&*/ winetest_debug>1) todo_wine
-        ok(pos*1000/freq <= slept*1.1, "Position %u too far after stop %ums\n", (UINT)pos, slept);
+    ok(pos*1000/freq <= slept*1.1, "Position %u too far after stop %ums\n", (UINT)pos, slept);
 
     hr = IAudioClient_Start(ac); /* #2 */
     ok(hr == S_OK, "Start failed: %08x\n", hr);
@@ -1054,12 +1053,11 @@ static void test_clock(int share)
     ok(pos * pwfx->nSamplesPerSec <= sum * freq, "Position %u > written %u\n", (UINT)pos, sum);
     /* Prove that Stop must not drop frames (in shared mode). */
     ok(pad ? pos > last : pos >= last, "Position %u vs. last %u\n", (UINT)pos,(UINT)last);
-    if (share && pad > 0 && winetest_debug>1) todo_wine
+    if (share && pad > 0)
         ok(pos*1000/freq <= slept*1.1, "Position %u too far after playing %ums\n", (UINT)pos, slept);
     /* in exclusive mode, testbot's w7 machines yield pos > sum-pad */
-    if(/*share &&*/ winetest_debug>1)
-        ok(pos * pwfx->nSamplesPerSec == (sum-pad) * freq,
-           "Position %u after stop vs. %u padding\n", (UINT)pos, pad);
+    ok(pos * pwfx->nSamplesPerSec == (sum-pad) * freq,
+       "Position %u after stop vs. %u padding\n", (UINT)pos, pad);
     last = pos;
 
     Sleep(100);
@@ -1087,7 +1085,7 @@ static void test_clock(int share)
     ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
     trace("data at %p\n", data);
 
-    hr = IAudioRenderClient_ReleaseBuffer(arc, avail, winetest_debug>2 ?
+    hr = IAudioRenderClient_ReleaseBuffer(arc, avail, winetest_interactive ?
         wave_generate_tone(pwfx, data, avail) : AUDCLNT_BUFFERFLAGS_SILENT);
     ok(hr == S_OK, "ReleaseBuffer failed: %08x\n", hr);
     if(hr == S_OK) sum += avail;
@@ -1112,10 +1110,7 @@ static void test_clock(int share)
     trace("position %u past %ums sleep #3\n", (UINT)pos, slept);
     ok(pos > last, "Position %u vs. last %u\n", (UINT)pos,(UINT)last);
     ok(pos * pwfx->nSamplesPerSec <= sum * freq, "Position %u > written %u\n", (UINT)pos, sum);
-    if (winetest_debug>1)
-        ok(pos*1000/freq <= slept*1.1, "Position %u too far after playing %ums\n", (UINT)pos, slept);
-    else
-        skip("Rerun with WINETEST_DEBUG=2 for GetPosition tests.\n");
+    ok(pos*1000/freq <= slept*1.1, "Position %u too far after playing %ums\n", (UINT)pos, slept);
     last = pos;
 
     hr = IAudioClient_Reset(ac);
@@ -1133,11 +1128,10 @@ static void test_clock(int share)
     ok(pos >= last, "Position %u vs. last %u\n", (UINT)pos,(UINT)last);
     ok(pcpos > pcpos0, "pcpos should increase\n");
     ok(pos * pwfx->nSamplesPerSec <= sum * freq, "Position %u > written %u\n", (UINT)pos, sum);
-    if (pad > 0 && winetest_debug>1) todo_wine
+    if (pad > 0)
         ok(pos*1000/freq <= slept*1.1, "Position %u too far after stop %ums\n", (UINT)pos, slept);
-    if(winetest_debug>1)
-        ok(pos * pwfx->nSamplesPerSec == (sum-pad) * freq,
-           "Position %u after stop vs. %u padding\n", (UINT)pos, pad);
+    ok(pos * pwfx->nSamplesPerSec == (sum-pad) * freq,
+       "Position %u after stop vs. %u padding\n", (UINT)pos, pad);
     last = pos;
 
     /* Begin the big loop */
@@ -1160,19 +1154,17 @@ static void test_clock(int share)
     ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
     trace("data at %p for prefill %u\n", data, avail);
 
-    if (winetest_debug>2) {
-        hr = IAudioClient_Stop(ac);
-        ok(hr == S_OK, "Stop failed: %08x\n", hr);
+    hr = IAudioClient_Stop(ac);
+    ok(hr == S_OK, "Stop failed: %08x\n", hr);
 
-        Sleep(20);
-        slept += 20;
+    Sleep(20);
+    slept += 20;
 
-        hr = IAudioClient_Reset(ac);
-        ok(hr == AUDCLNT_E_BUFFER_OPERATION_PENDING, "Reset failed: %08x\n", hr);
+    hr = IAudioClient_Reset(ac);
+    ok(hr == AUDCLNT_E_BUFFER_OPERATION_PENDING, "Reset failed: %08x\n", hr);
 
-        hr = IAudioClient_Start(ac);
-        ok(hr == S_OK, "Start failed: %08x\n", hr);
-    }
+    hr = IAudioClient_Start(ac);
+    ok(hr == S_OK, "Start failed: %08x\n", hr);
 
     /* Despite passed time, data must still point to valid memory... */
     hr = IAudioRenderClient_ReleaseBuffer(arc, avail,
@@ -1217,14 +1209,13 @@ static void test_clock(int share)
         trace("padding %u position %u/%u slept %ums iteration %d\n", pad, (UINT)pos, sum-pad, slept, i);
         ok(pad ? pos > last : pos >= last, "No position increase at iteration %d\n", i);
         ok(pos * pwfx->nSamplesPerSec <= sum * freq, "Position %u > written %u\n", (UINT)pos, sum);
-        if (winetest_debug>1) {
-            /* Padding does not lag behind by much */
-            ok(pos * pwfx->nSamplesPerSec <= (sum-pad+fragment) * freq, "Position %u > written %u\n", (UINT)pos, sum);
-            ok(pos*1000/freq <= slept*1.1, "Position %u too far after %ums\n", (UINT)pos, slept);
-            if (pad) /* not in case of underrun */
-                ok((pos-last)*1000/freq >= 90 && 110 >= (pos-last)*1000/freq,
-                   "Position delta %ld not regular\n", (long)(pos-last));
-        }
+
+        /* Padding does not lag behind by much */
+        ok(pos * pwfx->nSamplesPerSec <= (sum-pad+fragment) * freq, "Position %u > written %u\n", (UINT)pos, sum);
+        ok(pos*1000/freq <= slept*1.1, "Position %u too far after %ums\n", (UINT)pos, slept);
+        if (pad) /* not in case of underrun */
+            ok((pos-last)*1000/freq >= 90 && 110 >= (pos-last)*1000/freq,
+               "Position delta %ld not regular\n", (long)(pos-last));
         last = pos;
 
         hr = IAudioClient_GetStreamLatency(ac, &t1);
@@ -1237,7 +1228,7 @@ static void test_clock(int share)
         /* ok(hr == AUDCLNT_E_BUFFER_TOO_LARGE || (hr == S_OK && i==0) without todo_wine */
         ok(hr == S_OK || hr == AUDCLNT_E_BUFFER_TOO_LARGE,
            "GetBuffer large (%u) failed: %08x\n", avail, hr);
-        if(hr == S_OK && i) todo_wine ok(FALSE, "GetBuffer large (%u) at iteration %d\n", avail, i);
+        if(hr == S_OK && i) ok(FALSE, "GetBuffer large (%u) at iteration %d\n", avail, i);
         /* Only the first iteration should allow that large a buffer
          * as prefill was drained during the first 350+100ms sleep.
          * Afterwards, only 100ms of data should find room per iteration. */
@@ -2089,7 +2080,7 @@ static void test_worst_case(void)
     hr = IAudioClock_GetFrequency(acl, &freq);
     ok(hr == S_OK, "GetFrequency failed: %08x\n", hr);
 
-    for(j = 0; j <= (winetest_interactive ? 9 : 2); j++){
+    for(j = 0; j < 10; j++){
         sum = 0;
         trace("Should play %ums continuous tone with fragment size %u.\n",
               (ULONG)(defp/100), fragment);
@@ -2098,15 +2089,13 @@ static void test_worst_case(void)
         ok(hr == S_OK, "GetPosition failed: %08x\n", hr);
 
         /* XAudio2 prefills one period, play without it */
-        if(winetest_debug>2){
-            hr = IAudioRenderClient_GetBuffer(arc, fragment, &data);
-            ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
+        hr = IAudioRenderClient_GetBuffer(arc, fragment, &data);
+        ok(hr == S_OK, "GetBuffer failed: %08x\n", hr);
 
-            hr = IAudioRenderClient_ReleaseBuffer(arc, fragment, AUDCLNT_BUFFERFLAGS_SILENT);
-            ok(hr == S_OK, "ReleaseBuffer failed: %08x\n", hr);
-            if(hr == S_OK)
-                sum += fragment;
-        }
+        hr = IAudioRenderClient_ReleaseBuffer(arc, fragment, AUDCLNT_BUFFERFLAGS_SILENT);
+        ok(hr == S_OK, "ReleaseBuffer failed: %08x\n", hr);
+        if(hr == S_OK)
+            sum += fragment;
 
         hr = IAudioClient_Start(ac);
         ok(hr == S_OK, "Start failed: %08x\n", hr);
