@@ -397,6 +397,14 @@ d3dadapter9_GetAdapterMonitor( struct d3dadapter9 *This,
     return (HMONITOR)ADAPTER_OUTPUT.monitor;
 }
 
+static void d3dadapter9_DeviceReset_Callback(struct d3dadapter9 *This,D3DPRESENT_PARAMETERS *params )
+{
+
+    printf("Reset Callback\n");
+    if ( !params->Windowed )
+        SetWindowPos(params->hDeviceWindow,HWND_TOPMOST,0,0,params->BackBufferWidth,params->BackBufferHeight,0);
+}
+
 static HRESULT WINAPI
 d3dadapter9_CreateDevice( struct d3dadapter9 *This,
                           UINT Adapter,
@@ -408,6 +416,7 @@ d3dadapter9_CreateDevice( struct d3dadapter9 *This,
 {
     ID3DPresentGroup *present;
     HRESULT hr;
+
 
     if (Adapter >= d3dadapter9_GetAdapterCount(This)) {
         WARN("Adapter %u does not exist.\n", Adapter);
@@ -441,11 +450,11 @@ d3dadapter9_CreateDevice( struct d3dadapter9 *This,
     if (This->ex) {
         hr = ADAPTER_PROC(CreateDeviceEx, Adapter, DeviceType, hFocusWindow,
                           BehaviorFlags, (IDirect3D9Ex *)This, present,
-                          (IDirect3DDevice9Ex **)ppReturnedDeviceInterface);
+                          (IDirect3DDevice9Ex **)ppReturnedDeviceInterface, &d3dadapter9_DeviceReset_Callback);
     } else {
         hr = ADAPTER_PROC(CreateDevice, Adapter, DeviceType, hFocusWindow,
                           BehaviorFlags, (IDirect3D9 *)This, present,
-                          ppReturnedDeviceInterface);
+                          ppReturnedDeviceInterface, &d3dadapter9_DeviceReset_Callback);
     }
     if (FAILED(hr)) {
         WARN("ADAPTER_PROC failed.\n");
