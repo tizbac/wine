@@ -277,16 +277,13 @@ DRI2Present_GetBuffer( struct DRI2Present *This,
 
     TRACE("(This=%p, hWndOverride=%p, pBuffer=%p, pRect=%p, ppRegion=%p)\n",
           This, hWndOverride, pBuffer, pRect, ppRegion);
-    HWND wnd = 0;
+
     if (hWndOverride) {
         d3d = get_d3d_drawable(hWndOverride);
-        wnd = hWndOverride;
     } else if (This->params.hDeviceWindow) {
         d3d = get_d3d_drawable(This->params.hDeviceWindow);
-        wnd = This->params.hDeviceWindow;
     } else {
         d3d = get_d3d_drawable(This->focus_wnd);
-        wnd = This->focus_wnd;
     }
     if (!d3d) { return D3DERR_DRIVERINTERNALERROR; }
 
@@ -367,7 +364,6 @@ DRI2Present_GetBuffer( struct DRI2Present *This,
 
         TRACE("XFixes rect (x=%u, y=%u, w=%u, h=%u)\n",
               xrect.x, xrect.y, xrect.width, xrect.height);
-
     }
 
     This->cache.drawable = d3d->drawable;
@@ -627,8 +623,6 @@ DRI2Present_new( Display *dpy,
     if (params->BackBufferHeight == 0) {
         params->BackBufferHeight = rect.bottom;
     }
-    if ( !params->Windowed )
-        SetWindowPos(focus_wnd,HWND_TOPMOST,0,0,params->BackBufferWidth,params->BackBufferHeight,0);
     This->params = *params;
     strcpyW(This->devname, devname);
 
