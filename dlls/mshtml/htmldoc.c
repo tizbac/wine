@@ -1578,8 +1578,17 @@ static HRESULT WINAPI HTMLDocument_get_onerrorupdate(IHTMLDocument2 *iface, VARI
 static HRESULT WINAPI HTMLDocument_toString(IHTMLDocument2 *iface, BSTR *String)
 {
     HTMLDocument *This = impl_from_IHTMLDocument2(iface);
-    FIXME("(%p)->(%p)\n", This, String);
-    return E_NOTIMPL;
+
+    static const WCHAR objectW[] = {'[','o','b','j','e','c','t',']',0};
+
+    TRACE("(%p)->(%p)\n", This, String);
+
+    if(!String)
+        return E_INVALIDARG;
+
+    *String = SysAllocString(objectW);
+    return *String ? S_OK : E_OUTOFMEMORY;
+
 }
 
 static HRESULT WINAPI HTMLDocument_createStyleSheet(IHTMLDocument2 *iface, BSTR bstrHref,
@@ -2608,8 +2617,21 @@ static HRESULT WINAPI HTMLDocument5_get_doctype(IHTMLDocument5 *iface, IHTMLDOMN
 static HRESULT WINAPI HTMLDocument5_get_implementation(IHTMLDocument5 *iface, IHTMLDOMImplementation **p)
 {
     HTMLDocument *This = impl_from_IHTMLDocument5(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+    HTMLDocumentNode *doc_node = This->doc_node;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    if(!doc_node->dom_implementation) {
+        HRESULT hres;
+
+        hres = create_dom_implementation(&doc_node->dom_implementation);
+        if(FAILED(hres))
+            return hres;
+    }
+
+    IHTMLDOMImplementation_AddRef(doc_node->dom_implementation);
+    *p = doc_node->dom_implementation;
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLDocument5_createAttribute(IHTMLDocument5 *iface, BSTR bstrattrName,
@@ -4330,11 +4352,7 @@ static void HTMLDocumentNode_destructor(HTMLDOMNode *iface)
         This->nsnode_selector = NULL;
     }
 
-    if(This->nsdoc) {
-        assert(!This->window);
-        release_document_mutation(This);
-        nsIDOMHTMLDocument_Release(This->nsdoc);
-    }else if(This->window) {
+    if(!This->nsdoc && This->window) {
         /* document fragments own reference to inner window */
         IHTMLWindow2_Release(&This->window->base.IHTMLWindow2_iface);
         This->window = NULL;

@@ -85,6 +85,7 @@ static const struct wined3d_format_channels formats[] =
     {WINED3DFMT_B5G5R5A1_UNORM,             5,  5,  5,  1,  10,  5,  0, 15,    2,   0,     0},
     {WINED3DFMT_B4G4R4A4_UNORM,             4,  4,  4,  4,   8,  4,  0, 12,    2,   0,     0},
     {WINED3DFMT_B2G3R3_UNORM,               3,  3,  2,  0,   5,  2,  0,  0,    1,   0,     0},
+    {WINED3DFMT_R8_UNORM,                   8,  0,  0,  0,   0,  0,  0,  0,    1,   0,     0},
     {WINED3DFMT_A8_UNORM,                   0,  0,  0,  8,   0,  0,  0,  0,    1,   0,     0},
     {WINED3DFMT_B2G3R3A8_UNORM,             3,  3,  2,  8,   5,  2,  0,  8,    2,   0,     0},
     {WINED3DFMT_B4G4R4X4_UNORM,             4,  4,  4,  0,   8,  4,  0,  0,    2,   0,     0},
@@ -782,6 +783,11 @@ static const struct wined3d_format_texture_info format_texture_info[] =
             GL_RGB,                     GL_UNSIGNED_BYTE_3_3_2,           0,
             WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING | WINED3DFMT_FLAG_FILTERING,
             WINED3D_GL_EXT_NONE,        NULL},
+    {WINED3DFMT_R8_UNORM,               GL_R8,                            GL_R8,                                  0,
+            GL_RED,                     GL_UNSIGNED_BYTE,                 0,
+            WINED3DFMT_FLAG_TEXTURE | WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING | WINED3DFMT_FLAG_FILTERING
+            | WINED3DFMT_FLAG_RENDERTARGET | WINED3DFMT_FLAG_VTF,
+            ARB_TEXTURE_RG,             NULL},
     {WINED3DFMT_A8_UNORM,               GL_ALPHA8,                        GL_ALPHA8,                              0,
             GL_ALPHA,                   GL_UNSIGNED_BYTE,                 0,
             WINED3DFMT_FLAG_TEXTURE | WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING | WINED3DFMT_FLAG_FILTERING,
@@ -2678,6 +2684,8 @@ const char *debug_d3dstate(DWORD state)
         return wine_dbg_sprintf("STATE_SAMPLER(%#x)", state - STATE_SAMPLER(0));
     if (STATE_IS_SHADER(state))
         return wine_dbg_sprintf("STATE_SHADER(%s)", debug_shader_type(state - STATE_SHADER(0)));
+    if (STATE_IS_CONSTANT_BUFFER(state))
+        return wine_dbg_sprintf("STATE_CONSTANT_BUFFER(%s)", debug_shader_type(state - STATE_CONSTANT_BUFFER(0)));
     if (STATE_IS_TRANSFORM(state))
         return wine_dbg_sprintf("STATE_TRANSFORM(%s)", debug_d3dtstype(state - STATE_TRANSFORM(0)));
     if (STATE_IS_STREAMSRC(state))
@@ -3056,6 +3064,7 @@ DWORD wined3d_format_convert_from_float(const struct wined3d_surface *surface, c
         {WINED3DFMT_B5G6R5_UNORM,        31.0f,   63.0f,   31.0f,    0.0f, 11,  5,  0,  0},
         {WINED3DFMT_B5G5R5A1_UNORM,      31.0f,   31.0f,   31.0f,    1.0f, 10,  5,  0, 15},
         {WINED3DFMT_B5G5R5X1_UNORM,      31.0f,   31.0f,   31.0f,    1.0f, 10,  5,  0, 15},
+        {WINED3DFMT_R8_UNORM,           255.0f,    0.0f,    0.0f,    0.0f,  0,  0,  0,  0},
         {WINED3DFMT_A8_UNORM,             0.0f,    0.0f,    0.0f,  255.0f,  0,  0,  0,  0},
         {WINED3DFMT_B4G4R4A4_UNORM,      15.0f,   15.0f,   15.0f,   15.0f,  8,  4,  0, 12},
         {WINED3DFMT_B4G4R4X4_UNORM,      15.0f,   15.0f,   15.0f,   15.0f,  8,  4,  0, 12},
@@ -3204,7 +3213,7 @@ void gen_ffp_frag_op(const struct wined3d_context *context, const struct wined3d
     unsigned int i;
     DWORD ttff;
     DWORD cop, aop, carg0, carg1, carg2, aarg0, aarg1, aarg2;
-    const struct wined3d_surface *rt = state->fb->render_targets[0];
+    const struct wined3d_format *rt_format = state->fb->render_targets[0]->format;
     const struct wined3d_gl_info *gl_info = context->gl_info;
     const struct wined3d_d3d_info *d3d_info = context->d3d_info;
 
@@ -3418,7 +3427,7 @@ void gen_ffp_frag_op(const struct wined3d_context *context, const struct wined3d
     }
     if (!gl_info->supported[ARB_FRAMEBUFFER_SRGB]
             && state->render_states[WINED3D_RS_SRGBWRITEENABLE]
-            && rt->resource.format->flags & WINED3DFMT_FLAG_SRGB_WRITE)
+            && rt_format->flags & WINED3DFMT_FLAG_SRGB_WRITE)
     {
         settings->sRGB_write = 1;
     } else {

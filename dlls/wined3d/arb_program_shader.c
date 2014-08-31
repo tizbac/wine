@@ -706,7 +706,7 @@ static void shader_arb_load_constants_internal(struct shader_arb_priv *priv,
     {
         const struct wined3d_shader *pshader = state->shader[WINED3D_SHADER_TYPE_PIXEL];
         const struct arb_ps_compiled_shader *gl_shader = priv->compiled_fprog;
-        UINT rt_height = state->fb->render_targets[0]->resource.height;
+        UINT rt_height = state->fb->render_targets[0]->height;
 
         /* Load DirectX 9 float constants for pixel shader */
         priv->highest_dirty_ps_const = shader_arb_load_constantsF(pshader, gl_info, GL_FRAGMENT_PROGRAM_ARB,
@@ -4673,7 +4673,7 @@ static void shader_arb_select(void *shader_priv, struct wined3d_context *context
         }
         else
         {
-            UINT rt_height = state->fb->render_targets[0]->resource.height;
+            UINT rt_height = state->fb->render_targets[0]->height;
             shader_arb_ps_local_constants(compiled, context, state, rt_height);
         }
 
@@ -6791,7 +6791,7 @@ static void arbfp_free_blit_shader(struct wine_rb_entry *entry, void *context)
     HeapFree(GetProcessHeap(), 0, entry_arb);
 }
 
-const struct wine_rb_functions wined3d_arbfp_blit_rb_functions =
+static const struct wine_rb_functions wined3d_arbfp_blit_rb_functions =
 {
     wined3d_rb_alloc,
     wined3d_rb_realloc,
@@ -7278,14 +7278,12 @@ static GLuint gen_p8_shader(struct arbfp_blit_priv *priv,
 }
 
 /* Context activation is done by the caller. */
-static void upload_palette(const struct wined3d_surface *surface, struct wined3d_context *context)
+static void upload_palette(const struct wined3d_texture *texture, struct wined3d_context *context)
 {
-    BYTE table[256][4];
-    struct wined3d_device *device = surface->resource.device;
+    const struct wined3d_palette *palette = texture->swapchain ? texture->swapchain->palette : NULL;
+    struct wined3d_device *device = texture->resource.device;
     const struct wined3d_gl_info *gl_info = context->gl_info;
     struct arbfp_blit_priv *priv = device->blit_priv;
-
-    d3dfmt_p8_init_palette(surface, table);
 
     if (!priv->palette_texture)
         gl_info->gl_ops.gl.p_glGenTextures(1, &priv->palette_texture);
@@ -7299,9 +7297,19 @@ static void upload_palette(const struct wined3d_surface *surface, struct wined3d
     /* Make sure we have discrete color levels. */
     gl_info->gl_ops.gl.p_glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     gl_info->gl_ops.gl.p_glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    /* Upload the palette */
     /* TODO: avoid unneeded uploads in the future by adding some SFLAG_PALETTE_DIRTY mechanism */
-    gl_info->gl_ops.gl.p_glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, table);
+    if (palette)
+    {
+        gl_info->gl_ops.gl.p_glTexImage1D(GL_TEXTURE_1D, 0, GL_RGB, 256, 0, GL_BGRA,
+                GL_UNSIGNED_INT_8_8_8_8_REV, palette->colors);
+    }
+    else
+    {
+        static const DWORD black;
+        FIXME("P8 surface loaded without a palette.\n");
+        gl_info->gl_ops.gl.p_glTexImage1D(GL_TEXTURE_1D, 0, GL_RGB, 1, 0, GL_BGRA,
+                GL_UNSIGNED_INT_8_8_8_8_REV, &black);
+    }
 
     /* Switch back to unit 0 in which the 2D texture will be stored. */
     context_active_texture(context, gl_info, 0);
@@ -7530,7 +7538,7 @@ err_out:
     }
 
     if (fixup == COMPLEX_FIXUP_P8)
-        upload_palette(surface, context);
+        upload_palette(surface->container, context);
 
     gl_info->gl_ops.gl.p_glEnable(GL_FRAGMENT_PROGRAM_ARB);
     checkGLcall("glEnable(GL_FRAGMENT_PROGRAM_ARB)");
@@ -7637,7 +7645,7 @@ HRESULT arbfp_blit_surface(struct wined3d_device *device, DWORD filter,
     if (wined3d_settings.offscreen_rendering_mode != ORM_FBO
             && (src_surface->locations & (WINED3D_LOCATION_TEXTURE_RGB | WINED3D_LOCATION_DRAWABLE))
             == WINED3D_LOCATION_DRAWABLE
-            && !surface_is_offscreen(src_surface))
+            && !wined3d_resource_is_offscreen(&src_surface->resource))
     {
         /* Without FBO blits transferring from the drawable to the texture is
          * expensive, because we have to flip the data in sysmem. Since we can
@@ -7654,7 +7662,7 @@ HRESULT arbfp_blit_surface(struct wined3d_device *device, DWORD filter,
 
     context_apply_blit_state(context, device);
 
-    if (!surface_is_offscreen(dst_surface))
+    if (!wined3d_resource_is_offscreen(&dst_surface->resource))
         surface_translate_drawable_coords(dst_surface, context->win_handle, &dst_rect);
 
     arbfp_blit_set(device->blit_priv, context, src_surface);
@@ -7666,13 +7674,14 @@ HRESULT arbfp_blit_surface(struct wined3d_device *device, DWORD filter,
     arbfp_blit_unset(context->gl_info);
 
     if (wined3d_settings.strict_draw_ordering
-            || (dst_surface->swapchain && (dst_surface->swapchain->front_buffer == dst_surface)))
+            || (dst_surface->container->swapchain
+            && (dst_surface->container->swapchain->front_buffer == dst_surface->container)))
         context->gl_info->gl_ops.gl.p_glFlush(); /* Flush to ensure ordering across contexts. */
 
     context_release(context);
 
-    surface_validate_location(dst_surface, dst_surface->draw_binding);
-    surface_invalidate_location(dst_surface, ~dst_surface->draw_binding);
+    surface_validate_location(dst_surface, dst_surface->container->resource.draw_binding);
+    surface_invalidate_location(dst_surface, ~dst_surface->container->resource.draw_binding);
 
     return WINED3D_OK;
 }

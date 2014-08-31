@@ -989,9 +989,21 @@ static ULONG WINAPI AudioClient_Release(IAudioClient *iface)
 {
     ACImpl *This = impl_from_IAudioClient(iface);
     ULONG ref;
+
     ref = InterlockedDecrement(&This->ref);
     TRACE("(%p) Refcount now %u\n", This, ref);
     if (!ref) {
+        if(This->timer){
+            HANDLE event;
+            DWORD wait;
+            event = CreateEventW(NULL, TRUE, FALSE, NULL);
+            wait = !DeleteTimerQueueTimer(g_timer_q, This->timer, event);
+            wait = wait && GetLastError() == ERROR_IO_PENDING;
+            if(event && wait)
+                WaitForSingleObject(event, INFINITE);
+            CloseHandle(event);
+        }
+
         IAudioClient_Stop(iface);
         if (This->initted) {
             int i;
@@ -2322,6 +2334,14 @@ static HRESULT WINAPI AudioClient_Start(IAudioClient *iface)
                 This->bufsize_frames);
     }
 
+    if(!This->timer){
+        if(!CreateTimerQueueTimer(&This->timer, g_timer_q, alsa_push_buffer_data,
+                This, 0, This->mmdev_period_rt / 10000, WT_EXECUTEINTIMERTHREAD)){
+            LeaveCriticalSection(&This->lock);
+            WARN("Unable to create timer: %u\n", GetLastError());
+            return E_OUTOFMEMORY;
+        }
+    }
     This->started = TRUE;
 
     LeaveCriticalSection(&This->lock);
@@ -2930,7 +2950,7 @@ static HRESULT WINAPI AudioClock_GetFrequency(IAudioClock *iface, UINT64 *freq)
     TRACE("(%p)->(%p)\n", This, freq);
 
     if(This->share == AUDCLNT_SHAREMODE_SHARED)
-        *freq = This->fmt->nSamplesPerSec * This->fmt->nBlockAlign;
+        *freq = (UINT64)This->fmt->nSamplesPerSec * This->fmt->nBlockAlign;
     else
         *freq = This->fmt->nSamplesPerSec;
 

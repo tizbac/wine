@@ -449,6 +449,7 @@ static void exit_thread_common( int status )
     }
 
     LdrShutdownThread();
+    RtlFreeThreadActivationContextStack();
 
     pthread_sigmask( SIG_BLOCK, &server_block_set, NULL );
 
@@ -743,8 +744,6 @@ NTSTATUS WINAPI RtlCreateUserThread( HANDLE process, const SECURITY_DESCRIPTOR *
         frame->ActivationContext = actctx;
         frame->Flags = 0;
         teb->ActivationContextStack.ActiveFrame = frame;
-
-        RtlAddRefActivationContext(actctx);
     }
 
     info = (struct startup_info *)(teb + 1);

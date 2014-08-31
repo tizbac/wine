@@ -100,7 +100,6 @@
 
 #ifdef HAVE_NETIPX_IPX_H
 # include <netipx/ipx.h>
-# define HAS_IPX
 #elif defined(HAVE_LINUX_IPX_H)
 # ifdef HAVE_ASM_TYPES_H
 #  include <asm/types.h>
@@ -109,6 +108,8 @@
 #  include <linux/types.h>
 # endif
 # include <linux/ipx.h>
+#endif
+#if defined(SOL_IPX) || defined(SO_DEFAULT_HEADERS)
 # define HAS_IPX
 #endif
 
@@ -568,6 +569,7 @@ static const int ws_eai_map[][2] =
 static const char magic_loopback_addr[] = {127, 12, 34, 56};
 
 #ifndef HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS
+#ifdef IP_PKTINFO
 static inline WSACMSGHDR *fill_control_message(int level, int type, WSACMSGHDR *current, ULONG *maxsize, void *data, int len)
 {
     ULONG msgsize = sizeof(WSACMSGHDR) + WSA_CMSG_ALIGN(len);
@@ -585,6 +587,7 @@ static inline WSACMSGHDR *fill_control_message(int level, int type, WSACMSGHDR *
     /* Return the pointer to where next entry should go */
     return (WSACMSGHDR *) (ptr + WSA_CMSG_ALIGN(len));
 }
+#endif /* IP_PKTINFO */
 
 static inline int convert_control_headers(struct msghdr *hdr, WSABUF *control)
 {
@@ -1237,7 +1240,7 @@ int WINAPI WSAStartup(WORD wVersionRequested, LPWSADATA lpWSAData)
     /* don't do anything with lpWSAData->lpVendorInfo */
     /* (some apps don't allocate the space for this field) */
 
-    TRACE("succeeded\n");
+    TRACE("succeeded starts: %d\n", num_startup);
     return 0;
 }
 
@@ -1249,6 +1252,7 @@ INT WINAPI WSACleanup(void)
 {
     if (num_startup) {
         num_startup--;
+        TRACE("pending cleanups: %d\n", num_startup);
         return 0;
     }
     SetLastError(WSANOTINITIALISED);
@@ -1822,6 +1826,7 @@ static INT WS_EnumProtocols( BOOL unicode, const INT *protocols, LPWSAPROTOCOL_I
 
     for (i = items = 0; protocols[i]; i++)
     {
+        if (!supported_protocol(protocols[i])) continue;
         if (unicode)
         {
             if (WS_EnterSingleProtocolW( protocols[i], &info.w[items] ))
@@ -4757,7 +4762,7 @@ int WINAPI WS_setsockopt(SOCKET s, int level, int optname,
         switch(optname)
         {
         /* Some options need some conversion before they can be sent to
-         * setsockopt. The conversions are done here, then they will fall though
+         * setsockopt. The conversions are done here, then they will fall through
          * to the general case. Special options that are not passed to
          * setsockopt follow below that.*/
 

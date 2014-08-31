@@ -193,15 +193,34 @@ static HRESULT WINAPI HTMLTable_get_border(IHTMLTable *iface, VARIANT *p)
 static HRESULT WINAPI HTMLTable_put_frame(IHTMLTable *iface, BSTR v)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_w(v));
-    return E_NOTIMPL;
+    nsAString str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    nsAString_InitDepend(&str, v);
+    nsres = nsIDOMHTMLTableElement_SetFrame(This->nstable, &str);
+    nsAString_Finish(&str);
+
+    if (NS_FAILED(nsres)) {
+        ERR("SetFrame(%s) failed: %08x\n", debugstr_w(v), nsres);
+        return E_FAIL;
+    }
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLTable_get_frame(IHTMLTable *iface, BSTR *p)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+    nsAString str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    nsAString_Init(&str, NULL);
+    nsres = nsIDOMHTMLTableElement_GetFrame(This->nstable, &str);
+
+    return return_nsstr(nsres, &str, p);
 }
 
 static HRESULT WINAPI HTMLTable_put_rules(IHTMLTable *iface, BSTR v)
@@ -622,15 +641,41 @@ static HRESULT WINAPI HTMLTable_deleteCaption(IHTMLTable *iface)
 static HRESULT WINAPI HTMLTable_insertRow(IHTMLTable *iface, LONG index, IDispatch **row)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    FIXME("(%p)->(%d %p)\n", This, index, row);
-    return E_NOTIMPL;
+    nsIDOMHTMLElement *nselem;
+    HTMLElement *elem;
+    nsresult nsres;
+    HRESULT hres;
+
+    TRACE("(%p)->(%d %p)\n", This, index, row);
+    nsres = nsIDOMHTMLTableElement_InsertRow(This->nstable, index, &nselem);
+    if(NS_FAILED(nsres)) {
+        ERR("Insert Row at %d failed: %08x\n", index, nsres);
+        return E_FAIL;
+    }
+
+    hres = HTMLTableRow_Create(This->element.node.doc, nselem, &elem);
+    nsIDOMHTMLElement_Release(nselem);
+    if (FAILED(hres)) {
+        ERR("Create TableRow failed: %08x\n", hres);
+        return hres;
+    }
+
+    *row = (IDispatch *)&elem->IHTMLElement_iface;
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLTable_deleteRow(IHTMLTable *iface, LONG index)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    FIXME("(%p)->(%d)\n", This, index);
-    return E_NOTIMPL;
+    nsresult nsres;
+
+    TRACE("(%p)->(%d)\n", This, index);
+    nsres = nsIDOMHTMLTableElement_DeleteRow(This->nstable, index);
+    if(NS_FAILED(nsres)) {
+        ERR("Delete Row failed: %08x\n", nsres);
+        return E_FAIL;
+    }
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLTable_get_readyState(IHTMLTable *iface, BSTR *p)
@@ -869,15 +914,35 @@ static HRESULT WINAPI HTMLTable3_Invoke(IHTMLTable3 *iface, DISPID dispIdMember,
 static HRESULT WINAPI HTMLTable3_put_summary(IHTMLTable3 *iface, BSTR v)
 {
     HTMLTable *This = impl_from_IHTMLTable3(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_w(v));
-    return E_NOTIMPL;
+    nsAString str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    nsAString_InitDepend(&str, v);
+
+    nsres = nsIDOMHTMLTableElement_SetSummary(This->nstable, &str);
+
+    nsAString_Finish(&str);
+    if (NS_FAILED(nsres)) {
+        ERR("Set summary(%s) failed: %08x\n", debugstr_w(v), nsres);
+        return E_FAIL;
+    }
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLTable3_get_summary(IHTMLTable3 *iface, BSTR * p)
 {
     HTMLTable *This = impl_from_IHTMLTable3(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+    nsAString str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    nsAString_Init(&str, NULL);
+    nsres = nsIDOMHTMLTableElement_GetSummary(This->nstable, &str);
+
+    return return_nsstr(nsres, &str, p);
 }
 
 static const IHTMLTable3Vtbl HTMLTable3Vtbl = {
@@ -914,10 +979,10 @@ static HRESULT HTMLTable_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
         *ppv = &This->IHTMLTable_iface;
     }else if(IsEqualGUID(&IID_IHTMLTable2, riid)) {
         TRACE("(%p)->(IID_IHTMLTable2 %p)\n", This, ppv);
-        *ppv = &This->IHTMLTable_iface;
+        *ppv = &This->IHTMLTable2_iface;
     }else if(IsEqualGUID(&IID_IHTMLTable3, riid)) {
         TRACE("(%p)->(IID_IHTMLTable3 %p)\n", This, ppv);
-        *ppv = &This->IHTMLTable_iface;
+        *ppv = &This->IHTMLTable3_iface;
     }
 
     if(*ppv) {
@@ -946,6 +1011,8 @@ static const NodeImplVtbl HTMLTableImplVtbl = {
 static const tid_t HTMLTable_iface_tids[] = {
     HTMLELEMENT_TIDS,
     IHTMLTable_tid,
+    IHTMLTable2_tid,
+    IHTMLTable3_tid,
     0
 };
 
@@ -967,6 +1034,8 @@ HRESULT HTMLTable_Create(HTMLDocumentNode *doc, nsIDOMHTMLElement *nselem, HTMLE
 
     ret->element.node.vtbl = &HTMLTableImplVtbl;
     ret->IHTMLTable_iface.lpVtbl = &HTMLTableVtbl;
+    ret->IHTMLTable2_iface.lpVtbl = &HTMLTable2Vtbl;
+    ret->IHTMLTable3_iface.lpVtbl = &HTMLTable3Vtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLTable_dispex);
 

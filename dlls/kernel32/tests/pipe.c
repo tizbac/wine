@@ -60,6 +60,12 @@ static void test_CreateNamedPipe(int pipemode)
         trace("test_CreateNamedPipe starting in byte mode\n");
     else
         trace("test_CreateNamedPipe starting in message mode\n");
+
+    /* Wait for non existing pipe */
+    ret = WaitNamedPipeA(PIPENAME, 2000);
+    ok(ret == 0, "WaitNamedPipe returned %d for non existing pipe\n", ret);
+    ok(GetLastError() == ERROR_FILE_NOT_FOUND, "wrong error %u\n", GetLastError());
+
     /* Bad parameter checks */
     hnp = CreateNamedPipeA("not a named pipe", PIPE_ACCESS_DUPLEX, pipemode | PIPE_WAIT,
         /* nMaxInstances */ 1,
@@ -147,20 +153,13 @@ static void test_CreateNamedPipe(int pipemode)
         ok(written == sizeof(obuf2), "write file len 3b\n");
         ok(PeekNamedPipe(hFile, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek3\n");
         if (pipemode == PIPE_TYPE_BYTE) {
-            if (readden != sizeof(obuf))  /* Linux only returns the first message */
-                ok(readden == sizeof(obuf) + sizeof(obuf2), "peek3 got %d bytes\n", readden);
-            else
-                todo_wine ok(readden == sizeof(obuf) + sizeof(obuf2), "peek3 got %d bytes\n", readden);
+            todo_wine ok(readden == sizeof(obuf) + sizeof(obuf2), "peek3 got %d bytes\n", readden);
         }
         else
         {
-            if (readden != sizeof(obuf) + sizeof(obuf2))  /* MacOS returns both messages */
-                ok(readden == sizeof(obuf), "peek3 got %d bytes\n", readden);
-            else
-                todo_wine ok(readden == sizeof(obuf), "peek3 got %d bytes\n", readden);
+            ok(readden == sizeof(obuf), "peek3 got %d bytes\n", readden);
         }
-        if (avail != sizeof(obuf)) /* older Linux kernels only return the first write here */
-            ok(avail == sizeof(obuf) + sizeof(obuf2), "peek3 got %d bytes available\n", avail);
+        ok(avail == sizeof(obuf) + sizeof(obuf2), "peek3 got %d bytes available\n", avail);
         pbuf = ibuf;
         ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "pipe content 3a check\n");
         if (pipemode == PIPE_TYPE_BYTE && readden >= sizeof(obuf)+sizeof(obuf2)) {
@@ -182,21 +181,13 @@ static void test_CreateNamedPipe(int pipemode)
         ok(written == sizeof(obuf2), "write file len 4b\n");
         ok(PeekNamedPipe(hnp, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek4\n");
         if (pipemode == PIPE_TYPE_BYTE) {
-            if (readden != sizeof(obuf))  /* Linux only returns the first message */
-                /* should return all 23 bytes */
-                ok(readden == sizeof(obuf) + sizeof(obuf2), "peek4 got %d bytes\n", readden);
-            else
-                todo_wine ok(readden == sizeof(obuf) + sizeof(obuf2), "peek4 got %d bytes\n", readden);
+            todo_wine ok(readden == sizeof(obuf) + sizeof(obuf2), "peek4 got %d bytes\n", readden);
         }
         else
         {
-            if (readden != sizeof(obuf) + sizeof(obuf2))  /* MacOS returns both messages */
-                ok(readden == sizeof(obuf), "peek4 got %d bytes\n", readden);
-            else
-                todo_wine ok(readden == sizeof(obuf), "peek4 got %d bytes\n", readden);
+            ok(readden == sizeof(obuf), "peek4 got %d bytes\n", readden);
         }
-        if (avail != sizeof(obuf)) /* older Linux kernels only return the first write here */
-            ok(avail == sizeof(obuf) + sizeof(obuf2), "peek4 got %d bytes available\n", avail);
+        ok(avail == sizeof(obuf) + sizeof(obuf2), "peek4 got %d bytes available\n", avail);
         pbuf = ibuf;
         ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "pipe content 4a check\n");
         if (pipemode == PIPE_TYPE_BYTE && readden >= sizeof(obuf)+sizeof(obuf2)) {
@@ -227,9 +218,7 @@ static void test_CreateNamedPipe(int pipemode)
             ok(!SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
         }
         else {
-            todo_wine {
-                ok(SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
-            }
+            ok(SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
         
             memset(ibuf, 0, sizeof(ibuf));
             ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile5a\n");
@@ -237,14 +226,8 @@ static void test_CreateNamedPipe(int pipemode)
             ok(WriteFile(hnp, obuf2, sizeof(obuf2), &written, NULL), " WriteFile5b\n");
             ok(written == sizeof(obuf2), "write file len 3b\n");
             ok(PeekNamedPipe(hFile, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek5\n");
-            if (readden != sizeof(obuf) + sizeof(obuf2))  /* MacOS returns both writes */
-                ok(readden == sizeof(obuf), "peek5 got %d bytes\n", readden);
-            else
-                todo_wine ok(readden == sizeof(obuf), "peek5 got %d bytes\n", readden);
-            if (avail != sizeof(obuf)) /* older Linux kernels only return the first write here */
-                ok(avail == sizeof(obuf) + sizeof(obuf2), "peek5 got %d bytes available\n", avail);
-            else
-                todo_wine ok(avail == sizeof(obuf) + sizeof(obuf2), "peek5 got %d bytes available\n", avail);
+            ok(readden == sizeof(obuf), "peek5 got %d bytes\n", readden);
+            ok(avail == sizeof(obuf) + sizeof(obuf2), "peek5 got %d bytes available\n", avail);
             pbuf = ibuf;
             ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 5a check\n");
             ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
@@ -273,12 +256,8 @@ static void test_CreateNamedPipe(int pipemode)
             ok(WriteFile(hFile, obuf2, sizeof(obuf2), &written, NULL), " WriteFile6b\n");
             ok(written == sizeof(obuf2), "write file len 6b\n");
             ok(PeekNamedPipe(hnp, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek6\n");
-            if (readden != sizeof(obuf) + sizeof(obuf2))  /* MacOS returns both writes */
-                ok(readden == sizeof(obuf), "peek6 got %d bytes\n", readden);
-            else
-                todo_wine ok(readden == sizeof(obuf), "peek6 got %d bytes\n", readden);
-            if (avail != sizeof(obuf)) /* older Linux kernels only return the first write here */
-                ok(avail == sizeof(obuf) + sizeof(obuf2), "peek6b got %d bytes available\n", avail);
+            ok(readden == sizeof(obuf), "peek6 got %d bytes\n", readden);
+            ok(avail == sizeof(obuf) + sizeof(obuf2), "peek6b got %d bytes available\n", avail);
             pbuf = ibuf;
             ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");
             ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
@@ -1656,11 +1635,9 @@ static void test_NamedPipeHandleState(void)
         /* lpSecurityAttrib */ NULL);
     ok(server != INVALID_HANDLE_VALUE, "cf failed\n");
     ret = GetNamedPipeHandleStateA(server, NULL, NULL, NULL, NULL, NULL, 0);
-    todo_wine
     ok(ret, "GetNamedPipeHandleState failed: %d\n", GetLastError());
     ret = GetNamedPipeHandleStateA(server, &state, &instances, NULL, NULL, NULL,
         0);
-    todo_wine
     ok(ret, "GetNamedPipeHandleState failed: %d\n", GetLastError());
     if (ret)
     {
@@ -1681,7 +1658,6 @@ static void test_NamedPipeHandleState(void)
     state = PIPE_READMODE_MESSAGE;
     SetLastError(0xdeadbeef);
     ret = SetNamedPipeHandleState(server, &state, NULL, NULL);
-    todo_wine
     ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER,
        "expected ERROR_INVALID_PARAMETER, got %d\n", GetLastError());
 
@@ -1691,13 +1667,11 @@ static void test_NamedPipeHandleState(void)
 
     state = PIPE_READMODE_BYTE;
     ret = SetNamedPipeHandleState(client, &state, NULL, NULL);
-    todo_wine
     ok(ret, "SetNamedPipeHandleState failed: %d\n", GetLastError());
     /* A byte-mode pipe client can't be changed to message mode, either. */
     state = PIPE_READMODE_MESSAGE;
     SetLastError(0xdeadbeef);
     ret = SetNamedPipeHandleState(server, &state, NULL, NULL);
-    todo_wine
     ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER,
        "expected ERROR_INVALID_PARAMETER, got %d\n", GetLastError());
 
@@ -1713,11 +1687,9 @@ static void test_NamedPipeHandleState(void)
         /* lpSecurityAttrib */ NULL);
     ok(server != INVALID_HANDLE_VALUE, "cf failed\n");
     ret = GetNamedPipeHandleStateA(server, NULL, NULL, NULL, NULL, NULL, 0);
-    todo_wine
     ok(ret, "GetNamedPipeHandleState failed: %d\n", GetLastError());
     ret = GetNamedPipeHandleStateA(server, &state, &instances, NULL, NULL, NULL,
         0);
-    todo_wine
     ok(ret, "GetNamedPipeHandleState failed: %d\n", GetLastError());
     if (ret)
     {
@@ -1729,7 +1701,6 @@ static void test_NamedPipeHandleState(void)
      */
     state = PIPE_READMODE_BYTE;
     ret = SetNamedPipeHandleState(server, &state, NULL, NULL);
-    todo_wine
     ok(ret, "SetNamedPipeHandleState failed: %d\n", GetLastError());
 
     client = CreateFileA(PIPENAME, GENERIC_READ|GENERIC_WRITE, 0, NULL,
@@ -1738,13 +1709,11 @@ static void test_NamedPipeHandleState(void)
 
     state = PIPE_READMODE_MESSAGE;
     ret = SetNamedPipeHandleState(client, &state, NULL, NULL);
-    todo_wine
     ok(ret, "SetNamedPipeHandleState failed: %d\n", GetLastError());
     /* A message-mode pipe client can also be changed to byte mode.
      */
     state = PIPE_READMODE_BYTE;
     ret = SetNamedPipeHandleState(client, &state, NULL, NULL);
-    todo_wine
     ok(ret, "SetNamedPipeHandleState failed: %d\n", GetLastError());
 
     CloseHandle(client);
@@ -1851,6 +1820,14 @@ static void test_readfileex_pending(void)
 
     wait = WaitForSingleObjectEx(event, 0, TRUE);
     ok(wait == WAIT_IO_COMPLETION || wait == WAIT_OBJECT_0, "WaitForSingleObject returned %x\n", wait);
+    if (wait == WAIT_TIMEOUT)
+    {
+        ret = ReadFile(client, read_buf, sizeof(read_buf), &num_bytes, NULL);
+        ok(ret == TRUE, "ReadFile failed\n");
+        ok(completion_called == 0, "completion routine called during ReadFile\n");
+        wait = WaitForSingleObjectEx(event, 0, TRUE);
+        ok(wait == WAIT_IO_COMPLETION || wait == WAIT_OBJECT_0, "WaitForSingleObject returned %x\n", wait);
+    }
 
     ok(completion_called == 1, "completion routine not called\n");
     ok(completion_errorcode == 0, "completion called with error %x\n", completion_errorcode);

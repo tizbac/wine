@@ -102,15 +102,37 @@ static HRESULT WINAPI HTMLImgElement_Invoke(IHTMLImgElement *iface, DISPID dispI
 static HRESULT WINAPI HTMLImgElement_put_isMap(IHTMLImgElement *iface, VARIANT_BOOL v)
 {
     HTMLImgElement *This = impl_from_IHTMLImgElement(iface);
-    FIXME("(%p)->(%x)\n", This, v);
-    return E_NOTIMPL;
+    nsresult nsres;
+
+    TRACE("(%p)->(%x)\n", This, v);
+
+    nsres = nsIDOMHTMLImageElement_SetIsMap(This->nsimg, v != VARIANT_FALSE);
+    if (NS_FAILED(nsres)) {
+        ERR("Set IsMap failed: %08x\n", nsres);
+        return E_FAIL;
+    }
+
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLImgElement_get_isMap(IHTMLImgElement *iface, VARIANT_BOOL *p)
 {
     HTMLImgElement *This = impl_from_IHTMLImgElement(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+    cpp_bool b;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    if (p == NULL)
+        return E_INVALIDARG;
+
+    nsres = nsIDOMHTMLImageElement_GetIsMap(This->nsimg, &b);
+    if (NS_FAILED(nsres)) {
+        ERR("Get IsMap failed: %08x\n", nsres);
+        return E_FAIL;
+    }
+    *p = b ? VARIANT_TRUE : VARIANT_FALSE;
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLImgElement_put_useMap(IHTMLImgElement *iface, BSTR v)
@@ -390,15 +412,35 @@ static HRESULT WINAPI HTMLImgElement_get_loop(IHTMLImgElement *iface, VARIANT *p
 static HRESULT WINAPI HTMLImgElement_put_align(IHTMLImgElement *iface, BSTR v)
 {
     HTMLImgElement *This = impl_from_IHTMLImgElement(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_w(v));
-    return E_NOTIMPL;
+    nsAString str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    nsAString_InitDepend(&str, v);
+
+    nsres = nsIDOMHTMLImageElement_SetAlign(This->nsimg, &str);
+    nsAString_Finish(&str);
+    if (NS_FAILED(nsres)){
+        ERR("Set Align(%s) failed: %08x\n", debugstr_w(v), nsres);
+        return E_FAIL;
+    }
+
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLImgElement_get_align(IHTMLImgElement *iface, BSTR *p)
 {
     HTMLImgElement *This = impl_from_IHTMLImgElement(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+    nsAString str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    nsAString_Init(&str, NULL);
+    nsres = nsIDOMHTMLImageElement_GetAlign(This->nsimg, &str);
+
+    return return_nsstr(nsres, &str, p);
 }
 
 static HRESULT WINAPI HTMLImgElement_put_onload(IHTMLImgElement *iface, VARIANT v)
