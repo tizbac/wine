@@ -571,19 +571,12 @@ DRI2Present_new( Display *dpy,
     HWND draw_window;
     RECT rect;
 
-    if (!focus_wnd) {
-        if (!params->Windowed) {
-            ERR("No focus HWND specified for full screen presentation.\n");
-            return D3DERR_INVALIDCALL;
-        }
-        focus_wnd = params->hDeviceWindow;
-    }
+    if (!focus_wnd) { focus_wnd = params->hDeviceWindow; }
     if (!focus_wnd) {
         ERR("No focus HWND specified for presentation backend.\n");
         return D3DERR_INVALIDCALL;
     }
     draw_window = params->hDeviceWindow ? params->hDeviceWindow : focus_wnd;
-    /* TODO: figure out the sematics of adapter groups and hDeviceWindow */
 
     This = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
                      sizeof(struct DRI2Present));
@@ -615,11 +608,6 @@ DRI2Present_new( Display *dpy,
     }
 
     if (params->BackBufferFormat == D3DFMT_UNKNOWN) {
-        if (!params->Windowed) {
-            ERR("No backbuffer format specified for full screen window.\n");
-            HeapFree(GetProcessHeap(), 0, This);
-            return D3DERR_INVALIDCALL;
-        }
         params->BackBufferFormat = D3DFMT_A8R8G8B8;
     }
 
@@ -635,14 +623,9 @@ DRI2Present_new( Display *dpy,
     if (params->BackBufferHeight == 0) {
         params->BackBufferHeight = rect.bottom;
     }
-    
-    if ( !params->Windowed )
-        SetWindowPos(focus_wnd,HWND_TOPMOST,0,0,params->BackBufferWidth,params->BackBufferHeight,0);
     This->params = *params;
     strcpyW(This->devname, devname);
-	
-	
-	
+
     *out = This;
 
     return D3D_OK;
@@ -657,9 +640,6 @@ struct DRI2PresentGroup
 
     struct DRI2Present **present_backends;
     unsigned npresent_backends;
-    UINT adapter;
-    HWND focus_wnd;
-    WCHAR devname[32];
 };
 
 static ULONG WINAPI
@@ -710,7 +690,8 @@ DRI2PresentGroup_QueryInterface( struct DRI2PresentGroup *This,
 static UINT WINAPI
 DRI2PresentGroup_GetMultiheadCount( struct DRI2PresentGroup *This )
 {
-    return This->npresent_backends;
+    FIXME("(%p), stub!\n", This);
+    return 1;
 }
 
 static HRESULT WINAPI
@@ -737,55 +718,13 @@ DRI2PresentGroup_CreateAdditionalPresent( struct DRI2PresentGroup *This,
     return D3DERR_INVALIDCALL;
 }
 
-static void
-release_presents( struct DRI2PresentGroup *This )
-{
-    unsigned i;
-
-    for (i = 0; i < This->npresent_backends; ++i) {
-        if (This->present_backends[i]) {
-            DRI2Present_Release(This->present_backends[i]);
-            This->present_backends[i] = NULL;
-        }
-    }
-}
-
-static HRESULT WINAPI
-DRI2PresentGroup_Reset( struct DRI2PresentGroup *This,
-                        D3DPRESENT_PARAMETERS *pPresentationParameters )
-{
-    DISPLAY_DEVICEW dd;
-
-    /* release all ID3DPresents */
-    release_presents(This);
-	int i;
-    for (i = 0; i < This->npresent_backends; ++i) {
-        /* find final device name */
-        if (!EnumDisplayDevicesW(This->devname, This->adapter+i, &dd, 0)) {
-            WARN("Couldn't find subdevice %d from `%s'\n",
-                 i, debugstr_w(This->devname));
-        }
-
-        /* create an ID3DPresent for it */
-        HRESULT hr = DRI2Present_new(gdi_display, dd.DeviceName,
-                             &pPresentationParameters[i], This->focus_wnd,
-                             &This->present_backends[i]);
-        if (FAILED(hr)) {
-            This->present_backends[i] = NULL;
-            release_presents(This);
-            return hr;
-        }
-    }
-}
-
 static ID3DPresentGroupVtbl DRI2PresentGroup_vtable = {
     (void *)DRI2PresentGroup_QueryInterface,
     (void *)DRI2PresentGroup_AddRef,
     (void *)DRI2PresentGroup_Release,
     (void *)DRI2PresentGroup_GetMultiheadCount,
     (void *)DRI2PresentGroup_GetPresent,
-    (void *)DRI2PresentGroup_CreateAdditionalPresent,
-    (void *)DRI2PresentGroup_Reset,
+    (void *)DRI2PresentGroup_CreateAdditionalPresent
 };
 
 static HRESULT
@@ -821,17 +760,21 @@ dri2_create_present_group( const WCHAR *device_name,
     }
 
     if (nparams != 1) { adapter = 0; }
-    This->adapter = adapter;
-    This->focus_wnd = focus_wnd;
-    strcpyW(This->devname, device_name);
+    for (i = 0; i < This->npresent_backends; ++i) {
+        /* find final device name */
+        if (!EnumDisplayDevicesW(device_name, adapter+i, &dd, 0)) {
+            WARN("Couldn't find subdevice %d from `%s'\n",
+                 i, debugstr_w(device_name));
+        }
 
-    hr = DRI2PresentGroup_Reset(This, params);
-    if (FAILED(hr)) {
-        DRI2PresentGroup_Release(This);
-        return hr;
+        /* create an ID3DPresent for it */
+        hr = DRI2Present_new(gdi_display, dd.DeviceName, &params[i],
+                             focus_wnd, &This->present_backends[i]);
+        if (FAILED(hr)) {
+            DRI2PresentGroup_Release(This);
+            return hr;
+        }
     }
-    /* XXX should This->focus_wnd be reset here? I'm not sure what the exact
-     * sematics of IDirect3DDevice9::Reset is in that regard */
 
     *group = (ID3DPresentGroup *)This;
     TRACE("Returning %p\n", *group);
