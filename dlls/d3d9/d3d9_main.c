@@ -72,6 +72,8 @@ static BOOL try_native(void)
             {
                 data = 1;
             }
+        }else{
+            data = 1;
         }
         
     }
