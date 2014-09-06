@@ -62,9 +62,18 @@ static BOOL try_native(void)
     }
 
     if (!(appkey && !RegQueryValueExA(appkey, "UseNative", 0, &type, (BYTE *)&data, &size) && (type == REG_DWORD))) {
-        if (!(defkey && !RegQueryValueExA(defkey, "UseNative", 0, &type, (BYTE *)&data, &size) && (type == REG_DWORD))) {
-            data = 0;
+        
+        DWORD size2 = 4;//Enough for N\x00 or Y\x00
+        char value[size2];
+        if ( defkey && !RegQueryValueExA(defkey,"UseNative",0,&type,value,&size2) ) 
+        {
+            value[1] = 0;
+            if ( !strcmp(value,"Y"))
+            {
+                data = 1;
+            }
         }
+        
     }
 
     if (appkey) RegCloseKey( appkey );

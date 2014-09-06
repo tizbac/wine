@@ -144,6 +144,13 @@ static void init_dialog(HWND dialog)
 	CheckDlgButton(dialog, IDC_ENABLE_DECORATED, BST_UNCHECKED);
     HeapFree(GetProcessHeap(), 0, buf);
 
+	buf = get_reg_key(config_key, keypath("Direct3D"), "UseNative", "Y");
+    if (IS_OPTION_TRUE(*buf))
+	CheckDlgButton(dialog, IDC_ENABLE_NATIVE_D3D9, BST_CHECKED);
+    else
+	CheckDlgButton(dialog, IDC_ENABLE_NATIVE_D3D9, BST_UNCHECKED);
+    HeapFree(GetProcessHeap(), 0, buf);
+	
     updating_ui = FALSE;
 }
 
@@ -233,6 +240,14 @@ static void on_fullscreen_grab_clicked(HWND dialog)
         set_reg_key(config_key, keypath("X11 Driver"), "GrabFullscreen", "Y");
     else
         set_reg_key(config_key, keypath("X11 Driver"), "GrabFullscreen", "N");
+}
+
+static void on_enable_native_d3d9_clicked(HWND dialog)
+{
+    if (IsDlgButtonChecked(dialog, IDC_ENABLE_NATIVE_D3D9) == BST_CHECKED)
+        set_reg_key(config_key, keypath("Direct3D"), "UseNative", "Y");
+    else
+        set_reg_key(config_key, keypath("Direct3D"), "UseNative", "N");
 }
 
 static INT read_logpixels_reg(void)
@@ -387,6 +402,7 @@ GraphDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                         case IDC_ENABLE_MANAGED: on_enable_managed_clicked(hDlg); break;
                         case IDC_ENABLE_DECORATED: on_enable_decorated_clicked(hDlg); break;
 			case IDC_FULLSCREEN_GRAB:  on_fullscreen_grab_clicked(hDlg); break;
+			case IDC_ENABLE_NATIVE_D3D9: on_enable_native_d3d9_clicked(hDlg); break;
 		    }
 		    break;
 		}
